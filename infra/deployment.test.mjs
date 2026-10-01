@@ -8,7 +8,7 @@ test('deployment resolves only an environment branch before credentials', async 
   const guard = block.split('\n').filter(line=>line.trim()).map(line=>line.slice(10)).join('\n');
   const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
   for (const branch of ['dev','staging','prod','main','feat/login','codex/infra']) {
-    const result = spawnSync(bash,['-c',guard],{env:{...process.env,GITHUB_REF_NAME:branch,GITHUB_OUTPUT:process.platform==='win32'?'NUL':'/dev/null'},encoding:'utf8',windowsHide:true});
+    const result = spawnSync(bash,['-c',guard],{env:{...process.env,GITHUB_REF_NAME:branch,GITHUB_OUTPUT:'/dev/null'},encoding:'utf8',windowsHide:true});
     assert.equal(result.status===0,['dev','staging','prod'].includes(branch),branch);
   }
   assert.ok(!workflow.includes('workflow_dispatch'));
