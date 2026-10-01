@@ -9,7 +9,7 @@ test('an existing shared environment requires its original credential state', as
   const directory = await mkdtemp(join(tmpdir(), 'solventa-state-'));
   const path = join(directory, 'runtime.dev.json');
   try {
-    const admin = { query: async (_sql, roles) => { assert.equal(roles.length, 3); return { rows: [{ username: roles[0] }] }; } };
+    const admin = { query: async sql => { assert.equal(sql, 'SHOW USERS'); return { rows: [{ username: 'solventa_dev_acquisition' }] }; } };
     await assert.rejects(runtimeState('dev', { database: 'solventa_dev' }, admin, path), { code: 'runtime_state_missing' });
     await assert.rejects(access(path), { code: 'ENOENT' });
   } finally { await rm(directory, { recursive: true }); }

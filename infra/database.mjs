@@ -34,8 +34,8 @@ export async function runtimeState(environment, config, admin, statePath) {
     if (error.code !== 'ENOENT') throw error;
     // User names are cluster-wide. Never invent replacements for existing passwords.
     const roles = owners.map(owner => `solventa_${environment}_${owner.schema}`);
-    const existing = await admin.query('SELECT username FROM system.users WHERE username IN ($1, $2, $3)', roles);
-    if (existing.rows.length) {
+    const existing = await admin.query('SHOW USERS');
+    if (existing.rows.some(user => roles.includes(user.username))) {
       throw Object.assign(Error('Restore the custodied runtime state before provisioning existing users'), { code: 'runtime_state_missing' });
     }
     state = { database: config.database, passwords: Object.fromEntries(owners.map(o => [o.schema, randomBytes(32).toString('hex')])) };
