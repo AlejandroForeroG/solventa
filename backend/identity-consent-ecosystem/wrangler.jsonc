@@ -43,6 +43,34 @@
           "id": "b4a97889d47e4f6f8aa9920696aaf27a"
         }
       ]
+    },
+    "staging": {
+      "name": "solventa-identity-consent-ecosystem-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "hyperdrive": [
+        {
+          "binding": "IDENTITY_DB",
+          "id": "151061a3b9e34b248fdd504e5dd0258e"
+        }
+      ]
+    },
+    "prod": {
+      "name": "solventa-identity-consent-ecosystem-prod",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "hyperdrive": [
+        {
+          "binding": "IDENTITY_DB",
+          "id": "3c378c859a6f404eb56cfcdfb5a2059a"
+        }
+      ]
     }
   }
 }

@@ -2,6 +2,8 @@ import { Client } from 'pg';
 import { randomBytes, createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { parseEnv } from 'node:util';
+import { remoteEnvironments } from './environments.mjs';
 
 export const owners = [
   { name: 'acquisition-risk', schema: 'acquisition', binding: 'ACQUISITION_DB' },
@@ -9,14 +11,16 @@ export const owners = [
   { name: 'policy-claims-payments', schema: 'policy', binding: 'POLICY_DB' },
 ];
 export async function settings(environment) {
-  if (!['local', 'dev'].includes(environment)) throw Error('Unsupported environment');
-  process.loadEnvFile(`.env.infra.${environment}`);
-  const url = new URL(process.env.DATABASE_URL);
+  if (!['local', ...remoteEnvironments].includes(environment)) throw Error('Unsupported environment');
+  // Read only this environment's file; sequential operations cannot inherit another origin.
+  const variables = parseEnv(await readFile(`.env.infra.${environment}`, 'utf8'));
+  const url = new URL(variables.DATABASE_URL);
   for (const key of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) url.searchParams.delete(key);
   if (environment === 'local' && !['localhost', '127.0.0.1'].includes(url.hostname)) throw Error('Local database must be loopback');
+  if (environment !== 'local' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) throw Error('Remote database must not be loopback');
   const ssl = { rejectUnauthorized: true };
   for (const [key, variable] of [['ca', 'DATABASE_CA_FILE'], ['cert', 'DATABASE_CERT_FILE'], ['key', 'DATABASE_KEY_FILE']]) {
-    if (process.env[variable]) ssl[key] = await readFile(process.env[variable], 'utf8');
+    if (variables[variable]) ssl[key] = await readFile(variables[variable], 'utf8');
   }
   return { url, ssl, database: `solventa_${environment}` };
 }
@@ -110,6 +114,29 @@ export async function verifyIsolation(environment) {
     } finally { await client.end(); }
   }
   console.log(JSON.stringify({ environment, results }));
+}
+export async function verifyEnvironmentIsolation(environment) {
+  const config = await settings(environment);
+  const state = JSON.parse(await readFile(`infra/.local/runtime.${environment}.json`, 'utf8'));
+  const results = [];
+  for (const owner of owners) {
+    const url = new URL(config.url);
+    url.pathname = '/' + config.database;
+    url.username = `solventa_${environment}_${owner.schema}`;
+    url.password = state.passwords[owner.schema];
+    const client = clientFor(url, { ca: config.ssl.ca, rejectUnauthorized: true });
+    try {
+      await client.connect();
+      for (const other of remoteEnvironments.filter(e => e !== environment)) {
+        let denied = false;
+        try { await client.query(`SELECT version FROM ${id(`solventa_${other}`)}.${id(owner.schema)}.schema_migrations`); }
+        catch (error) { if (error.code !== '42501') throw error; denied = true; }
+        if (!denied) throw Error('Cross-environment read allowed');
+        results.push({ schema: owner.schema, target: other, crossEnvironmentReadDenied: true });
+      }
+    } finally { await client.end(); }
+  }
+  console.log(JSON.stringify({ environment, environmentIsolation: results }));
 }
 if (process.argv[1] === resolve('infra/database.mjs')) {
   try {

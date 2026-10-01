@@ -74,6 +74,60 @@
           "DEV_INFRA_TOKEN"
         ]
       }
+    },
+    "staging": {
+      "name": "solventa-web-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "services": [
+        {
+          "binding": "ACQUISITION",
+          "service": "solventa-acquisition-risk-staging"
+        },
+        {
+          "binding": "IDENTITY",
+          "service": "solventa-identity-consent-ecosystem-staging"
+        },
+        {
+          "binding": "POLICY",
+          "service": "solventa-policy-claims-payments-staging"
+        }
+      ],
+      "secrets": {
+        "required": [
+          "DEV_INFRA_TOKEN"
+        ]
+      }
+    },
+    "prod": {
+      "name": "solventa-web-prod",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "services": [
+        {
+          "binding": "ACQUISITION",
+          "service": "solventa-acquisition-risk-prod"
+        },
+        {
+          "binding": "IDENTITY",
+          "service": "solventa-identity-consent-ecosystem-prod"
+        },
+        {
+          "binding": "POLICY",
+          "service": "solventa-policy-claims-payments-prod"
+        }
+      ],
+      "secrets": {
+        "required": [
+          "DEV_INFRA_TOKEN"
+        ]
+      }
     }
   },
   "secrets": {

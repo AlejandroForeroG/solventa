@@ -8,12 +8,12 @@ export default class extends WorkerEntrypoint<AcquisitionEnv> {
   async fetch(request: Request): Promise<Response> {
     return createHttp().fetch(request, this.env, this.ctx);
   }
-  liveness() { return { service: 'acquisition-risk' }; }
+  liveness() { return { service: 'acquisition-risk', environment: this.env.APP_ENV }; }
   async infraStatus() {
     const probe = await databaseProbe(this.env.ACQUISITION_DB.connectionString);
     let identity = false;
-    try { identity = (await this.env.IDENTITY_SERVICE.liveness()).service === 'identity-consent-ecosystem'; } catch {}
-    const database = probe.ready;
-    return { service: 'acquisition-risk', ready: database && identity, database, databaseCode: probe.code, identity };
+    try { const target = await this.env.IDENTITY_SERVICE.liveness(); identity = target.service === 'identity-consent-ecosystem' && target.environment === this.env.APP_ENV; } catch {}
+    const database = probe.ready && probe.databaseName === `solventa_${this.env.APP_ENV}`;
+    return { service: 'acquisition-risk', environment: this.env.APP_ENV, databaseName: probe.databaseName, ready: database && identity, database, databaseCode: probe.code, identity };
   }
 }

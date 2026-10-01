@@ -49,6 +49,46 @@
           "service": "solventa-identity-consent-ecosystem-dev"
         }
       ]
+    },
+    "staging": {
+      "name": "solventa-acquisition-risk-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "hyperdrive": [
+        {
+          "binding": "ACQUISITION_DB",
+          "id": "789c6e9ceac34df2b4712c86abbfaedd"
+        }
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-staging"
+        }
+      ]
+    },
+    "prod": {
+      "name": "solventa-acquisition-risk-prod",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "hyperdrive": [
+        {
+          "binding": "ACQUISITION_DB",
+          "id": "fe460ee7b27442afa08967f8e6ec5ef8"
+        }
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-prod"
+        }
+      ]
     }
   },
   "services": [

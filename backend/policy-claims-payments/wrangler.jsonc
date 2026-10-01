@@ -43,6 +43,34 @@
           "id": "2e62599bd8ea401092bd70c45b124af2"
         }
       ]
+    },
+    "staging": {
+      "name": "solventa-policy-claims-payments-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "hyperdrive": [
+        {
+          "binding": "POLICY_DB",
+          "id": "9eab620dc2654d4c823128fb884f0664"
+        }
+      ]
+    },
+    "prod": {
+      "name": "solventa-policy-claims-payments-prod",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "hyperdrive": [
+        {
+          "binding": "POLICY_DB",
+          "id": "0821ea6b041445ce976921a4c28f07b5"
+        }
+      ]
     }
   }
 }

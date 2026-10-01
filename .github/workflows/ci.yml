@@ -1,8 +1,11 @@
 name: CI
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
+    inputs:
+      revision:
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -15,6 +18,8 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

@@ -28,7 +28,12 @@ try {
   const result = await response.json();
   console.log(JSON.stringify({ probeStatus: response.status, result }));
   assert.equal(response.status,200); assert.equal(result.ready,true); assert.equal(result.services.length,3);
-  for (const status of result.services) assert.equal(status.database,true);
+  assert.equal(result.environment, 'local');
+  for (const status of result.services) {
+    assert.equal(status.database,true);
+    assert.equal(status.environment, 'local');
+    assert.equal(status.databaseName, 'solventa_local');
+  }
   assert.equal((await fetch(base+'/api/v1/quotes')).status,404);
   assert.equal((await fetch(base+'/')).status,200);
   console.log(JSON.stringify({ status:'passed', checks:['SQL through Workers','RPC service bindings','invalid-token rejection','static web','business API not enabled'], services:result.services }));

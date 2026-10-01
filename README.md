@@ -21,7 +21,7 @@ npm ci
 npm run check
 ```
 
-`check` comprueba las dependencias del núcleo, las pruebas del guardián arquitectónico, lint, tipos y builds locales y dev. El móvil exporta un bundle Android. Los Workers se empaquetan con `--dry-run`. CI también levanta CockroachDB con TLS y ejecuta SQL y RPC reales mediante Workers locales.
+`check` comprueba las dependencias del núcleo, las pruebas de arquitectura, credenciales y fronteras entre ambientes, lint, tipos y builds. El móvil exporta un bundle Android. Los doce Workers remotos se empaquetan con `--dry-run` para dev, staging y prod. CI también levanta CockroachDB con TLS y ejecuta SQL y RPC reales mediante Workers locales.
 
 ## Desarrollo local
 
@@ -46,6 +46,6 @@ Vite usa 5173 para editar la interfaz. CockroachDB escucha únicamente en loopba
 
 Cada backend reserva `domain`, `application`, `application/ports` y `adapters`. Los SDK pertenecen a adaptadores o a la raíz de composición. Cada propietario mantiene sus migraciones y acceso a datos; otros dominios consumen contratos.
 
-La base implementa infraestructura local y un ambiente remoto `dev`: web, tres Workers privados, tres conexiones Hyperdrive y una base CockroachDB con esquemas y credenciales separados. Ver [operación](infra/README.md) y [fronteras](backend/README.md).
+La base implementa infraestructura local y tres ambientes remotos: `dev`, `staging` y `prod`. Cada ambiente tiene web, tres Workers privados, tres conexiones Hyperdrive y su base CockroachDB con esquemas y credenciales separados. Ver [operación](infra/README.md) y [fronteras](backend/README.md).
 
-Las pantallas y los núcleos de negocio son iniciales. No hay cotización, biometría, consentimiento, OAuth, pagos, auditoría transaccional ni proveedores implementados. `/api/*` devuelve 404; el secreto de diagnóstico no sustituye la autenticación de usuarios. `packages/contracts` permanece vacío hasta que exista un contrato real. No hay configuración de producción, alta disponibilidad local ni validación de rendimiento o ejecución móvil nativa.
+Las pantallas y los núcleos de negocio son iniciales. No hay cotización, biometría, consentimiento, OAuth, pagos, auditoría transaccional ni proveedores implementados. `/api/*` devuelve 404; el secreto de diagnóstico no sustituye la autenticación de usuarios. `packages/contracts` permanece vacío hasta que exista un contrato real. El ambiente `prod` contiene la base operativa del producto. El clúster SQL compartido sigue siendo un fallo común y requiere evaluación antes de manejar datos reales. No hay alta disponibilidad local ni validación de rendimiento o ejecución móvil nativa.

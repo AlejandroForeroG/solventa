@@ -1,0 +1,84 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, staging, prod]
+        required: true
+        default: dev
+      revision:
+        description: Full commit SHA to deploy (empty uses the selected branch commit)
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.target.outputs.revision }}
+      environment: ${{ steps.target.outputs.environment }}
+    steps:
+      - id: target
+        env:
+          TARGET_REVISION: ${{ inputs.revision || github.sha }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          [[ "$WORKFLOW_REF" == refs/heads/main ]] || exit 1
+          [[ "$TARGET_REVISION" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$TARGET_ENVIRONMENT" =~ ^(dev|staging|prod)$ ]] || exit 1
+          echo "revision=$TARGET_REVISION" >> "$GITHUB_OUTPUT"
+          echo "environment=$TARGET_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ needs.resolve.outputs.revision }}
+  deploy:
+    needs: [resolve, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.revision }}
+          fetch-depth: 0
+      - name: Require integrated code for every environment
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run types
+      - name: Restore environment credentials
+        env:
+          DATABASE_HOST: ${{ vars.DATABASE_HOST }}
+          DATABASE_PORT: ${{ vars.DATABASE_PORT }}
+          DATABASE_CA_PEM: ${{ secrets.DATABASE_CA_PEM }}
+          RUNTIME_STATE_JSON: ${{ secrets.RUNTIME_STATE_JSON }}
+          WEB_INFRA_TOKEN: ${{ secrets.WEB_INFRA_TOKEN }}
+        run: node infra/ci.mjs prepare "$TARGET_ENVIRONMENT"
+      - name: Deploy and verify Cloudflare services
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npm run "deploy:$TARGET_ENVIRONMENT"
+          npm run "infra:$TARGET_ENVIRONMENT:verify"
+      - if: always()
+        run: node infra/ci.mjs cleanup "$TARGET_ENVIRONMENT"

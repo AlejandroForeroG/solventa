@@ -4,7 +4,7 @@ export default {
   async fetch(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
-    if (path === '/health') return Response.json({ status: 'alive' }, { headers });
+    if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
     if (path.startsWith('/api/')) return Response.json({ error: 'not_implemented' }, { status: 404, headers });
     if (path.startsWith('/internal/')) {
       const token = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
@@ -16,8 +16,8 @@ export default {
       if (path !== '/internal/infra' || request.method !== 'GET') return Response.json({ error: 'not_found' }, { status: 404, headers });
       try {
         const services = await Promise.all([env.ACQUISITION.infraStatus(), env.IDENTITY.infraStatus(), env.POLICY.infraStatus()]);
-        const ready = services.every(s => s.ready);
-        return Response.json({ ready, services }, { status: ready ? 200 : 503, headers });
+        const ready = services.every(s => s.ready && s.environment === env.APP_ENV && s.databaseName === `solventa_${env.APP_ENV}`);
+        return Response.json({ environment: env.APP_ENV, ready, services }, { status: ready ? 200 : 503, headers });
       } catch { return Response.json({ ready: false }, { status: 503, headers }); }
     }
     return env.ASSETS.fetch(request);
