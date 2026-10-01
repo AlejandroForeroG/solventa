@@ -5,13 +5,13 @@ Rama de trabajo: `feat/<caso-o-ticket>` desde `dev`. Commits y títulos de PR: `
 ## Flujo
 
 1. Implementar y probar en local; abrir PR `feat/*` → `dev`.
-2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. El PR requiere una revisión y checks verdes antes de integrar.
+2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. El PR hacia dev requiere checks verdes antes de integrar; no necesita revisión humana.
 3. Al integrar en `dev`, Deploy repite CI, despliega los cuatro Workers de dev y verifica SQL, RPC y aislamiento.
 4. Probar el flujo real en dev; abrir PR `dev` → `staging`. CI exige que el commit de origen tenga un Deploy exitoso y que el árbol resultante coincida con el origen. Integrar con merge normal.
 5. Al integrar en `staging`, se ejecuta CI y despliegue de staging. Probar el candidato y abrir PR `staging` → `prod` con el mismo control de despliegue previo y contenido. Integrar con merge normal.
 6. Al integrar en `prod`, CI y Deploy publican y verifican producción. Revisar la ejecución y los flujos del producto.
 
-Las ramas de ambientes requieren PR, una aprobación, checks `policy` y `validate`, y resolución de conversaciones; aplican también a administradores. No hacer pushes directos. La validación humana de negocio se documenta en el PR y la revisión. El control automático acredita el despliegue previo, no todos los criterios funcionales.
+Las tres ramas de ambientes requieren PR, checks `policy` y `validate` con la rama actualizada y resolución de conversaciones; aplican también a administradores. Dev no exige aprobación humana. Staging y prod requieren una aprobación antes de integrar. No hacer pushes directos. La validación humana de negocio se documenta en el PR de promoción y la revisión. El control automático acredita el despliegue previo, no todos los criterios funcionales.
 
 Los merge commits cambian el SHA entre ambientes; se conserva el contenido del candidato, comprobado con git diff en el PR de promoción. No usar squash ni rebase entre ambientes, ni agregar cambios específicos en staging/prod. Squash se admite al integrar una feature en dev. `main` queda como referencia histórica, sin despliegue.
 

@@ -28,6 +28,7 @@
 
 - Trabajar en ramas `feat/<caso-o-ticket>`; no usar el prefijo `codex`. Los commits y títulos de PR usan `feat|fix|refactor|test(modulo): mensaje`, máximo 72 caracteres en la primera línea.
 - Integrar mediante PR: `feat/*` hacia `dev`, `dev` hacia `staging` y `staging` hacia `prod`. No hacer commits o pushes directos a las ramas de ambientes. CI valida el PR; al integrarlo, CD publica el ambiente correspondiente.
+- Hacia dev, exigir todos los checks verdes sin aprobación humana. Hacia staging y prod, exigir además una aprobación antes de integrar el PR.
 - Validar la versión desplegada en el ambiente anterior antes de aprobar su promoción. Promover con merge normal para conservar la historia; no usar squash ni rebase entre ramas de ambientes.
 
 - Usar datos sintéticos. No guardar secretos ni PII en Git, respuestas de diagnóstico o logs. Mantener credenciales y recursos separados entre local, dev, staging y prod.
