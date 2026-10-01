@@ -1,0 +1,15 @@
+{
+  "name": "@solventa/identity-consent-ecosystem",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8789",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {
+    "hono": "4.13.12"
+  }
+}

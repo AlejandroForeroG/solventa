@@ -1,0 +1,3 @@
+# policy-claims-payments
+
+Worker independiente. `npm run dev --workspace @solventa/policy-claims-payments` sirve el scaffolding local en el puerto 8788. `/health` identifica el proceso; no comprueba persistencia ni integraciones. Las carpetas del núcleo y adaptadores están vacías. No hay bindings remotos ni migraciones SQL.

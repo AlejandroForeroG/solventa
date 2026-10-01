@@ -1,0 +1,32 @@
+{
+  "name": "solventa",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "backend/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.21.1 <23"
+  },
+  "packageManager": "npm@10.9.4",
+  "scripts": {
+    "dev:web": "npm run dev --workspace @solventa/web",
+    "dev:mobile": "npm run start --workspace @solventa/mobile",
+    "dev:acquisition": "npm run dev --workspace @solventa/acquisition-risk",
+    "dev:policy": "npm run dev --workspace @solventa/policy-claims-payments",
+    "dev:identity": "npm run dev --workspace @solventa/identity-consent-ecosystem",
+    "types": "npm run types --workspaces --if-present",
+    "typecheck": "npm run types && npm run typecheck --workspaces --if-present",
+    "lint": "oxlint apps backend packages --ignore-pattern **/worker-configuration.d.ts",
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run lint && npm run typecheck && npm run build"
+  },
+  "devDependencies": {
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.3",
+    "wrangler": "4.146.0",
+    "@types/node": "^22.20.2"
+  }
+}
