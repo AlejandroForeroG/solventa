@@ -21,3 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run infra:up
+      - run: npm run test:infra
+      - if: always()
+        run: npm run infra:down

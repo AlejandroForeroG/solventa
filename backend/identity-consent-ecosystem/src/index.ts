@@ -1,7 +1,17 @@
-import { Hono } from 'hono';
+/// <reference path="../worker-configuration.d.ts" />
+import { WorkerEntrypoint } from 'cloudflare:workers';
+import { createHttp } from './adapters/inbound/http';
+import { databaseProbe } from './adapters/outbound/database-probe';
 
-const app = new Hono<{ Bindings: Env }>();
-app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'scaffold' }));
-app.notFound((c) => c.json({ error: 'not_found' }, 404));
-
-export default app;
+// Composition root: platform wiring and operational probes stay outside the core.
+export default class extends WorkerEntrypoint<IdentityEnv> {
+  async fetch(request: Request): Promise<Response> {
+    return createHttp().fetch(request, this.env, this.ctx);
+  }
+  liveness() { return { service: 'identity-consent-ecosystem' }; }
+  async infraStatus() {
+    const probe = await databaseProbe(this.env.IDENTITY_DB.connectionString);
+    const database = probe.ready;
+    return { service: 'identity-consent-ecosystem', ready: database, database, databaseCode: probe.code };
+  }
+}

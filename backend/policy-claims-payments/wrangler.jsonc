@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "solventa-policy-claims-payments",
+  "name": "solventa-policy-claims-payments-local",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": [
@@ -17,6 +17,32 @@
     "traces": {
       "enabled": true,
       "head_sampling_rate": 0.01
+    }
+  },
+  "account_id": "803fd559877aae8f638140610f106857",
+  "vars": {
+    "APP_ENV": "local"
+  },
+  "hyperdrive": [
+    {
+      "binding": "POLICY_DB",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "env": {
+    "dev": {
+      "name": "solventa-policy-claims-payments-dev",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "dev"
+      },
+      "hyperdrive": [
+        {
+          "binding": "POLICY_DB",
+          "id": "2e62599bd8ea401092bd70c45b124af2"
+        }
+      ]
     }
   }
 }

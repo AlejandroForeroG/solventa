@@ -21,12 +21,26 @@
     "typecheck": "npm run types && npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps backend packages --ignore-pattern **/worker-configuration.d.ts",
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run lint && npm run typecheck && npm run build"
+    "check": "npm run architecture:check && npm run test:architecture && npm run test:database && npm run lint && npm run typecheck && npm run build && npm run build:dev",
+    "infra:up": "node infra/local.mjs up",
+    "infra:down": "node infra/local.mjs down",
+    "infra:verify": "node infra/database.mjs verify local",
+    "dev:backend": "node infra/local.mjs dev",
+    "architecture:check": "node tools/architecture.mjs",
+    "test:architecture": "node --test tools/architecture.test.mjs",
+    "build:dev": "npm run build:dev --workspaces --if-present",
+    "test:infra": "node infra/smoke.mjs",
+    "test:database": "node --test infra/database.test.mjs",
+    "infra:dev:up": "node infra/dev.mjs up",
+    "deploy:dev": "npm run build --workspace @solventa/web && node infra/dev.mjs deploy",
+    "infra:dev:verify": "node infra/dev.mjs verify"
   },
   "devDependencies": {
     "oxlint": "^1.81.0",
     "typescript": "~6.0.3",
     "wrangler": "4.146.0",
-    "@types/node": "^22.20.2"
+    "@types/node": "^22.20.2",
+    "pg": "8.23.1",
+    "@types/pg": "8.23.1"
   }
 }
