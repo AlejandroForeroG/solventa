@@ -1,11 +1,38 @@
 name: CI
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [dev, staging, prod]
+    types: [opened, synchronize, reopened, edited]
+  workflow_call:
+    inputs:
+      revision:
+        required: false
+        type: string
 permissions:
   contents: read
+  actions: read
 jobs:
+  policy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tools/git-policy.mjs pr
+      - name: Require a successful upstream deployment before promotion
+        if: github.base_ref == 'staging' || github.base_ref == 'prod'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: ${{ github.head_ref }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git diff --exit-code "$SOURCE_SHA" HEAD
+          gh api "repos/$REPOSITORY/actions/workflows/deploy.yml/runs?event=push&branch=$SOURCE_BRANCH&head_sha=$SOURCE_SHA" --jq '.workflow_runs | any(.conclusion == "success")' | grep -qx true
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -15,9 +42,15 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run infra:up
+      - run: npm run test:infra
+      - if: always()
+        run: npm run infra:down

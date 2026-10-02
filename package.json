@@ -21,12 +21,36 @@
     "typecheck": "npm run types && npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps backend packages --ignore-pattern **/worker-configuration.d.ts",
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run lint && npm run typecheck && npm run build"
+    "check": "npm run test:git && npm run architecture:check && npm run test:architecture && npm run test:database && npm run test:environments && npm run lint && npm run typecheck && npm run build && npm run build:remote",
+    "infra:up": "node infra/local.mjs up",
+    "infra:down": "node infra/local.mjs down",
+    "infra:verify": "node infra/database.mjs verify local",
+    "dev:backend": "node infra/local.mjs dev",
+    "architecture:check": "node tools/architecture.mjs",
+    "test:architecture": "node --test tools/architecture.test.mjs",
+    "build:dev": "npm run build:dev --workspaces --if-present",
+    "test:infra": "node infra/smoke.mjs",
+    "test:database": "node --test infra/database.test.mjs",
+    "infra:dev:up": "node infra/remote.mjs up dev",
+    "deploy:dev": "npm run build --workspace @solventa/web && node infra/remote.mjs deploy dev",
+    "infra:dev:verify": "node infra/remote.mjs verify dev",
+    "test:environments": "node --test infra/environments.test.mjs infra/ci.test.mjs infra/deployment.test.mjs",
+    "build:remote": "node infra/build-remote.mjs",
+    "infra:staging:up": "node infra/remote.mjs up staging",
+    "deploy:staging": "npm run build --workspace @solventa/web && node infra/remote.mjs deploy staging",
+    "infra:staging:verify": "node infra/remote.mjs verify staging",
+    "infra:prod:up": "node infra/remote.mjs up prod",
+    "deploy:prod": "npm run build --workspace @solventa/web && node infra/remote.mjs deploy prod",
+    "infra:prod:verify": "node infra/remote.mjs verify prod",
+    "prepare": "node tools/install-hooks.mjs",
+    "test:git": "node --test tools/git-policy.test.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
+    "@types/pg": "8.23.1",
     "oxlint": "^1.81.0",
+    "pg": "8.23.1",
     "typescript": "~6.0.3",
-    "wrangler": "4.146.0",
-    "@types/node": "^22.20.2"
+    "wrangler": "4.146.0"
   }
 }

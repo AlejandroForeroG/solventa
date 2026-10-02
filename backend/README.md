@@ -1,0 +1,17 @@
+# Fronteras de los backends
+
+Cada backend es una unidad de despliegue y posee sus migraciones, esquema SQL y credencial runtime. Adquisición usa un service binding hacia Identidad. El Worker web compone comprobaciones operativas mediante RPC a los tres servicios. Estas llamadas de diagnóstico no son contratos de negocio.
+
+`src/index.ts` es la raíz de composición de Cloudflare. `adapters/inbound/http.ts` contiene Hono y liveness; `adapters/outbound/database-probe.ts` contiene PostgreSQL y el diagnóstico del almacén. Ninguno representa un caso de uso de negocio. No envolver estas sondas en interfaces artificiales para dar apariencia de dominio.
+
+Cuando se implemente una capacidad:
+
+- `domain` contiene reglas y tipos propios sin SDK, red, variables de ambiente ni APIs de plataforma.
+- `application` coordina el caso de uso y define los puertos que requiere. Puede depender de su dominio y aplicación, nunca de adaptadores.
+- `adapters` implementa los puertos; Hono, PostgreSQL, proveedores y Cloudflare permanecen aquí o en la raíz de composición.
+- La raíz de composición inyecta adaptadores. Una transacción pertenece a un solo propietario. Las colaboraciones entre propietarios usan contratos; los eventos futuros requieren idempotencia y una estrategia transaccional antes de habilitar escrituras.
+- `packages/contracts` contiene únicamente contratos de frontera estables. No agregar entidades, servicios ni repositorios compartidos para eludir la separación.
+
+`architecture:check` analiza importaciones, exportaciones, imports de tipos e imports dinámicos. Rechaza dependencias del núcleo hacia SDK o adaptadores, del dominio hacia aplicación e importaciones relativas fuera del backend. Compila el núcleo con ES2022 sin tipos de Node, DOM o Workers. `test:architecture` verifica ejemplos de infracción. Es una ayuda estática; la revisión debe comprobar responsabilidades y dependencias semánticas.
+
+Los núcleos siguen vacíos. La infraestructura no valida hexágonos funcionales, contratos públicos, consistencia eventual, outbox, OAuth, auditoría ni capacidades de negocio.

@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "solventa-identity-consent-ecosystem",
+  "name": "solventa-identity-consent-ecosystem-local",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": [
@@ -17,6 +17,60 @@
     "traces": {
       "enabled": true,
       "head_sampling_rate": 0.01
+    }
+  },
+  "account_id": "803fd559877aae8f638140610f106857",
+  "vars": {
+    "APP_ENV": "local"
+  },
+  "hyperdrive": [
+    {
+      "binding": "IDENTITY_DB",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "env": {
+    "dev": {
+      "name": "solventa-identity-consent-ecosystem-dev",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "dev"
+      },
+      "hyperdrive": [
+        {
+          "binding": "IDENTITY_DB",
+          "id": "b4a97889d47e4f6f8aa9920696aaf27a"
+        }
+      ]
+    },
+    "staging": {
+      "name": "solventa-identity-consent-ecosystem-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "hyperdrive": [
+        {
+          "binding": "IDENTITY_DB",
+          "id": "151061a3b9e34b248fdd504e5dd0258e"
+        }
+      ]
+    },
+    "prod": {
+      "name": "solventa-identity-consent-ecosystem-prod",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "hyperdrive": [
+        {
+          "binding": "IDENTITY_DB",
+          "id": "3c378c859a6f404eb56cfcdfb5a2059a"
+        }
+      ]
     }
   }
 }

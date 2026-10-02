@@ -1,0 +1,19 @@
+{
+  "name": "@solventa/assets",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web": "./src/web.ts",
+    "./mobile": "./src/mobile.ts",
+    "./brand/*": "./brand/*"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "sharp": "0.35.4"
+  }
+}

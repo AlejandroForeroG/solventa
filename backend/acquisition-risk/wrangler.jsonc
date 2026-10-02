@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "solventa-acquisition-risk",
+  "name": "solventa-acquisition-risk-local",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": [
@@ -18,5 +18,83 @@
       "enabled": true,
       "head_sampling_rate": 0.01
     }
-  }
+  },
+  "account_id": "803fd559877aae8f638140610f106857",
+  "vars": {
+    "APP_ENV": "local"
+  },
+  "hyperdrive": [
+    {
+      "binding": "ACQUISITION_DB",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "env": {
+    "dev": {
+      "name": "solventa-acquisition-risk-dev",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "dev"
+      },
+      "hyperdrive": [
+        {
+          "binding": "ACQUISITION_DB",
+          "id": "e5a14ab9ea0042cab2769448f8b5495a"
+        }
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-dev"
+        }
+      ]
+    },
+    "staging": {
+      "name": "solventa-acquisition-risk-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "hyperdrive": [
+        {
+          "binding": "ACQUISITION_DB",
+          "id": "789c6e9ceac34df2b4712c86abbfaedd"
+        }
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-staging"
+        }
+      ]
+    },
+    "prod": {
+      "name": "solventa-acquisition-risk-prod",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "prod"
+      },
+      "hyperdrive": [
+        {
+          "binding": "ACQUISITION_DB",
+          "id": "fe460ee7b27442afa08967f8e6ec5ef8"
+        }
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-prod"
+        }
+      ]
+    }
+  },
+  "services": [
+    {
+      "binding": "IDENTITY_SERVICE",
+      "service": "solventa-identity-consent-ecosystem-local"
+    }
+  ]
 }
