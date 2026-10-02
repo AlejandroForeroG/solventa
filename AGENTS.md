@@ -8,6 +8,7 @@
 
 ## Arquitectura
 
+- Fuente de arquitectura: [documento vigente de Solventa](https://docs.google.com/document/d/19xO1-UH7n3q_vsnDWfzJcDXH49-eQEDGCeWIDw4gQFU/edit). Leerlo completo antes de modificar límites, responsabilidades o integraciones. En el workspace local, la copia PDF está en `../output/semana8-arquitectura.pdf` y los ajustes de apoyo en `../docs/semana-7/04-ajustes-arquitectura.md`; estas rutas pertenecen al repositorio padre y no están incluidas en un clon del producto. Si no se puede acceder a la fuente, indicarlo; no sustituirla por supuestos. Mantener los documentos fuente fuera del producto.
 - Mantener el monorepo: `apps/web` (React/Vite), `apps/mobile` (Expo/React Native) y tres backends Hono/Cloudflare Workers.
 - Respetar sus responsabilidades: `acquisition-risk` para cotización y riesgo; `identity-consent-ecosystem` para identidad, autorización, consentimiento y socios; `policy-claims-payments` para pólizas, siniestros y pagos.
 - Aplicar hexagonal con criterio: Domain contiene reglas; Application orquesta casos de uso mediante puertos; los adaptadores implementan HTTP, SQL, proveedores y mensajería. Domain y Application no importan SDK de infraestructura ni tipos de plataforma. No crear abstracciones sin una necesidad concreta.
