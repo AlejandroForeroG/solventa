@@ -18,6 +18,8 @@
 
 ## Mockups e interfaz
 
+- Usar `packages/assets` para la marca y recursos compartidos. Consumir sus registros `@solventa/assets/web` y `@solventa/assets/mobile`; no duplicar logos entre canales. Mantener la identidad verde y consultar su README antes de añadir variantes.
+
 - Consultar el mockup vigente del canal y recorrido solicitado. Respetar navegación, jerarquía, componentes y estados; no duplicar automáticamente las funciones web en móvil.
 - Los mockups orientan la interfaz; los criterios de aceptación y las reglas de negocio gobiernan el comportamiento. No convertir una simulación visual en una garantía de seguridad o negocio.
 - Implementar los estados pertinentes de carga, vacío, error, acceso denegado y degradación. Una oferta preliminar no habilita contratación; en móvil mostrar modo offline y última sincronización cuando corresponda.

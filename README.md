@@ -10,6 +10,7 @@ Monorepo TypeScript con aplicaciones web y móvil y tres backends independientes
 | backend/policy-claims-payments | Pólizas, Siniestros y Pagos |
 | backend/identity-consent-ecosystem | Identidad, Consentimiento y Ecosistema |
 | packages/contracts | Contratos de frontera |
+| packages/assets | Marca y assets compartidos de web y móvil |
 | infra | Configuración operativa |
 
 ## Instalación y comprobación
@@ -28,6 +29,8 @@ npm run check
 Crear la feature desde `dev`. Abrir PR hacia `dev`; después promover con PR de `dev` a `staging` y de `staging` a `prod`. Cada integración dispara CI y el despliegue correspondiente. Ver [CI/CD](infra/ci-cd.md).
 
 ## Desarrollo local
+
+Los SVG de marca y sus variantes están en [packages/assets](packages/assets/README.md). Importar `brandAssets` desde `@solventa/assets/web` o `@solventa/assets/mobile`; el catálogo de rutas está en `@solventa/assets`. Ambos canales consumen la misma fuente.
 
 Requiere Docker con Compose:
 

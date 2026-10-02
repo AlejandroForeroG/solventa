@@ -13,6 +13,7 @@
     "build:dev": "npm run build && wrangler deploy --env dev --dry-run --outdir worker-dist"
   },
   "dependencies": {
+    "@solventa/assets": "0.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
