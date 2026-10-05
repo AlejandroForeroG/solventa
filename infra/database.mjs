@@ -151,6 +151,18 @@ export async function provision(environment) {
   } finally { await db.end(); }
   console.log(JSON.stringify({ database: config.database, schemas: owners.map(o => o.schema), status: 'provisioned' }));
 }
+async function expectPermissionDenied(client, sql) {
+  await client.query('BEGIN');
+  try {
+    let denied = false;
+    try { await client.query(sql); } catch (error) { if (error.code !== '42501') throw error; denied = true; }
+    if (!denied) throw Error('Runtime isolation failed');
+  } finally { await client.query('ROLLBACK'); }
+}
+export async function verifyNoSchemaCreate(client, schema) {
+  const result = await client.query('SELECT has_schema_privilege(current_user, $1, $2) AS can_create', [schema, 'CREATE']);
+  if (result.rows[0]?.can_create !== false) throw Error('Runtime DDL privilege detected');
+}
 export async function verifyIsolation(environment) {
   const config = await settings(environment);
   const state = JSON.parse(await readFile(`infra/.local/runtime.${environment}.json`, 'utf8'));
@@ -162,12 +174,11 @@ export async function verifyIsolation(environment) {
       await client.connect();
       await client.query(`SELECT count(*) FROM ${id(owner.schema)}.schema_migrations`);
       const attempts = owners.filter(other => other.schema !== owner.schema).map(other => `SELECT * FROM ${id(other.schema)}.schema_migrations`);
-      attempts.push(`CREATE TABLE ${id(owner.schema)}.unauthorized_probe (id INT)`);
       for (const sql of attempts) {
-        let denied = false;
-        try { await client.query(sql); } catch (error) { if (error.code !== '42501') throw error; denied = true; }
-        if (!denied) throw Error('Runtime isolation failed');
+        await expectPermissionDenied(client, sql);
       }
+      // Catalog checks cannot leave a table behind if a role is overprivileged.
+      await verifyNoSchemaCreate(client, owner.schema);
       results.push({ schema: owner.schema, ownRead: true, crossReadDenied: true, ddlDenied: true });
     } finally { await client.end(); }
   }

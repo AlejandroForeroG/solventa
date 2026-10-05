@@ -25,6 +25,7 @@
 - Los esquemas son `identity`, `acquisition` y `policy`. Abrir una conexión separada con el rol correspondiente para cada propietario; no ampliar permisos para hacer consultas cruzadas.
 - `backend/<backend>/runtime-grants.json` describe los permisos de tablas de negocio. Listar una tabla en el catálogo no concede acceso: `schema_migration_failures` es administrativa y runtime no puede leerla; el ledger `schema_migrations` sí permite SELECT.
 - Usar `settings` y `clientFor` de `infra/database.mjs`, TLS verificado y una transacción de solo lectura. Empezar por listar tablas; un ambiente puede tener migraciones distintas. Consultar solo los campos necesarios, con filtros y límites, evitando PII en salidas.
+- `npm run infra:<ambiente>:schema-verify` comprueba sin escribir versiones, checksums, tablas y lecturas propias. Para verificar public y marcas administrativas, el operador usa `node infra/schema-verify.mjs <ambiente> --admin`; no ejecutar ese modo con credenciales administrativas en CI/CD.
 - Si falta configuración o estado de credenciales, restaurarlo desde la custodia del operador; no inventar contraseñas ni rotar usuarios. Para arrancar local, `npm run infra:up` inicia Docker y aplica migraciones pendientes: no es un comando de inspección.
 - Inspeccionar datos no autoriza migrar, aprovisionar, desplegar, insertar, actualizar ni borrar, especialmente en staging/prod. Esas operaciones requieren su tarea y el flujo de promoción correspondiente.
 
