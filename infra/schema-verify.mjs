@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { owners, settings, clientFor, migrationChecksums, validateRuntimeGrants } from './database.mjs';
+import { owners, settings, clientFor, migrationChecksums, validateRuntimeGrants, verifyNoSchemaCreate } from './database.mjs';
 
 export async function verifySchema(environment, { administrative = false } = {}) {
   const config = await settings(environment);
@@ -29,8 +29,19 @@ export async function verifySchema(environment, { administrative = false } = {})
       const expected = Object.keys(grants).concat('schema_migrations', 'schema_migration_failures').sort();
       const tables = (await db.query('SELECT table_name FROM information_schema.tables WHERE table_catalog=$1 AND table_schema=$2 ORDER BY table_name', [config.database, owner.schema])).rows.map(row => row.table_name);
       assert.deepEqual(tables, expected, 'Schema tables differ');
-      for (const table of Object.keys(grants)) await db.query(`SELECT * FROM ${owner.schema}.${table} LIMIT 0`);
-      results.push({ schema: owner.schema, tables: Object.keys(grants).length, versionsMatch: true, checksumsMatch: true, ownReads: true });
+      for (const [table, desired] of Object.entries(grants)) {
+        await db.query(`SELECT * FROM ${owner.schema}.${table} LIMIT 0`);
+        const privileges = (await db.query("SELECT has_table_privilege(current_user, $1, 'SELECT') AS select, has_table_privilege(current_user, $1, 'INSERT') AS insert, has_table_privilege(current_user, $1, 'UPDATE') AS update, has_table_privilege(current_user, $1, 'DELETE') AS delete", [`${owner.schema}.${table}`])).rows[0];
+        for (const privilege of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
+          assert.equal(privileges[privilege.toLowerCase()], desired.includes(privilege), 'Runtime table privileges differ');
+        }
+      }
+      await verifyNoSchemaCreate(db, owner.schema);
+      results.push({ schema: owner.schema, tables: Object.keys(grants).length, versionsMatch: true, checksumsMatch: true, ownReads: true, runtimeDmlMatches: true });
+    } catch (error) {
+      error.schema = owner.schema;
+      if (error.code === 'ERR_ASSERTION') error.reason = error.message.split('\n')[0];
+      throw error;
     } finally { await db.end(); }
   }
   // Runtime cannot inspect administrative migration guards or prove the absence
@@ -54,5 +65,5 @@ export async function verifySchema(environment, { administrative = false } = {})
 }
 if (process.argv[1] === resolve('infra/schema-verify.mjs')) {
   try { await verifySchema(process.argv[2], { administrative: process.argv[3] === '--admin' }); }
-  catch (error) { console.error(JSON.stringify({ environment: process.argv[2], status: 'failed', code: error.code ?? 'schema_mismatch' })); process.exitCode = 1; }
+  catch (error) { console.error(JSON.stringify({ environment: process.argv[2], status: 'failed', code: error.code ?? 'schema_mismatch', schema: error.schema, reason: error.reason })); process.exitCode = 1; }
 }

@@ -93,6 +93,15 @@ reprovisión converge y luego se verifica. Roles con ALL/grant option exigen rev
 administrativa antes de continuar. No se afirma atomicidad de permisos.
 
 schema_migration_failures es una tabla administrativa, sin permisos runtime. El
+runner conserva `autocommit_before_ddl=on`, verificado en local y en el clúster Basic.
+Cada sentencia DDL puede confirmar por separado; BEGIN/ROLLBACK no hacen atómica
+una migración de varias sentencias ni el ledger con ese DDL. Desactivar el ajuste
+impide los ALTER actuales sobre tablas con schema_locked en la versión local;
+no se cambia globalmente ni se desbloquean tablas automáticamente.
+El guard persistente es el mecanismo de protección: cualquier fallo intermedio
+puede dejar tablas/constraints parciales y requiere inspección/reconciliación
+administrativa, no solo XXA00. No asumir que rollback deshizo el DDL ni volver a
+ejecutar la migración completa automáticamente. El
 runner guarda allí la intención antes de iniciar DDL y solo la elimina tras confirmar
 la transacción. Si falla o se interrumpe, bloquea replay incluso si existe un checksum
 en el ledger: CockroachDB puede confirmar DML y fallar ALTER TABLE con XXA00.

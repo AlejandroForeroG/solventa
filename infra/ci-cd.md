@@ -20,6 +20,9 @@ volver a dev antes de la siguiente promoción. Crear `feat/sync-staging` o
 `feat/sync-prod` desde dev, integrar la rama del ambiente con merge normal y abrir
 PR hacia dev con CI. Integrar ese PR también con merge normal, nunca squash/rebase,
 para conservar la ascendencia. Después promover dev a staging y staging a prod.
+Usar un mensaje compatible con el hook, por ejemplo
+`git merge --no-ff -m "fix(ci): sincronizar staging en dev" origin/staging`
+en la rama `feat/sync-staging`; para prod sustituir el ambiente en ambos lugares.
 No usar Update branch para empujar directamente a una rama protegida. Resolver
 conflictos en la rama feat; el gate sigue exigiendo el contenido del origen.
 
@@ -57,7 +60,7 @@ distintos con el mismo alcance de cuenta no resuelven por sí solos este límite
 Las migraciones siguen a cargo del operador por ambiente, antes de desplegar código que dependa de ellas. Un cambio solo de código no requiere reprovisionar Hyperdrive. El despliegue no hace rollback automático si falla una comprobación posterior. Para recuperar, preparar una reversión en una rama feat, pasar por PR y promoverla; verificar compatibilidad con datos y migraciones existentes. Nunca restaurar credenciales administrativas en Actions.
 
 CD ejecuta `infra:<ambiente>:schema-verify` antes de publicar: compara versiones,
-checksums, catálogo y lecturas de tablas con la revisión desplegada usando roles
+checksums, catálogo, lecturas y permisos DML efectivos con la revisión desplegada usando roles
 runtime. Un ambiente que siga en baseline no puede obtener Deploy exitoso de esta
 revisión. Tras aprobar el candidato, el operador debe aplicar sus migraciones antes
 de integrar y ejecutar `node infra/schema-verify.mjs <ambiente> --admin` con su
