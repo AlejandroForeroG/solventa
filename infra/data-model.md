@@ -83,3 +83,21 @@ aprobada del ambiente, con credenciales administrativas custodiadas. CD no obtie
 credenciales ni ejecuta DDL. Aplicar migraciones aditivas antes de desplegar consumidores
 que las necesiten; promover código por PR. Rollback de Workers no revierte tablas.
 Nunca editar migraciones registradas. Clúster Basic actual de una región; no se afirma HA.
+
+El checksum nuevo normaliza LF; replay también admite el hash CRLF histórico sin
+reescribir el ledger. Cualquier otra modificación falla. Los permisos se reconcilian
+por diferencias tras validar todas las tablas; no se usa REVOKE ALL sobre runtime.
+CockroachDB puede conservar GRANT/REVOKE pese al rollback. Un fallo intermedio puede
+dejar el plan incompleto, pero no elimina los permisos deseados que ya existían; la
+reprovisión converge y luego se verifica. Roles con ALL/grant option exigen revisión
+administrativa antes de continuar. No se afirma atomicidad de permisos.
+
+schema_migration_failures es una tabla administrativa, sin permisos runtime. El
+runner guarda allí la intención antes de iniciar DDL y solo la elimina tras confirmar
+la transacción. Si falla o se interrumpe, bloquea replay incluso si existe un checksum
+en el ledger: CockroachDB puede confirmar DML y fallar ALTER TABLE con XXA00.
+El operador debe comprobar SHOW CONSTRAINTS/SHOW CREATE TABLE y el ledger de esa
+versión. Si el esquema está completo, conserva el ledger y elimina únicamente su
+marca; si está incompleto, reconcilia el DDL y su ledger antes de quitar la marca.
+No borrar marcas ni volver a ejecutar automáticamente sin esa inspección. No editar
+el SQL registrado para resolverlo. Véase la [limitación oficial de CockroachDB](https://docs.cockroachlabs.com/docs/stable/online-schema-changes#schema-change-ddl-statements-inside-a-multi-statement-transaction-can-fail-while-other-statements-succeed).

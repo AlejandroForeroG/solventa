@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { owners, settings, clientFor, verifyIsolation, validateRuntimeGrants, applyMigrations } from './database.mjs';
+import { owners, settings, clientFor, verifyIsolation, validateRuntimeGrants, applyMigrations, applyRuntimeGrants } from './database.mjs';
 
 // Synthetic probes run only locally, within rolled-back transactions.
 const config = await settings('local');
@@ -29,10 +29,37 @@ try {
     const before = (await fresh.query(`SELECT * FROM ${owner.schema}.schema_migrations ORDER BY version`)).rows;
     await applyMigrations(fresh, owner);
     assert.deepEqual((await fresh.query(`SELECT * FROM ${owner.schema}.schema_migrations ORDER BY version`)).rows, before);
-    const expected = Object.keys(JSON.parse(await readFile(`backend/${owner.name}/runtime-grants.json`, 'utf8'))).concat('schema_migrations').sort();
+  }
+  for (const owner of owners) {
+    const expected = Object.keys(JSON.parse(await readFile(`backend/${owner.name}/runtime-grants.json`, 'utf8'))).concat('schema_migrations', 'schema_migration_failures').sort();
     const actual = (await fresh.query('SELECT table_name FROM information_schema.tables WHERE table_schema = $1', [owner.schema])).rows.map(r => r.table_name).sort();
     assert.deepEqual(actual, expected);
   }
+  // Validate the entire plan before changing any permission.
+  const beforeGrants = (await fresh.query('SHOW GRANTS ON TABLE acquisition.audit_events')).rows;
+  await assert.rejects(applyRuntimeGrants(fresh, owners[0], 'solventa_local_acquisition', {
+    audit_events: ['SELECT'], nonexistent_probe: ['SELECT'],
+  }), error => error.code === '42P01');
+  assert.deepEqual((await fresh.query('SHOW GRANTS ON TABLE acquisition.audit_events')).rows, beforeGrants);
+  await fresh.query('GRANT SELECT ON TABLE acquisition.audit_events TO solventa_local_acquisition');
+  const grantPlan = {audit_events: ['SELECT', 'INSERT'], inbox_events: ['SELECT', 'INSERT']};
+  const interrupted = {query: (sql, ...args) => {
+    if (typeof sql === 'string' && sql.startsWith('GRANT') && sql.includes('inbox_events')) {
+      return Promise.reject(Object.assign(Error('synthetic grant interruption'), {code: 'synthetic_interruption'}));
+    }
+    return fresh.query(sql, ...args);
+  }};
+  await assert.rejects(applyRuntimeGrants(interrupted, owners[0], 'solventa_local_acquisition', grantPlan), {code: 'synthetic_interruption'});
+  assert.ok((await fresh.query('SHOW GRANTS ON TABLE acquisition.audit_events')).rows.some(row => row.grantee === 'solventa_local_acquisition' && row.privilege_type === 'SELECT'));
+  await applyRuntimeGrants(fresh, owners[0], 'solventa_local_acquisition', grantPlan);
+  await applyRuntimeGrants({query: (sql, ...args) => {
+    assert.ok(sql.startsWith('SHOW GRANTS'), 'Unchanged runtime grants must not mutate privileges');
+    return fresh.query(sql, ...args);
+  }}, owners[0], 'solventa_local_acquisition', grantPlan);
+  await transaction(fresh, async () => {
+    await fresh.query("UPDATE acquisition.schema_migrations SET checksum=$1 WHERE version='0001_baseline.sql'", ['0'.repeat(64)]);
+    await assert.rejects(applyMigrations(fresh, owners[0]), /Applied migration changed/);
+  });
   assert.equal((await fresh.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")).rowCount, 0);
 } finally {
   if (fresh) await fresh.end();
@@ -40,7 +67,7 @@ try {
   await freshAdmin.end();
 }
 async function denied(client, sql, code) {
-  await assert.rejects(client.query(sql), error => error.code === code);
+  await transaction(client, () => assert.rejects(client.query(sql), error => error.code === code));
 }
 async function transaction(client, fn) {
   await client.query('BEGIN');
@@ -61,11 +88,15 @@ for (const owner of owners) {
     for (const other of owners.filter(o => o !== owner)) {
       await denied(client, `SELECT * FROM ${other.schema}.audit_events`, '42501');
       await denied(client, `INSERT INTO ${other.schema}.inbox_events DEFAULT VALUES`, '42501');
+      await denied(client, `UPDATE ${other.schema}.inbox_events SET consumer=consumer WHERE false`, '42501');
+      await denied(client, `DELETE FROM ${other.schema}.inbox_events WHERE false`, '42501');
     }
+    for (const table of Object.keys(grants)) await denied(client, `DELETE FROM ${table} WHERE false`, '42501');
     await denied(client, 'UPDATE audit_events SET action = action', '42501');
     await denied(client, 'DELETE FROM audit_events', '42501');
     await denied(client, 'UPDATE inbox_events SET consumer = consumer', '42501');
     await denied(client, 'INSERT INTO schema_migrations DEFAULT VALUES', '42501');
+    await denied(client, 'SELECT * FROM schema_migration_failures', '42501');
     const event = randomUUID();
     const aggregate = randomUUID();
     const correlation = randomUUID();
@@ -131,8 +162,8 @@ for (const owner of owners) {
       await denied(client, 'UPDATE underwriting_decisions SET outcome = outcome', '42501');
       await denied(client, 'UPDATE offer_revisions SET premium = premium', '42501');
       await denied(client, 'UPDATE risk_profiles SET source = source', '42501');
-      await assert.rejects(client.query(`INSERT INTO offers (decision_id, premium, currency, coverages, valid_from, expires_at)
-        VALUES ($1, -1, 'COP', '{}', now(), now() + INTERVAL '1 day')`, [randomUUID()]), e => e.code === '23514');
+      await transaction(client, () => assert.rejects(client.query(`INSERT INTO offers (decision_id, premium, currency, coverages, valid_from, expires_at)
+        VALUES ($1, -1, 'COP', '{}', now(), now() + INTERVAL '1 day')`, [randomUUID()]), e => e.code === '23514'));
     }
     if (owner.schema === 'policy') {
       const policy = randomUUID(), otherPolicy = randomUUID(), claim = randomUUID(), indemnity = randomUUID();
@@ -151,10 +182,10 @@ for (const owner of owners) {
         assert.equal((await client.query(payment, [policy, indemnity, 'a'.repeat(64), correlation])).rowCount, 0);
         await assert.rejects(client.query(payment, [otherPolicy, indemnity, 'a'.repeat(64), correlation]), e => e.code === '23503');
       });
-      await assert.rejects(client.query(`INSERT INTO policies (subject_token, offer_id, offer_version, idempotency_key, request_hash,
+      await transaction(client, () => assert.rejects(client.query(`INSERT INTO policies (subject_token, offer_id, offer_version, idempotency_key, request_hash,
         premium, currency, coverage_snapshot, effective_from, effective_until, correlation_id)
         VALUES ('synthetic', $1, 1, 'probe', $2, 1, 'COP', '{}', now(), now() - INTERVAL '1 day', $3)`,
-      [aggregate, 'a'.repeat(64), correlation]), e => e.code === '23514');
+      [aggregate, 'a'.repeat(64), correlation]), e => e.code === '23514'));
     }
     checks.push({ schema: owner.schema, tables: Object.keys(grants).length, ownRead: true, crossDmlDenied: true,
       appendOnlyAudit: true, inboxDeduplication: true, rollbackAtomicity: true });
