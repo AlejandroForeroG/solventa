@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtemp, access, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runtimeState } from './database.mjs';
+import { runtimeState, validateRuntimeGrants } from './database.mjs';
+
+test('runtime grants reject DDL, ledger writes and interpolated identifiers', () => {
+  for (const grants of [{clients: ['ALL']}, {clients: ['CREATE']}, {clients: ['DELETE']}, {schema_migrations: ['INSERT']}, {'clients; DROP DATABASE x': ['SELECT']}]) {
+    assert.throws(() => validateRuntimeGrants(grants));
+  }
+  assert.deepEqual(validateRuntimeGrants({audit_events: ['SELECT', 'INSERT']}), {audit_events: ['SELECT', 'INSERT']});
+});
 
 test('an existing shared environment requires its original credential state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'solventa-state-'));

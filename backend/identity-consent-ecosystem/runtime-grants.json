@@ -1,0 +1,44 @@
+{
+  "clients": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "external_identities": [
+    "SELECT",
+    "INSERT"
+  ],
+  "partners": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "partner_credentials": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "consents": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "registered_devices": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "outbox_events": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "inbox_events": [
+    "SELECT",
+    "INSERT"
+  ],
+  "audit_events": [
+    "SELECT",
+    "INSERT"
+  ]
+}

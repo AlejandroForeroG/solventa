@@ -26,7 +26,7 @@ La base `solventa_local` tiene tres propietarios lógicos:
 
 Cada rol runtime puede leer su registro de migraciones; no puede consultar los demás esquemas ni crear tablas. El aprovisionador utiliza una conexión administrativa separada. Las futuras migraciones deben otorgar explícitamente el DML mínimo de sus tablas al rol propio; nunca DDL ni privilegios sobre otro propietario. `infra:verify` comprueba permisos con consultas reales.
 
-Cada backend mantiene sus SQL en `migrations/`. El registro conserva versión, checksum y fecha; modificar una migración aplicada produce un error. La inicial solo fija la línea base con `SELECT 1`. No crea tablas de negocio.
+Cada backend mantiene sus SQL en `migrations/`. El registro conserva versión, checksum y fecha; modificar una migración aplicada produce un error. La inicial fija la línea base con `SELECT 1`; las posteriores crean las [26 tablas base](data-model.md). Ejecutar `npm run test:schema` para verificar migraciones, permisos y restricciones en SQL local real.
 
 `test:infra` inicia temporalmente cuatro Workers en 8790 y verifica SQL, RPC, rechazo de tokens ausentes o inválidos, activos web y rutas de negocio deshabilitadas. El token local se genera en `apps/web/.dev.vars`; no se imprime. `/health` es liveness; `GET /internal/infra` exige `Authorization: Bearer <DEV_INFRA_TOKEN>` y devuelve 503 si una dependencia no está disponible.
 

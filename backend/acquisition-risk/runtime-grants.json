@@ -1,0 +1,42 @@
+{
+  "quotes": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "risk_profiles": [
+    "SELECT",
+    "INSERT"
+  ],
+  "underwriting_decisions": [
+    "SELECT",
+    "INSERT"
+  ],
+  "offers": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "offer_revisions": [
+    "SELECT",
+    "INSERT"
+  ],
+  "signal_refresh_jobs": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "outbox_events": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "inbox_events": [
+    "SELECT",
+    "INSERT"
+  ],
+  "audit_events": [
+    "SELECT",
+    "INSERT"
+  ]
+}

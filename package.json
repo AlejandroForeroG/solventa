@@ -31,6 +31,7 @@
     "build:dev": "npm run build:dev --workspaces --if-present",
     "test:infra": "node infra/smoke.mjs",
     "test:database": "node --test infra/database.test.mjs",
+    "test:schema": "node infra/schema-smoke.mjs",
     "infra:dev:up": "node infra/remote.mjs up dev",
     "deploy:dev": "npm run build --workspace @solventa/web && node infra/remote.mjs deploy dev",
     "infra:dev:verify": "node infra/remote.mjs verify dev",
