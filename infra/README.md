@@ -72,4 +72,12 @@ CI valida código, empaquetado de los doce Workers y entorno local sin credencia
 
 El ambiente prod inicial solo ofrece activos, liveness y diagnóstico protegido. Las funcionalidades, autenticación de usuarios, tratamiento de PII, recuperación y alertas requieren implementación y validación antes de habilitar el producto para usuarios reales.
 
+CD verifica el esquema con `infra:<ambiente>:schema-verify` antes de publicar. Si un
+candidato añade migraciones, el operador debe aplicarlas desde su SHA definitivo
+y aprobado antes de integrar el PR, en todos los ambientes, incluido dev. No editar
+esos archivos después de aplicarlos; si cambian, preparar otra migración aditiva.
+Si se integra antes de migrar, Deploy falla de forma segura y se repite tras aplicar
+las migraciones de ese mismo SHA. Verificar también con
+`node infra/schema-verify.mjs <ambiente> --admin` desde la configuración custodiada.
+
 Referencias: [ambientes Wrangler](https://developers.cloudflare.com/workers/wrangler/environments/), [Hyperdrive y TLS](https://developers.cloudflare.com/hyperdrive/configuration/tls-ssl-certificates-for-hyperdrive/), [service bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/), [secretos](https://developers.cloudflare.com/workers/configuration/secrets/).

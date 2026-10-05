@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { owners, settings, clientFor, verifyIsolation, validateRuntimeGrants, applyMigrations, applyRuntimeGrants } from './database.mjs';
+import { owners, settings, clientFor, verifyIsolation, validateRuntimeGrants, applyMigrations, applyRuntimeGrants, verifyNoSchemaCreate } from './database.mjs';
 
 // Synthetic probes run only locally, within rolled-back transactions.
 const config = await settings('local');
@@ -36,6 +36,8 @@ try {
     assert.deepEqual(actual, expected);
   }
   // Validate the entire plan before changing any permission.
+  await assert.rejects(verifyNoSchemaCreate(fresh, 'acquisition'), /Runtime DDL privilege detected/);
+  assert.equal((await fresh.query("SELECT table_name FROM information_schema.tables WHERE table_schema='acquisition' AND table_name='unauthorized_probe'")).rowCount, 0);
   const beforeGrants = (await fresh.query('SHOW GRANTS ON TABLE acquisition.audit_events')).rows;
   await assert.rejects(applyRuntimeGrants(fresh, owners[0], 'solventa_local_acquisition', {
     audit_events: ['SELECT'], nonexistent_probe: ['SELECT'],

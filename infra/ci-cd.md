@@ -15,6 +15,17 @@ Las tres ramas de ambientes requieren PR, checks `policy` y `validate` con la ra
 
 Los merge commits cambian el SHA entre ambientes; se conserva el contenido del candidato, comprobado con git diff en el PR de promoción. No usar squash ni rebase entre ambientes, ni agregar cambios específicos en staging/prod. Squash se admite al integrar una feature en dev. `main` queda como referencia histórica, sin despliegue.
 
+Con protección de rama actualizada, los commits de integración de staging/prod deben
+volver a dev antes de la siguiente promoción. Crear `feat/sync-staging` o
+`feat/sync-prod` desde dev, integrar la rama del ambiente con merge normal y abrir
+PR hacia dev con CI. Integrar ese PR también con merge normal, nunca squash/rebase,
+para conservar la ascendencia. Después promover dev a staging y staging a prod.
+Usar un mensaje compatible con el hook, por ejemplo
+`git merge --no-ff -m "fix(ci): sincronizar staging en dev" origin/staging`
+en la rama `feat/sync-staging`; para prod sustituir el ambiente en ambos lugares.
+No usar Update branch para empujar directamente a una rama protegida. Resolver
+conflictos en la rama feat; el gate sigue exigiendo el contenido del origen.
+
 PR sugerido: `feat(identity): registrar sesión principal`. Promoción: `refactor(ci): promover dev a staging` y `refactor(ci): promover staging a prod`. Describir resultado de pruebas, ejecución de Deploy, limitaciones y compatibilidad SQL. Los mensajes no seleccionan ambientes: lo hace la rama de destino.
 
 ## Configuración de GitHub
@@ -36,6 +47,26 @@ Crear un token de Cloudflare limitado a la cuenta configurada, con **Workers Scr
 
 Las políticas de GitHub environments permiten exclusivamente su rama homónima: dev, staging o prod. Los PR no reciben credenciales remotas; solo el job de Deploy posterior a CI las restaura. Los secretos se limpian siempre al terminar. Todos los recursos deben estar aprovisionados antes de integrar cambios que los necesiten.
 
+El token Workers Scripts a nivel de cuenta puede modificar Workers de otros
+ambientes. Las ramas/environments no limitan ese alcance dentro de Cloudflare:
+código integrado en dev recibe un token que podría publicar sobre prod. Esta base
+presupone colaboradores de confianza y no contiene usuarios reales. Antes de
+habilitar datos reales, definir aislamiento mediante cuentas Cloudflare separadas
+o revisión obligatoria de los cambios ejecutables de infraestructura/CI. Tokens
+distintos con el mismo alcance de cuenta no resuelven por sí solos este límite.
+
 ## Migraciones y recuperación
 
 Las migraciones siguen a cargo del operador por ambiente, antes de desplegar código que dependa de ellas. Un cambio solo de código no requiere reprovisionar Hyperdrive. El despliegue no hace rollback automático si falla una comprobación posterior. Para recuperar, preparar una reversión en una rama feat, pasar por PR y promoverla; verificar compatibilidad con datos y migraciones existentes. Nunca restaurar credenciales administrativas en Actions.
+
+CD ejecuta `infra:<ambiente>:schema-verify` antes de publicar: compara versiones,
+checksums, catálogo, lecturas y permisos DML efectivos con la revisión desplegada usando roles
+runtime. Un ambiente que siga en baseline no puede obtener Deploy exitoso de esta
+revisión. Tras aprobar el candidato, el operador debe aplicar sus migraciones antes
+de integrar y ejecutar `node infra/schema-verify.mjs <ambiente> --admin` con su
+configuración custodiada. Este paso también confirma public vacío y guardas sin
+marcas pendientes. Antes de migrar, inspeccionar el catálogo y ledger con una
+conexión administrativa READ ONLY; si existe schema_migration_failures, consultar
+`SELECT version, checksum, error_code FROM <esquema>.schema_migration_failures` por
+propietario. No quitar marcas sin reconciliar. La verificación runtime no reemplaza
+este control administrativo ni recibe esas credenciales en CD.
