@@ -31,29 +31,73 @@ export function clientFor(url, ssl) {
 }
 const id = (s) => '"' + s.replaceAll('"', '""') + '"';
 const literal = (s) => "'" + s.replaceAll("'", "''") + "'";
+export function migrationChecksums(sql) {
+  const normalized = sql.replaceAll('\r\n', '\n');
+  const hash = value => createHash('sha256').update(value).digest('hex');
+  return { canonical: hash(normalized), accepted: new Set([hash(normalized), hash(normalized.replaceAll('\n', '\r\n'))]) };
+}
 export function validateRuntimeGrants(grants) {
   if (!grants || typeof grants !== 'object' || Array.isArray(grants)) throw Error('Invalid runtime grants');
   for (const [table, privileges] of Object.entries(grants)) {
-    if (!/^[a-z][a-z0-9_]*$/.test(table) || table === 'schema_migrations' || !Array.isArray(privileges) || !privileges.length ||
+    if (!/^[a-z][a-z0-9_]*$/.test(table) || ['schema_migrations', 'schema_migration_failures'].includes(table) || !Array.isArray(privileges) || !privileges.length ||
       privileges.some(p => !['SELECT', 'INSERT', 'UPDATE'].includes(p)) || new Set(privileges).size !== privileges.length) throw Error('Invalid runtime grants');
   }
   return grants;
 }
+export async function applyRuntimeGrants(db, owner, role, grants) {
+  validateRuntimeGrants(grants);
+  const plans = [];
+  // GRANT/REVOKE can outlive ROLLBACK in CockroachDB. Preflight every table,
+  // then reconcile differences without removing any desired runtime privilege.
+  for (const [table, desired] of Object.entries(grants)) {
+    const target = `${id(owner.schema)}.${id(table)}`;
+    const rows = (await db.query(`SHOW GRANTS ON TABLE ${target}`)).rows;
+    const own = rows.filter(row => row.grantee === role);
+    if (own.some(row => row.privilege_type === 'ALL' || row.is_grantable)) {
+      throw Object.assign(Error('Reconcile overprivileged runtime role administratively'), {code: 'runtime_privileges_too_broad'});
+    }
+    const current = own.map(row => row.privilege_type);
+    if (current.some(privilege => !/^[A-Z]+$/.test(privilege))) throw Error('Unsupported catalog privilege');
+    plans.push({target, missing: desired.filter(privilege => !current.includes(privilege)),
+      surplus: current.filter(privilege => !desired.includes(privilege)), publicAccess: rows.some(row => row.grantee === 'public')});
+  }
+  for (const {target, missing, surplus, publicAccess} of plans) {
+    if (publicAccess) await db.query(`REVOKE ALL ON TABLE ${target} FROM public`);
+    if (surplus.length) await db.query(`REVOKE ${surplus.join(', ')} ON TABLE ${target} FROM ${id(role)}`);
+    if (missing.length) await db.query(`GRANT ${missing.join(', ')} ON TABLE ${target} TO ${id(role)}`);
+  }
+}
 export async function applyMigrations(db, owner) {
+  // Persist intent outside the DDL transaction. CockroachDB XXA00 can commit
+  // ledger DML while failing a schema change; a checksum alone is insufficient.
+  const guard = `${id(owner.schema)}.schema_migration_failures`;
+  await db.query(`CREATE TABLE IF NOT EXISTS ${guard} (version STRING PRIMARY KEY, checksum STRING NOT NULL, started_at TIMESTAMPTZ NOT NULL DEFAULT now(), error_code STRING)`);
+  await db.query(`REVOKE ALL ON TABLE ${guard} FROM public`);
+  if ((await db.query(`SELECT version FROM ${guard}`)).rowCount) {
+    throw Object.assign(Error('Inspect and reconcile incomplete migrations before replay'), { code: 'migration_reconciliation_required' });
+  }
   const migrations = (await readdir(`backend/${owner.name}/migrations`)).filter(f => f.endsWith('.sql')).sort();
   for (const version of migrations) {
     const sql = await readFile(`backend/${owner.name}/migrations/${version}`, 'utf8');
-    const checksum = createHash('sha256').update(sql).digest('hex');
+    const checksums = migrationChecksums(sql);
+    const checksum = checksums.canonical;
     const applied = (await db.query(`SELECT checksum FROM ${id(owner.schema)}.schema_migrations WHERE version=$1`, [version])).rows[0];
-    if (applied) { if (applied.checksum !== checksum) throw Error('Applied migration changed'); continue; }
+    if (applied) { if (!checksums.accepted.has(applied.checksum)) throw Error('Applied migration changed'); continue; }
     // DDL may reset transaction-local settings; select the owner on the connection.
     await db.query(`SET search_path = ${id(owner.schema)}`);
-    await db.query('BEGIN');
+    await db.query(`INSERT INTO ${guard} (version, checksum) VALUES ($1,$2)`, [version, checksum]);
     try {
+      await db.query('BEGIN');
       await db.query({ text: sql, query_timeout: 120000 });
       await db.query(`INSERT INTO ${id(owner.schema)}.schema_migrations (version,checksum) VALUES ($1,$2)`, [version,checksum]);
       await db.query('COMMIT');
-    } catch (error) { error.migration = `${owner.schema}/${version}`; await db.query('ROLLBACK'); throw error; }
+      await db.query(`DELETE FROM ${guard} WHERE version=$1`, [version]);
+    } catch (error) {
+      error.migration = `${owner.schema}/${version}`;
+      try { await db.query('ROLLBACK'); } catch { /* Preserve the original failure. */ }
+      try { await db.query(`UPDATE ${guard} SET error_code=$2 WHERE version=$1`, [version, error.code ?? 'migration_failed']); } catch { /* Durable intent still blocks replay. */ }
+      throw error;
+    }
   }
 }
 export async function runtimeState(environment, config, admin, statePath) {
@@ -102,11 +146,7 @@ export async function provision(environment) {
       // Runtime roles can read the migration ledger; they cannot mutate DDL or it.
       await db.query(`GRANT SELECT ON TABLE ${id(owner.schema)}.schema_migrations TO ${id(role)}`);
       const grants = validateRuntimeGrants(JSON.parse(await readFile(`backend/${owner.name}/runtime-grants.json`, 'utf8')));
-      for (const [table, privileges] of Object.entries(grants)) {
-        await db.query(`REVOKE ALL ON TABLE ${id(owner.schema)}.${id(table)} FROM public`);
-        await db.query(`REVOKE ALL ON TABLE ${id(owner.schema)}.${id(table)} FROM ${id(role)}`);
-        await db.query(`GRANT ${privileges.join(', ')} ON TABLE ${id(owner.schema)}.${id(table)} TO ${id(role)}`);
-      }
+      await applyRuntimeGrants(db, owner, role, grants);
     }
   } finally { await db.end(); }
   console.log(JSON.stringify({ database: config.database, schemas: owners.map(o => o.schema), status: 'provisioned' }));
