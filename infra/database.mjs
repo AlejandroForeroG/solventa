@@ -31,6 +31,31 @@ export function clientFor(url, ssl) {
 }
 const id = (s) => '"' + s.replaceAll('"', '""') + '"';
 const literal = (s) => "'" + s.replaceAll("'", "''") + "'";
+export function validateRuntimeGrants(grants) {
+  if (!grants || typeof grants !== 'object' || Array.isArray(grants)) throw Error('Invalid runtime grants');
+  for (const [table, privileges] of Object.entries(grants)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(table) || table === 'schema_migrations' || !Array.isArray(privileges) || !privileges.length ||
+      privileges.some(p => !['SELECT', 'INSERT', 'UPDATE'].includes(p)) || new Set(privileges).size !== privileges.length) throw Error('Invalid runtime grants');
+  }
+  return grants;
+}
+export async function applyMigrations(db, owner) {
+  const migrations = (await readdir(`backend/${owner.name}/migrations`)).filter(f => f.endsWith('.sql')).sort();
+  for (const version of migrations) {
+    const sql = await readFile(`backend/${owner.name}/migrations/${version}`, 'utf8');
+    const checksum = createHash('sha256').update(sql).digest('hex');
+    const applied = (await db.query(`SELECT checksum FROM ${id(owner.schema)}.schema_migrations WHERE version=$1`, [version])).rows[0];
+    if (applied) { if (applied.checksum !== checksum) throw Error('Applied migration changed'); continue; }
+    // DDL may reset transaction-local settings; select the owner on the connection.
+    await db.query(`SET search_path = ${id(owner.schema)}`);
+    await db.query('BEGIN');
+    try {
+      await db.query({ text: sql, query_timeout: 120000 });
+      await db.query(`INSERT INTO ${id(owner.schema)}.schema_migrations (version,checksum) VALUES ($1,$2)`, [version,checksum]);
+      await db.query('COMMIT');
+    } catch (error) { error.migration = `${owner.schema}/${version}`; await db.query('ROLLBACK'); throw error; }
+  }
+}
 export async function runtimeState(environment, config, admin, statePath) {
   let state;
   try { state = JSON.parse(await readFile(statePath, 'utf8')); }
@@ -73,22 +98,15 @@ export async function provision(environment) {
       await db.query(`GRANT CONNECT ON DATABASE ${id(config.database)} TO ${id(role)}`);
       await db.query(`GRANT USAGE ON SCHEMA ${id(owner.schema)} TO ${id(role)}`);
       await db.query(`CREATE TABLE IF NOT EXISTS ${id(owner.schema)}.schema_migrations (version STRING PRIMARY KEY, checksum STRING NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-      const migrations = (await readdir(`backend/${owner.name}/migrations`)).filter(f => f.endsWith('.sql')).sort();
-      for (const version of migrations) {
-        const sql = await readFile(`backend/${owner.name}/migrations/${version}`, 'utf8');
-        const checksum = createHash('sha256').update(sql).digest('hex');
-        const applied = (await db.query(`SELECT checksum FROM ${id(owner.schema)}.schema_migrations WHERE version=$1`, [version])).rows[0];
-        if (applied) { if (applied.checksum !== checksum) throw Error('Applied migration changed'); continue; }
-        await db.query('BEGIN');
-        try {
-          await db.query(`SET LOCAL search_path = ${id(owner.schema)}`);
-          await db.query(sql);
-          await db.query(`INSERT INTO ${id(owner.schema)}.schema_migrations (version,checksum) VALUES ($1,$2)`, [version,checksum]);
-          await db.query('COMMIT');
-        } catch (error) { await db.query('ROLLBACK'); throw error; }
-      }
+      await applyMigrations(db, owner);
       // Runtime roles can read the migration ledger; they cannot mutate DDL or it.
       await db.query(`GRANT SELECT ON TABLE ${id(owner.schema)}.schema_migrations TO ${id(role)}`);
+      const grants = validateRuntimeGrants(JSON.parse(await readFile(`backend/${owner.name}/runtime-grants.json`, 'utf8')));
+      for (const [table, privileges] of Object.entries(grants)) {
+        await db.query(`REVOKE ALL ON TABLE ${id(owner.schema)}.${id(table)} FROM public`);
+        await db.query(`REVOKE ALL ON TABLE ${id(owner.schema)}.${id(table)} FROM ${id(role)}`);
+        await db.query(`GRANT ${privileges.join(', ')} ON TABLE ${id(owner.schema)}.${id(table)} TO ${id(role)}`);
+      }
     }
   } finally { await db.end(); }
   console.log(JSON.stringify({ database: config.database, schemas: owners.map(o => o.schema), status: 'provisioned' }));
