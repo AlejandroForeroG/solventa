@@ -22,3 +22,8 @@ service-account*.json
 Thumbs.db
 .idea/
 .vscode/
+infra/.local/
+.env.infra.*
+!.env.infra.example
+wrangler.local.json
+worker-dist/

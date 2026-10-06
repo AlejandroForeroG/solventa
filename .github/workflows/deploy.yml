@@ -1,0 +1,63 @@
+name: Deploy
+on:
+  push:
+    branches: [dev, staging, prod]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.target.outputs.environment }}
+    steps:
+      - id: target
+        name: Resolve environment branch
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^(dev|staging|prod)$ ]] || exit 1
+          echo "environment=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ github.sha }}
+  deploy:
+    needs: [resolve, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run types
+      - name: Restore environment credentials
+        env:
+          DATABASE_HOST: ${{ vars.DATABASE_HOST }}
+          DATABASE_PORT: ${{ vars.DATABASE_PORT }}
+          DATABASE_CA_PEM: ${{ secrets.DATABASE_CA_PEM }}
+          RUNTIME_STATE_JSON: ${{ secrets.RUNTIME_STATE_JSON }}
+          WEB_INFRA_TOKEN: ${{ secrets.WEB_INFRA_TOKEN }}
+        run: node infra/ci.mjs prepare "$TARGET_ENVIRONMENT"
+      - name: Deploy and verify Cloudflare services
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npm run "infra:$TARGET_ENVIRONMENT:schema-verify"
+          npm run "deploy:$TARGET_ENVIRONMENT"
+          npm run "infra:$TARGET_ENVIRONMENT:verify"
+      - if: always()
+        run: node infra/ci.mjs cleanup "$TARGET_ENVIRONMENT"
