@@ -18,8 +18,9 @@ en remotos. Local permite HTTP solo en localhost. No entregar tokens a React ni
 guardarlos en localStorage, SQL, logs o Git. El adaptador verifica firma e issuer
 del cliente configurado. Si expira el access token, usa refresco del SDK; un fallo
 transitorio devuelve 503 y conserva la cookie. Las respuestas de validación
-fallida tampoco borran cookies: una petición concurrente puede haber instalado
-una sesión renovada. Logout sí las elimina. Cada sesión comprueba usuario activo,
+fallida del proveedor tampoco borran cookies: una petición concurrente puede haber
+instalado una sesión renovada. Si SQL no encuentra un principal activo y vigente,
+la respuesta 401 sí borra la cookie; logout también la elimina. Cada sesión comprueba usuario activo,
 pertenencia, vencimiento y revocación local en SQL. Duración local máxima: siete días.
 
 El alta confirma cliente, vínculo, sesión, auditoría y evento de creación en una
@@ -35,6 +36,17 @@ Initiate login URI y Sign-out URI. `AUTH_ORIGIN` y `AUTH_REDIRECT_URI` están en
 Wrangler. Secretos: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` y `AUTH_COOKIE_PASSWORD`
 (64 caracteres hex aleatorios, custodiados por ambiente). No compartir claves.
 Producción requiere habilitar el ambiente WorkOS antes de configurar credenciales.
+
+En Authentication, habilitar correo/contraseña y Magic Auth; mantener deshabilitados
+los proveedores sociales mientras no exista una integración aprobada. La cuenta
+de Outlook del operador no implica habilitar Microsoft como proveedor del producto.
+
+En Branding, usar los SVG de `packages/assets/brand`: logo e icono verdes para
+modo claro y blancos para oscuro, IBM Plex Sans y apariencia System. Colores
+claro/oscuro: fondo `#F7F6F3`/`#062F2A`, botón y enlaces `#0B6B5F`/`#12D9B8`,
+texto del botón `#FFFFFF`/`#062F2A`. El editor permite copiar únicamente branding
+entre ambientes; guardar y comprobar la página AuthKit real después de copiar.
+El idioma sigue la localización de AuthKit según las preferencias del navegador.
 
 Local: restaurar esos tres valores en `.dev.vars` de este backend. Desde la raíz,
 ejecutar `npm run infra:up`, `npm run build --workspace @solventa/web` y
