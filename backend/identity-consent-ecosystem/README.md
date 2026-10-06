@@ -18,8 +18,9 @@ en remotos. Local permite HTTP solo en localhost. No entregar tokens a React ni
 guardarlos en localStorage, SQL, logs o Git. El adaptador verifica firma e issuer
 del cliente configurado. Si expira el access token, usa refresco del SDK; un fallo
 transitorio devuelve 503 y conserva la cookie. Las respuestas de validación
-fallida tampoco borran cookies: una petición concurrente puede haber instalado
-una sesión renovada. Logout sí las elimina. Cada sesión comprueba usuario activo,
+fallida del proveedor tampoco borran cookies: una petición concurrente puede haber
+instalado una sesión renovada. Si SQL no encuentra un principal activo y vigente,
+la respuesta 401 sí borra la cookie; logout también la elimina. Cada sesión comprueba usuario activo,
 pertenencia, vencimiento y revocación local en SQL. Duración local máxima: siete días.
 
 El alta confirma cliente, vínculo, sesión, auditoría y evento de creación en una

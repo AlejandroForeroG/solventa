@@ -1,8 +1,8 @@
 # Fronteras de los backends
 
-Cada backend es una unidad de despliegue y posee sus migraciones, esquema SQL y credencial runtime. Adquisición usa un service binding hacia Identidad. El Worker web compone comprobaciones operativas mediante RPC a los tres servicios. Estas llamadas de diagnóstico no son contratos de negocio.
+Cada backend es una unidad de despliegue y posee sus migraciones, esquema SQL y credencial runtime. Adquisición usa un service binding hacia Identidad. El Worker web enruta `/auth/*` por el binding de Identidad y compone comprobaciones operativas mediante RPC a los tres servicios. Estas llamadas de diagnóstico no son contratos de negocio.
 
-`src/index.ts` es la raíz de composición de Cloudflare. `adapters/inbound/http.ts` contiene Hono y liveness; `adapters/outbound/database-probe.ts` contiene PostgreSQL y el diagnóstico del almacén. Ninguno representa un caso de uso de negocio. No envolver estas sondas en interfaces artificiales para dar apariencia de dominio.
+`src/index.ts` es la raíz de composición de Cloudflare. `adapters/inbound/http.ts` contiene Hono y liveness; en Identidad también monta las rutas de autenticación. `adapters/outbound/database-probe.ts` contiene PostgreSQL y el diagnóstico del almacén. Las sondas operativas no representan casos de uso de negocio; no envolverlas en interfaces artificiales para dar apariencia de dominio.
 
 Cuando se implemente una capacidad:
 

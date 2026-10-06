@@ -4,7 +4,7 @@ Monorepo TypeScript con aplicaciones web y móvil y tres backends independientes
 
 | Ruta | Componente |
 |---|---|
-| apps/web | React y Vite; Worker de activos y diagnóstico |
+| apps/web | React y Vite; Worker de activos, autenticación por binding y diagnóstico |
 | apps/mobile | React Native y Expo |
 | backend/acquisition-risk | Adquisición y Riesgo |
 | backend/policy-claims-payments | Pólizas, Siniestros y Pagos |
@@ -55,4 +55,16 @@ Cada backend reserva `domain`, `application`, `application/ports` y `adapters`. 
 
 La base implementa infraestructura local y tres ambientes remotos: `dev`, `staging` y `prod`. Cada ambiente tiene web, tres Workers privados, tres conexiones Hyperdrive y su base CockroachDB con esquemas y credenciales separados. Ver [operación](infra/README.md) y [fronteras](backend/README.md).
 
-Las pantallas y los núcleos de negocio son iniciales. No hay cotización, biometría, consentimiento, OAuth, pagos, auditoría transaccional ni proveedores implementados. `/api/*` devuelve 404; el secreto de diagnóstico no sustituye la autenticación de usuarios. `packages/contracts` permanece vacío hasta que exista un contrato real. El ambiente `prod` contiene la base operativa del producto. El clúster SQL compartido sigue siendo un fallo común y requiere evaluación antes de manejar datos reales. No hay alta disponibilidad local ni validación de rendimiento o ejecución móvil nativa.
+La autenticación web usa WorkOS AuthKit con PKCE, sesión sellada y usuario interno
+verificado en SQL. El alta de cliente nuevo confirma sesión, auditoría y evento de
+creación juntos; logout confirma revocación local y auditoría. Ver
+[autenticación](backend/identity-consent-ecosystem/README.md) y sus límites.
+
+Cotización, biometría, consentimiento efectivo, autorización de negocio y pagos
+siguen pendientes. `/api/*` devuelve 404; el secreto de diagnóstico no sustituye
+la sesión de usuario. `packages/contracts` permanece vacío hasta que exista un
+contrato real. Promover autenticación requiere migraciones y credenciales propias;
+producción necesita WorkOS habilitado antes de publicar este código. El clúster
+SQL compartido sigue siendo un fallo común y requiere evaluación antes de datos
+reales. No hay alta disponibilidad local ni validación de rendimiento o ejecución
+móvil nativa.
