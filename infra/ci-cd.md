@@ -39,6 +39,7 @@ En el repositorio, ir a **Settings > Environments**. Los ambientes `dev`, `stagi
 | Secret | DATABASE_CA_PEM | Contenido completo del bundle CA público del clúster |
 | Secret | RUNTIME_STATE_JSON | Contenido de infra/.local/runtime.<ambiente>.json |
 | Secret | WEB_INFRA_TOKEN | Valor DEV_INFRA_TOKEN de infra/.local/web.<ambiente>.secrets.json |
+| Secret | IDENTITY_AUTH_JSON | Configuración custodiada de Identidad para ese ambiente; ver [autenticación](../backend/identity-consent-ecosystem/README.md) |
 | Secret | CLOUDFLARE_API_TOKEN | Token de despliegue de la cuenta configurada |
 
 Los valores runtime y web pertenecen al ambiente y deben conservar las credenciales provisionadas. No colocar una URL administrativa, contraseña root ni certificados cliente en GitHub. CD usa las credenciales runtime para comprobar SQL y la API de Cloudflare para publicar. El ID de cuenta permanece fijo en las configuraciones.

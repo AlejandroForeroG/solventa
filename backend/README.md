@@ -14,4 +14,12 @@ Cuando se implemente una capacidad:
 
 `architecture:check` analiza importaciones, exportaciones, imports de tipos e imports dinámicos. Rechaza dependencias del núcleo hacia SDK o adaptadores, del dominio hacia aplicación e importaciones relativas fuera del backend. Compila el núcleo con ES2022 sin tipos de Node, DOM o Workers. `test:architecture` verifica ejemplos de infracción. Es una ayuda estática; la revisión debe comprobar responsabilidades y dependencias semánticas.
 
-Los núcleos siguen vacíos. La infraestructura no valida hexágonos funcionales, contratos públicos, consistencia eventual, outbox, OAuth, auditoría ni capacidades de negocio.
+Identidad implementa los casos de uso de autenticación web mediante puertos de
+sesión y persistencia, con adaptadores WorkOS y SQL; consultar su
+[README](identity-consent-ecosystem/README.md). El alta de cliente confirma vínculo,
+sesión, auditoría y evento de creación en una transacción; la revocación local
+confirma estado y auditoría juntos.
+
+Los núcleos de Adquisición y Pólizas siguen sin casos de uso de negocio. La base
+actual no acredita contratos públicos de negocio, publicación/consumo de eventos,
+consentimiento efectivo ni recorridos financieros completos.

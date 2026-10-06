@@ -36,6 +36,17 @@ Wrangler. Secretos: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` y `AUTH_COOKIE_PASSWORD
 (64 caracteres hex aleatorios, custodiados por ambiente). No compartir claves.
 Producción requiere habilitar el ambiente WorkOS antes de configurar credenciales.
 
+En Authentication, habilitar correo/contraseña y Magic Auth; mantener deshabilitados
+los proveedores sociales mientras no exista una integración aprobada. La cuenta
+de Outlook del operador no implica habilitar Microsoft como proveedor del producto.
+
+En Branding, usar los SVG de `packages/assets/brand`: logo e icono verdes para
+modo claro y blancos para oscuro, IBM Plex Sans y apariencia System. Colores
+claro/oscuro: fondo `#F7F6F3`/`#062F2A`, botón y enlaces `#0B6B5F`/`#12D9B8`,
+texto del botón `#FFFFFF`/`#062F2A`. El editor permite copiar únicamente branding
+entre ambientes; guardar y comprobar la página AuthKit real después de copiar.
+El idioma sigue la localización de AuthKit según las preferencias del navegador.
+
 Local: restaurar esos tres valores en `.dev.vars` de este backend. Desde la raíz,
 ejecutar `npm run infra:up`, `npm run build --workspace @solventa/web` y
 `npm run dev:backend`. Abrir `http://localhost:8787`. Vite en 5173 redirige `/auth`
