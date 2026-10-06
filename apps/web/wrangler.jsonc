@@ -16,19 +16,22 @@
     "run_worker_first": [
       "/health",
       "/internal/*",
-      "/api/*"
+      "/api/*",
+      "/auth/*"
     ]
   },
   "observability": {
     "enabled": true,
     "logs": {
       "enabled": true,
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
+      "invocation_logs": false
     },
     "traces": {
       "enabled": true,
       "head_sampling_rate": 0.01
-    }
+    },
+    "redact_query_string": true
   },
   "vars": {
     "APP_ENV": "local"

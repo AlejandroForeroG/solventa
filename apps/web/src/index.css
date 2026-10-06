@@ -1,2 +1,15 @@
-body { margin: 0; color: #000; background: #fff; font-family: system-ui, sans-serif; }
-main { max-width: 72rem; margin: 0 auto; padding: 2rem; }
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+:root { color: #12151a; background: #f7f6f3; font-family: 'IBM Plex Sans', sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header { border-bottom: 1px solid #e3e1dc; padding: 24px 40px; background: #fff; }
+header img { display: block; }
+.access-panel { width: min(460px, calc(100% - 32px)); margin: clamp(48px, 12vh, 140px) auto; padding: 40px; background: #fff; border: 1px solid #e3e1dc; border-radius: 12px; }
+h1 { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600; line-height: 1.15; margin: 0 0 24px; }
+p { color: #3a424e; line-height: 1.5; }
+button, .primary-action { display: block; width: 100%; padding: 14px 20px; border: 1px solid #0b6b5f; border-radius: 8px; background: #0b6b5f; color: #fff; font: 500 16px 'IBM Plex Sans', sans-serif; text-decoration: none; text-align: center; cursor: pointer; }
+button:hover, .primary-action:hover { background: #08544a; }
+button:disabled { opacity: .6; cursor: wait; }
+button:focus-visible, a:focus-visible { outline: 3px solid #12d9b8; outline-offset: 4px; }
+.error { color: #a32b22; }
+@media (max-width: 600px) { header { padding: 24px; } .access-panel { padding: 28px; } }

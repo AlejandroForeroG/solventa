@@ -15,7 +15,7 @@
 - Cada backend conserva sus entidades, repositorios, esquema SQL, roles y transacciones. No consultar tablas ajenas; interactuar mediante contratos o eventos. `packages/contracts` comparte contratos de frontera, no entidades ni repositorios de dominio.
 - Mantener como máximo una dependencia interna remota en el recorrido crítico. Esperar las llamadas por Service Binding y conservar deadlines y errores explícitos.
 - Al implementar efectos asíncronos, asumir entrega al menos una vez: idempotencia, outbox/inbox, reintentos acotados y fallos observables. No prometer una transacción distribuida entre Workers o entre SQL y R2.
-- Autenticación y permisos se verifican en servidor. La integración OAuth/OIDC queda detrás de un adaptador; no dar por elegido un proveedor. Una sesión válida no reemplaza el consentimiento vigente antes de consultar o reutilizar señales externas.
+- Autenticación y permisos se verifican en servidor. WorkOS AuthKit está detrás del adaptador de Identidad; consultar `backend/identity-consent-ecosystem/README.md` para el contrato y sus límites. Una sesión válida no reemplaza permisos de negocio ni consentimiento vigente antes de consultar o reutilizar señales externas.
 
 ## Consultar la base de datos
 
