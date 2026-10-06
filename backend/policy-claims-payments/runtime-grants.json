@@ -1,0 +1,40 @@
+{
+  "policies": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "claims": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "indemnities": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "payments": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "evidence_metadata": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "outbox_events": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "inbox_events": [
+    "SELECT",
+    "INSERT"
+  ],
+  "audit_events": [
+    "SELECT",
+    "INSERT"
+  ]
+}

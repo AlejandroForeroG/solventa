@@ -8,9 +8,12 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.worker.json",
+    "types": "wrangler types --env-interface WebEnv --strict-vars=false -c wrangler.jsonc -c ../../backend/acquisition-risk/wrangler.jsonc -c ../../backend/identity-consent-ecosystem/wrangler.jsonc -c ../../backend/policy-claims-payments/wrangler.jsonc",
+    "build:dev": "npm run build && wrangler deploy --env dev --dry-run --outdir worker-dist"
   },
   "dependencies": {
+    "@solventa/assets": "0.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

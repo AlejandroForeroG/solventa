@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --local --port 8789",
-    "types": "wrangler types",
+    "dev": "wrangler dev --local --port 8789 -c wrangler.local.json",
+    "types": "wrangler types --strict-vars=false --env-interface IdentityEnv",
     "typecheck": "tsc --noEmit",
-    "build": "wrangler deploy --dry-run --outdir dist"
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "build:dev": "wrangler deploy --env dev --dry-run --outdir dist/dev"
   },
   "dependencies": {
-    "hono": "4.13.12"
+    "hono": "4.13.12",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
   }
 }
