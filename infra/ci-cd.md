@@ -1,10 +1,10 @@
 # Desarrollo y promoción por PR
 
-Rama de trabajo: `feat/<descripcion>` desde `dev`, en minúsculas y con guiones. La descripción resume el cambio, como `feat/agregar-login`. Commits y títulos de PR: `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea. `npm ci` activa los hooks nativos: pre-commit/pre-push validan rama y commit-msg valida el mensaje. CI vuelve a validar el título y origen del PR para cubrir cambios hechos sin hooks.
+Rama de trabajo: `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripcion>` o `test/<descripcion>` desde `dev`, en minúsculas y con guiones. La descripción resume el cambio, como `feat/agregar-login`. Commits y títulos de PR: `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea. `npm ci` activa los hooks nativos: pre-commit/pre-push validan rama y commit-msg valida el mensaje. CI vuelve a validar el título y origen del PR para cubrir cambios hechos sin hooks.
 
 ## Flujo
 
-1. Implementar y probar en local; abrir PR `feat/*` → `dev`.
+1. Implementar y probar en local; abrir PR desde una rama de trabajo hacia `dev`.
 2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. El PR hacia dev requiere checks verdes antes de integrar; no necesita revisión humana.
 3. Al integrar en `dev`, Deploy repite CI, despliega los cuatro Workers de dev y verifica SQL, RPC y aislamiento.
 4. Probar el flujo real en dev; abrir PR `dev` → `staging`. CI exige que el commit de origen tenga un Deploy exitoso y que el árbol resultante coincida con el origen. Integrar con merge normal.
@@ -24,7 +24,7 @@ Usar un mensaje compatible con el hook, por ejemplo
 `git merge --no-ff -m "fix(ci): sincronizar staging en dev" origin/staging`
 en la rama `feat/sync-staging`; para prod sustituir el ambiente en ambos lugares.
 No usar Update branch para empujar directamente a una rama protegida. Resolver
-conflictos en la rama feat; el gate sigue exigiendo el contenido del origen.
+conflictos en la rama de trabajo; el gate sigue exigiendo el contenido del origen.
 
 PR sugerido: `feat(identity): registrar sesión principal`. Promoción: `refactor(ci): promover dev a staging` y `refactor(ci): promover staging a prod`. Describir resultado de pruebas, ejecución de Deploy, limitaciones y compatibilidad SQL. Los mensajes no seleccionan ambientes: lo hace la rama de destino.
 
@@ -58,7 +58,7 @@ distintos con el mismo alcance de cuenta no resuelven por sí solos este límite
 
 ## Migraciones y recuperación
 
-Las migraciones siguen a cargo del operador por ambiente, antes de desplegar código que dependa de ellas. Un cambio solo de código no requiere reprovisionar Hyperdrive. El despliegue no hace rollback automático si falla una comprobación posterior. Para recuperar, preparar una reversión en una rama feat, pasar por PR y promoverla; verificar compatibilidad con datos y migraciones existentes. Nunca restaurar credenciales administrativas en Actions.
+Las migraciones siguen a cargo del operador por ambiente, antes de desplegar código que dependa de ellas. Un cambio solo de código no requiere reprovisionar Hyperdrive. El despliegue no hace rollback automático si falla una comprobación posterior. Para recuperar, preparar una reversión en una rama de trabajo, pasar por PR y promoverla; verificar compatibilidad con datos y migraciones existentes. Nunca restaurar credenciales administrativas en Actions.
 
 CD ejecuta `infra:<ambiente>:schema-verify` antes de publicar: compara versiones,
 checksums, catálogo, lecturas y permisos DML efectivos con la revisión desplegada usando roles

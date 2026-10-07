@@ -65,8 +65,8 @@ try {
 
 ## Verificación y entrega
 
-- Trabajar en ramas `feat/<descripcion>`; no usar el prefijo `codex`. La descripción resume el cambio, como `feat/agregar-login`. Los commits y títulos de PR usan `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea.
-- Integrar mediante PR: `feat/*` hacia `dev`, `dev` hacia `staging` y `staging` hacia `prod`. No hacer commits o pushes directos a las ramas de ambientes. CI valida el PR; al integrarlo, CD publica el ambiente correspondiente.
+- Trabajar en ramas `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripcion>` o `test/<descripcion>`; no usar el prefijo `codex`. La descripción resume el cambio, como `feat/agregar-login`. Los commits y títulos de PR usan `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea.
+- Integrar mediante PR: ramas de trabajo hacia `dev`, `dev` hacia `staging` y `staging` hacia `prod`. No hacer commits o pushes directos a las ramas de ambientes. CI valida el PR; al integrarlo, CD publica el ambiente correspondiente.
 - Hacia dev, exigir todos los checks verdes sin aprobación humana. Hacia staging y prod, exigir además una aprobación antes de integrar el PR.
 - Validar la versión desplegada en el ambiente anterior antes de aprobar su promoción. Promover con merge normal para conservar la historia; no usar squash ni rebase entre ramas de ambientes.
 

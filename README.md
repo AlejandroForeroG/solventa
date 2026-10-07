@@ -24,9 +24,9 @@ npm run check
 
 `check` comprueba las dependencias del núcleo, las pruebas de arquitectura, credenciales y fronteras entre ambientes, lint, tipos y builds. El móvil exporta un bundle Android. Los doce Workers remotos se empaquetan con `--dry-run` para dev, staging y prod. CI también levanta CockroachDB con TLS y ejecuta SQL y RPC reales mediante Workers locales.
 
-`npm ci` instala hooks nativos de Git mediante `prepare`. `pre-commit` y `pre-push` validan la rama; `commit-msg` valida el mensaje. Usar ramas `feat/<descripcion>` en minúsculas, con guiones, y títulos `feat|fix|refactor|test(modulo): descripción` de hasta 72 caracteres. Ejemplos: `feat/agregar-login` y `feat(auth): agregar login`. El cuerpo del commit admite más detalle.
+`npm ci` instala hooks nativos de Git mediante `prepare`. `pre-commit` y `pre-push` validan la rama; `commit-msg` valida el mensaje. Usar ramas `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripcion>` o `test/<descripcion>` en minúsculas, con guiones, y títulos `feat|fix|refactor|test(modulo): descripción` de hasta 72 caracteres. Ejemplos: `feat/agregar-login` y `feat(auth): agregar login`. El cuerpo del commit admite más detalle.
 
-Crear la feature desde `dev`. Abrir PR hacia `dev`; después promover con PR de `dev` a `staging` y de `staging` a `prod`. Cada integración dispara CI y el despliegue correspondiente. Ver [CI/CD](infra/ci-cd.md).
+Crear la rama de trabajo desde `dev`. Abrir PR hacia `dev`; después promover con PR de `dev` a `staging` y de `staging` a `prod`. Cada integración dispara CI y el despliegue correspondiente. Ver [CI/CD](infra/ci-cd.md).
 
 ## Desarrollo local
 
