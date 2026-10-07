@@ -5,8 +5,32 @@ import { mkdtemp, mkdir, access, readFile, writeFile, rm } from 'node:fs/promise
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { rootCertificates } from 'node:tls';
 
 const script = fileURLToPath(new URL('./ci.mjs', import.meta.url));
+
+test('WorkOS environment credentials accept documented keys and reject mismatches before writing', async () => {
+  for (const [environment, taggedEnvironment, apiKey, accepted] of [
+    ['prod', 'prod', 'sk_' + 'b'.repeat(75), true],
+    ['staging', 'staging', 'sk_' + 'c'.repeat(75), true],
+    ['prod', 'dev', 'sk_' + 'b'.repeat(75), false],
+    ['prod', 'prod', 'sk_test_' + 'b'.repeat(32), false],
+    ['dev', 'dev', 'sk_live_' + 'b'.repeat(32), false],
+    ['prod', 'prod', 'pk_' + 'b'.repeat(32), false],
+  ]) {
+    const directory = await mkdtemp(join(tmpdir(), 'solventa-ci-'));
+    try {
+      const secret = 'a'.repeat(64);
+      const auth = { environment: taggedEnvironment, secrets: { WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: apiKey, AUTH_COOKIE_PASSWORD: secret } };
+      const env = { ...process.env, DATABASE_HOST: 'database.example.com', DATABASE_CA_PEM: rootCertificates[0], RUNTIME_STATE_JSON: JSON.stringify({ database: `solventa_${environment}`, passwords: { acquisition: secret, identity: secret, policy: secret } }), WEB_INFRA_TOKEN: secret, IDENTITY_AUTH_JSON: JSON.stringify(auth) };
+      const result = spawnSync(process.execPath, [script, 'prepare', environment], { cwd: directory, env, encoding: 'utf8', windowsHide: true });
+      assert.equal(result.status === 0, accepted, `${environment}/${taggedEnvironment}`);
+      assert.ok(!result.stdout.includes(apiKey) && !result.stderr.includes(apiKey));
+      if (accepted) assert.deepEqual(JSON.parse(await readFile(join(directory, `infra/.local/identity.${environment}.secrets.json`), 'utf8')), auth.secrets);
+      else await assert.rejects(access(join(directory, 'infra/.local')), { code: 'ENOENT' });
+    } finally { await rm(directory, { recursive: true }); }
+  }
+});
 
 test('restoring development credentials into production fails before writing files', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'solventa-ci-'));
