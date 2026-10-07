@@ -5,6 +5,8 @@ test('commit types, scope and length', () => {
   for (const type of ['feat','fix','refactor','test']) validateCommit(`${type}(identity): validar sesión\n\nDetalle.`);
   for (const bad of ['chore(ci): cambio','feat: cambio','feat(web): ','feat(web): cambio ',`feat(web): ${'a'.repeat(63)}`]) assert.throws(() => validateCommit(bad));
   validateCommit(`feat(web): ${'a'.repeat(61)}`);
+  assert.throws(() => validateCommit('fix(mobile): Add initial mobile app structure with welcome screen and theme'), /75 caracteres; el máximo es 72/);
+  validateCommit('fix(mobile): add initial app structure, welcome screen and theme');
 });
 test('work branches', () => {
   for (const branch of ['feat/activar-biometria','feat/123','fix/struct-expo','refactor/identity','test/login']) validateBranch(branch);
