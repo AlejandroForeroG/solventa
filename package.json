@@ -21,7 +21,7 @@
     "typecheck": "npm run types && npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps backend packages --ignore-pattern **/worker-configuration.d.ts",
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run test:git && npm run architecture:check && npm run test:architecture && npm run test:database && npm run test:environments && npm run test:authentication && npm run lint && npm run typecheck && npm run build && npm run build:remote",
+    "check": "npm run test:git && npm run architecture:check && npm run test:architecture && npm run test:database && npm run test:environments && npm run test:authentication && npm run test:contracts && npm run lint:openapi && npm run lint && npm run typecheck && npm run build && npm run build:remote",
     "infra:up": "node infra/local.mjs up",
     "infra:down": "node infra/local.mjs down",
     "infra:verify": "node infra/database.mjs verify local",
@@ -50,17 +50,22 @@
     "prepare": "node tools/install-hooks.mjs",
     "test:git": "node --test tools/git-policy.test.mjs",
     "test:authentication": "tsx --test tests/authentication.test.ts",
-    "test:authentication:sql": "tsx infra/authentication-smoke.mts"
+    "test:authentication:sql": "tsx infra/authentication-smoke.mts",
+    "lint:openapi": "node tools/lint-openapi.mjs",
+    "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.59.0",
     "@types/node": "^22.20.2",
     "@types/pg": "8.23.1",
+    "ajv": "^8.20.0",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
     "oxlint": "^1.81.0",
     "pg": "8.23.1",
     "tsx": "4.23.15",
     "typescript": "~6.0.3",
-    "wrangler": "4.146.0"
+    "wrangler": "4.146.0",
+    "yaml": "^2.9.1"
   }
 }

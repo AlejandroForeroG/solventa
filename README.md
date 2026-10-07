@@ -22,7 +22,7 @@ npm ci
 npm run check
 ```
 
-`check` comprueba las dependencias del núcleo, las pruebas de arquitectura, credenciales y fronteras entre ambientes, lint, tipos y builds. El móvil exporta un bundle Android. Los doce Workers remotos se empaquetan con `--dry-run` para dev, staging y prod. CI también levanta CockroachDB con TLS y ejecuta SQL y RPC reales mediante Workers locales.
+`check` comprueba las dependencias del núcleo, las pruebas de arquitectura, credenciales y fronteras entre ambientes, el versionado y los contratos de la API (pruebas y linter OpenAPI), lint, tipos y builds. El móvil exporta un bundle Android. Los doce Workers remotos se empaquetan con `--dry-run` para dev, staging y prod. CI también levanta CockroachDB con TLS y ejecuta SQL y RPC reales mediante Workers locales.
 
 `npm ci` instala hooks nativos de Git mediante `prepare`. `pre-commit` y `pre-push` validan la rama; `commit-msg` valida el mensaje. Usar ramas `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripcion>` o `test/<descripcion>` en minúsculas, con guiones, y títulos `feat|fix|refactor|test(modulo): descripción` de hasta 150 caracteres. Ejemplos: `feat/agregar-login` y `feat(auth): agregar login`. El cuerpo del commit admite más detalle.
 
@@ -62,8 +62,9 @@ creación juntos; logout confirma revocación local y auditoría. Ver
 
 Cotización, biometría, consentimiento efectivo, autorización de negocio y pagos
 siguen pendientes. `/api/*` devuelve 404; el secreto de diagnóstico no sustituye
-la sesión de usuario. `packages/contracts` permanece vacío hasta que exista un
-contrato real. Promover autenticación requiere migraciones y credenciales propias;
+la sesión de usuario. `packages/contracts` define el versionado de la API (`/api/v1`),
+su spec OpenAPI base y el esquema de captura histórica; aún no contiene contratos de
+endpoints de negocio. Promover autenticación requiere migraciones y credenciales propias;
 producción necesita WorkOS habilitado antes de publicar este código. El clúster
 SQL compartido sigue siendo un fallo común y requiere evaluación antes de datos
 reales. No hay alta disponibilidad local ni validación de rendimiento o ejecución

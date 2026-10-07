@@ -10,6 +10,8 @@ Cuando se implemente una capacidad:
 - `application` coordina el caso de uso y define los puertos que requiere. Puede depender de su dominio y aplicación, nunca de adaptadores.
 - `adapters` implementa los puertos; Hono, PostgreSQL, proveedores y Cloudflare permanecen aquí o en la raíz de composición.
 - La raíz de composición inyecta adaptadores. Una transacción pertenece a un solo propietario. Las colaboraciones entre propietarios usan contratos; los eventos futuros requieren idempotencia y una estrategia transaccional antes de habilitar escrituras.
+- Los endpoints nuevos se construyen con una fábrica que **recibe** sus puertos (`createHttp(deps)`); solo la raíz de composición crea los adaptadores reales a partir de `env`. Así las pruebas HTTP y la verificación de contratos usan implementaciones en memoria sin SQL ni otros Workers. Las rutas de autenticación existentes no se refactorizan.
+- Las rutas públicas viven bajo `/api/v<N>/`; el Worker web aplica la compuerta de versiones (deprecación y retiro), por lo que los backends no la repiten. Ver [contratos](../packages/contracts/README.md).
 - `packages/contracts` contiene únicamente contratos de frontera estables. No agregar entidades, servicios ni repositorios compartidos para eludir la separación.
 
 `architecture:check` analiza importaciones, exportaciones, imports de tipos e imports dinámicos. Rechaza dependencias del núcleo hacia SDK o adaptadores, del dominio hacia aplicación e importaciones relativas fuera del backend. Compila el núcleo con ES2022 sin tipos de Node, DOM o Workers. `test:architecture` verifica ejemplos de infracción. Es una ayuda estática; la revisión debe comprobar responsabilidades y dependencias semánticas.
