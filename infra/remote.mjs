@@ -123,7 +123,8 @@ async function deploy(api) {
   }
   // Targets must exist before a consumer binds to them.
   for (const name of ['identity-consent-ecosystem', 'policy-claims-payments', 'acquisition-risk']) {
-    wrangler(['deploy', '--config', `backend/${name}/wrangler.jsonc`, '--env', environment]);
+    const authSecrets = name === 'identity-consent-ecosystem' ? ['--secrets-file', `infra/.local/identity.${environment}.secrets.json`] : [];
+    wrangler(['deploy', '--config', `backend/${name}/wrangler.jsonc`, '--env', environment, ...authSecrets]);
   }
   wrangler(['deploy', '--config', 'apps/web/wrangler.jsonc', '--env', environment, '--secrets-file', path]);
   const subdomain = await api('/workers/subdomain');
@@ -146,6 +147,20 @@ async function smoke(api) {
   assert.match(token, /^[a-f0-9]{64}$/);
   const request = (path, authenticated = false) => fetch(url + path, { headers: authenticated ? { authorization: `Bearer ${token}` } : undefined, signal: AbortSignal.timeout(20000) });
   assert.equal((await request('/health')).status, 200);
+  let sessionResponse;
+  let login;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    sessionResponse = await request('/auth/session');
+    login = await fetch(url + '/auth/login', { redirect: 'manual', signal: AbortSignal.timeout(20000) });
+    if (sessionResponse.status === 401 && login.status === 302) break;
+    if (attempt < 19) await new Promise(resolve => setTimeout(resolve, 1500));
+  }
+  assert.equal(sessionResponse.status, 401, 'Authentication configuration must be ready');
+  assert.equal(login.status, 302);
+  const authorization = new URL(login.headers.get('location'));
+  assert.equal(authorization.origin, 'https://api.workos.com');
+  assert.equal(authorization.searchParams.get('redirect_uri'), url + '/auth/callback');
+  assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256');
   assert.equal((await request('/internal/infra')).status, 401);
   assert.equal((await fetch(url + '/internal/infra', { headers: { authorization: 'Bearer invalid' }, signal: AbortSignal.timeout(20000) })).status, 401);
   // Deployment routing can briefly serve the previous version of web or a backend.
@@ -177,7 +192,7 @@ async function smoke(api) {
     assert.equal(exposure.enabled, false);
     assert.equal(exposure.previews_enabled, false);
   }
-  console.log(JSON.stringify({ status: 'passed', environment, url, privateBackends: 3, services: result.services }));
+  console.log(JSON.stringify({ status: 'passed', environment, url, authentication: 'configured', privateBackends: 3, services: result.services }));
 }
 try {
   if (!remoteEnvironments.includes(environment)) throw Error('Specify dev, staging or prod');

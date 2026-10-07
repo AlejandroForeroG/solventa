@@ -4,16 +4,16 @@ import { pathToFileURL } from 'node:url';
 
 export function validateCommit(message) {
   const title = message.split(/\r?\n/)[0];
-  if (title.length > 72 || !/^(feat|fix|refactor|test)\([a-z][a-z0-9-]*\): \S(?:.*\S)?$/.test(title)) throw Error('Usa feat|fix|refactor|test(modulo): mensaje, máximo 72 caracteres.');
+  if (title.length > 72 || !/^(feat|fix|refactor|test)\([a-z][a-z0-9-]*\): \S(?:.*\S)?$/.test(title)) throw Error('Usa feat|fix|refactor|test(modulo): descripción, máximo 72 caracteres. Ejemplo: feat(auth): agregar login.');
 }
 export function validateBranch(branch) {
-  if (branch.length > 72 || !/^feat\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branch)) throw Error('Usa feat/<caso-o-ticket> en minúsculas, con guiones y máximo 72 caracteres.');
+  if (branch.length > 72 || !/^(feat|fix|refactor|test)\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branch)) throw Error('Usa feat|fix|refactor|test/<descripcion> en minúsculas, con guiones y máximo 72 caracteres. Ejemplo: fix/struct-expo.');
 }
 export function validatePullRequest({ head, base, title, sameRepository }) {
   validateCommit(title);
   if (!sameRepository) throw Error('El PR debe proceder de este repositorio.');
   if (base === 'dev') validateBranch(head);
-  else if (!((base === 'staging' && head === 'dev') || (base === 'prod' && head === 'staging'))) throw Error('Flujo permitido: feat/* → dev → staging → prod.');
+  else if (!((base === 'staging' && head === 'dev') || (base === 'prod' && head === 'staging'))) throw Error('Flujo permitido: feat|fix|refactor|test/* → dev → staging → prod.');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {

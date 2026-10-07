@@ -40,5 +40,10 @@
   "audit_events": [
     "SELECT",
     "INSERT"
+  ],
+  "authentication_sessions": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }
