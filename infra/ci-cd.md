@@ -1,6 +1,6 @@
 # Desarrollo y promoción por PR
 
-Rama de trabajo: `feat/<nombre>` desde `dev`, en minúsculas y con guiones. El nombre puede describir el cambio, como `feat/login`; un identificador es opcional. Commits y títulos de PR: `feat|fix|refactor|test(modulo): mensaje`, máximo 72 caracteres en la primera línea, sin exigir identificador. `npm ci` activa los hooks nativos: pre-commit/pre-push validan rama y commit-msg valida el mensaje. CI vuelve a validar el título y origen del PR para cubrir cambios hechos sin hooks.
+Rama de trabajo: `feat/<descripcion>` desde `dev`, en minúsculas y con guiones. La descripción resume el cambio, como `feat/agregar-login`. Commits y títulos de PR: `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea. `npm ci` activa los hooks nativos: pre-commit/pre-push validan rama y commit-msg valida el mensaje. CI vuelve a validar el título y origen del PR para cubrir cambios hechos sin hooks.
 
 ## Flujo
 

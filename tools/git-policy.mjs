@@ -4,10 +4,10 @@ import { pathToFileURL } from 'node:url';
 
 export function validateCommit(message) {
   const title = message.split(/\r?\n/)[0];
-  if (title.length > 72 || !/^(feat|fix|refactor|test)\([a-z][a-z0-9-]*\): \S(?:.*\S)?$/.test(title)) throw Error('Usa feat|fix|refactor|test(modulo): mensaje, máximo 72 caracteres.');
+  if (title.length > 72 || !/^(feat|fix|refactor|test)\([a-z][a-z0-9-]*\): \S(?:.*\S)?$/.test(title)) throw Error('Usa feat|fix|refactor|test(modulo): descripción, máximo 72 caracteres. Ejemplo: feat(auth): agregar login.');
 }
 export function validateBranch(branch) {
-  if (branch.length > 72 || !/^feat\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branch)) throw Error('Usa feat/<caso-o-ticket> en minúsculas, con guiones y máximo 72 caracteres.');
+  if (branch.length > 72 || !/^feat\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branch)) throw Error('Usa feat/<descripcion> en minúsculas, con guiones y máximo 72 caracteres. Ejemplo: feat/agregar-login.');
 }
 export function validatePullRequest({ head, base, title, sameRepository }) {
   validateCommit(title);
