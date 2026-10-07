@@ -30,7 +30,7 @@
 
 ## Security and database access
 
-- Verify authentication, authorization and applicable consent on the server. A valid session is not a business permission or consent. Follow the [authentication contract and limits](docs/modulos/identity-consent-ecosystem/autenticacion.md); keep WorkOS in Identity adapters and tokens out of client storage, SQL and logs.
+- Verify authentication, authorization and applicable consent on the server. A valid session is not a business permission or consent. Follow the [authentication contract and limits](docs/modulos/identity-consent-ecosystem/autenticacion.md); keep WorkOS in Identity adapters. Use the specified sealed HttpOnly session cookie for web; never expose provider tokens to client JavaScript or store them in localStorage, SQL or logs. Native login follows its own secure-storage contract, without server keys on the device.
 - Use synthetic data for tests. Never commit or print credentials, tokens, PII or ignored secret files. Keep local, dev, staging and prod configuration and resources separate; never substitute one environment's credentials for another's.
 - For inspection, follow [read-only SQL access](docs/infraestructura/consultas-sql.md): select an explicit environment and owner, use its runtime role, verified TLS and a READ ONLY transaction. Query only needed fields with filters and limits. Do not use the administrative URL for routine inspection or broaden grants to cross schemas.
 - Runtime grants and migration guard restrictions are described in the [SQL model](docs/infraestructura/modelo-datos.md). Missing credentials require restoration from custody, not invented passwords or automatic rotation. Inspection does not authorize writes, provisioning or migrations.
