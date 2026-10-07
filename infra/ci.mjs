@@ -27,7 +27,9 @@ try {
     const auth = JSON.parse(process.env.IDENTITY_AUTH_JSON || 'null');
     assert.equal(auth?.environment, environment);
     assert.match(auth.secrets.WORKOS_CLIENT_ID, /^client_[a-zA-Z0-9]+$/);
-    assert.match(auth.secrets.WORKOS_API_KEY, environment === 'prod' ? /^sk_live_[a-zA-Z0-9]+$/ : /^sk_test_[a-zA-Z0-9]+$/);
+    // WorkOS environment keys use sk_; their prefix does not prove their scope.
+    // Retain rejection of explicitly test/live-labelled credentials in the wrong target.
+    assert.match(auth.secrets.WORKOS_API_KEY, environment === 'prod' ? /^sk_(?:live_)?[a-zA-Z0-9]+$/ : /^sk_(?:test_)?[a-zA-Z0-9]+$/);
     assert.match(auth.secrets.AUTH_COOKIE_PASSWORD, /^[a-f0-9]{64}$/);
     assert.deepEqual(Object.keys(auth.secrets).sort(), ['AUTH_COOKIE_PASSWORD','WORKOS_API_KEY','WORKOS_CLIENT_ID']);
     await mkdir('infra/.local', { recursive: true, mode: 0o700 });

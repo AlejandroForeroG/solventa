@@ -58,6 +58,12 @@ CD restaura `IDENTITY_AUTH_JSON` desde cada GitHub Environment: objeto con
 `infra/.local/identity.<ambiente>.secrets.json`; nunca imprimirlo. Configuración
 ausente o un ambiente diferente bloquea el despliegue.
 
+Las claves de ambiente WorkOS usan el prefijo `sk_`; este no identifica si son
+de pruebas o producción. Crear y custodiar cada clave en su ambiente WorkOS,
+con su aplicación propia, y cargarla únicamente en el GitHub Environment
+homónimo. El marcador `environment` valida el destino de la custodia, no
+demuestra el alcance real de una clave. Ver [autenticación de la API WorkOS](https://workos.com/docs/reference/api-authentication).
+
 Pruebas: `npm run test:authentication` y, con SQL local iniciado,
 `npm run test:authentication:sql`. La segunda usa una base temporal independiente
 y datos sintéticos; no vacía la base del desarrollador.
