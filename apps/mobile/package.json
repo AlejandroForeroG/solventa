@@ -1,24 +1,33 @@
 {
   "name": "@solventa/mobile",
+  "main": "expo-router/entry",
   "version": "0.0.0",
-  "main": "index.ts",
-  "dependencies": {
-    "@solventa/assets": "0.0.0",
-    "expo": "~57.0.26",
-    "expo-status-bar": "~57.0.1",
-    "react": "19.2.3",
-    "react-native": "0.86.3"
-  },
-  "devDependencies": {
-    "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
-  },
+  "private": true,
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "typecheck": "tsc --noEmit",
-    "build": "expo export --platform android --output-dir dist"
+    "web": "expo start --web",
+    "build": "expo export --platform web",
+    "lint": "expo lint",
+    "types": "tsc --noEmit"
   },
-  "private": true
+  "dependencies": {
+    "@solventa/assets": "0.0.0",
+    "expo": "~57.0.27",
+    "expo-constants": "~57.0.21",
+    "expo-linking": "~57.0.12",
+    "expo-router": "~57.0.25",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
 }
