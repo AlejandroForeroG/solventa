@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { validateCommit, validateBranch, validatePullRequest } from './git-policy.mjs';
 test('commit types, scope and length', () => {
   for (const type of ['feat','fix','refactor','test']) validateCommit(`${type}(identity): validar sesión\n\nDetalle.`);
-  for (const bad of ['chore(ci): cambio','feat: cambio','feat(web): ','feat(web): cambio ',`feat(web): ${'a'.repeat(63)}`]) assert.throws(() => validateCommit(bad));
-  validateCommit(`feat(web): ${'a'.repeat(61)}`);
+  for (const bad of ['chore(ci): cambio','feat: cambio','feat(web): ','feat(web): cambio ']) assert.throws(() => validateCommit(bad));
+  validateCommit(`feat(web): ${'a'.repeat(139)}`);
+  assert.throws(() => validateCommit(`feat(web): ${'a'.repeat(140)}`), /151 caracteres; el máximo es 150/);
+  validateCommit('fix(mobile): Add initial mobile app structure with welcome screen and theme');
+  validateCommit('fix(mobile): add initial app structure, welcome screen and theme');
 });
 test('work branches', () => {
   for (const branch of ['feat/activar-biometria','feat/123','fix/struct-expo','refactor/identity','test/login']) validateBranch(branch);
