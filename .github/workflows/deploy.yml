@@ -51,6 +51,7 @@ jobs:
           DATABASE_CA_PEM: ${{ secrets.DATABASE_CA_PEM }}
           RUNTIME_STATE_JSON: ${{ secrets.RUNTIME_STATE_JSON }}
           WEB_INFRA_TOKEN: ${{ secrets.WEB_INFRA_TOKEN }}
+          IDENTITY_AUTH_JSON: ${{ secrets.IDENTITY_AUTH_JSON }}
         run: node infra/ci.mjs prepare "$TARGET_ENVIRONMENT"
       - name: Deploy and verify Cloudflare services
         env:

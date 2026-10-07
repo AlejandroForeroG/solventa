@@ -7,11 +7,11 @@ autorización por usuario se completan en los casos de uso.
 
 | Propietario | Tablas de negocio |
 |---|---|
-| identity | clients, external_identities, partners, partner_credentials, consents, registered_devices |
+| identity | clients, external_identities, authentication_sessions, partners, partner_credentials, consents, registered_devices |
 | acquisition | quotes, risk_profiles, underwriting_decisions, offers, offer_revisions, signal_refresh_jobs |
 | policy | policies, claims, indemnities, payments, evidence_metadata |
 
-Cada propietario añade audit_events, outbox_events e inbox_events: 26 tablas, además
+Cada propietario añade audit_events, outbox_events e inbox_events: 27 tablas, además
 de tres registros administrativos schema_migrations. No hay FK entre esquemas;
 referencias externas se validan por contrato o evento, nunca por consulta a tablas ajenas.
 
@@ -20,7 +20,11 @@ referencias externas se validan por contrato o evento, nunca por consulta a tabl
 clients.id identifica al usuario interno; subject_token es la referencia opaca compartida.
 external_identities vincula un sujeto externo verificado por servidor, único por proveedor
 y sujeto. No aceptar ese sujeto directamente de un formulario. No hay contraseñas ni
-tokens de sesión en SQL y no se fija un proveedor OAuth/OIDC.
+tokens de sesión en SQL. El adaptador WorkOS vincula el sujeto verificado;
+authentication_sessions conserva referencias opacas, vencimiento y revocación local.
+Cada consulta de sesión comprueba además que clients.status sea active. Logout
+revoca localmente antes de solicitar la revocación al proveedor. La sesión local
+vence como máximo en siete días; el proveedor puede exigir reautenticación antes.
 
 registered_devices registra dispositivos tras autenticación principal; no guarda huellas,
 rostros ni plantillas biométricas. La custodia segura y biometría pertenecen al dispositivo;

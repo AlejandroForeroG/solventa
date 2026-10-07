@@ -11,6 +11,7 @@
     "build:dev": "wrangler deploy --env dev --dry-run --outdir dist/dev"
   },
   "dependencies": {
+    "@workos-inc/node": "^11.0.0",
     "hono": "4.13.12",
     "pg": "8.23.1"
   },

@@ -15,7 +15,7 @@
 - Cada backend conserva sus entidades, repositorios, esquema SQL, roles y transacciones. No consultar tablas ajenas; interactuar mediante contratos o eventos. `packages/contracts` comparte contratos de frontera, no entidades ni repositorios de dominio.
 - Mantener como máximo una dependencia interna remota en el recorrido crítico. Esperar las llamadas por Service Binding y conservar deadlines y errores explícitos.
 - Al implementar efectos asíncronos, asumir entrega al menos una vez: idempotencia, outbox/inbox, reintentos acotados y fallos observables. No prometer una transacción distribuida entre Workers o entre SQL y R2.
-- Autenticación y permisos se verifican en servidor. La integración OAuth/OIDC queda detrás de un adaptador; no dar por elegido un proveedor. Una sesión válida no reemplaza el consentimiento vigente antes de consultar o reutilizar señales externas.
+- Autenticación y permisos se verifican en servidor. WorkOS AuthKit está detrás del adaptador de Identidad; consultar `backend/identity-consent-ecosystem/README.md` para el contrato y sus límites. Una sesión válida no reemplaza permisos de negocio ni consentimiento vigente antes de consultar o reutilizar señales externas.
 
 ## Consultar la base de datos
 
@@ -65,8 +65,8 @@ try {
 
 ## Verificación y entrega
 
-- Trabajar en ramas `feat/<caso-o-ticket>`; no usar el prefijo `codex`. Los commits y títulos de PR usan `feat|fix|refactor|test(modulo): mensaje`, máximo 72 caracteres en la primera línea.
-- Integrar mediante PR: `feat/*` hacia `dev`, `dev` hacia `staging` y `staging` hacia `prod`. No hacer commits o pushes directos a las ramas de ambientes. CI valida el PR; al integrarlo, CD publica el ambiente correspondiente.
+- Trabajar en ramas `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripcion>` o `test/<descripcion>`; no usar el prefijo `codex`. La descripción resume el cambio, como `feat/agregar-login`. Los commits y títulos de PR usan `feat|fix|refactor|test(modulo): descripción`, máximo 72 caracteres en la primera línea.
+- Integrar mediante PR: ramas de trabajo hacia `dev`, `dev` hacia `staging` y `staging` hacia `prod`. No hacer commits o pushes directos a las ramas de ambientes. CI valida el PR; al integrarlo, CD publica el ambiente correspondiente.
 - Hacia dev, exigir todos los checks verdes sin aprobación humana. Hacia staging y prod, exigir además una aprobación antes de integrar el PR.
 - Validar la versión desplegada en el ambiente anterior antes de aprobar su promoción. Promover con merge normal para conservar la historia; no usar squash ni rebase entre ramas de ambientes.
 

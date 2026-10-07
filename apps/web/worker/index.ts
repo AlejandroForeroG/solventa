@@ -5,6 +5,7 @@ export default {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
+    if (path.startsWith('/auth/')) return env.IDENTITY.fetch(request);
     if (path.startsWith('/api/')) return Response.json({ error: 'not_implemented' }, { status: 404, headers });
     if (path.startsWith('/internal/')) {
       const token = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
