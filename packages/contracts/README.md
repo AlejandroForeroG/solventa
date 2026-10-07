@@ -4,7 +4,8 @@ Contratos de frontera estables: versionado de la API pública, especificaciones 
 
 | Ruta | Contenido |
 |---|---|
-| `openapi/v<N>.yaml` | Especificación OpenAPI de la versión N. `paths` se llena con cada endpoint que se publica; los componentes comunes (`X-Trace-Id`, `Error`, cabeceras de deprecación) ya existen |
+| `openapi/v<N>/<dominio>.yaml` | Un spec OpenAPI independiente y válido por dominio (cotización, consentimiento…) dentro de la carpeta de su versión |
+| `openapi/v<N>/common.yaml` | Componentes compartidos de la versión (`X-Trace-Id`, `Error`, cabeceras de deprecación); los specs de dominio los referencian con `$ref` |
 | `src/versions.ts` | Registro de versiones (`apiVersions`) con `deprecatedAt` y `sunset` opcionales |
 | `schemas/decision-capture.v1.json` | Esquema de lo que se guarda con cada cotización o decisión para poder reconstruirla |
 | `redocly.yaml` | Reglas del linter OpenAPI |
@@ -22,24 +23,30 @@ La versión va en la ruta: `/api/v1/...`. Un cambio compatible (campo opcional n
 
 La compuerta vive en `apps/web/worker/api-versions.ts` y se aplica a toda ruta `/api/v<N>/...`; los backends no repiten esa lógica.
 
+### Un spec por dominio
+
+Cada dominio tiene su propio archivo (`openapi/v1/quotes.yaml`, `openapi/v1/consents.yaml`…), de modo que dos historias que tocan dominios distintos no editan el mismo archivo. Cada spec es un OpenAPI completo con `info.version` que empieza por el número de su versión y `servers[0].url` igual a `/api/v<N>`. Lo compartido se referencia con `$ref`, por ejemplo `$ref: './common.yaml#/components/schemas/Error'`. Los specs van directamente dentro de la carpeta de su versión, sin más subcarpetas ni archivos sueltos en `openapi/`.
+
+Para añadir un dominio: crear `openapi/v<N>/<dominio>.yaml` y, si hace falta, montar sus rutas en el backend propietario y enrutar el prefijo en el Worker web.
+
 ### Publicar una versión nueva
 
-1. Copiar `openapi/v<N>.yaml` a `openapi/v<N+1>.yaml`, ajustar `info.version` (`<N+1>.0.0`) y `servers[0].url` (`/api/v<N+1>`).
+1. Crear `openapi/v<N+1>/` con los specs de los dominios que cambian de forma incompatible (`info.version` `<N+1>.0.0`, `servers[0].url` `/api/v<N+1>`) y un `common.yaml`. Los dominios que no cambian pueden reutilizarse con `$ref` a los de `v<N>`.
 2. Añadir `{ id: 'v<N+1>' }` a `apiVersions`.
 3. Montar el grupo de rutas `/api/v<N+1>` en el backend propietario y enrutar el prefijo en el Worker web.
 
 ### Retirar una versión
 
-En `apiVersions`, dar a la versión `deprecatedAt` y `sunset`; en su spec, poner `info.x-sunset` con la misma fecha y `deprecated: true` en cada operación. Las pruebas comprueban que registro y spec coincidan, y que una versión sin fecha no tenga operaciones deprecadas. Los contratos de una versión retirada se archivan en el mismo cambio.
+En `apiVersions`, dar a la versión `deprecatedAt` y `sunset`; en **cada** spec de su carpeta, poner `info.x-sunset` con la misma fecha y `deprecated: true` en cada operación. Las pruebas comprueban que registro y specs coincidan, y que una versión sin fecha no tenga operaciones deprecadas. Los contratos de una versión retirada se archivan en el mismo cambio.
 
 ## Linter y pruebas
 
 ```sh
-npm run lint:openapi     # Redocly sobre openapi/*.yaml
+npm run lint:openapi     # Redocly sobre todos los .yaml de openapi/
 npm run test:contracts   # versionado, registro, coherencia spec-registro y esquema de captura
 ```
 
-Ambos corren dentro de `npm run check` (CI y despliegue). El hook `pre-commit` ejecuta el linter cuando hay cambios en `openapi/` o `redocly.yaml`, y `pre-push` lo ejecuta siempre; los hooks se pueden omitir, así que CI es el control que bloquea. `no-unused-components` está desactivada mientras los componentes comunes no los referencie ningún endpoint; reactivarla con los primeros endpoints. Con `security-defined`, cada operación debe declarar `security` (`security: []` si es pública).
+Ambos corren dentro de `npm run check` (CI y despliegue). El hook `pre-commit` ejecuta el linter cuando hay cambios en `openapi/` o `redocly.yaml`, y `pre-push` lo ejecuta siempre; los hooks se pueden omitir, así que CI es el control que bloquea. `no-unused-components` está desactivada mientras los componentes comunes no los referencie ningún endpoint; reactivarla con los primeros endpoints. Cada operación debe declarar `operationId`, `summary`, `security` (`security: []` si es pública) y al menos una respuesta 4xx.
 
 ## Captura histórica
 

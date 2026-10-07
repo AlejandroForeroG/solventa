@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 
 const directory = 'packages/contracts/openapi';
-const specs = readdirSync(directory).filter(name => name.endsWith('.yaml')).map(name => `${directory}/${name}`);
+const specs = readdirSync(directory, { recursive: true }).filter(name => String(name).endsWith('.yaml')).map(name => `${directory}/${name}`);
 if (!specs.length) {
   console.error('No OpenAPI specs found.');
   process.exit(1);

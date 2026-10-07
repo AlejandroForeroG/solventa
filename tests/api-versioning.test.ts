@@ -27,17 +27,19 @@ function registryViolations(versions: readonly ApiVersion[]): string[] {
   return problems;
 }
 
-function specViolations(spec: any, file: string, versions: readonly ApiVersion[]): string[] {
+// `location` is relative to the openapi folder: <version>/<domain>.yaml
+function specViolations(spec: any, location: string, versions: readonly ApiVersion[]): string[] {
   const problems: string[] = [];
-  const id = file.replace(/\.yaml$/, '');
+  const [id, file, ...deeper] = location.split('/');
+  if (!file || deeper.length) return [`${location}: specs must sit directly inside a version folder`];
   const entry = versions.find(v => v.id === id);
-  if (!entry) return [`${file}: version not in registry`];
-  if (!String(spec.info?.version).startsWith(`${id.slice(1)}.`)) problems.push(`${file}: info.version must start with ${id.slice(1)}.`);
-  if (spec.servers?.[0]?.url !== `/api/${id}`) problems.push(`${file}: first server must be /api/${id}`);
-  if (spec.info?.['x-sunset'] !== entry.sunset) problems.push(`${file}: info.x-sunset must match the registry`);
+  if (!entry) return [`${location}: version not in registry`];
+  if (!String(spec.info?.version).startsWith(`${id.slice(1)}.`)) problems.push(`${location}: info.version must start with ${id.slice(1)}.`);
+  if (spec.servers?.[0]?.url !== `/api/${id}`) problems.push(`${location}: first server must be /api/${id}`);
+  if (spec.info?.['x-sunset'] !== entry.sunset) problems.push(`${location}: info.x-sunset must match the registry`);
   for (const [path, item] of Object.entries<any>(spec.paths ?? {})) {
     for (const method of methods.filter(m => item[m])) {
-      if (Boolean(item[method].deprecated) !== Boolean(entry.sunset)) problems.push(`${file}: ${method} ${path} deprecated flag must match the registry`);
+      if (Boolean(item[method].deprecated) !== Boolean(entry.sunset)) problems.push(`${location}: ${method} ${path} deprecated flag must match the registry`);
     }
   }
   return problems;
@@ -110,19 +112,28 @@ test('the registry validator rejects malformed entries', () => {
   assert.ok(registryViolations([{ id: 'v2' }, { id: 'v1' }]).length);
 });
 
-test('every OpenAPI spec matches its registry entry', () => {
+test('every OpenAPI spec matches its registry entry and every version has a spec', () => {
   const directory = 'packages/contracts/openapi';
-  const files = readdirSync(directory).filter(name => name.endsWith('.yaml'));
-  assert.ok(files.length);
-  for (const file of files) assert.deepEqual(specViolations(parse(readFileSync(`${directory}/${file}`, 'utf8')), file, apiVersions), []);
+  const locations = (readdirSync(directory, { recursive: true }) as string[]).map(name => name.split('\\').join('/')).filter(name => name.endsWith('.yaml'));
+  assert.ok(locations.length);
+  for (const location of locations) assert.deepEqual(specViolations(parse(readFileSync(`${directory}/${location}`, 'utf8')), location, apiVersions), []);
+  for (const version of apiVersions) assert.ok(locations.some(location => location.startsWith(`${version.id}/`)), `${version.id} has no spec`);
 });
 
 test('the spec validator rejects specs that contradict the registry', () => {
   const base = { info: { version: '1.0.0' }, servers: [{ url: '/api/v1' }], paths: { '/quotes': { post: {} } } };
-  assert.deepEqual(specViolations(base, 'v1.yaml', [{ id: 'v1' }]), []);
-  assert.ok(specViolations(base, 'v1.yaml', [retiring[0]]).length, 'sunset without x-sunset or deprecated flag');
-  assert.ok(specViolations({ ...base, paths: { '/quotes': { post: { deprecated: true } } } }, 'v1.yaml', [{ id: 'v1' }]).length, 'deprecated without sunset');
-  assert.ok(specViolations({ ...base, servers: [{ url: '/v1' }] }, 'v1.yaml', [{ id: 'v1' }]).length);
-  assert.ok(specViolations({ ...base, info: { version: '2.0.0' } }, 'v1.yaml', [{ id: 'v1' }]).length);
-  assert.ok(specViolations(base, 'v3.yaml', [{ id: 'v1' }]).length);
+  assert.deepEqual(specViolations(base, 'v1/quotes.yaml', [{ id: 'v1' }]), []);
+  assert.ok(specViolations(base, 'v1/quotes.yaml', [retiring[0]]).length, 'sunset without x-sunset or deprecated flag');
+  assert.ok(specViolations({ ...base, paths: { '/quotes': { post: { deprecated: true } } } }, 'v1/quotes.yaml', [{ id: 'v1' }]).length, 'deprecated without sunset');
+  assert.ok(specViolations({ ...base, servers: [{ url: '/v1' }] }, 'v1/quotes.yaml', [{ id: 'v1' }]).length);
+  assert.ok(specViolations({ ...base, info: { version: '2.0.0' } }, 'v1/quotes.yaml', [{ id: 'v1' }]).length);
+  assert.ok(specViolations(base, 'v3/quotes.yaml', [{ id: 'v1' }]).length, 'version not in registry');
+  assert.ok(specViolations(base, 'quotes.yaml', [{ id: 'v1' }]).length, 'spec outside a version folder');
+  assert.ok(specViolations(base, 'v1/nested/quotes.yaml', [{ id: 'v1' }]).length, 'spec nested deeper than the version folder');
+});
+
+test('a retiring version requires the sunset on every domain spec of that version', () => {
+  const dated = { info: { version: '1.0.0', 'x-sunset': '2027-06-06' }, servers: [{ url: '/api/v1' }], paths: {} };
+  assert.deepEqual(specViolations(dated, 'v1/quotes.yaml', [retiring[0]]), []);
+  assert.ok(specViolations({ ...dated, info: { version: '1.0.0' } }, 'v1/consents.yaml', [retiring[0]]).length);
 });

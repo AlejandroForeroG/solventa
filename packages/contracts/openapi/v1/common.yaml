@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Solventa API
   version: 1.0.0
-  description: Public API, version 1. Endpoint contracts are added by the stories that own them.
+  description: Components shared by the version 1 domain specs, which reference them with $ref. Endpoint contracts live in one spec per domain.
 servers:
   - url: /api/v1
 paths: {}
