@@ -90,6 +90,19 @@ test('an outdated base cannot promote an untested merge result', t => {
   assert.throws(() => verifyPromotion({ ...f.promotion, mergeSha }), /El merge cambia el candidato/);
 });
 
+test('a descendant deployment that reverted or overwrote the trial does not validate it', t => {
+  for (const change of ['revert', 'overwrite']) {
+    const f = fixture(t);
+    f.git('switch', 'dev');
+    if (change === 'revert') f.git('revert', '--no-edit', f.promotion.sourceSha);
+    else f.commit('quote', 'another change replaced the trial behavior');
+    const laterDeployment = f.git('rev-parse', 'HEAD');
+    assert.equal(f.checks.isAncestor(f.promotion.trialSha, laterDeployment), true);
+    assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] }), /mismo contenido/);
+    verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment, f.deployed] });
+  }
+});
+
 test('a release requires a successful deployment of the exact staging candidate', t => {
   const f = fixture(t);
   f.git('switch', 'staging');
