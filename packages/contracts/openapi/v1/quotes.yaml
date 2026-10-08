@@ -1,0 +1,284 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Quotes
+  version: 1.0.0
+  description: >
+    Quote with minimum data. The same input and rule version always give the same premium;
+    no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
+    Authentication and the quotes:create permission are verified by Identity; see identity-access.yaml.
+servers:
+  - url: /api/v1
+tags:
+  - name: Quotes
+    description: Quote creation for partners and for authenticated web users.
+paths:
+  /quotes:
+    post:
+      operationId: createPartnerQuote
+      summary: Create a quote as a partner
+      tags: [Quotes]
+      description: The partner is the actor. The customer data comes from the request body.
+      security:
+        - PartnerBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common.yaml#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        $ref: '#/components/requestBodies/QuoteRequest'
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '200': { $ref: '#/components/responses/Replayed' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/PartnerUnauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /me/quotes:
+    post:
+      operationId: createUserQuote
+      summary: Create a quote as the authenticated web user
+      tags: [Quotes]
+      description: >
+        The actor is the user of the sealed session cookie; the quote belongs to that user's own
+        subject and no user identifier is taken from the body. A write must carry the configured
+        Origin. Requests with an Authorization header are rejected with 400. If the session expired,
+        renew it through /auth/session and retry once.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common.yaml#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        $ref: '#/components/requestBodies/QuoteRequest'
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '200': { $ref: '#/components/responses/Replayed' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/UserUnauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    PartnerBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS Connect M2M access token with the quotes:create scope.
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Remote sealed HttpOnly session from the web login flow.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local-only sealed HttpOnly session for http://localhost:8787.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key per quote attempt. Allows retrying without duplicating.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: Language of text messages. It never changes amounts or currency.
+      schema: { type: string, enum: [es-CO, en-US], default: es-CO }
+  headers:
+    TraceId:
+      description: Correlation id of the request.
+      schema: { type: string, format: uuid }
+    WwwAuthenticate:
+      description: Challenge for a missing or invalid partner token.
+      schema: { type: string, enum: ['Bearer realm="solventa"'] }
+  requestBodies:
+    QuoteRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QuoteRequest'
+  responses:
+    Created:
+      description: Quote calculated and stored.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Quote'
+    Replayed:
+      description: The Idempotency-Key was reused with the same request. Returns the original quote without creating another.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Quote'
+    Invalid:
+      description: One or more fields break the rules, or a web request carries an Authorization header. No quote is stored.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ValidationError'
+              - $ref: '#/components/schemas/AccessError'
+    PartnerUnauthorized:
+      description: Missing, invalid or expired partner token.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        WWW-Authenticate: { $ref: '#/components/headers/WwwAuthenticate' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccessError'
+    UserUnauthorized:
+      description: Missing, expired or revoked web session, or unverified email.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccessError'
+    Forbidden:
+      description: The partner credential is inactive, expired, revoked or lacks the scope, or a web write carries an unauthorized Origin.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccessError'
+    Conflict:
+      description: The Idempotency-Key was already used with a different request.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: './common.yaml#/components/schemas/Error'
+          example:
+            error: idempotency_key_reused
+            message: The idempotency key was already used with a different request.
+            traceId: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
+    Unavailable:
+      description: Access could not be verified, or a service is unavailable. Nothing was stored; retry later with the same Idempotency-Key.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccessError'
+  schemas:
+    QuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [product, customer, credit]
+      properties:
+        product:
+          type: string
+          enum: [vida_hipotecario]
+        customer:
+          type: object
+          additionalProperties: false
+          required: [fullName, documentType, documentNumber, birthDate, city]
+          properties:
+            fullName: { type: string, minLength: 1, maxLength: 120 }
+            documentType: { type: string, enum: [CC] }
+            documentNumber: { type: string, pattern: '^[0-9]{6,10}$' }
+            birthDate:
+              type: string
+              format: date
+              description: Insurable age from 18 to 70 completed years on the request date.
+            city: { type: string, minLength: 1, maxLength: 80 }
+        credit:
+          type: object
+          additionalProperties: false
+          required: [partnerCreditId, amount, termMonths]
+          properties:
+            partnerCreditId: { type: string, minLength: 1, maxLength: 64 }
+            amount:
+              type: integer
+              minimum: 1
+              description: Loan amount in Colombian pesos, no decimals.
+            termMonths:
+              type: integer
+              minimum: 12
+              maximum: 240
+    Quote:
+      type: object
+      additionalProperties: false
+      required: [quoteId, premiumMonthly, currency, sumInsured, termMonths, validUntil, basis, ruleVersion, traceId]
+      properties:
+        quoteId: { type: string, pattern: '^COT-[0-9]{4}-[0-9]{5}$' }
+        premiumMonthly:
+          type: integer
+          minimum: 0
+          description: Estimated monthly premium in Colombian pesos, no decimals.
+        currency: { type: string, enum: [COP] }
+        sumInsured: { type: integer, minimum: 1 }
+        termMonths: { type: integer, minimum: 12, maximum: 240 }
+        validUntil:
+          type: string
+          format: date-time
+          description: Issue time plus 30 days.
+        basis:
+          type: string
+          enum: [minimum_data]
+          description: Calculated only from the submitted data, with no external source.
+        ruleVersion:
+          type: string
+          minLength: 1
+        traceId: { type: string, format: uuid }
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code]
+      properties:
+        field:
+          type: string
+          description: Field path, for example customer.birthDate.
+        code:
+          type: string
+          enum:
+            - required
+            - invalid_type
+            - invalid_format
+            - age_out_of_range
+            - amount_out_of_range
+            - term_out_of_range
+            - unsupported_product
+        params:
+          type: object
+          description: Numbers to build the message, for example age, min and max. Never personal data.
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [error, message, errors, traceId]
+      properties:
+        error: { type: string, enum: [validation_error] }
+        message: { type: string }
+        errors:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FieldError'
+        traceId: { type: string, format: uuid }
+    AccessError:
+      type: object
+      additionalProperties: false
+      description: Only the canonical code and the correlation id, with no provider data.
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden, access_unavailable, service_unavailable, invalid_request]
+        traceId: { type: string, format: uuid }
