@@ -60,3 +60,32 @@ test('documentation rejects writes before fetching assets and HEAD omits the ass
   assert.equal(head.status, 200);
   assert.equal(await head.text(), '');
 });
+
+test('bundled fonts and their license are public read-only assets with no-store and no SPA fallback', async () => {
+  const files = [
+    'IBMPlexSans-Regular.woff2', 'IBMPlexSans-Medium.woff2', 'IBMPlexSans-SemiBold.woff2',
+    'IBMPlexSans-Bold.woff2', 'IBMPlexMono-Regular.woff2', 'IBMPlexMono-SemiBold.woff2', 'LICENSE.txt',
+  ];
+  for (const file of files) {
+    const type = file.endsWith('.woff2') ? 'font/woff2' : 'text/plain';
+    const { env, requests } = environment('dev', type, 'asset bytes');
+    const url = `https://web.example/api/docs/fonts/${file}`;
+    const response = await worker.fetch(new Request(url), env);
+    assert.equal(response.status, 200, file);
+    assert.equal(response.headers.get('content-type'), type);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('x-solventa-environment'), 'dev');
+    assert.equal(await response.text(), 'asset bytes');
+    const head = await worker.fetch(new Request(url, { method: 'HEAD' }), env);
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), '');
+    const rejected = await worker.fetch(new Request(url, { method: 'POST' }), env);
+    assert.equal(rejected.status, 405);
+    assert.equal(requests.length, 2, 'writes must not fetch the asset');
+    const missing = environment('dev', 'text/html', '<html>Product application</html>');
+    assert.equal((await worker.fetch(new Request(url), missing.env)).status, 404, 'SPA fallback must not masquerade as a font');
+  }
+  const unknown = environment('dev', 'font/woff2', 'asset bytes');
+  assert.equal((await worker.fetch(new Request('https://web.example/api/docs/fonts/unknown.woff2'), unknown.env)).status, 404);
+  assert.equal(unknown.requests.length, 0);
+});

@@ -7,6 +7,13 @@ const staticFiles = new Map([
   ['/wordmark.svg', 'image/svg+xml'],
   ['/viewer.js', 'javascript'],
   ['/viewer.css', 'text/css'],
+  ['/fonts/IBMPlexSans-Regular.woff2', 'font/woff2'],
+  ['/fonts/IBMPlexSans-Medium.woff2', 'font/woff2'],
+  ['/fonts/IBMPlexSans-SemiBold.woff2', 'font/woff2'],
+  ['/fonts/IBMPlexSans-Bold.woff2', 'font/woff2'],
+  ['/fonts/IBMPlexMono-Regular.woff2', 'font/woff2'],
+  ['/fonts/IBMPlexMono-SemiBold.woff2', 'font/woff2'],
+  ['/fonts/LICENSE.txt', 'text/plain'],
 ]);
 
 export function isApiDocsPath(path: string): boolean {
