@@ -1,6 +1,7 @@
 import { brandAssets } from '@solventa/assets/web';
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
+import { PrivacyPanel } from './consent/PrivacyPanel';
 import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
@@ -23,6 +24,7 @@ function Shell() {
   const announce = useAnnounce();
   const [session, setSession] = useState<Session>('loading');
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<'flow' | 'privacy'>('flow');
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   async function load() {
     setSession('loading');
@@ -58,8 +60,11 @@ function Shell() {
     </header>
     {session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
-        <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span></div>
-        <QuoteFlow onSessionLost={() => setSession('anonymous')} />
+        <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
+          <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
+        </div>
+        <div hidden={view === 'privacy'}><QuoteFlow onOpenPrivacy={() => setView('privacy')} onSessionLost={() => setSession('anonymous')} /></div>
+        {view === 'privacy' && <PrivacyPanel onBack={() => setView('flow')} onSessionLost={() => setSession('anonymous')} />}
       </main>
       : <main className="access-panel" aria-busy={session === 'loading'}>
         <h1>{t('session.title')}</h1>
