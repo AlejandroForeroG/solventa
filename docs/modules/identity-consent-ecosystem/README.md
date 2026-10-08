@@ -5,10 +5,11 @@ Code: `backend/identity-consent-ecosystem`. This module is the authority for ide
 ## Documents
 
 - [Web authentication: routes, session, configuration and tests](authentication.md).
+- [API access: M2M partners, web users, contract and Bruno](api-access.md).
 - [Identity, consent and device data](data.md).
 - [Boundaries and backend communication](../../architecture.md).
 - [Operations](../../infrastructure/README.md).
 
-Web authentication is implemented. Effective consent, business permissions, quotas, partner authentication, biometrics and mobile login require their use cases and validation. Existing tables do not establish those flows.
+Web authentication and `quotes:create` access probes for M2M partners and authenticated web users are implemented. M2M access requires WorkOS setup and configuration per environment. Quoting, effective consent, quotas, other business permissions, biometrics and mobile login still require their use cases and validation. Existing tables do not establish those flows.
 
 When implementing module endpoints/decisions, follow [common standards](../../endpoint-standards.md), [purposeful testing](../../testing.md) and [migration procedures](../../infrastructure/migrations.md). Document specific behavior here without copying shared rules.

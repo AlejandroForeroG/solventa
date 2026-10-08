@@ -25,7 +25,7 @@ test('OAuth transaction is encrypted, expires and cannot cross environments', as
   assert.equal(await unsealAttempt(await sealAttempt({...attempt,expires:Date.now()-1},password,origin),password,origin),null);
 });
 test('missing session, forged callback, CSRF and wrong methods fail closed', async () => {
-  const app=createHttp();
+  const app=createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_business_authorization') });
   assert.equal((await app.request(origin+'/auth/session',{},env)).status,401);
   const invalidSession=await app.request(origin+'/auth/session',{headers:{Cookie:'__Host-solventa-session=forged_cookie'}},env);
   assert.equal(invalidSession.status,401);
