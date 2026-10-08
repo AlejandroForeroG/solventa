@@ -15,13 +15,14 @@ export function Loading() {
 
 export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix: () => void; onContinue?: () => void }) {
   const intl = useIntl();
-  const { cop, copAmount, monthYear } = useFormatters();
+  const { cop, copAmount, monthYear, dayMonthYear } = useFormatters();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   const creditEnd = new Date();
   creditEnd.setMonth(creditEnd.getMonth() + quote.termMonths);
   return <section className="step">
     <div className="banner banner-info">
+      <span aria-hidden="true" className="banner-icon">i</span>
       <p><strong>{intl.formatMessage({ id: 'result.minTitle' })}</strong> {intl.formatMessage({ id: 'result.minDetail' })}</p>
     </div>
     <div className="card">
@@ -30,7 +31,7 @@ export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix:
           <h1 ref={heading} tabIndex={-1} className="section-label">{intl.formatMessage({ id: 'result.label' })}</h1>
           <p className="mono">{quote.quoteId}</p>
         </div>
-        <span className="pill pill-ok">{intl.formatMessage({ id: 'result.valid' })}</span>
+        <span className="pill pill-ok">{intl.formatMessage({ id: 'result.validUntil' }, { date: dayMonthYear(new Date(quote.validUntil)) })}</span>
       </div>
       <dl className="facts">
         <div>
