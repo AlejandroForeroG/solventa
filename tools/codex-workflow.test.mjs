@@ -10,7 +10,7 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.equal(workflow.permissions['pull-requests'], 'read');
   assert.equal(workflow.permissions.statuses, undefined);
   const checkout = workflow.jobs.review.steps.find(step => step.uses?.startsWith('actions/checkout@'));
-  assert.equal(checkout.with.ref, '${{ github.sha }}');
+  assert.equal(checkout.with.ref, '${{ github.event.repository.default_branch }}');
   assert.equal(checkout.with['persist-credentials'], false);
   const token = workflow.jobs.review.steps.find(step => step.id === 'app');
   assert.equal(token.with['private-key'], '${{ secrets.CODEX_GATE_PRIVATE_KEY }}');
@@ -22,3 +22,9 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.match(workflow.jobs.review.if, /COLLABORATOR/);
   assert.match(workflow.jobs.review.if, /199175422/);
 });
+
+ test('ignored comments cannot cancel an authorized run', () => {
+  assert.match(workflow.concurrency.group, /github\.run_id/);
+  assert.match(workflow.concurrency.group, /author_association/);
+  assert.match(workflow.concurrency.group, /199175422/);
+ });
