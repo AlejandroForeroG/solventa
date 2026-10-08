@@ -142,12 +142,17 @@ export class SqlConsents implements ConsentStore {
   async forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]> {
     const client = await this.connect();
     try {
-      const result = await client.query<Row>(
-        `SELECT ${prefixed} FROM identity.consents c JOIN identity.clients owner ON owner.id = c.client_id
-         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING = ANY(c.scopes) AND c.consent_code IS NOT NULL
-         ORDER BY c.granted_at DESC, c.id LIMIT 20`, [subjectToken, purposeCode, scope]);
-      await this.auditExpired(client, subjectToken, result.rows, now);
-      return result.rows.map(fromRow);
+      const of = `FROM identity.consents c JOIN identity.clients owner ON owner.id = c.client_id
+         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING = ANY(c.scopes) AND c.consent_code IS NOT NULL`;
+      const parameters = [subjectToken, purposeCode, scope];
+      // Only usable consents are searched, so newer revoked or expired ones never hide an active one; without
+      // any, the latest record is read just to explain the denial.
+      const usable = await client.query<Row>(
+        `SELECT ${prefixed} ${of} AND c.revoked_at IS NULL AND c.expires_at > $4 ORDER BY c.granted_at DESC, c.id LIMIT 20`, [...parameters, now]);
+      const rows = usable.rows.length ? usable.rows
+        : (await client.query<Row>(`SELECT ${prefixed} ${of} ORDER BY c.granted_at DESC, c.id LIMIT 1`, parameters)).rows;
+      await this.auditExpired(client, subjectToken, rows, now);
+      return rows.map(fromRow);
     } finally {
       await client.end().catch(() => {});
     }
