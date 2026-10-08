@@ -38,5 +38,10 @@
   "audit_events": [
     "SELECT",
     "INSERT"
+  ],
+  "quote_counters": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }
