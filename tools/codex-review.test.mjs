@@ -1,7 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CODEX_BOT_ID, reviewCompleted, requestJson } from './codex-review.mjs';
+import { CODEX_BOT_ID, SHA_REF_PATTERN, SHA_REF_GUARDS, protectsShaRefs, reviewCompleted, requestJson } from './codex-review.mjs';
 const head = '1234567890abcdef1234567890abcdef12345678';
+test('requires active creation guards without bypasses or excluded refs', () => {
+  for (const target of ['branch', 'tag']) {
+    const pinned = SHA_REF_GUARDS.find(rule => rule.target === target);
+    const guard = { id: pinned.id, updated_at: pinned.updatedAt, target, enforcement: 'active', bypass_actors: [], rules: [{ type: 'creation' }],
+      conditions: { ref_name: { include: [`refs/${target === 'branch' ? 'heads' : 'tags'}/${SHA_REF_PATTERN}`], exclude: [] } } };
+    assert.equal(protectsShaRefs(guard, target), true);
+    assert.equal(protectsShaRefs({ ...guard, bypass_actors: undefined }, target), true);
+    assert.equal(protectsShaRefs({ ...guard, updated_at: '2027-01-01T00:00:00Z', bypass_actors: undefined }, target), false);
+    assert.equal(protectsShaRefs({ ...guard, id: pinned.id + 1 }, target), false);
+    assert.equal(protectsShaRefs({ ...guard, enforcement: 'disabled' }, target), false);
+    assert.equal(protectsShaRefs({ ...guard, bypass_actors: [{ actor_id: 5 }] }, target), false);
+    assert.equal(protectsShaRefs({ ...guard, conditions: { ref_name: { ...guard.conditions.ref_name, exclude: ['refs/heads/1234567'] } } }, target), false);
+    assert.equal(protectsShaRefs({ ...guard, rules: [] }, target), false);
+  }
+});
 function summary(status = '✅ **Completed**', sha = head.slice(0, 7)) {
   return { id: 1, user: { id: CODEX_BOT_ID, type: 'Bot' }, lastEditedAt: null,
     body: '<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | ' + status + ' | `' + sha + '` | PR opened |' };
@@ -70,6 +85,20 @@ test('configuration and ambiguous commit errors are fatal without retry', async 
     }, async () => {}), new RegExp(String(status)));
     assert.equal(attempts, 1);
   }
+});
+
+test('retries truncated JSON responses within the same attempt and deadline limits', async () => {
+  let attempts = 0;
+  const value = await requestJson('https://example.test', 'synthetic', async () =>
+    ++attempts === 1 ? new Response('{"sha":') : Response.json({ sha: head }), async () => {});
+  assert.equal(value.sha, head);
+  assert.equal(attempts, 2);
+  attempts = 0;
+  await assert.rejects(requestJson('https://example.test', 'synthetic', async () => {
+    attempts++;
+    return new Response('{');
+  }, async () => {}), SyntaxError);
+  assert.equal(attempts, 3);
 });
 
 test('respects rate limit headers for 403/429 and the original deadline', async () => {

@@ -1,6 +1,22 @@
 import { pathToFileURL } from 'node:url';
 
 export const CODEX_BOT_ID = 199175422;
+export const SHA_REF_PATTERN = '[0-9a-f]'.repeat(7) + '*';
+// Admin-verified versions have no bypass actors. Read-only API responses omit
+// that field; pinning updated_at rejects later edits without expanding access.
+export const SHA_REF_GUARDS = [
+  { id: 24692521, target: 'branch', updatedAt: '2026-10-08T02:35:54.746Z' },
+  { id: 24692524, target: 'tag', updatedAt: '2026-10-08T02:35:55.685Z' },
+];
+export function protectsShaRefs(rule, target) {
+  const pinned = SHA_REF_GUARDS.find(guard => guard.target === target);
+  return rule.target === target && rule.enforcement === 'active' &&
+    rule.id === pinned?.id && Date.parse(rule.updated_at) === Date.parse(pinned.updatedAt) &&
+    (rule.bypass_actors === undefined || (Array.isArray(rule.bypass_actors) && rule.bypass_actors.length === 0)) &&
+    rule.conditions?.ref_name?.exclude?.length === 0 &&
+    rule.conditions.ref_name.include?.includes(`refs/${target === 'branch' ? 'heads' : 'tags'}/${SHA_REF_PATTERN}`) &&
+    rule.rules?.some(item => item.type === 'creation');
+}
 export function reviewedSha(comments) {
   const botComments = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot');
   // Check editorial identity before content: removing a marker cannot hide tampering.
@@ -59,7 +75,7 @@ export async function requestJson(url, token, fetcher = fetch, pause = ms => new
         delay = retryAfter > 0 ? retryAfter * 1000 : reset > 0 ? reset + 1000 : 60_000;
       }
     } catch (error) {
-      if (attempt === 2 || !['TypeError', 'TimeoutError'].includes(error.name)) throw error;
+      if (attempt === 2 || !['TypeError', 'TimeoutError', 'SyntaxError'].includes(error.name)) throw error;
     }
     if (delay >= deadline - Date.now()) throw new Error('GitHub rate limit or retry exceeds review deadline');
     await pause(delay);
@@ -76,6 +92,18 @@ async function list(path) {
     result.push(...items);
     if (items.length < 100) return result;
   }
+}
+async function resolveReviewedObject(sha) {
+  // Commit lookup also accepts refs. Enforced creation guards prevent a new
+  // hex-named branch/tag from racing the check for pre-existing shadow refs.
+  const guards = await Promise.all(SHA_REF_GUARDS.map(rule => api(`rulesets/${rule.id}`)));
+  for (const target of ['branch', 'tag']) {
+    if (!guards.some(rule => protectsShaRefs(rule, target))) throw Error('Missing enforced SHA ref creation guard');
+    const namespace = target === 'branch' ? 'heads' : 'tags';
+    const refs = await api(`git/matching-refs/${namespace}/${sha}`);
+    if (refs.some(ref => ref.ref === `refs/${namespace}/${sha}`)) throw Error('Review SHA is shadowed by a Git ref');
+  }
+  return (await api(`commits/${sha}`)).sha;
 }
 async function verifiedSummary(comments) {
   const bots = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot');
@@ -109,8 +137,7 @@ export async function waitForReview() {
     const [rawComments, reviews] = await Promise.all([list(`issues/${number}/comments`), list(`pulls/${number}/reviews`)]);
     const comments = await verifiedSummary(rawComments);
     const sha = reviewedSha(comments);
-    // GitHub rejects ambiguous abbreviated SHAs; never use prefix equality alone.
-    const resolved = sha ? (await api(`commits/${sha}`)).sha : undefined;
+    const resolved = sha ? await resolveReviewedObject(sha) : undefined;
     if (reviewCompleted(comments, reviews, head, resolved)) {
       console.log(`Codex review completed for ${head}. GitHub separately requires resolved conversations.`);
       return;
