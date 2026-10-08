@@ -13,24 +13,6 @@ permissions:
   actions: read
   pull-requests: read
 jobs:
-  codex-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Reviewed immutable gate code; never execute the PR's gate implementation.
-          ref: 506a62f876376e2d3a0734b54ffb43be9afca592
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: node --test tools/codex-review.test.mjs
-      - run: node tools/codex-review.mjs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
   policy:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

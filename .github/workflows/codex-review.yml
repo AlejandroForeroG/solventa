@@ -1,0 +1,78 @@
+name: Codex review gate
+on:
+  pull_request_target:
+    branches: [dev, staging, prod]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Open pull request number to recheck
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Both this workflow and gate code come from the trusted target branch.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Resolve PR and publish pending status on its head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+          head=$(jq -r '.head.sha' <<< "$pr")
+          base=$(jq -r '.base.ref' <<< "$pr")
+          [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
+          [[ "$base" =~ ^(dev|staging|prod)$ ]] || exit 1
+          [[ -z "$EVENT_HEAD" || "$EVENT_HEAD" == "$head" ]] || exit 1
+          # Manual retries must run the trusted workflow of this PR's target branch.
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$GITHUB_REF_NAME" == "$base" ]] || exit 1
+          fi
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head" \
+            -f state=pending -f context=codex-review \
+            -f description='Waiting for Codex on this commit' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Wait for the current commit review
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head }}
+        run: node tools/codex-review.mjs
+      - name: Publish final status on the reviewed head
+        if: always() && steps.pr.outputs.head != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          GATE_RESULT: ${{ steps.gate.outcome }}
+        run: |
+          state=failure
+          description='Codex review incomplete or failed; inspect this run'
+          if [[ "$GATE_RESULT" == success ]]; then
+            state=success
+            description='Codex completed review of this exact commit'
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f state="$state" -f context=codex-review -f description="$description" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

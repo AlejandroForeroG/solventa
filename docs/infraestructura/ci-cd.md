@@ -78,6 +78,8 @@ El check `codex-review` espera hasta 12 minutos por el resumen Completed publica
 
 Si Codex falla, agota su cuota o no termina, el check falla y el PR permanece bloqueado. Solicitar `@codex review` y volver a ejecutar el check fallido cuando termine. Después de subir correcciones, solicitar una nueva revisión del commit actual: la configuración de Codex revisa automáticamente al abrir el PR. No saltarse el check ni reutilizar la revisión anterior. El reconocimiento del resumen depende del formato actual del conector; un cambio de formato falla de forma cerrada y requiere actualizar el parser y sus pruebas.
 
-El job ejecuta el gate desde el commit inmutable `506a62f876376e2d3a0734b54ffb43be9afca592`, no desde el código propuesto por el PR. Para actualizar el gate, revisar su implementación primero y después actualizar el SHA fijado del workflow mediante otro PR. Los cambios a workflows siguen formando parte de la frontera de confianza de los colaboradores del repositorio.
-
 El SHA abreviado del resumen se resuelve mediante la API de commits y se compara con los 40 caracteres del head; un prefijo ambiguo falla. Las lecturas reintentan errores de red, timeout, 429 y 5xx transitorios hasta tres intentos con backoff; errores de permisos, configuración y SHA ambiguo fallan sin reintentar.
+
+El workflow `codex-review.yml` usa `pull_request_target`: su definición y el código del gate proceden de la rama de destino confiable. Nunca hace checkout del PR ni instala o ejecuta sus dependencias. Solo lee la revisión y publica un status `codex-review` sobre el SHA completo del head, con token mínimo de lectura y statuses:write, sin secretos de ambientes. CI del candidato sigue separado y no publica ese status. Los cambios a workflows necesitan conservar esta separación.
+
+Para reintentar tras un timeout, solicitar primero `@codex review`; en Actions > Codex review gate > Run workflow elegir la rama de destino (`dev`, `staging` o `prod`) e introducir el número del PR. El workflow rechaza una rama distinta, PR cerrado o un head cambiado. Una revisión antigua jamás acredita el nuevo commit. Si se agota el plazo, mantiene el bloqueo con status failure.
