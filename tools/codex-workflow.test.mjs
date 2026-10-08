@@ -32,8 +32,12 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.match(workflow.concurrency.group, /github\.run_id/);
   assert.match(workflow.concurrency.group, /author_association/);
   assert.match(workflow.concurrency.group, /199175422/);
-  assert.match(workflow.concurrency.group, /pull_request\.head\.sha/);
-  assert.match(workflow.concurrency.group, /comment\.id/);
+  assert.ok(!workflow.concurrency.group.includes('comment.id'));
+  assert.ok(!workflow.concurrency.group.includes('pull_request.head.sha'));
+  assert.match(workflow.concurrency.group, /pull_request\.number/);
+  const resolve = workflow.jobs.review.steps.find(step => step.id === 'pr');
+  assert.ok(!resolve.run.includes('EVENT_HEAD'));
+  assert.match(resolve.run, /\.head\.sha/);
  });
 
 test('Codex and CI statuses target the PR test merge commit, not a shared head', () => {

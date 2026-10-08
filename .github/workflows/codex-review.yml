@@ -20,8 +20,7 @@ concurrency:
         ((github.event.comment.body == '@codex review' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
          github.event.comment.user.id == 199175422))) &&
-      format('{0}-{1}', github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number,
-        github.event.pull_request.head.sha || github.event.workflow_run.pull_requests[0].head.sha || format('comment-{0}', github.event.comment.id)) || github.run_id }}
+      (github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number) || github.run_id }}
   cancel-in-progress: true
 jobs:
   review:
@@ -58,7 +57,6 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           READ_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
-          EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.event.workflow_run.pull_requests[0].head.sha }}
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
           pr=$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
@@ -68,7 +66,6 @@ jobs:
           base=$(jq -r '.base.ref' <<< "$pr")
           [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
           [[ "$base" =~ ^(dev|staging|prod)$ ]] || exit 1
-          [[ -z "$EVENT_HEAD" || "$EVENT_HEAD" == "$head" ]] || exit 1
           echo "head=$head" >> "$GITHUB_OUTPUT"
           echo "merge=$merge" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
