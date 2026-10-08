@@ -1,11 +1,11 @@
 # Solventa
 
-Monorepo TypeScript con aplicaciones web y móvil y tres backends independientes.
+TypeScript monorepo with web and mobile applications and three independent backends.
 
-- [Documentación por módulos](docs/README.md).
-- [Instalación y desarrollo local](docs/desarrollo.md).
-- [Arquitectura y fronteras](docs/arquitectura.md).
-- [Operación y ambientes](docs/infraestructura/README.md).
-- [CI/CD y promociones](docs/infraestructura/ci-cd.md).
+- [Documentation by module](docs/README.md).
+- [Installation and local development](docs/development.md).
+- [Architecture and boundaries](docs/architecture.md).
+- [Operations and environments](docs/infrastructure/README.md).
+- [CI/CD and promotions](docs/infrastructure/ci-cd.md).
 
-Las reglas para contribuir están en [AGENTS.md](AGENTS.md).
+Contribution rules are in [AGENTS.md](AGENTS.md).

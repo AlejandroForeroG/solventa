@@ -2,6 +2,26 @@ import { timingSafeEqual } from 'node:crypto';
 import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 
+const quotesPath = /^\/api\/v1\/(me\/)?quotes(\/|$)/;
+const isQuotesPath = (path: string) => quotesPath.test(path);
+
+function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
+  const supplied = request.headers.get('x-trace-id') ?? '';
+  const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied)
+    ? supplied
+    : crypto.randomUUID();
+  return Response.json({ error, traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } });
+}
+
+// Credentials travel untouched: Acquisition verifies them through Identity.
+async function forwardToAcquisition(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try { return await env.ACQUISITION.fetch(new Request(request, { signal: controller.signal })); }
+  catch { return unavailable(request, headers, 'service_unavailable'); }
+  finally { clearTimeout(timeout); }
+}
+
 export default {
   async fetch(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
@@ -10,7 +30,19 @@ export default {
     if (path.startsWith('/auth/')) return env.IDENTITY.fetch(request);
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
-      return gate.response ?? withHeaders(Response.json({ error: 'not_implemented' }, { status: 404, headers }), gate.headers);
+      if (gate.response) return gate.response;
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web') {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
+        catch {
+          const requestedTrace = request.headers.get('X-Trace-Id') ?? '';
+          const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
+          return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
+        } finally { clearTimeout(timeout); }
+      }
+      const response = isQuotesPath(path) ? await forwardToAcquisition(request, env, headers) : Response.json({ error: 'not_implemented' }, { status: 404, headers });
+      return withHeaders(response, gate.headers);
     }
     if (path.startsWith('/internal/')) {
       const token = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];

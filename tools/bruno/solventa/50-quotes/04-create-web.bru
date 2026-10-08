@@ -1,0 +1,50 @@
+meta {
+  name: Create web user quote
+  type: http
+  seq: 4
+}
+post {
+  url: {{baseUrl}}/api/v1/me/quotes
+  body: json
+  auth: none
+}
+headers {
+  Content-Type: application/json
+  Cookie: {{sessionCookieName}}={{webSessionCookie}}
+  Origin: {{baseUrl}}
+  Idempotency-Key: {{quoteIdempotencyKey}}
+  X-Trace-Id: 50000000-0000-4000-8000-000000000004
+}
+body:json {
+  {
+    "product": "vida_hipotecario",
+    "customer": {
+      "fullName": "Synthetic Bruno Customer",
+      "documentType": "CC",
+      "documentNumber": "1098765432",
+      "birthDate": "1992-03-14",
+      "city": "Bogotá D.C."
+    },
+    "credit": {
+      "partnerCreditId": "BRUNO-SYNTHETIC-1",
+      "amount": 320000000,
+      "termMonths": 180
+    }
+  }
+}
+script:pre-request {
+  if (!bru.getEnvVar("webSessionCookie")) throw new Error("Set a valid local test session cookie first.");
+  if (!bru.getEnvVar("quoteIdempotencyKey")) throw new Error("Set a new local quoteIdempotencyKey for this attempt.");
+}
+tests {
+  test("Web user quote created or replayed", function () {
+    expect([200, 201]).to.include(res.getStatus());
+    const body = res.getBody();
+    expect(body.quoteId).to.match(/^COT-\d{4}-\d{5}$/);
+    expect(res.getHeader("x-trace-id")).to.equal(body.traceId);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+}
+docs {
+  Use an authenticated browser for the normal flow. This optional request requires a test cookie placed in Bruno's local secret variables. Bruno cannot read the browser's HttpOnly cookie automatically. Never commit or export it.
+}

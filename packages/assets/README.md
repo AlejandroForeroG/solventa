@@ -1,3 +1,3 @@
-# Assets compartidos
+# Shared assets
 
-Documentación: [guía vigente](../../docs/compartidos/assets/README.md).
+Documentation: [current guide](../../docs/shared/assets/README.md).
