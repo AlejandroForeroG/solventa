@@ -1,3 +1,3 @@
-# Contratos
+# Contracts
 
-Documentación: [guía vigente](../../docs/compartidos/contracts/README.md).
+Documentation: [current guide](../../docs/shared/contracts/README.md).

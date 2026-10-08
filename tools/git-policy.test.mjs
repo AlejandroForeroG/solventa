@@ -2,19 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateCommit, validateBranch, validatePullRequest } from './git-policy.mjs';
 test('commit types, scope and length', () => {
-  for (const type of ['feat','fix','refactor','test']) validateCommit(`${type}(identity): validar sesión\n\nDetalle.`);
-  for (const bad of ['chore(ci): cambio','feat: cambio','feat(web): ','feat(web): cambio ']) assert.throws(() => validateCommit(bad));
+  for (const type of ['feat','fix','refactor','test']) validateCommit(`${type}(identity): validate session\n\nDetails.`);
+  for (const bad of ['chore(ci): change','feat: change','feat(web): ','feat(web): change ']) assert.throws(() => validateCommit(bad));
   validateCommit(`feat(web): ${'a'.repeat(139)}`);
-  assert.throws(() => validateCommit(`feat(web): ${'a'.repeat(140)}`), /151 caracteres; el máximo es 150/);
+  assert.throws(() => validateCommit(`feat(web): ${'a'.repeat(140)}`), /151 characters; the maximum is 150/);
   validateCommit('fix(mobile): Add initial mobile app structure with welcome screen and theme');
   validateCommit('fix(mobile): add initial app structure, welcome screen and theme');
 });
 test('work branches', () => {
-  for (const branch of ['feat/activar-biometria','feat/123','fix/struct-expo','refactor/identity','test/login']) validateBranch(branch);
+  for (const branch of ['feat/enable-biometrics','feat/123','fix/expo-structure','refactor/identity','test/login']) validateBranch(branch);
   for (const branch of ['codex/infra','chore/login','feat/','feat/ABC-12','dev','prod','feat/a--b','']) assert.throws(() => validateBranch(branch));
 });
 test('PRs keep integration branches separate from staging candidates', () => {
-  const pr = { title: 'refactor(ci): promover versión', sameRepository: true };
+  const pr = { title: 'refactor(ci): promote version', sameRepository: true };
   for (const type of ['feat', 'fix', 'refactor', 'test']) {
     validatePullRequest({...pr, head: `${type}/login-dev`, base: 'dev'});
     validatePullRequest({...pr, head: `${type}/login`, base: 'staging'});
