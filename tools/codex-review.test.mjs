@@ -82,3 +82,24 @@ test('respects rate limit headers for 403/429 and the original deadline', async 
   assert.equal(attempts, 2);
   assert.ok(pauses[0] > 1000 && pauses[0] <= 4000);
 });
+
+test('retries interrupted 2xx JSON bodies and secondary limits without retry headers', async () => {
+  let attempts = 0;
+  const pauses = [];
+  const value = await requestJson('https://example.test', 'synthetic', async () => {
+    attempts++;
+    if (attempts === 1) return {ok:true,json:async () => {throw new TypeError('body interrupted');}};
+    return Response.json({ok:true});
+  }, async ms => { pauses.push(ms); });
+  assert.equal(value.ok,true);
+  assert.deepEqual(pauses,[500]);
+  attempts=0;
+  pauses.length=0;
+  await requestJson('https://example.test','synthetic',async () => {
+    attempts++;
+    return attempts===1 ? Response.json({message:'You have exceeded a secondary rate limit.'},{status:403,headers:{'x-ratelimit-remaining':'100'}}) : Response.json({});
+  },async ms => {pauses.push(ms);});
+  assert.deepEqual(pauses,[60000]);
+  await assert.rejects(requestJson('https://example.test','synthetic',async () =>
+    Response.json({message:'Resource not accessible by integration'},{status:403}),async () => {throw Error('must not retry');}),/403/);
+});

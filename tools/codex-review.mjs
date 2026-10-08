@@ -28,12 +28,19 @@ export async function requestJson(url, token, fetcher = fetch, pause = ms => new
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())),
       });
-      if (response.ok) return response.json();
+      if (response.ok) return await response.json();
       const retryAfter = Number(response.headers.get('retry-after'));
-      const limited = response.status === 429 || (response.status === 403 &&
+      let limited = response.status === 429 || (response.status === 403 &&
         (retryAfter > 0 || response.headers.get('x-ratelimit-remaining') === '0'));
+      if (response.status === 403 && !limited) {
+        const payload = await response.json().catch(error => {
+          if (error.name === 'SyntaxError') return {};
+          throw error;
+        });
+        limited = typeof payload.message === 'string' && /secondary rate limit/i.test(payload.message);
+      }
       const transient = limited || [500, 502, 503, 504].includes(response.status);
-      await response.body?.cancel();
+      if (!response.bodyUsed) await response.body?.cancel();
       if (!transient || attempt === 2) throw new Error(`GitHub API returned ${response.status}`);
       if (limited) {
         const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000 - Date.now();
