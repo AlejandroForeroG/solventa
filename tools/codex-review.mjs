@@ -19,14 +19,15 @@ export function reviewCompleted(comments, reviews, head, resolvedSha) {
     review.commit_id === head && review.state === 'CHANGES_REQUESTED');
   return Boolean(sha && head.startsWith(sha) && resolvedSha === head && !rejected);
 }
-export async function requestJson(url, token, fetcher = fetch, pause = ms => new Promise(resolve => setTimeout(resolve, ms)), deadline = Date.now() + 12 * 60_000) {
+export async function requestJson(url, token, fetcher = fetch, pause = ms => new Promise(resolve => setTimeout(resolve, ms)), deadline = Date.now() + 12 * 60_000, request = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
     let delay = 500 * 2 ** attempt;
     if (Date.now() >= deadline) throw new Error('GitHub API deadline exceeded');
     try {
       const response = await fetcher(url, {
+        ...request,
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())),
+          'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())),
       });
       if (response.ok) return await response.json();
       const retryAfter = Number(response.headers.get('retry-after'));

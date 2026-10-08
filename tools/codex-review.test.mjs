@@ -103,3 +103,35 @@ test('retries interrupted 2xx JSON bodies and secondary limits without retry hea
   await assert.rejects(requestJson('https://example.test','synthetic',async () =>
     Response.json({message:'Resource not accessible by integration'},{status:403}),async () => {throw Error('must not retry');}),/403/);
 });
+import { publishCodexStatus } from './codex-status.mjs';
+
+test('status publication reconciles an uncertain write before retrying', async () => {
+  const config = { repository: 'AlejandroForeroG/solventa', merge: 'a'.repeat(40), token: 'test-token',
+    state: 'success', description: 'Reviewed', targetUrl: 'https://github.com/AlejandroForeroG/solventa/actions/runs/1' };
+  let writes = 0;
+  let reads = 0;
+  const result = await publishCodexStatus(config, async (url, options) => {
+    if (options.method === 'POST') { writes++; throw new TypeError('Connection interrupted after write'); }
+    reads++;
+    assert.match(url, /\/commits\/[a-f0-9]{40}\/statuses/);
+    return new Response(JSON.stringify([{ context: 'codex-review', state: config.state, description: config.description,
+      target_url: config.targetUrl, creator: { login: 'solventa-codex-review-gate[bot]' } }]), { status: 200 });
+  }, async () => {});
+  assert.equal(result.state, 'success');
+  assert.equal(writes, 1);
+  assert.equal(reads, 1);
+});
+
+test('status publication retries a transient failure but not a permission denial', async () => {
+  const config = { repository: 'AlejandroForeroG/solventa', merge: 'b'.repeat(40), token: 'test-token',
+    state: 'pending', description: 'Waiting', targetUrl: 'https://github.com/AlejandroForeroG/solventa/actions/runs/2' };
+  let writes = 0;
+  await publishCodexStatus(config, async (_url, options) => {
+    if (options.method !== 'POST') return new Response('[]');
+    return ++writes === 1 ? new Response('{}', { status: 503 }) : new Response('{"state":"pending"}');
+  }, async () => {});
+  assert.equal(writes, 2);
+  writes = 0;
+  await assert.rejects(() => publishCodexStatus(config, async () => { writes++; return new Response('{"message":"Forbidden"}', { status: 403 }); }, async () => {}), /403/);
+  assert.equal(writes, 1);
+});

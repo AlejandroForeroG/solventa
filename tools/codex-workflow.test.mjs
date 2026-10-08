@@ -16,7 +16,7 @@ test('privileged review gate uses trusted triggers and its protected environment
   const token = workflow.jobs.review.steps.find(step => step.id === 'app');
   assert.equal(token.with['private-key'], '${{ secrets.CODEX_GATE_PRIVATE_KEY }}');
   assert.equal(token.with['permission-statuses'], 'write');
-  for (const step of workflow.jobs.review.steps.filter(step => step.run?.includes('statuses/$'))) {
+  for (const step of workflow.jobs.review.steps.filter(step => step.run?.includes('tools/codex-status.mjs'))) {
     assert.equal(step.env.GH_TOKEN, '${{ steps.app.outputs.token }}');
   }
   assert.match(workflow.jobs.review.if, /author_association/);
@@ -28,6 +28,8 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.match(workflow.concurrency.group, /github\.run_id/);
   assert.match(workflow.concurrency.group, /author_association/);
   assert.match(workflow.concurrency.group, /199175422/);
+  assert.match(workflow.concurrency.group, /pull_request\.head\.sha/);
+  assert.match(workflow.concurrency.group, /comment\.id/);
  });
 
 test('Codex and CI statuses target the PR test merge commit, not a shared head', () => {
@@ -36,7 +38,7 @@ test('Codex and CI statuses target the PR test merge commit, not a shared head',
   const publish = workflow.jobs.review.steps.find(step => step.name === 'Publish final status on the reviewed integration commit');
   assert.equal(publish.env.MERGE_SHA, '${{ steps.pr.outputs.merge }}');
   assert.match(publish.if, /!cancelled\(\)/);
-  assert.match(publish.run, /statuses\/\$MERGE_SHA/);
+  assert.equal(publish.run, 'node tools/codex-status.mjs');
   const ci = YAML.parse(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   assert.equal(ci.jobs.report.permissions.statuses, 'write');
   assert.deepEqual(ci.jobs.report.needs, ['policy', 'validate']);

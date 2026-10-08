@@ -105,3 +105,5 @@ El job CI report usa statuses:write para publicar policy/validate reales sobre e
 Antes de publicar, CI compara además título, referencias y repositorio de origen con el evento validado. Una ejecución anterior a una edición del PR no puede acreditar los datos nuevos aunque conserve los mismos SHAs.
 
 Editar la base del PR vuelve a ejecutar el gate para su candidato actual. Una ejecución cancelada no publica el resultado final; la ejecución vigente conserva la responsabilidad de actualizar el status.
+
+Los eventos de heads distintos tienen grupos de concurrencia distintos; un evento obsoleto no cancela la revisión del head nuevo. Publicar el status usa hasta tres intentos dentro de dos minutos para errores transitorios. Antes de repetir una escritura incierta, consulta el status de esa App, candidato y ejecución; si ya coincide, conserva el resultado.
