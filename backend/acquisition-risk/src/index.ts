@@ -12,7 +12,7 @@ export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?
   async fetch(request: Request): Promise<Response> {
     const quotes = new CreateQuote({
       access: new IdentityApiAccess(this.env.IDENTITY_SERVICE),
-      store: new SqlQuoteStore(this.env.ACQUISITION_DB.connectionString),
+      store: new SqlQuoteStore(this.env.ACQUISITION_DB.connectionString, this.env.APP_ENV === 'dev'),
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
