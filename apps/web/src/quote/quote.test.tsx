@@ -101,7 +101,7 @@ describe('step 2: result', () => {
     await user.click(screen.getByRole('button', { name: 'Calculate quote' }));
     expect(await screen.findByText('$86,400')).toBeInTheDocument();
     expect(screen.getByText('$320,000,000 COP')).toBeInTheDocument();
-    expect(screen.getByText('Valid · 30 days')).toBeInTheDocument();
+    expect(screen.getByText('Valid until Nov 5, 2026')).toBeInTheDocument();
   });
 
   it('lets the user correct the data and keeps what was typed', async () => {
@@ -237,13 +237,17 @@ describe('i18n and accessibility', () => {
 });
 
 describe('stepper', () => {
-  it('labels each step, marks the current one and flags unreachable ones', () => {
+  it('lists the steps without controls, marks the current one and flags unreachable ones', () => {
     render(<I18n initial="es-CO"><Stepper current={1} available={2} /></I18n>);
     const nav = screen.getByRole('navigation', { name: 'Pasos de la contratación' });
-    expect(within(nav).getAllByRole('button')).toHaveLength(7);
-    expect(within(nav).getByRole('button', { name: 'Paso 1: Cotización' })).toHaveAttribute('aria-current', 'step');
-    expect(within(nav).getByRole('button', { name: 'Paso 2: Resultado' })).not.toHaveAttribute('aria-disabled');
-    expect(within(nav).getByRole('button', { name: 'Paso 3: Consentimiento (aún no disponible)' })).toHaveAttribute('aria-disabled', 'true');
+    const steps = within(nav).getAllByRole('listitem');
+    expect(steps).toHaveLength(7);
+    expect(within(nav).queryAllByRole('button')).toHaveLength(0);
+    expect(steps[0]).toHaveAttribute('aria-current', 'step');
+    expect(steps[0]).toHaveTextContent('Paso 1: Cotización');
+    expect(steps[1]).not.toHaveAttribute('aria-current');
+    expect(steps[1]).not.toHaveTextContent('aún no disponible');
+    expect(steps[2]).toHaveTextContent('Paso 3: Consentimiento (aún no disponible)');
   });
 });
 
