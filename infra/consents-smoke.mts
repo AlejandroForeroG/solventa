@@ -6,8 +6,7 @@ import { SqlConsents } from '../backend/identity-consent-ecosystem/src/adapters/
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { Consents } from '../backend/identity-consent-ecosystem/src/application/consents';
 
-// Real SQL integration in a generated, disposable local database only, with the identity runtime role
-// and its grants so the permissions in runtime-grants.json are exercised. Synthetic data only.
+// Real SQL against a disposable local database, with the Identity runtime role and its grants. Synthetic data only.
 const config = await settings('local');
 const name = 'solventa_consent_test_' + randomUUID().replaceAll('-', '');
 assert.match(name, /^solventa_consent_test_[a-f0-9]{32}$/);
