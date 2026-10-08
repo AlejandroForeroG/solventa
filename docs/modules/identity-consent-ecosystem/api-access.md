@@ -45,7 +45,7 @@ Dev and staging have separate public `WORKOS_CONNECT_*` values in Wrangler and B
 
 ### Provisioning a partner in WorkOS
 
-Use the environment's administrative API key only in a trusted operator process. Through the [WorkOS APIs](https://workos.com/docs/reference/workos-connect/applications), ensure the `quotes:create` permission exists (`POST /authorization/permissions` with `slug`, `name` and `description`), create or select the partner organization, and create a Connect application with `application_type: "m2m"`, its `organization_id` and `scopes: ["quotes:create"]`. An M2M application represents a third-party service, not a user.
+Use the environment's administrative API key only in a trusted operator process. Through the [WorkOS APIs](https://workos.com/docs/reference/workos-connect/applications), ensure the `quotes:create` permission exists (`POST /authorization/permissions` with `slug`, `name` and `description`), create or select the partner organization, and create a Connect application with a descriptive `name`, `application_type: "m2m"`, its `organization_id` and `scopes: ["quotes:create"]`. An M2M application represents a third-party service, not a user.
 
 Create its credential with `POST /connect/applications/{application_id}/client_secrets`. WorkOS returns the plaintext `secret` only at creation; immediately save it in authorized secret custody and never include it in Git, reports or client bundles. The application resource ID is used for administration; the returned `client_id` is used for token issuance and Identity's local credential reference. Neither is the environment client ID used as the JWT audience.
 
