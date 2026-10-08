@@ -107,3 +107,7 @@ Antes de publicar, CI compara además título, referencias y repositorio de orig
 Editar la base del PR vuelve a ejecutar el gate para su candidato actual. Una ejecución cancelada no publica el resultado final; la ejecución vigente conserva la responsabilidad de actualizar el status.
 
 Los eventos de heads distintos tienen grupos de concurrencia distintos; un evento obsoleto no cancela la revisión del head nuevo. Publicar el status usa hasta tres intentos dentro de dos minutos para errores transitorios. Antes de repetir una escritura incierta, consulta el status de esa App, candidato y ejecución; si ya coincide, conserva el resultado.
+
+El resumen se consulta también mediante GraphQL para comprobar autor y último editor: una edición humana de un comentario originalmente publicado por Codex no acredita una revisión. Los eventos de revisión formal submitted/edited/dismissed ejecutan un relay sin permisos ni secretos; al completarse, workflow_run activa el gate desde dev para reevaluar la evidencia real. No se ejecuta código ni se consumen artifacts del relay en el job privilegiado. Fuente: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run.
+
+CI publica pending antes de validar la política y publica los resultados finales mediante el mismo cliente con reintentos y reconciliación. Las consultas y escrituras de esa ejecución comparten un plazo de cuatro minutos. Los checks policy/validate requieren la fuente GitHub Actions; codex-review exige la App propia.

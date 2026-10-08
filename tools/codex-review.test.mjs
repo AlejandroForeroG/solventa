@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CODEX_BOT_ID, reviewCompleted, requestJson } from './codex-review.mjs';
 const head = '1234567890abcdef1234567890abcdef12345678';
 function summary(status = '✅ **Completed**', sha = head.slice(0, 7)) {
-  return { id: 1, user: { id: CODEX_BOT_ID, type: 'Bot' },
+  return { id: 1, user: { id: CODEX_BOT_ID, type: 'Bot' }, lastEditedAt: null,
     body: '<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | ' + status + ' | `' + sha + '` | PR opened |' };
 }
 test('accepts completed review only for the current commit and trusted bot', () => {
@@ -25,6 +25,13 @@ test('blocks changes requested for the same commit', () => {
   const review = { user: { id: CODEX_BOT_ID }, commit_id: head, state: 'CHANGES_REQUESTED' };
   assert.equal(reviewCompleted([summary()], [review], head, head), false);
   assert.equal(reviewCompleted([summary()], [{ ...review, commit_id: 'old' }], head, head), true);
+});
+test('rejects a bot summary edited by a collaborator or without editorial evidence', () => {
+  const edited = { ...summary(), lastEditedAt: '2026-10-08T00:00:00Z' };
+  assert.equal(reviewCompleted([edited], [], head, head), false);
+  assert.equal(reviewCompleted([{ ...edited, editor: { id: 42, type: 'User' } }], [], head, head), false);
+  assert.equal(reviewCompleted([{ ...edited, editor: { id: CODEX_BOT_ID, type: 'Bot' } }], [], head, head), true);
+  assert.equal(reviewCompleted([{ ...summary(), lastEditedAt: undefined }], [], head, head), false);
 });
 
 test('does not accept a different full commit with a colliding abbreviated SHA', () => {

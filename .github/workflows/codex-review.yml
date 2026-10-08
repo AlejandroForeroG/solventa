@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize, reopened, edited, ready_for_review]
   issue_comment:
     types: [created, edited]
+  workflow_run:
+    workflows: [Codex review event]
+    types: [completed]
 permissions:
   contents: read
   pull-requests: read
@@ -12,18 +15,20 @@ concurrency:
   group: >-
     codex-review-${{
       (github.event_name == 'pull_request_target' ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request_review' && github.event.workflow_run.pull_requests[0].number) ||
        (github.event.issue.pull_request &&
         ((github.event.comment.body == '@codex review' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
          (github.event.comment.user.id == 199175422 &&
           contains(github.event.comment.body, '<!-- codex-pull-request-review-summary -->'))))) &&
-      format('{0}-{1}', github.event.pull_request.number || github.event.issue.number,
-        github.event.pull_request.head.sha || format('comment-{0}', github.event.comment.id)) || github.run_id }}
+      format('{0}-{1}', github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number,
+        github.event.pull_request.head.sha || github.event.workflow_run.pull_requests[0].head.sha || format('comment-{0}', github.event.comment.id)) || github.run_id }}
   cancel-in-progress: true
 jobs:
   review:
     if: >-
       github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request_review' && github.event.workflow_run.pull_requests[0].number) ||
       (github.event.issue.pull_request &&
        ((github.event.comment.body == '@codex review' &&
          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
@@ -54,8 +59,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           READ_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.event.workflow_run.pull_requests[0].head.sha }}
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
           pr=$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")

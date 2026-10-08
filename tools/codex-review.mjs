@@ -6,7 +6,10 @@ export function reviewedSha(comments) {
     comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot' &&
     comment.body?.includes('<!-- codex-pull-request-review-summary -->'));
   summaries.sort((a, b) => b.id - a.id);
-  for (const row of summaries[0]?.body?.split('\n') ?? []) {
+  const summary = summaries[0];
+  if (!summary || !(summary.lastEditedAt === null ||
+      (typeof summary.lastEditedAt === 'string' && summary.editor?.type === 'Bot' && summary.editor.id === CODEX_BOT_ID))) return;
+  for (const row of summary.body?.split('\n') ?? []) {
     const cells = row.split('|');
     if (cells[1]?.includes('**Code Review**') && cells[2]?.includes('✅ **Completed**')) {
       return cells[3]?.match(/`([a-f0-9]{7,40})`/)?.[1];
@@ -66,6 +69,18 @@ async function list(path) {
     if (items.length < 100) return result;
   }
 }
+async function verifiedSummary(comments) {
+  const latest = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot' &&
+    comment.body?.includes('<!-- codex-pull-request-review-summary -->')).sort((a, b) => b.id - a.id)[0];
+  if (!latest) return [];
+  const result = await requestJson('https://api.github.com/graphql', process.env.GITHUB_TOKEN, fetch, undefined, reviewDeadline,
+    { method: 'POST', body: JSON.stringify({ query: 'query($id:ID!){node(id:$id){... on IssueComment{body lastEditedAt author{__typename ... on Bot{databaseId}} editor{__typename ... on Bot{databaseId}}}}}', variables: { id: latest.node_id } }) });
+  if (result.errors || !result.data?.node) throw Error('Cannot verify the summary editor');
+  const node = result.data.node;
+  return [{ id: latest.id, body: node.body, lastEditedAt: node.lastEditedAt,
+    user: { id: node.author?.databaseId, type: node.author?.__typename },
+    editor: { id: node.editor?.databaseId, type: node.editor?.__typename } }];
+}
 export async function waitForReview() {
   const number = process.env.PR_NUMBER;
   const head = process.env.PR_HEAD_SHA;
@@ -79,7 +94,8 @@ export async function waitForReview() {
   do {
     const pr = await api(`pulls/${number}`);
     if (pr.state !== 'open' || pr.head.sha !== head || (merge && pr.merge_commit_sha !== merge)) throw new Error('PR closed or head changed; run the check for the new commit');
-    const [comments, reviews] = await Promise.all([list(`issues/${number}/comments`), list(`pulls/${number}/reviews`)]);
+    const [rawComments, reviews] = await Promise.all([list(`issues/${number}/comments`), list(`pulls/${number}/reviews`)]);
+    const comments = await verifiedSummary(rawComments);
     const sha = reviewedSha(comments);
     // GitHub rejects ambiguous abbreviated SHAs; never use prefix equality alone.
     const resolved = sha ? (await api(`commits/${sha}`)).sha : undefined;

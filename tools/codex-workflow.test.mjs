@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
+import { currentCandidate } from './ci-report.mjs';
 const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/codex-review.yml', import.meta.url), 'utf8'));
 test('privileged review gate uses trusted triggers and its protected environment', () => {
-  assert.deepEqual(Object.keys(workflow.on).sort(), ['issue_comment', 'pull_request_target']);
+  assert.deepEqual(Object.keys(workflow.on).sort(), ['issue_comment', 'pull_request_target', 'workflow_run']);
+  assert.deepEqual(workflow.on.workflow_run.workflows, ['Codex review event']);
   assert.ok(workflow.on.pull_request_target.types.includes('edited'));
   assert.equal(workflow.jobs.review.environment, 'codex-review-gate');
   assert.equal(workflow.permissions.contents, 'read');
@@ -42,11 +44,20 @@ test('Codex and CI statuses target the PR test merge commit, not a shared head',
   const ci = YAML.parse(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   assert.equal(ci.jobs.report.permissions.statuses, 'write');
   assert.deepEqual(ci.jobs.report.needs, ['policy', 'validate']);
-  assert.match(ci.jobs.report.steps[0].run, /merge_commit_sha/);
-  assert.match(ci.jobs.report.steps[0].run, /BASE_SHA/);
-  for (const field of ['PR_TITLE', 'HEAD_REF', 'BASE_REF', 'HEAD_REPOSITORY']) {
-    assert.ok(ci.jobs.report.steps[0].env[field]);
-    assert.ok(ci.jobs.report.steps[0].run.includes(`== "$${field}"`));
+  assert.ok(ci.jobs.report.steps.some(step => step.run === 'node tools/ci-report.mjs'));
+  assert.ok(ci.jobs.policy.steps.some(step => step.run === 'node tools/ci-report.mjs pending'));
+  const relay = YAML.parse(readFileSync(new URL('../.github/workflows/codex-review-events.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(relay.permissions, {});
+  assert.deepEqual(relay.on.pull_request_review.types, ['submitted', 'edited', 'dismissed']);
+  assert.equal(relay.jobs.notify.steps.length, 1);
+});
+
+test('CI rejects changed policy inputs even when the commit SHAs match', () => {
+  const expected = { number: 1, title: 'feat(ci): gate', head: { sha: 'a'.repeat(40), ref: 'feat/gate', repo: { full_name: 'AlejandroForeroG/solventa' } }, base: { sha: 'b'.repeat(40), ref: 'dev' } };
+  const pr = { ...structuredClone(expected), state: 'open', merge_commit_sha: 'c'.repeat(40) };
+  assert.equal(currentCandidate(pr, expected), true);
+  for (const mutate of [p => {p.title = 'invalid';}, p => {p.head.ref = 'feat/other';}, p => {p.base.ref = 'staging';}, p => {p.head.repo.full_name = 'other/repo';}, p => {p.head.sha = 'd'.repeat(40);}, p => {p.base.sha = 'e'.repeat(40);}, p => {p.state = 'closed';}]) {
+    const changed = structuredClone(pr); mutate(changed);
+    assert.equal(currentCandidate(changed, expected), false);
   }
-  assert.match(ci.jobs.report.steps[0].run, /state=failure/);
 });

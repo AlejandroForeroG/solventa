@@ -1,20 +1,21 @@
 import { pathToFileURL } from 'node:url';
 import { requestJson } from './codex-review.mjs';
 
-export async function publishCodexStatus({ repository, merge, token, state, description, targetUrl }, fetcher = fetch, pause) {
+export async function publishCodexStatus({ repository, merge, token, state, description, targetUrl, context = 'codex-review', deadline: outerDeadline }, fetcher = fetch, pause) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^[a-f0-9]{40}$/.test(merge ?? '') ||
-      !token || !['pending', 'success', 'failure'].includes(state) || typeof description !== 'string' || description.length > 140 ||
+      !token || !['codex-review', 'policy', 'validate'].includes(context) || !['pending', 'success', 'failure'].includes(state) || typeof description !== 'string' || description.length > 140 ||
       !targetUrl?.startsWith(`https://github.com/${repository}/actions/runs/`)) throw Error('Invalid status configuration');
   const base = `https://api.github.com/repos/${repository}`;
-  const body = { state, context: 'codex-review', description, target_url: targetUrl };
-  const deadline = Date.now() + 2 * 60_000;
+  const body = { state, context, description, target_url: targetUrl };
+  const publisher = context === 'codex-review' ? 'solventa-codex-review-gate[bot]' : 'github-actions[bot]';
+  const deadline = Math.min(outerDeadline ?? Infinity, Date.now() + 2 * 60_000);
   let attempt = 0;
   // A status is an idempotent assertion. Check an uncertain write before repeating it.
   const reconcileAndWrite = async (url, options) => {
     if (attempt++ > 0) {
       const statuses = await requestJson(`${base}/commits/${merge}/statuses?per_page=100`, token, fetcher, pause, deadline);
       const latest = statuses.find(status => status.context === body.context);
-      if (latest?.creator?.login === 'solventa-codex-review-gate[bot]' && latest.state === state &&
+      if (latest?.creator?.login === publisher && latest.state === state &&
           latest.description === description && latest.target_url === targetUrl) {
         return new Response(JSON.stringify(latest), { status: 200 });
       }
