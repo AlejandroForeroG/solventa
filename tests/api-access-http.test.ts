@@ -74,7 +74,7 @@ test('gateway forwards only the published probes and handles a failed identity b
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { forwarded: '/api/v1/access/' + kind });
   }
-  assert.equal((await web.fetch(new Request(origin + '/api/v1/consents'), mockEnv)).status, 404);
+  assert.equal((await web.fetch(new Request(origin + '/api/v1/offers'), mockEnv)).status, 404);
   const unavailable = await web.fetch(new Request(origin + '/api/v1/access/partner'), { IDENTITY: { fetch: async () => { throw Error('private detail'); } } } as WebEnv);
   assert.equal(unavailable.status, 503);
   const body = await unavailable.json() as { error: string; traceId: string };
