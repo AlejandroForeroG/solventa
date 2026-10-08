@@ -39,15 +39,17 @@ test('other /api paths stay unimplemented and static assets are untouched', asyn
   assert.equal(await (await run('/')).response.text(), 'asset');
 });
 
-test('a failing Acquisition binding becomes a safe 503 with a trace id and no internal detail', async () => {
+test('a failing Acquisition binding preserves a valid trace id without leaking details', async () => {
   const env = { APP_ENV: 'local', ACQUISITION: { fetch: async () => { throw new Error('binding exploded at 10.0.0.7 with token abc'); } } } as never;
   for (const path of ['/api/v1/quotes', '/api/v1/me/quotes']) {
-    const response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: '{}' }), env);
+    const traceId = '50000000-0000-4000-8000-000000000001';
+    const response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: '{}', headers: { 'x-trace-id': traceId } }), env);
     const text = await response.text();
     const body = JSON.parse(text);
     assert.equal(response.status, 503);
     assert.equal(body.error, 'service_unavailable');
     assert.equal(response.headers.get('x-trace-id'), body.traceId);
+    assert.equal(body.traceId, traceId);
     assert.deepEqual(Object.keys(body).sort(), ['error', 'traceId']);
     assert.ok(!/10\.0\.0\.7|token|exploded/.test(text));
   }
