@@ -61,15 +61,16 @@ async function list(path) {
 export async function waitForReview() {
   const number = process.env.PR_NUMBER;
   const head = process.env.PR_HEAD_SHA;
+  const merge = process.env.PR_MERGE_SHA;
   if (!/^\d+$/.test(number ?? '') || !/^[a-f0-9]{40}$/.test(head ?? '') ||
-      !/^[\w.-]+\/[\w.-]+$/.test(process.env.GITHUB_REPOSITORY ?? '') || !process.env.GITHUB_TOKEN) {
+      !/^[\w.-]+\/[\w.-]+$/.test(process.env.GITHUB_REPOSITORY ?? '') || !process.env.GITHUB_TOKEN || (merge && !/^[a-f0-9]{40}$/.test(merge))) {
     throw new Error('Missing or invalid review gate configuration');
   }
   const deadline = Date.now() + 12 * 60_000;
   reviewDeadline = deadline;
   do {
     const pr = await api(`pulls/${number}`);
-    if (pr.state !== 'open' || pr.head.sha !== head) throw new Error('PR closed or head changed; run the check for the new commit');
+    if (pr.state !== 'open' || pr.head.sha !== head || (merge && pr.merge_commit_sha !== merge)) throw new Error('PR closed or head changed; run the check for the new commit');
     const [comments, reviews] = await Promise.all([list(`issues/${number}/comments`), list(`pulls/${number}/reviews`)]);
     const sha = reviewedSha(comments);
     // GitHub rejects ambiguous abbreviated SHAs; never use prefix equality alone.

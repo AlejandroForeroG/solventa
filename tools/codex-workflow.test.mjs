@@ -28,3 +28,17 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.match(workflow.concurrency.group, /author_association/);
   assert.match(workflow.concurrency.group, /199175422/);
  });
+
+test('Codex and CI statuses target the PR test merge commit, not a shared head', () => {
+  const gate = workflow.jobs.review.steps.find(step => step.id === 'gate');
+  assert.equal(gate.env.PR_MERGE_SHA, '${{ steps.pr.outputs.merge }}');
+  const publish = workflow.jobs.review.steps.find(step => step.name === 'Publish final status on the reviewed integration commit');
+  assert.equal(publish.env.MERGE_SHA, '${{ steps.pr.outputs.merge }}');
+  assert.match(publish.run, /statuses\/\$MERGE_SHA/);
+  const ci = YAML.parse(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+  assert.equal(ci.jobs.report.permissions.statuses, 'write');
+  assert.deepEqual(ci.jobs.report.needs, ['policy', 'validate']);
+  assert.match(ci.jobs.report.steps[0].run, /merge_commit_sha/);
+  assert.match(ci.jobs.report.steps[0].run, /BASE_SHA/);
+  assert.match(ci.jobs.report.steps[0].run, /state=failure/);
+});

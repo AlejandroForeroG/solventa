@@ -48,7 +48,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-statuses: write
-      - name: Resolve PR and publish pending status on its head
+      - name: Resolve PR and publish pending status on its integration commit
         id: pr
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -59,13 +59,16 @@ jobs:
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
           pr=$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
           head=$(jq -r '.head.sha' <<< "$pr")
+          merge=$(jq -r '.merge_commit_sha' <<< "$pr")
+          [[ "$merge" =~ ^[a-f0-9]{40}$ ]] || exit 1
           base=$(jq -r '.base.ref' <<< "$pr")
           [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
           [[ "$base" =~ ^(dev|staging|prod)$ ]] || exit 1
           [[ -z "$EVENT_HEAD" || "$EVENT_HEAD" == "$head" ]] || exit 1
           echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "merge=$merge" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head" \
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$merge" \
             -f state=pending -f context=codex-review \
             -f description='Waiting for Codex on this commit' \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -75,12 +78,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           PR_HEAD_SHA: ${{ steps.pr.outputs.head }}
+          PR_MERGE_SHA: ${{ steps.pr.outputs.merge }}
         run: node tools/codex-review.mjs
-      - name: Publish final status on the reviewed head
+      - name: Publish final status on the reviewed integration commit
         if: always() && steps.pr.outputs.head != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          MERGE_SHA: ${{ steps.pr.outputs.merge }}
           GATE_RESULT: ${{ steps.gate.outcome }}
         run: |
           state=failure
@@ -89,6 +93,6 @@ jobs:
             state=success
             description='Codex completed review of this exact commit'
           fi
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$MERGE_SHA" \
             -f state="$state" -f context=codex-review -f description="$description" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
