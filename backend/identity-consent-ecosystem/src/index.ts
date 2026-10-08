@@ -6,6 +6,10 @@ import { authorizeApiAccess } from './adapters/inbound/api-access-http';
 import type { ApiAccessRequest } from './adapters/inbound/api-access-http';
 
 import { ApiAccess } from './application/api-access';
+import { Consents } from './application/consents';
+import type { ConsentCheck } from './application/consents';
+import { HmacIntegrity } from './adapters/outbound/hmac-integrity';
+import { SqlConsents } from './adapters/outbound/sql-consents';
 import type { AccessDecision } from './application/api-access';
 import { SqlIdentitySessions } from './adapters/outbound/identity-sessions';
 import { SqlPartnerAccess } from './adapters/outbound/partner-access';
@@ -32,13 +36,27 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
 }
 
 // Composition root: platform wiring and operational probes stay outside the core.
-export default class extends WorkerEntrypoint<IdentityEnv> {
+type ConsentEnv = IdentityEnv & { CONSENT_SEAL_KEY?: string };
+
+function consentsFor(env: ConsentEnv) {
+  return new Consents({
+    store: new SqlConsents(env.IDENTITY_DB.connectionString),
+    platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
+    integrity: new HmacIntegrity(env.CONSENT_SEAL_KEY ?? '')
+  });
+}
+
+export default class extends WorkerEntrypoint<ConsentEnv> {
   async fetch(request: Request): Promise<Response> {
-    return createHttp({ authorizeApiAccess: input => authorize(this.env, input) }).fetch(request, this.env, this.ctx);
+    return createHttp({ authorizeApiAccess: input => authorize(this.env, input), consents: consentsFor(this.env) }).fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'identity-consent-ecosystem', environment: this.env.APP_ENV }; }
   async authorizeApiAccessV1(request: ApiAccessRequest) {
     return authorize(this.env, request);
+  }
+  // Fresh check for another module before it queries a source; the answer is never cached.
+  async verifyConsentV1(request: ConsentCheck) {
+    return consentsFor(this.env).verify(request);
   }
   async infraStatus() {
     const probe = await databaseProbe(this.env.IDENTITY_DB.connectionString);
