@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
+import { isApiDocsPath, serveApiDocs } from './api-docs';
 
 const quotesPath = /^\/api\/v1\/(me\/)?quotes(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
@@ -27,6 +28,7 @@ export default {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
+    if (isApiDocsPath(path)) return serveApiDocs(request, env);
     if (path.startsWith('/auth/')) return env.IDENTITY.fetch(request);
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
