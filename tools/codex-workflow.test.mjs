@@ -40,5 +40,9 @@ test('Codex and CI statuses target the PR test merge commit, not a shared head',
   assert.deepEqual(ci.jobs.report.needs, ['policy', 'validate']);
   assert.match(ci.jobs.report.steps[0].run, /merge_commit_sha/);
   assert.match(ci.jobs.report.steps[0].run, /BASE_SHA/);
+  for (const field of ['PR_TITLE', 'HEAD_REF', 'BASE_REF', 'HEAD_REPOSITORY']) {
+    assert.ok(ci.jobs.report.steps[0].env[field]);
+    assert.ok(ci.jobs.report.steps[0].run.includes(`== "$${field}"`));
+  }
   assert.match(ci.jobs.report.steps[0].run, /state=failure/);
 });

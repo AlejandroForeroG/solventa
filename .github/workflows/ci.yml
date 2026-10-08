@@ -72,12 +72,20 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           POLICY_RESULT: ${{ needs.policy.result }}
           VALIDATE_RESULT: ${{ needs.validate.result }}
         run: |
           pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
           [[ $(jq -r '.head.sha' <<< "$pr") == "$HEAD_SHA" ]] || exit 1
           [[ $(jq -r '.base.sha' <<< "$pr") == "$BASE_SHA" ]] || exit 1
+          [[ $(jq -r '.title' <<< "$pr") == "$PR_TITLE" ]] || exit 1
+          [[ $(jq -r '.head.ref' <<< "$pr") == "$HEAD_REF" ]] || exit 1
+          [[ $(jq -r '.base.ref' <<< "$pr") == "$BASE_REF" ]] || exit 1
+          [[ $(jq -r '.head.repo.full_name' <<< "$pr") == "$HEAD_REPOSITORY" ]] || exit 1
           merge=$(jq -r '.merge_commit_sha' <<< "$pr")
           [[ "$merge" =~ ^[a-f0-9]{40}$ ]] || exit 1
           for context in policy validate; do
