@@ -10,3 +10,5 @@ Código: `backend/identity-consent-ecosystem`. Este módulo es la autoridad de i
 - [Operación](../../infraestructura/README.md).
 
 La autenticación web está implementada. Consentimiento efectivo, permisos de negocio, cuotas, autenticación de socios, biometría y login móvil requieren sus casos de uso y validación. La existencia de tablas no acredita esos flujos.
+
+Al implementar endpoints y decisiones del módulo, seguir el [estándar común](../../estandares-endpoints.md), las [pruebas con propósito](../../pruebas.md) y el [procedimiento de migraciones](../../infraestructura/migraciones.md). Documentar aquí el comportamiento específico sin copiar las reglas compartidas.

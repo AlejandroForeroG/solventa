@@ -24,13 +24,16 @@ Esta carpeta contiene la documentación técnica vigente del producto. La organi
 - [Estilo UI y sus fuentes](canales/estilo-ui.md).
 - [Instalación y desarrollo](desarrollo.md).
 - [Arquitectura y fronteras](arquitectura.md).
+- [Estándar de endpoints y decisiones de negocio](estandares-endpoints.md).
+- [Pruebas con propósito](pruebas.md).
 - [Operación de infraestructura](infraestructura/README.md).
 - [Consultas SQL de solo lectura](infraestructura/consultas-sql.md).
-- [Modelo SQL, permisos y migraciones](infraestructura/modelo-datos.md).
+- [Modelo SQL y permisos](infraestructura/modelo-datos.md).
+- [Crear, aplicar y recuperar migraciones](infraestructura/migraciones.md).
 - [CI/CD y promoción de ambientes](infraestructura/ci-cd.md).
 
 ## Mantener la documentación
 
 Las reglas obligatorias están en [AGENTS.md](../AGENTS.md#required-documentation). Buscar primero el módulo y el tema existentes; actualizar esa guía en la misma rama y PR que cambia el comportamiento. Crear un documento solo si el tema aún no tiene uno, dentro de su módulo, y enlazarlo desde su índice.
 
-Una explicación tiene un único documento de referencia. Los README junto al código sirven de enlaces hacia estas guías. Los cambios compartidos se documentan una vez en su guía transversal y se enlazan desde los módulos afectados. El historial queda en Git: mantener el texto vigente, retirar instrucciones obsoletas y no crear copias por rama, feature, sprint o ambiente.
+Una explicación tiene un único documento de referencia. Los README junto al código sirven de enlaces hacia estas guías. Los cambios compartidos se documentan una vez en su guía transversal y se enlazan desde los módulos afectados. El historial queda en Git: mantener el texto vigente, retirar instrucciones obsoletas y no crear copias por rama, feature, sprint o ambiente. Cada PR enlaza las guías que crea o modifica desde su rama de origen.

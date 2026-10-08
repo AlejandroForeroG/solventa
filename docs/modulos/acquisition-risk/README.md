@@ -12,3 +12,5 @@ Worker con esquema `acquisition`, rol runtime y Hyperdrive propios. `/health` in
 - [Contratos y captura de decisiones](../../compartidos/contracts/README.md).
 - [Fronteras y comunicación](../../arquitectura.md).
 - [Operación](../../infraestructura/README.md).
+
+Al implementar endpoints y decisiones del módulo, seguir el [estándar común](../../estandares-endpoints.md), las [pruebas con propósito](../../pruebas.md) y el [procedimiento de migraciones](../../infraestructura/migraciones.md). Documentar aquí el comportamiento específico sin copiar las reglas compartidas.

@@ -29,3 +29,5 @@ npm run lint --workspace @solventa/mobile
 npm run types --workspace @solventa/mobile
 npm run build --workspace @solventa/mobile
 ```
+
+El build actual exporta para web. Para cambios de capacidades nativas, comprobar el flujo en dispositivo/emulador; ver [pruebas](../../pruebas.md).

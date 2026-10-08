@@ -26,7 +26,7 @@ La base `solventa_local` tiene tres propietarios lógicos:
 
 Cada rol runtime puede leer su registro de migraciones; no puede consultar los demás esquemas ni crear tablas. El aprovisionador utiliza una conexión administrativa separada. Las futuras migraciones deben otorgar explícitamente el DML mínimo de sus tablas al rol propio; nunca DDL ni privilegios sobre otro propietario. `infra:verify` comprueba permisos con consultas reales.
 
-Cada backend mantiene sus SQL en `migrations/`. El registro conserva versión, checksum y fecha; modificar una migración aplicada produce un error. La inicial fija la línea base con `SELECT 1`; las posteriores crean las [27 tablas](modelo-datos.md), incluida la sesión de autenticación. Un ambiente aún no promovido puede tener menos versiones aplicadas. Ejecutar `npm run test:schema` para verificar migraciones, permisos y restricciones en SQL local real.
+Cada backend mantiene sus SQL en `migrations/`. Ver [modelo de datos](modelo-datos.md) para las tablas y [procedimiento de migraciones](migraciones.md) para creación, permisos, validación, aplicación y recuperación. Un ambiente aún no promovido puede tener menos versiones aplicadas.
 
 `test:infra` inicia temporalmente cuatro Workers en 8790 y verifica SQL, RPC, rechazo de tokens ausentes o inválidos, activos web y rutas de negocio deshabilitadas. El token local se genera en `apps/web/.dev.vars`; no se imprime. `/health` es liveness; `GET /internal/infra` exige `Authorization: Bearer <DEV_INFRA_TOKEN>` y devuelve 503 si una dependencia no está disponible.
 
@@ -68,16 +68,8 @@ El despliegue publica primero Identidad y Pólizas, después Adquisición y fina
 
 La comprobación remota valida configuración Hyperdrive, SQL vía Workers, RPC, permisos del diagnóstico y exposición privada de backends. También exige que los tres servicios informen el ambiente y nombre de base correctos. `infra:<ambiente>:verify` comprueba lecturas SQL denegadas hacia los otros esquemas y las otras dos bases remotas, por lo que las tres bases deben existir. No mide latencia, resiliencia, alertas, cumplimiento PCI ni seguridad integral.
 
-CI valida código, empaquetado de los doce Workers y entorno local sin credenciales de despliegue. CD reutiliza esas comprobaciones antes de publicar los cuatro Workers del ambiente seleccionado, verifica SQL/RPC y limpia los archivos sensibles del runner. Ver [configuración de CI/CD](ci-cd.md). Para promover una versión, conservar el mismo contenido validado en dev, desplegarlo en staging y comprobar sus flujos antes de prod. Aprovisionar cada ambiente por separado para aplicar sus migraciones desde el operador administrativo. CD restaura credenciales runtime y nunca crea usuarios SQL ni aplica migraciones con privilegios administrativos. No copiar datos, secretos ni IDs al promover código. Un rollback de Worker no revierte SQL ni datos. Conservar las migraciones aplicadas y su checksum.
+CI valida código, empaquetado de los doce Workers y entorno local sin credenciales remotas. CD repite esas comprobaciones, publica los cuatro Workers del ambiente seleccionado, verifica SQL/RPC y limpia archivos sensibles. Seguir [Gitflow y CI/CD](ci-cd.md) para probar la rama de integración en dev, promover su base a staging y publicar releases a prod. Los recursos se aprovisionan por separado; no copiar datos, secretos ni IDs entre ambientes. CD verifica el esquema con roles runtime antes de publicar. La [guía de migraciones](migraciones.md) concentra la aplicación administrativa del candidato y la recuperación; CD no crea usuarios ni aplica DDL remoto.
 
 La autenticación web tiene su [guía y límites](../modulos/identity-consent-ecosystem/autenticacion.md). Las capacidades de negocio, tratamiento de PII, recuperación y alertas requieren implementación y validación antes de habilitar el producto para usuarios reales.
-
-CD verifica el esquema con `infra:<ambiente>:schema-verify` antes de publicar. Si un
-candidato añade migraciones, el operador debe aplicarlas desde su SHA definitivo
-y aprobado antes de integrar el PR, en todos los ambientes, incluido dev. No editar
-esos archivos después de aplicarlos; si cambian, preparar otra migración aditiva.
-Si se integra antes de migrar, Deploy falla de forma segura y se repite tras aplicar
-las migraciones de ese mismo SHA. Verificar también con
-`node infra/schema-verify.mjs <ambiente> --admin` desde la configuración custodiada.
 
 Referencias: [ambientes Wrangler](https://developers.cloudflare.com/workers/wrangler/environments/), [Hyperdrive y TLS](https://developers.cloudflare.com/hyperdrive/configuration/tls-ssl-certificates-for-hyperdrive/), [service bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/), [secretos](https://developers.cloudflare.com/workers/configuration/secrets/).

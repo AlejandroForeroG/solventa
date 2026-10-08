@@ -54,6 +54,8 @@ Ambos corren dentro de `npm run check` (CI y despliegue). El hook `pre-commit` e
 
 `decision-capture.v1.json` fija qué se persiste con cada decisión: versión del esquema y del contrato de API, `correlationId`, entradas normalizadas (sin PII), fuentes consultadas con su fecha y calidad, estado del consentimiento (`verified` con identificador y versión, `not_required` o `absent`), regla y modelo con sus versiones y el resultado. Evoluciona solo con campos opcionales; un cambio incompatible crea `decision-capture.v2.json`. Encaja con las columnas JSON existentes (`input_snapshot`, `explanation`, `normalized_request`); la versión del contrato de API es la que se guarda en `contract_version`.
 
+La creación de la ficha por decisión, su persistencia y el routing con cabeceras se explican en el [estándar de endpoints](../../estandares-endpoints.md).
+
 ## Tipos TypeScript desde OpenAPI (pendiente)
 
 Todavía no se generan. Cuando haya endpoints: usar `openapi-typescript` sobre cada spec de dominio en `openapi/v<N>/<dominio>.yaml` para escribir `src/generated/v<N>.d.ts`, añadir un script `generate` a este paquete (como `@solventa/assets`), versionar fuente y generados juntos y hacer que CI regenere y falle si hay diferencias.

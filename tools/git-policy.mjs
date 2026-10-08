@@ -13,8 +13,14 @@ export function validateBranch(branch) {
 export function validatePullRequest({ head, base, title, sameRepository }) {
   validateCommit(title);
   if (!sameRepository) throw Error('El PR debe proceder de este repositorio.');
-  if (base === 'dev') validateBranch(head);
-  else if (!((base === 'staging' && head === 'dev') || (base === 'prod' && head === 'staging'))) throw Error('Flujo permitido: feat|fix|refactor|test/* → dev → staging → prod.');
+  if (base === 'dev' || base === 'staging') {
+    validateBranch(head);
+    if (base === 'dev') {
+      if (!head.endsWith('-dev')) throw Error('Hacia dev usa la rama de integración con sufijo -dev; conserva la rama base para staging.');
+      validateBranch(head.slice(0, -4));
+      if (head.slice(0, -4).endsWith('-dev')) throw Error('Reserva el sufijo -dev exclusivamente para la rama de integración.');
+    } else if (head.endsWith('-dev') || head.length > 68) throw Error('Hacia staging usa una rama base sin sufijo -dev y reserva cuatro caracteres para su rama de integración.');
+  } else if (!(base === 'prod' && head === 'staging')) throw Error('Flujo permitido: rama base → rama -dev → dev; rama base → staging; staging → prod.');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
