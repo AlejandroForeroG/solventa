@@ -10,6 +10,8 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 | `openapi/v<N>/common.yaml` | Shared version components (`X-Trace-Id`, `Error`, deprecation headers); domain specs reference them with `$ref` |
 | `openapi/v1/quotes.yaml` | Minimum-data quote for partners (`POST /quotes`) and web users (`POST /me/quotes`): responses 201, 200, 400, 401, 403, 409 and 503; access errors carry only the canonical code and the trace id |
 | `examples/quotes.json` | Valid and invalid cases with synthetic data, checked against the spec by `tests/quotes-contract.test.ts` |
+| `openapi/v1/consents.yaml` | Consent of the authenticated web user: terms, grant, decline, list and revoke; responses 200, 201, 204, 400, 401, 403, 404, 409 and 503, with only the canonical code and the trace id in errors |
+| `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
 | `redocly.yaml` | OpenAPI lint rules |
