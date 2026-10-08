@@ -28,6 +28,7 @@ export function useFormatters() {
   return {
     copAmount: (value: number) => intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }),
     cop: (value: number) => `${intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })} COP`,
-    monthYear: (date: Date) => intl.formatDate(date, { month: 'short', year: 'numeric', timeZone: 'America/Bogota' })
+    monthYear: (date: Date) => intl.formatDate(date, { month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
+    dayMonthYear: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' })
   };
 }
