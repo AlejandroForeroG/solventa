@@ -331,8 +331,24 @@ describe('request to the API', () => {
   });
 
   it('builds amounts as integers and trims text', () => {
-    const body = toRequestBody({ ...valid, fullName: '  Ana  ', amount: '50000000' });
+    const body = toRequestBody({ ...valid, fullName: '  Ana  ', amount: '50000000' }, 'k');
     expect(body.customer.fullName).toBe('Ana');
     expect(body.credit.amount).toBe(50000000);
+  });
+
+  it('sends the same body on every retry of one attempt, including the renewal after a 401', async () => {
+    const bodies: string[] = [];
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input) === '/auth/session') return new Response('{}', { status: 200 });
+      bodies.push(String(init?.body));
+      return new Response('{}', { status: bodies.length === 1 ? 401 : 503 });
+    });
+    const key = '0b6f6a52-6c52-4a43-9d3e-5d1f1c0e7a11';
+    await requestQuote(valid, key, 'es-CO');
+    await requestQuote(valid, key, 'es-CO');
+    spy.mockRestore();
+    expect(bodies).toHaveLength(3);
+    expect(new Set(bodies).size).toBe(1);
+    expect(JSON.parse(bodies[0]).credit.partnerCreditId).toBe('WEB-0B6F6A526C52');
   });
 });
