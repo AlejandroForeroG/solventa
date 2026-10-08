@@ -90,7 +90,7 @@ test('Identity, the contract, Acquisition and the web catalogue describe the sam
   assert.deepEqual([...SIGNAL_SCOPES], scopes, 'Acquisition asks for exactly the scopes Identity records');
   for (const locale of ['es-CO', 'en-US'] as const) {
     for (const source of CURRENT_TERMS.sources) {
-      for (const key of [`source.${source.code}.name`, `source.${source.code}.detail`, `kind.${source.kind}`]) assert.ok(messages[locale][key], `${locale} lacks ${key}`);
+      for (const key of [`source.${source.code}.name`, `source.${source.code}.detail`, `kind.${source.kind}`, `scope.${source.scope}`]) assert.ok(messages[locale][key], `${locale} lacks ${key}`);
     }
   }
 });

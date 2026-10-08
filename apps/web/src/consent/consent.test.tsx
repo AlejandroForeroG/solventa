@@ -22,7 +22,8 @@ const terms: Terms = {
   ]
 };
 const sources = terms.sources.map(s => s.code);
-const active: Consent = { consentId: 'CNS-2026-00003', status: 'active', sources, grantedAt: '2026-10-08T15:00:00Z', expiresAt: '2027-01-06T15:00:00Z', revokedAt: null, seal: 'a'.repeat(64) };
+const scopes = terms.sources.map(s => s.scope);
+const active: Consent = { consentId: 'CNS-2026-00003', status: 'active', sources, scopes, grantedAt: '2026-10-08T15:00:00Z', expiresAt: '2027-01-06T15:00:00Z', revokedAt: null, seal: 'a'.repeat(64) };
 const revoked: Consent = { ...active, consentId: 'CNS-2026-00002', status: 'revoked', revokedAt: '2026-10-09T16:30:00Z', seal: 'b'.repeat(64) };
 const expired: Consent = { ...active, consentId: 'CNS-2026-00001', status: 'expired', grantedAt: '2026-06-01T14:00:00Z', expiresAt: '2026-08-30T14:00:00Z', seal: 'c'.repeat(64) };
 const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e1b4d4c8aa0d1e2f3a4b5c6d7' };
@@ -229,6 +230,8 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
     expect(within(items[0]).getByText('CNS-2026-00003')).toBeInTheDocument();
     expect(within(items[0]).getByText(t.activePill)).toBeInTheDocument();
     expect(within(items[0]).getByText(/aaaa…aaaa/)).toBeInTheDocument();
+    const scope = within(items[0]).getByText(/^(Alcance|Scope):/);
+    for (const text of locale === 'es-CO' ? ['Ingresos y obligaciones', 'Historial de pagos', 'Afiliación y régimen', 'Validación de identidad'] : ['Income and obligations', 'Payment history', 'Affiliation and regime', 'Identity validation']) expect(scope).toHaveTextContent(text);
     expect(within(items[1]).getByText(t.revokedPill)).toBeInTheDocument();
     expect(within(items[2]).getByText(t.expiredPill)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /Revo/ })).toHaveLength(1);
@@ -361,7 +364,7 @@ describe('consent client', () => {
   it('sends the grant with the session cookie, the key and no identity of its own', async () => {
     const fetchMock = spy(json({ ...active }, 201));
     const outcome = await grantConsent({ textVersion: 1, quoteRef: 'COT-2026-00001' }, 'key-1');
-    expect(outcome).toEqual({ kind: 'ok', value: { consentId: 'CNS-2026-00003', status: 'active', sources, grantedAt: active.grantedAt, expiresAt: active.expiresAt, revokedAt: null, seal: active.seal } });
+    expect(outcome).toEqual({ kind: 'ok', value: { consentId: 'CNS-2026-00003', status: 'active', sources, scopes, grantedAt: active.grantedAt, expiresAt: active.expiresAt, revokedAt: null, seal: active.seal } });
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe('/api/v1/consents');
     expect(init).toMatchObject({ method: 'POST', credentials: 'same-origin' });

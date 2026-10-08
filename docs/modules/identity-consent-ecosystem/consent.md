@@ -37,7 +37,7 @@ Changing the purpose, a source, a scope, the validity or the wording requires a 
 
 ## Fresh access check
 
-Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study.
+Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study. The check searches only the usable consents of the user, so any number of newer revoked or expired ones never hides an active one.
 
 The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
 
@@ -69,7 +69,7 @@ The check happens before the call and is not repeated afterwards, so a revocatio
 
 ## Limits
 
-- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired.
+- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the answer does not change: the failure is logged as `consent_expiry_audit_failed` with a short error code and the next read tries again.
 - Consent is checked against the actor's subject only; Identity does not read quotes, so `quoteRef` is not validated.
 - No source is queried yet. Real providers, their adapters and the use of the answer belong to the profiling work.
 

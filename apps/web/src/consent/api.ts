@@ -12,6 +12,7 @@ export type Consent = {
   consentId: string;
   status: ConsentStatus;
   sources: string[];
+  scopes: string[];
   grantedAt: string;
   expiresAt: string;
   revokedAt: string | null;
@@ -40,9 +41,9 @@ function asTerms(value: unknown): Terms | null {
 }
 
 function asConsent(value: unknown): Consent | null {
-  if (!isRecord(value) || typeof value.consentId !== 'string' || !STATUSES.includes(value.status) || !Array.isArray(value.sources) || !value.sources.every(s => typeof s === 'string')
+  if (!isRecord(value) || typeof value.consentId !== 'string' || !STATUSES.includes(value.status) || !Array.isArray(value.sources) || !value.sources.every(s => typeof s === 'string') || !Array.isArray(value.scopes) || !value.scopes.every(s => typeof s === 'string')
     || typeof value.grantedAt !== 'string' || typeof value.expiresAt !== 'string' || (value.revokedAt !== null && typeof value.revokedAt !== 'string') || typeof value.seal !== 'string') return null;
-  return { consentId: value.consentId, status: value.status as ConsentStatus, sources: value.sources as string[], grantedAt: value.grantedAt, expiresAt: value.expiresAt, revokedAt: value.revokedAt as string | null, seal: value.seal };
+  return { consentId: value.consentId, status: value.status as ConsentStatus, sources: value.sources as string[], scopes: value.scopes as string[], grantedAt: value.grantedAt, expiresAt: value.expiresAt, revokedAt: value.revokedAt as string | null, seal: value.seal };
 }
 
 async function send<T>(path: string, init: RequestInit, read: (response: Response) => Promise<T | null>, ok: readonly number[]): Promise<Outcome<T>> {
