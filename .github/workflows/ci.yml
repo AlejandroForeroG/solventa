@@ -19,6 +19,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Reviewed immutable gate code; never execute the PR's gate implementation.
+          ref: 6f3ed56d7bc8e6234da67b5ccca1d5fef4feced6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
