@@ -1,0 +1,9 @@
+extends:
+  - recommended
+telemetry: off
+rules:
+  info-license: off
+  operation-operationId: error
+  operation-4xx-response: error
+  # Components are shared scaffolding until the first endpoints reference them.
+  no-unused-components: off

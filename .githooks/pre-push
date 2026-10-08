@@ -1,2 +1,3 @@
 #!/bin/sh
-node tools/git-policy.mjs branch
+node tools/git-policy.mjs branch || exit 1
+npm run --silent lint:openapi || exit 1

@@ -1,4 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
+import { apiVersions } from '@solventa/contracts';
+import { gateApiVersion, withHeaders } from './api-versions';
 
 export default {
   async fetch(request: Request, env: WebEnv): Promise<Response> {
@@ -6,7 +8,10 @@ export default {
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
     if (path.startsWith('/auth/')) return env.IDENTITY.fetch(request);
-    if (path.startsWith('/api/')) return Response.json({ error: 'not_implemented' }, { status: 404, headers });
+    if (path.startsWith('/api/')) {
+      const gate = gateApiVersion(path, new Date(), apiVersions);
+      return gate.response ?? withHeaders(Response.json({ error: 'not_implemented' }, { status: 404, headers }), gate.headers);
+    }
     if (path.startsWith('/internal/')) {
       const token = request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const expected = env.DEV_INFRA_TOKEN;
