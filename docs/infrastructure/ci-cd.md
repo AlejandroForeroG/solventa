@@ -24,7 +24,7 @@ git push -u origin feat/quotes
 git push -u origin feat/quotes-dev
 ```
 
-Resolve integration conflicts in `feat/quotes-dev`. Open **`feat/quotes-dev` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and completed current-head Codex review. Deploy repeats CI, publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
+Resolve integration conflicts in `feat/quotes-dev`. Open **`feat/quotes-dev` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
 
 If functionality is corrected on `-dev`, cherry-pick relevant commits back to the base; never copy merges or unrelated dev work:
 
@@ -66,9 +66,9 @@ If prod merge history needs to return to staging, use a maintenance base origina
 
 ## Protections and PR documentation
 
-All three branches require PRs, `policy`, `validate` and `codex-review` checks, an up-to-date branch and resolved conversations; this also applies to administrators. Dev requires no human approval. Staging/prod normally require one approval. An explicitly authorized exception affects only the requested promotion: preserve CI and restore the temporary approval requirement.
+All three branches require PRs, `policy` and `validate` checks from GitHub Actions, an up-to-date branch and resolved conversations; this also applies to administrators. GitHub's native **Require conversation resolution before merging** setting blocks unresolved review threads. Dev requires no human approval. Staging/prod normally require one approval. An explicitly authorized exception affects only the requested promotion: preserve CI and restore the temporary approval requirement.
 
-Each PR waits for Codex review of its current SHA and checks relevant technical criteria. Follow [change review](../change-review.md) to give the reviewer accessible context, record evidence and resolve findings or consult the user. Review does not replace CI or required human approval; it also does not establish completion of an entire story.
+Use Codex feedback and check relevant technical criteria. Follow [change review](../change-review.md) to give the reviewer accessible context, record evidence and resolve findings or consult the user. Do not mark a thread resolved merely to unblock merging. There is no separate required Codex status, custom review workflow or GitHub App; conversation resolution is enforced natively. This setting does not prove that Codex finished a review or accepted every criterion. Review does not replace CI or required human approval; it also does not establish completion of an entire story.
 
 Use the [PR template](../../.github/pull_request_template.md). Each PR links its new/updated documents using GitHub URLs on its source branch and explains change, executed tests and limits in English. An internal fix with no documentation impact must justify it; every feature includes documentation. Do not create copies per branch/environment. Messages do not select environments: the target branch does.
 

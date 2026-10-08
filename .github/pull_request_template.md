@@ -20,7 +20,7 @@ Link guides created or updated using GitHub URLs on this branch. If an internal 
 
 State executed checks, results and remaining limits. When functionality changes, update its unit tests and retain relevant regressions.
 
-Link completed Codex review of the final SHA and explain how findings were resolved. Do not integrate while review is pending or a finding needs a user decision.
+Link available Codex review and explain how findings were resolved. Confirm passing CI and resolution of every review conversation. If a finding needs a user decision, wait for it before integration. GitHub enforces conversation resolution natively; no separate Codex status is required.
 
 ## Candidate
 
