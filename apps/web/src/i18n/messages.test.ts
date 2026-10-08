@@ -36,6 +36,7 @@ describe('message catalogues', () => {
     for (const code of ['open_finance_bancolombia', 'datacredito_experian', 'ruaf', 'registraduria']) {
       for (const part of ['name', 'detail']) expect(es[`source.${code}.${part}`], code).toBeTruthy();
     }
+    for (const scope of ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation']) expect(es[`scope.${scope}`], scope).toBeTruthy();
     for (const kind of ['open_finance', 'credit_bureau', 'open_data']) expect(es[`kind.${kind}`]).toBeTruthy();
     for (const status of ['active', 'revoked', 'expired']) expect(es[`status.${status}`]).toBeTruthy();
     for (const n of [1, 2, 3, 4, 5, 6, 7]) expect(es[`stepper.${n}`]).toBeTruthy();
