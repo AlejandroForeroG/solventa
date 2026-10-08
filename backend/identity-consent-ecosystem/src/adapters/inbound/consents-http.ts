@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { Consents } from '../../application/consents';
 import type { Principal } from '../../application/authentication';
+import { safeCode } from '../safe-code';
 import type { AuthorizeApiAccess } from './api-access-http';
 
 const MAX_BODY_BYTES = 4 * 1024;
@@ -60,8 +61,7 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
         if (decision.actor.kind !== 'user') return reply({ error: 'forbidden' }, 403);
         return await handler(c, decision.actor.principal, traceId, reply);
       } catch (error) {
-        const code = (error as { code?: unknown } | null)?.code;
-        console.error(JSON.stringify({ event: 'consent_failed', traceId, code: typeof code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : 'unexpected_error' }));
+        console.error(JSON.stringify({ event: 'consent_failed', traceId, code: safeCode(error) }));
         return reply({ error: 'access_unavailable' }, 503);
       }
     };
