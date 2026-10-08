@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Both this workflow and gate code come from the trusted target branch.
+          # Both this workflow and gate code come from the trusted default branch.
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -34,6 +34,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
@@ -43,9 +44,9 @@ jobs:
           [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
           [[ "$base" =~ ^(dev|staging|prod)$ ]] || exit 1
           [[ -z "$EVENT_HEAD" || "$EVENT_HEAD" == "$head" ]] || exit 1
-          # Manual retries must run the trusted workflow of this PR's target branch.
+          # Manual retries must run the trusted workflow of repository default branch.
           if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            [[ "$GITHUB_REF_NAME" == "$base" ]] || exit 1
+            [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]] || exit 1
           fi
           echo "head=$head" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
