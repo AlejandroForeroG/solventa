@@ -8,6 +8,8 @@ Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Servi
 
 The Worker applies API versioning to `/api/v<N>/...`: it adds deprecation headers and returns 410 when a version reaches its retirement date. See [contracts](../../shared/contracts/README.md).
 
+The same Worker serves the public, read-only OpenAPI viewer at `/api/docs/` and bundled specifications beneath that path, independently of the React application and business service bindings. Web builds generate its assets from the current domain contracts. See [published API reference and maintenance](../../shared/contracts/README.md#published-api-reference) for environment URLs, local setup and the requirement to update API documentation with every endpoint change.
+
 Logo and favicon come from `packages/assets`; preserve the green identity and loading, error and session states when extending the UI.
 
 ## Quote journey
