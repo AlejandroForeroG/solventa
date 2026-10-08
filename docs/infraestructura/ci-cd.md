@@ -13,6 +13,8 @@ Rama de trabajo: `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripci
 
 Las tres ramas de ambientes requieren PR, checks `policy` y `validate` con la rama actualizada y resolución de conversaciones; aplican también a administradores. Dev no exige aprobación humana. Staging y prod requieren una aprobación antes de integrar. No hacer pushes directos. La validación humana de negocio se documenta en el PR de promoción y la revisión. El control automático acredita el despliegue previo, no todos los criterios funcionales.
 
+GitHub's native **Require conversation resolution before merging** rule blocks integration while any review thread is unresolved. Codex may review PRs and leave findings, but there is no separate Codex-completion check, custom review workflow, App or review secret. Resolve each thread after addressing its finding; green CI remains mandatory.
+
 Los merge commits cambian el SHA entre ambientes; se conserva el contenido del candidato, comprobado con git diff en el PR de promoción. No usar squash ni rebase entre ambientes, ni agregar cambios específicos en staging/prod. Squash se admite al integrar una feature en dev. `main` queda como referencia histórica, sin despliegue.
 
 Con protección de rama actualizada, los commits de integración de staging/prod deben
