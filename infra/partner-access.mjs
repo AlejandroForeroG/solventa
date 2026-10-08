@@ -14,7 +14,7 @@ export function validatePartnerAccessInput(environment, action, input, now = Dat
   if (Object.keys(input).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(input, key))) throw failure('invalid_input');
   if (!['workos-connect', 'solventa-web'].includes(input.provider) || !boundedString(input.reference, 2048)) throw failure('invalid_reference');
   if (input.provider === 'solventa-web') {
-    if (input.reference !== environment) throw failure('invalid_reference');
+    if (!new RegExp(`^${environment}:[a-z0-9][a-z0-9-]{0,63}$`).test(input.reference)) throw failure('invalid_reference');
   } else {
     let tuple;
     try { tuple = JSON.parse(input.reference); } catch { throw failure('invalid_reference'); }
@@ -37,34 +37,41 @@ export function validatePartnerAccessInput(environment, action, input, now = Dat
 
 // The caller supplies the owner's connected runtime client; no administrative SQL is needed.
 export async function changePartnerAccess(db, environment, action, input) {
-  validatePartnerAccessInput(environment, action, input);
-  await db.query('BEGIN');
-  try {
-    let partnerId;
-    let credentialId;
-    let changed = true;
-    if (action === 'register') {
-      const existing = (await db.query('SELECT id FROM identity.partner_credentials WHERE provider=$1 AND credential_reference=$2', [input.provider, input.reference])).rows[0];
-      if (existing) throw failure('credential_exists');
-      let partner = (await db.query('SELECT id,status FROM identity.partners WHERE code=$1 FOR UPDATE', [input.partnerCode])).rows[0];
-      if (!partner) partner = (await db.query('INSERT INTO identity.partners (code) VALUES ($1) RETURNING id,status', [input.partnerCode])).rows[0];
-      if (partner.status !== 'active') throw failure('partner_inactive');
-      partnerId = partner.id;
-      credentialId = (await db.query(`INSERT INTO identity.partner_credentials (partner_id,provider,credential_reference,scopes,expires_at)
-        VALUES ($1,$2,$3,$4,$5) RETURNING id`, [partnerId, input.provider, input.reference, input.scopes, input.expiresAt])).rows[0].id;
-    } else {
-      const credential = (await db.query('SELECT id,partner_id,revoked_at FROM identity.partner_credentials WHERE provider=$1 AND credential_reference=$2 FOR UPDATE', [input.provider, input.reference])).rows[0];
-      if (!credential) throw failure('credential_not_found');
-      partnerId = credential.partner_id;
-      credentialId = credential.id;
-      changed = credential.revoked_at === null;
-      if (changed) await db.query('UPDATE identity.partner_credentials SET revoked_at=now() WHERE id=$1', [credentialId]);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    validatePartnerAccessInput(environment, action, input);
+    await db.query('BEGIN');
+    try {
+      let partnerId;
+      let credentialId;
+      let changed = true;
+      if (action === 'register') {
+        const partner = (await db.query(`INSERT INTO identity.partners (code) VALUES ($1)
+          ON CONFLICT (code) DO UPDATE SET code=excluded.code RETURNING id,status`, [input.partnerCode])).rows[0];
+        if (partner.status !== 'active') throw failure('partner_inactive');
+        partnerId = partner.id;
+        const credential = (await db.query(`INSERT INTO identity.partner_credentials (partner_id,provider,credential_reference,scopes,expires_at)
+          VALUES ($1,$2,$3,$4,$5) ON CONFLICT (provider,credential_reference) DO NOTHING RETURNING id`,
+        [partnerId, input.provider, input.reference, input.scopes, input.expiresAt])).rows[0];
+        if (!credential) throw failure('credential_exists');
+        credentialId = credential.id;
+      } else {
+        const credential = (await db.query('SELECT id,partner_id,revoked_at FROM identity.partner_credentials WHERE provider=$1 AND credential_reference=$2 FOR UPDATE', [input.provider, input.reference])).rows[0];
+        if (!credential) throw failure('credential_not_found');
+        partnerId = credential.partner_id;
+        credentialId = credential.id;
+        changed = credential.revoked_at === null;
+        if (changed) await db.query('UPDATE identity.partner_credentials SET revoked_at=now() WHERE id=$1', [credentialId]);
+      }
+      if (changed) await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+        VALUES ($1,$2,'partner_credential',$3,'success',$4,now()+INTERVAL '90 days')`, [`partner-access-operator:${partnerId}`, `partner_credential.${action === 'register' ? 'registered' : 'revoked'}`, credentialId, randomUUID()]);
+      await db.query('COMMIT');
+      return { status: 'passed', environment, action, partnerId, credentialId, changed };
+    } catch (error) {
+      try { await db.query('ROLLBACK'); } catch { throw error; }
+      // Only a serialization rejection permits one complete retry; ambiguous commits do not.
+      if (error.code !== '40001' || attempt === 1) throw error;
     }
-    if (changed) await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-      VALUES ($1,$2,'partner_credential',$3,'success',$4,now()+INTERVAL '90 days')`, [`partner-access-operator:${partnerId}`, `partner_credential.${action === 'register' ? 'registered' : 'revoked'}`, credentialId, randomUUID()]);
-    await db.query('COMMIT');
-    return { status: 'passed', environment, action, partnerId, credentialId, changed };
-  } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+  }
 }
 
 async function main() {

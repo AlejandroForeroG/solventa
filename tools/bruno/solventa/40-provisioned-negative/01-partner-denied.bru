@@ -1,5 +1,5 @@
 meta {
-  name: Socio revocado o sin permiso
+  name: Revoked or unauthorized partner
   type: http
   seq: 1
 }
@@ -13,7 +13,7 @@ headers {
   Authorization: Bearer {{deniedPartnerToken}}
 }
 tests {
-  test("Contrato de acceso", function () {
+  test("Access contract", function () {
     expect(res.getStatus()).to.equal(403);
     const body = res.getBody();
     expect(body.traceId).to.equal("7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47");

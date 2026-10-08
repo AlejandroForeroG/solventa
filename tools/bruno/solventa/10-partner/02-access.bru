@@ -1,5 +1,5 @@
 meta {
-  name: Acceso socio autorizado
+  name: Authorized partner access
   type: http
   seq: 2
 }
@@ -13,11 +13,11 @@ headers {
   Authorization: Bearer {{accessToken}}
 }
 script:pre-request {
-  if (!bru.getVar("accessToken")) throw new Error("Ejecuta Obtener token M2M en este ambiente.");
-  if (bru.getVar("accessTokenBaseUrl") !== bru.getEnvVar("baseUrl")) throw new Error("Emite un token para el ambiente seleccionado.");
+  if (!bru.getVar("accessToken")) throw new Error("Run Obtain M2M token in this environment.");
+  if (bru.getVar("accessTokenBaseUrl") !== bru.getEnvVar("baseUrl")) throw new Error("Issue a token for the selected environment.");
 }
 tests {
-  test("Contrato de acceso", function () {
+  test("Access contract", function () {
     expect(res.getStatus()).to.equal(200);
     const body = res.getBody();
     expect(body.traceId).to.equal("7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47");

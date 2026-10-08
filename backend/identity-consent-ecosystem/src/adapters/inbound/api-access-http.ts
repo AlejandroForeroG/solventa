@@ -41,7 +41,7 @@ export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Prom
     if (!input.cookie) return unauthorized;
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
     const verified = await new WorkosAuthentication(config).authenticate(input.cookie, false);
-    return verified ? await application.web(verified.identity, env.APP_ENV, input.scope) : unauthorized;
+    return verified ? await application.web(verified.identity, env.APP_ENV, input.scope, env.WEB_CHANNEL_CREDENTIAL_REFERENCE) : unauthorized;
   } catch {
     return { allowed: false, error: 'access_unavailable', status: 503 };
   }

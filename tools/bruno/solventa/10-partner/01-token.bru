@@ -1,5 +1,5 @@
 meta {
-  name: Obtener token M2M
+  name: Obtain M2M token
   type: http
   seq: 1
 }
@@ -22,7 +22,7 @@ script:pre-request {
   bru.deleteVar("accessTokenBaseUrl");
   const issuer = bru.getEnvVar("issuer");
   if (!/^https:\/\/[a-z0-9-]+\.authkit\.app$/.test(issuer || "")) {
-    throw new Error("Configura issuer con el dominio AuthKit propio del ambiente.");
+    throw new Error("Set issuer to this environment's AuthKit domain.");
   }
 }
 script:post-response {
@@ -33,11 +33,11 @@ script:post-response {
   }
 }
 tests {
-  test("Token emitido", function () {
+  test("Token issued", function () {
     expect(res.getStatus()).to.equal(200);
     expect(res.getBody().access_token).to.be.a("string").and.not.empty;
   });
 }
 docs {
-  Requiere aplicacion M2M registrada y m2mClientId/m2mClientSecret como variables secretas locales. El access token solo se asigna a una variable runtime; no se imprime ni se escribe en environments. No compartir el panel de respuesta ni exportar cuerpos de esta solicitud.
+  Requires a registered M2M application and m2mClientId/m2mClientSecret as local secret variables. The access token is assigned only to a runtime variable; it is not printed or written to environment files. Do not share the response panel or export this request's bodies.
 }

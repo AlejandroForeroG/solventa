@@ -75,20 +75,73 @@ try {
   assert.equal(Number((await db.query('SELECT count(*) AS n FROM identity.audit_events')).rows[0].n), beforeAudit + 1);
   await assert.rejects(changePartnerAccess(operator, 'local', 'register', input), /credential_exists/);
 
-  await changePartnerAccess(operator, 'local', 'register', { ...input, partnerCode: 'synthetic-web', provider: 'solventa-web', reference: 'local' });
+  const webInput = { ...input, partnerCode: 'synthetic-web', provider: 'solventa-web', reference: 'local:v1' };
+  const webV1 = await changePartnerAccess(operator, 'local', 'register', webInput);
   const webIdentity = { providerSubject: 'synthetic_' + randomUUID(), sessionReference: 'synthetic_' + randomUUID(), emailVerified: true };
-  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create'), { allowed: false, error: 'unauthorized', status: 401 });
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'local:v1'), { allowed: false, error: 'unauthorized', status: 401 });
   const principal = await sessions.open(webIdentity);
-  const webAccess = await api.web(webIdentity, 'local', 'quotes:create');
+  const webAccess = await api.web(webIdentity, 'local', 'quotes:create', 'local:v1');
   assert.equal(webAccess.allowed, true);
   if (webAccess.allowed) assert.deepEqual(webAccess.actor.principal, principal);
-  assert.deepEqual(await api.web(webIdentity, 'dev', 'quotes:create'), denied);
+  assert.deepEqual(await api.web(webIdentity, 'dev', 'quotes:create', 'dev:v1'), denied);
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'dev:v1'), { allowed: false, error: 'access_unavailable', status: 503 });
+  await db.query("UPDATE identity.partner_credentials SET created_at=now()-INTERVAL '2 hours', expires_at=now()-INTERVAL '1 hour' WHERE id=$1", [webV1.credentialId]);
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'local:v1'), denied);
+  await changePartnerAccess(operator, 'local', 'revoke', { provider: 'solventa-web', reference: 'local:v1' });
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'local:v1'), denied);
+  const webV2 = await changePartnerAccess(operator, 'local', 'register', { ...webInput, reference: 'local:v2' });
+  assert.equal(webV2.partnerId, webV1.partnerId);
+  assert.notEqual(webV2.credentialId, webV1.credentialId);
+  assert.equal((await api.web(webIdentity, 'local', 'quotes:create', 'local:v2')).allowed, true);
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'local:v1'), denied);
+  await assert.rejects(changePartnerAccess(operator, 'local', 'register', webInput), /credential_exists/);
   await sessions.revoke(webIdentity);
-  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create'), { allowed: false, error: 'unauthorized', status: 401 });
+  assert.deepEqual(await api.web(webIdentity, 'local', 'quotes:create', 'local:v2'), { allowed: false, error: 'unauthorized', status: 401 });
   const audit = (await db.query("SELECT actor_reference FROM identity.audit_events WHERE resource_type='partner_credential'")).rows;
   assert.ok(audit.length >= 3);
   assert.ok(audit.every(row => /^partner-access-operator:[a-f0-9-]{36}$/.test(row.actor_reference)));
-  console.log(JSON.stringify({ partnerAccessSQL: 'passed', checks: ['owner_runtime_grants', 'explicit_registration', 'jwt_sql_scope_intersection', 'organization_isolation', 'suspended_denied', 'expired_denied', 'revocation', 'no_reactivation', 'atomic_audit_rollback', 'audit_idempotence', 'web_session', 'environment_channel'] }));
+
+  const concurrentRuntime = new URL(runtime);
+  concurrentRuntime.searchParams.delete('sslmode');
+  concurrentRuntime.searchParams.delete('sslrootcert');
+  const secondOperator = clientFor(concurrentRuntime, { ca: config.ssl.ca, rejectUnauthorized: true });
+  try {
+    await secondOperator.connect();
+    const concurrentReference = JSON.stringify([partner.issuer, partner.organizationId, 'client_concurrent']);
+    const partnerCodes = ['synthetic-concurrent-a', 'synthetic-concurrent-b'];
+    const countBefore = Number((await db.query('SELECT count(*) AS n FROM identity.audit_events')).rows[0].n);
+    let arrivals = 0;
+    let release: () => void = () => {};
+    const ready = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error('Concurrent registration synchronization timed out')), 5000);
+      release = () => { clearTimeout(timer); resolve(); };
+    });
+    // Both independent transactions create their partner before competing for one reference.
+    const synchronize = (connection: typeof operator) => ({
+      query: async (sql: string, values?: unknown[]) => {
+        if (sql.includes('INSERT INTO identity.partner_credentials')) {
+          if (++arrivals === 2) release();
+          await ready;
+        }
+        return connection.query(sql, values);
+      },
+    });
+    const results = await Promise.allSettled([
+      changePartnerAccess(synchronize(operator), 'local', 'register', { ...input, partnerCode: partnerCodes[0], reference: concurrentReference }),
+      changePartnerAccess(synchronize(secondOperator), 'local', 'register', { ...input, partnerCode: partnerCodes[1], reference: concurrentReference }),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    const rejected = results.find(result => result.status === 'rejected');
+    assert.ok(rejected && rejected.status === 'rejected');
+    assert.equal(rejected.reason.code, 'credential_exists');
+    const stored = (await db.query('SELECT id,partner_id FROM identity.partner_credentials WHERE provider=$1 AND credential_reference=$2', [input.provider, concurrentReference])).rows;
+    assert.equal(stored.length, 1);
+    const storedPartners = (await db.query('SELECT id FROM identity.partners WHERE code IN ($1,$2)', partnerCodes)).rows;
+    assert.deepEqual(storedPartners, [{ id: stored[0].partner_id }], 'The losing transaction must not leave an extra partner');
+    assert.equal(Number((await db.query('SELECT count(*) AS n FROM identity.audit_events')).rows[0].n), countBefore + 1);
+    assert.equal(Number((await db.query("SELECT count(*) AS n FROM identity.audit_events WHERE resource_id=$1 AND action='partner_credential.registered'", [stored[0].id])).rows[0].n), 1);
+  } finally { await secondOperator.end(); }
+  console.log(JSON.stringify({ partnerAccessSQL: 'passed', checks: ['owner_runtime_grants', 'explicit_registration', 'jwt_sql_scope_intersection', 'organization_isolation', 'suspended_denied', 'expired_denied', 'revocation', 'no_reactivation', 'atomic_audit_rollback', 'audit_idempotence', 'web_session', 'environment_channel', 'web_channel_rotation', 'concurrent_registration_conflict', 'concurrent_registration_atomicity'] }));
 } finally {
   await operator?.end();
   await db?.end();

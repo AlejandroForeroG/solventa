@@ -27,7 +27,8 @@
     "AUTH_ORIGIN": "http://localhost:8787",
     "AUTH_REDIRECT_URI": "http://localhost:8787/auth/callback",
     "WORKOS_CONNECT_ISSUER": "",
-    "WORKOS_CONNECT_AUDIENCE": ""
+    "WORKOS_CONNECT_AUDIENCE": "",
+    "WEB_CHANNEL_CREDENTIAL_REFERENCE": "local:v1"
   },
   "hyperdrive": [
     {
@@ -45,7 +46,8 @@
         "AUTH_ORIGIN": "https://solventa-web-dev.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-dev.ja-forerog1.workers.dev/auth/callback",
         "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_AUDIENCE": "",
+        "WEB_CHANNEL_CREDENTIAL_REFERENCE": "dev:v1"
       },
       "hyperdrive": [
         {
@@ -70,7 +72,8 @@
         "AUTH_ORIGIN": "https://solventa-web-staging.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-staging.ja-forerog1.workers.dev/auth/callback",
         "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_AUDIENCE": "",
+        "WEB_CHANNEL_CREDENTIAL_REFERENCE": "staging:v1"
       },
       "hyperdrive": [
         {
@@ -95,7 +98,8 @@
         "AUTH_ORIGIN": "https://solventa-web-prod.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-prod.ja-forerog1.workers.dev/auth/callback",
         "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_AUDIENCE": "",
+        "WEB_CHANNEL_CREDENTIAL_REFERENCE": "prod:v1"
       },
       "hyperdrive": [
         {
