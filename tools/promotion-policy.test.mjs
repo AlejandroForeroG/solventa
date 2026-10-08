@@ -4,7 +4,31 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { gitChecks, verifyPromotion } from './promotion-policy.mjs';
+import { findDeployedSha, gitChecks, verifyPromotion } from './promotion-policy.mjs';
+
+test('deployment history is consumed page by page and stops at a matching revision', () => {
+  const wanted = 'b'.repeat(40);
+  const calls = [];
+  const result = findDeployedSha(page => {
+    calls.push(page);
+    assert.ok(page <= 3, 'Do not fetch the remaining history after a match');
+    return { count: 100, candidates: [page === 3 ? wanted : 'a'.repeat(40)] };
+  }, sha => sha === wanted);
+  assert.equal(result, wanted);
+  assert.deepEqual(calls, [1, 2, 3]);
+});
+
+test('deployment pagination terminates without a match and rejects invalid responses', () => {
+  const calls = [];
+  assert.equal(findDeployedSha(page => {
+    calls.push(page);
+    return { count: page === 1 ? 100 : 0, candidates: [] };
+  }, () => false), undefined);
+  assert.deepEqual(calls, [1, 2]);
+  for (const response of [{ count: 101, candidates: [] }, { count: 0, candidates: ['a'.repeat(40)] }, { count: 1, candidates: ['invalid'] }]) {
+    assert.throws(() => findDeployedSha(() => response, () => true), /Invalid deployment page/);
+  }
+});
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'solventa-promotion-'));

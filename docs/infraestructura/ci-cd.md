@@ -49,6 +49,8 @@ El gate comprueba que:
 - Ese SHA de integración es ancestro de un Deploy exitoso de dev y su árbol coincide con el desplegado. La ascendencia sola no basta: un descendiente que revierte o sobrescribe el contenido no acredita esa prueba. Sincronizar la rama de integración con dev antes de integrar si avanzó.
 - El árbol del merge candidato a staging coincide con el árbol de la base.
 
+La búsqueda de Deploy procesa páginas de hasta 100 ejecuciones, conserva solo los SHA exitosos y se detiene al encontrar el candidato válido; no descarga el historial completo en memoria. Si no existe un despliegue válido, la promoción permanece bloqueada.
+
 Si staging avanzó, actualizar la base desde `origin/staging` mediante merge normal, resolver ahí la compatibilidad del candidato y sincronizarla en `-dev`. Repetir pruebas y PR/Deploy en dev antes de promover; no aprobar un resultado combinado que no se haya probado. El gate no acredita por sí solo pruebas de aceptación de negocio.
 
 Conservar las dos ramas remotas hasta completar la promoción. Usar **merge normal** en estos PR, incluido `-dev` a dev: squash/rebase elimina la ascendencia necesaria para acreditar el despliegue. No borrar la rama `-dev` automáticamente tras integrar su primer PR. No utilizar Update branch si eso incorporaría dev en la base.
@@ -63,7 +65,7 @@ Si se necesita incorporar historia de un merge de prod de vuelta a staging, usar
 
 Las tres ramas requieren PR, checks `policy`, `validate` y `codex-review`, rama actualizada y conversaciones resueltas; aplica también a administradores. Dev no exige aprobación humana. Staging/prod normalmente requieren una aprobación. Una excepción explícitamente autorizada solo afecta la promoción solicitada: mantener CI y restaurar el requisito temporal de aprobación.
 
-Cada PR espera la revisión de Codex antes de integrarse. Comprobar su finalización real sobre el SHA actual del PR: un disparo, estado Running, CI verde o revisión de una versión anterior no bastan. Resolver los hallazgos corregibles dentro del alcance, actualizar pruebas/documentación y obtener revisión de la versión final. Si un hallazgo es ambiguo, no puede resolverse o requiere una decisión de producto/cambio de alcance, explicarlo al usuario y esperar su respuesta antes de integrar. No descartar hallazgos para desbloquear el merge. Esta revisión no sustituye CI ni la aprobación humana cuando sea exigida.
+Cada PR espera revisión de Codex del SHA actual y contrasta los criterios técnicos pertinentes. Seguir el [procedimiento de revisión](../revision-cambios.md) para preparar contexto realmente accesible al revisor, registrar evidencia y resolver hallazgos o consultar al usuario. Esta revisión no sustituye CI ni la aprobación humana cuando sea exigida; tampoco acredita por sí sola una historia completa.
 
 Usar la [plantilla de PR](../../.github/pull_request_template.md). Cada PR enlaza sus documentos nuevos o actualizados mediante URLs de GitHub a los archivos en su rama de origen, y explica cambio, pruebas ejecutadas y límites. Una corrección interna sin impacto documental debe justificarlo; una feature siempre incluye documentación. No crear copias de una guía por rama o ambiente. Los mensajes no seleccionan ambientes: lo hace la rama de destino.
 

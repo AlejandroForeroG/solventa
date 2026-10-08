@@ -26,6 +26,7 @@ Esta carpeta contiene la documentación técnica vigente del producto. La organi
 - [Arquitectura y fronteras](arquitectura.md).
 - [Estándar de endpoints y decisiones de negocio](estandares-endpoints.md).
 - [Pruebas con propósito](pruebas.md).
+- [Revisión de cambios y criterios de aceptación](revision-cambios.md).
 - [Operación de infraestructura](infraestructura/README.md).
 - [Consultas SQL de solo lectura](infraestructura/consultas-sql.md).
 - [Modelo SQL y permisos](infraestructura/modelo-datos.md).
