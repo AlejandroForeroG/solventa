@@ -37,7 +37,29 @@ Changing the purpose, a source, a scope, the validity or the wording requires a 
 
 ## Fresh access check
 
-Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, and covering the required scope. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study.
+Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study.
+
+The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
+
+```ts
+{ subjectToken, purposeCode: 'risk_profiling', scope }
+// { allowed: true, consent: { consentId, textVersion, expiresAt } }
+// { allowed: false, reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' }
+```
+
+`subjectToken` is the internal pseudonymous identifier of the actor already authorized by the caller. `consent_invalid` means the stored record no longer matches its seal. The check is never cached, and the caller treats every `allowed: false` the same way: no source and no copy.
+
+## Operation
+
+- **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns. Apply it before deploying this code. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code.
+- **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret of Identity; without it a grant answers 503 and a check denies. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
+- **Routing:** the web Worker forwards `/api/v1/consents` and its sub-paths to Identity after the version gate.
+
+## Limits
+
+- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired.
+- Consent is checked against the actor's subject only; Identity does not read quotes, so `quoteRef` is not validated.
+- No source is queried yet. Real providers, their adapters and the use of the answer belong to the profiling work.
 
 ## Failures
 
@@ -52,4 +74,6 @@ Another module that wants to query a source asks Identity, through the Service B
 
 ## Verification
 
-`npm run test:contracts` checks the contract and its examples: every operation requires the web session, the status codes of each flow exist, requests accept no extra fields, the status of each example follows its dates, and a consent covers exactly the sources of its terms.
+- `npm run test:contracts` checks the contract and its examples: every operation requires the web session, the status codes of each flow exist, requests accept no extra fields, the status of each example follows its dates, and a consent covers exactly the sources of its terms.
+- `npm run test:consents` covers the use cases and the HTTP adapter with in-memory dependencies, validating responses against the contract: grant, retry and conflict, outdated text, decline, ownership, revocation, expiry, tampering, session and origin failures, body limit and unavailable persistence.
+- `npm run test:consents:sql` runs the same rules against a disposable local database with the Identity runtime role: one transaction for record, audit and outbox, concurrent retries and revocations, expiry audited once, tampering, and permissions. Run `npm run infra:up` first.
