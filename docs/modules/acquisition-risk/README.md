@@ -26,6 +26,8 @@ Both entries run the same use case. Identity decides who the actor is through `a
 
 Each request runs in this order: credential, access check, `Idempotency-Key`, validation, calculation, write. Without a credential the answer is 401 and Identity is not called. Identity's answers keep their difference: 401 `unauthorized`, 403 `forbidden`, 503 `access_unavailable`; an RPC failure, a reply that does not validate or a call past the 2 s deadline blocks the quote as 503. A 400 names the field and the code, never the submitted value. Responses carry `X-Trace-Id` (UUID); the server generates one when the header is missing or invalid.
 
+A gateway failure returns 503 `service_unavailable` and preserves a valid caller-supplied trace ID. The gateway may lose a response after Acquisition commits the quote, so a 503 does not prove that no quote was stored. An internal quote failure returns 500 `internal_error`. After either error, retry only with the same `Idempotency-Key` and unchanged request body to recover a confirmed result without creating another quote.
+
 **Body limit.** A body over 16 KiB is answered as a validation error (400) after the access check. It is refused from `Content-Length` before reading, or cancelled while reading when no length is declared, so it is never held in memory.
 
 **Who owns a quote.** A partner quote belongs to the partner and is keyed by a keyed hash of the customer's document. A web quote belongs to the user's `clientId` and uses the user's own `subjectToken`; the document in the body is not stored. Idempotency is scoped to the actor, so one key used by two users creates two quotes.
@@ -33,6 +35,15 @@ Each request runs in this order: credential, access check, `Idempotency-Key`, va
 **Premium rule.** Monthly premium = amount × rate ÷ 1,000,000, rounded half up to a whole peso. The rate depends on the completed age: 18-30, 220; 31-40, 270; 41-50, 400; 51-60, 650; 61-70, 1000 (parts per million). The term (12 to 240 months) does not change the premium. This is a placeholder, not an actuarial tariff: replace it by publishing a new `ruleVersion`.
 
 **Configuration.** `QUOTE_HMAC_KEY` (at least 32 characters, different per environment) signs the document and the request. Locally, copy `.dev.vars.example` to `.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret; without it an authorized request returns 500 and writes nothing. Apply migrations `0006_partner_quotes.sql`, `0007_user_quotes.sql` and `0008_quote_idempotency_by_actor.sql` before deploying this code. Partner tokens need Identity's `WORKOS_CONNECT_*` configuration; until it exists, the partner entry answers 503.
+
+The operator keeps an environment-specific, ignored `infra/.local/acquisition.<environment>.secrets.json` containing only `QUOTE_HMAC_KEY`. After verifying its length and environment, upload it to the matching Acquisition Worker with the installed Wrangler version:
+
+```sh
+node node_modules/wrangler/bin/wrangler.js secret bulk infra/.local/acquisition.dev.secrets.json --config backend/acquisition-risk/wrangler.jsonc --env dev --profile solventa-universidad
+node node_modules/wrangler/bin/wrangler.js secret list --config backend/acquisition-risk/wrangler.jsonc --env dev --profile solventa-universidad
+```
+
+Replace `dev` consistently when preparing staging or prod. `secret bulk` publishes a new Worker version, so perform it as a coordinated environment operation before the quote PR is merged. The second command lists names only; confirm that `QUOTE_HMAC_KEY` is present without displaying its value. Subsequent Wrangler deployments preserve an existing secret. The local file belongs in authorized custody and never in Git or a request body. See [migration operations](../../infrastructure/migrations.md) for the separate SQL prerequisite.
 
 **Verification.**
 
@@ -44,7 +55,7 @@ npm run test:quotes:sql   # real local SQL for both actors; requires npm run inf
 
 The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in session cookie or a partner token.
 
-**Limits.** The web journey after login and a real partner token have not been demonstrated end to end here; they depend on a WorkOS login and on the M2M setup that Identity documents. Each quote adds one Identity call to the critical path, so the earlier load measurements, taken before that call existed, must be repeated. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
+**Limits.** Identity accepts a real M2M partner token in dev and staging, but the quote journey with that token and the web journey after a real login have not been demonstrated yet. Each quote adds one Identity call to the critical path, so the earlier load measurements, taken before that call existed, must be repeated. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
 
 ## Documents
 

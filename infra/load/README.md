@@ -6,7 +6,7 @@ Measures the latency of `POST /api/v1/quotes` with [k6](https://k6.io) against t
 
 It runs against the local Workers (`npm run dev:backend`) and the local Docker CockroachDB. Identity verifies every request, so you need a credential: the sealed session cookie of a logged-in user, or a partner M2M token.
 
-**It does not show that production meets the objective.** The traffic skips the Cloudflare network and Hyperdrive, the database is a single node and the machine shares CPU with k6 and Docker. Use it to find code bottlenecks and to compare before and after a change. Measuring dev, staging or prod needs partner authentication (those environments reject every credential today), migration `0006` applied by the operator and `QUOTE_HMAC_KEY` loaded.
+**It does not show that production meets the objective.** The traffic skips the Cloudflare network and Hyperdrive, the database is a single node and the machine shares CPU with k6 and Docker. Use it to find code bottlenecks and to compare before and after a change. Identity accepts a real partner M2M token in dev and staging; measuring quotes there additionally requires the quote code deployed, Acquisition migrations `0006`–`0008` applied and `QUOTE_HMAC_KEY` loaded. Production needs its own partner setup and approved release.
 
 ## Running it
 

@@ -49,7 +49,7 @@ test('the contract declares both entries, the shared headers and the status code
   assert.deepEqual(user.security, [{ WebSession: [] }, { LocalWebSession: [] }]);
   assert.equal(quotes.components.securitySchemes.PartnerBearer.bearerFormat, 'JWT');
   for (const operation of [partner, user]) {
-    for (const code of ['200', '201', '400', '401', '403', '409', '503']) assert.ok(operation.responses[code], `missing response ${code}`);
+    for (const code of ['200', '201', '400', '401', '403', '409', '500', '503']) assert.ok(operation.responses[code], `missing response ${code}`);
     assert.deepEqual(operation.requestBody, partner.requestBody, 'both entries accept the same request');
     assert.deepEqual(operation.responses['201'], partner.responses['201'], 'both entries return the same quote');
   }
