@@ -64,7 +64,7 @@ The access check does not refresh the cookie and never registers a session: if t
 
 ## Responses
 
-The web gateway gives each access probe's Identity Service Binding call a five-second deadline, cancels it on expiry and returns `503 access_unavailable`. Upstream failures preserve a valid caller-supplied UUID in `X-Trace-Id` and the response body; missing or invalid values receive a generated UUID. API version headers and `Cache-Control: no-store` also apply to these failures.
+The web gateway gives each access probe's Identity Service Binding call a five-second deadline, cancels it on expiry and returns `503 access_unavailable`. This deadline does not rely on client-disconnection signals. Upstream failures preserve a valid caller-supplied UUID in `X-Trace-Id` and the response body; missing or invalid values receive a generated UUID. API version headers and `Cache-Control: no-store` also apply to these failures.
 
 `GET /api/v1/access/partner` and `GET /api/v1/access/web` check the fixed `quotes:create` operation. They do not accept an actor identifier or a client-selected operation. The actor is a discriminated union. Synthetic web response example:
 
@@ -157,5 +157,7 @@ This foundation does not implement quoting, consent, quotas, biometrics, mobile 
 ## Verification
 
 The Identity composition root (`src/index.ts`) builds SQL and WorkOS adapters and injects the access authorizer through `createHttp({ authorizeApiAccess })`. The HTTP and RPC adapter share the same dependency-driven authorization function; HTTP tests use in-memory dependencies without patching production adapters. Existing `/auth/*` composition and behavior are unchanged.
+
+`npm run test:runtime` executes the actual bundled gateway in local workerd through Wrangler's installed Miniflare, with a synthetic Identity service. It verifies forwarding, the five-second deadline, upstream cancellation and correlated 503 responses. It does not establish remote SQL cancellation or a complete user flow.
 
 From the root: `npm run test:authentication` verifies sessions, JWT verification, partner and web user authorization and the HTTP adapter with synthetic data; `npm run test:contracts` checks the version registry/schemas, and `npm run lint:openapi` validates the specification. With local SQL prepared, `npm run test:partner-access:sql` exercises partner registration, revocation, concurrency and audit, plus web user access without partner records and after session revocation, in a temporary database. These tests do not create WorkOS applications or demonstrate real M2M token issuance. Probes and manual cases are in the Bruno collection linked above.

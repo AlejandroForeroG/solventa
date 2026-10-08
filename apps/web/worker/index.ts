@@ -14,8 +14,7 @@ export default {
       if (path === '/api/v1/access/partner' || path === '/api/v1/access/web') {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const signal = AbortSignal.any([request.signal, controller.signal]);
-        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal })), gate.headers); }
+        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
         catch {
           const requestedTrace = request.headers.get('X-Trace-Id') ?? '';
           const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
