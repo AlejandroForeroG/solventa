@@ -123,6 +123,8 @@ Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a p
 { kind: 'web', cookie, origin, method, operation: 'quotes:create' }
 ```
 
+Identity's own [consent](consent.md) routes call the same function with `consents:read` or `consents:write`, for web users only: a partner credential is always forbidden those operations.
+
 `cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `method` is the actual method. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
 
 A positive response applies to that check and must not be stored as permanent permission. Each use verifies the signature and current local state; the RPC does not renew cookies. Do not duplicate calls to Identity without reviewing the flow's limit of one internal remote dependency. Consent authorization for signals remains an additional pending capability.
