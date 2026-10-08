@@ -1,5 +1,3 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { messages } from './messages';
 
@@ -7,14 +5,7 @@ const es = messages['es-CO'];
 const en = messages['en-US'];
 // Names, codes and symbols that are the same in both languages.
 const SAME_IN_BOTH = new Set(['locale.es-CO', 'locale.en-US', 'source.open_finance_bancolombia.name', 'source.datacredito_experian.name', 'source.registraduria.name', 'kind.open_finance', 'privacy.period']);
-
-function sources(dir: string): string[] {
-  return readdirSync(dir).flatMap(name => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return sources(path);
-    return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) && name !== 'messages.ts' ? [path] : [];
-  });
-}
+const code = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.*', '!/src/i18n/messages.ts'], { query: '?raw', import: 'default', eager: true });
 
 describe('message catalogues', () => {
   it('define the same keys in both languages', () => {
@@ -33,8 +24,8 @@ describe('message catalogues', () => {
 
   it('are the only place where interface text is written: no component hard-codes a message id that is missing', () => {
     const used = new Set<string>();
-    for (const file of sources('src')) {
-      for (const match of readFileSync(file, 'utf8').matchAll(/id: ['`]([\w.${}-]+)['`]/g)) used.add(match[1]);
+    for (const text of Object.values(code)) {
+      for (const match of text.matchAll(/id: ['`]([\w.${}-]+)['`]/g)) used.add(match[1]);
     }
     const dynamic = [...used].filter(id => id.includes('${'));
     const fixed = [...used].filter(id => !id.includes('${'));
