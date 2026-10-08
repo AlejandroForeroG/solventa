@@ -41,7 +41,15 @@ grant_type=client_credentials&client_id=<M2M_CLIENT_ID>&client_secret=<M2M_CLIEN
 
 Use the response's `access_token` to call `GET /api/v1/access/partner`. Renew it by requesting another token before expiry; this flow does not represent a user or require copying a web session. Do not store tokens or secrets in SQL, logs or Git. Token issuance errors come from WorkOS and do not use Solventa's error format.
 
-The `WORKOS_CONNECT_*` values remain empty until external setup is completed for each environment. Missing configuration makes partner token verification return `503 access_unavailable`. Do not substitute another environment's credentials. M2M setup and a real call using its token must be verified separately from builds and tests with synthetic data.
+Dev and staging have separate public `WORKOS_CONNECT_*` values in Wrangler and Bruno. Local and prod remain empty until separately provisioned. Missing configuration makes partner token verification return `503 access_unavailable`; configured environments reject malformed or foreign-environment tokens with 401. Do not substitute another environment's credentials. M2M setup and a real call using its token must be verified separately from builds and tests with synthetic data.
+
+### Provisioning a partner in WorkOS
+
+Use the environment's administrative API key only in a trusted operator process. Through the [WorkOS APIs](https://workos.com/docs/reference/workos-connect/applications), ensure the `quotes:create` permission exists (`POST /authorization/permissions` with `slug`, `name` and `description`), create or select the partner organization, and create a Connect application with a descriptive `name`, `application_type: "m2m"`, its `organization_id` and `scopes: ["quotes:create"]`. An M2M application represents a third-party service, not a user.
+
+Create its credential with `POST /connect/applications/{application_id}/client_secrets`. WorkOS returns the plaintext `secret` only at creation; immediately save it in authorized secret custody and never include it in Git, reports or client bundles. The application resource ID is used for administration; the returned `client_id` is used for token issuance and Identity's local credential reference. Neither is the environment client ID used as the JWT audience.
+
+Then register the verified issuer/organization/client tuple using the operator below. Keep a finite local expiry for integration credentials and grant only the needed scope. A test partner does not onboard a real partner automatically. For rotation, WorkOS supports multiple client secrets, but Identity's local reference is per application: rotating a WorkOS secret does not reactivate an expired or revoked local registration. Deleting a secret prevents future issuance with it; use local revocation to block already-issued tokens. A replacement for a revoked local registration requires a new application/client reference under the current operator contract.
 
 ## Web: authenticated user and operation policy
 

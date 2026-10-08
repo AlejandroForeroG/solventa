@@ -14,7 +14,7 @@ Do not run the entire collection as if every scenario shared the same state: a p
 
 ## Variables and secrets
 
-Environment files version `baseUrl`, `sessionCookieName` and the initially empty `issuer` and `audience` fields. Fill the latter two with the environment's public values according to the Identity guide. `audience` documents the configuration expected by the API; the M2M request does not send it or allow selecting another audience.
+Environment files version `baseUrl`, `sessionCookieName`, `issuer` and `audience`. Dev and staging contain their configured public issuer/audience; local and prod remain empty until separately provisioned. `audience` documents the configuration expected by the API; the M2M request does not send it or allow selecting another audience.
 
 Populate Bruno's local secret variables when needed:
 

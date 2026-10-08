@@ -44,8 +44,8 @@
         "APP_ENV": "dev",
         "AUTH_ORIGIN": "https://solventa-web-dev.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-dev.ja-forerog1.workers.dev/auth/callback",
-        "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_ISSUER": "https://thorough-solar-66-solventa-dev.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F52THNNZZZ4WSGACX8KA4"
       },
       "hyperdrive": [
         {
@@ -69,8 +69,8 @@
         "APP_ENV": "staging",
         "AUTH_ORIGIN": "https://solventa-web-staging.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-staging.ja-forerog1.workers.dev/auth/callback",
-        "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_ISSUER": "https://essential-nightingale-37-staging.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F209CBGBJGD73ZM39ADW6"
       },
       "hyperdrive": [
         {
