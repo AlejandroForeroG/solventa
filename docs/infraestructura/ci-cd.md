@@ -4,6 +4,8 @@ Rama de trabajo: `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripci
 
 ## Flujo
 
+Si el título del commit supera 150 caracteres, mover los detalles al cuerpo del commit y conservar una descripción breve en la primera línea.
+
 1. Implementar y probar en local; abrir PR desde una rama de trabajo hacia `dev`.
 2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. El PR hacia dev requiere checks verdes antes de integrar; no necesita revisión humana.
 3. Al integrar en `dev`, Deploy repite CI, despliega los cuatro Workers de dev y verifica SQL, RPC y aislamiento.
