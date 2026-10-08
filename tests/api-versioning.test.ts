@@ -100,6 +100,54 @@ test('the web Worker keeps answering 404 for an unimplemented version without de
   assert.equal(response.headers.get('sunset'), null);
 });
 
+test('access gateway failures preserve valid trace IDs and replace invalid ones', async () => {
+  const validTrace = '50000000-0000-4000-8000-000000000001';
+  for (const trace of [validTrace, 'invalid']) {
+    const response = await worker.fetch(new Request('https://solventa.invalid/api/v1/access/web', { headers: { 'X-Trace-Id': trace } }), {
+      IDENTITY: { fetch: async () => { throw new Error('unavailable'); } },
+    } as WebEnv);
+    const body = await response.json() as { error: string; traceId: string };
+    assert.equal(response.status, 503);
+    assert.equal(body.error, 'access_unavailable');
+    assert.equal(response.headers.get('x-trace-id'), body.traceId);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    if (trace === validTrace) assert.equal(body.traceId, trace);
+    else assert.match(body.traceId, /^[0-9a-f-]{36}$/);
+  }
+});
+
+test('the access gateway aborts stalled Identity calls after five seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let upstreamSignal: AbortSignal | undefined;
+  const result = worker.fetch(new Request('https://solventa.invalid/api/v1/access/partner'), {
+    IDENTITY: { fetch: (request: Request) => new Promise<Response>((_resolve, reject) => {
+      upstreamSignal = request.signal;
+      request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+    }) },
+  } as WebEnv);
+  t.mock.timers.tick(4999);
+  assert.equal(upstreamSignal?.aborted, false);
+  t.mock.timers.tick(1);
+  assert.equal(upstreamSignal?.aborted, true);
+  const response = await result;
+  assert.equal(response.status, 503);
+  assert.equal((await response.json() as { error: string }).error, 'access_unavailable');
+});
+
+test('the access gateway propagates client cancellation to Identity', async () => {
+  const controller = new AbortController();
+  let upstreamSignal: AbortSignal | undefined;
+  const pending = worker.fetch(new Request('https://solventa.invalid/api/v1/access/web', { signal: controller.signal }), {
+    IDENTITY: { fetch: (request: Request) => new Promise<Response>((_resolve, reject) => {
+      upstreamSignal = request.signal;
+      request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+    }) },
+  } as WebEnv);
+  controller.abort();
+  assert.equal(upstreamSignal?.aborted, true);
+  assert.equal((await pending).status, 503);
+});
+
 test('the version registry is well formed', () => {
   assert.deepEqual(registryViolations(apiVersions), []);
 });

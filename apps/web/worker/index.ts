@@ -12,11 +12,15 @@ export default {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
       if (path === '/api/v1/access/partner' || path === '/api/v1/access/web') {
-        try { return withHeaders(await env.IDENTITY.fetch(request), gate.headers); }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const signal = AbortSignal.any([request.signal, controller.signal]);
+        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal })), gate.headers); }
         catch {
-          const traceId = crypto.randomUUID();
+          const requestedTrace = request.headers.get('X-Trace-Id') ?? '';
+          const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
           return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
-        }
+        } finally { clearTimeout(timeout); }
       }
       return gate.response ?? withHeaders(Response.json({ error: 'not_implemented' }, { status: 404, headers }), gate.headers);
     }

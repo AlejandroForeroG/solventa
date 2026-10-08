@@ -1,12 +1,18 @@
 import type { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import { ApiAccess, isApiOperation } from '../../application/api-access';
-import type { AccessDecision, ApiOperation } from '../../application/api-access';
-import { SqlIdentitySessions } from '../outbound/identity-sessions';
-import { SqlPartnerAccess } from '../outbound/partner-access';
-import { WorkosAuthentication } from '../outbound/workos-authentication';
-import { WorkosPartnerAuthentication } from '../outbound/workos-partner-authentication';
-import { configuration } from './authentication-http';
+import { isApiOperation } from '../../application/api-access';
+import type { AccessDecision, ApiOperation, ApiAccess, PartnerIdentity } from '../../application/api-access';
+import type { VerifiedIdentity } from '../../application/authentication';
+
+export type ApiAccessDependencies = {
+  application: Pick<ApiAccess, 'partner' | 'webUser'>;
+  partner: { authenticate(token: string): Promise<PartnerIdentity | null> } | null;
+  web: {
+    authenticate(cookie: string, refresh: boolean): Promise<{ identity: VerifiedIdentity } | null>;
+    allowedOrigins: readonly string[];
+  } | null;
+};
+export type AuthorizeApiAccess = (input: unknown) => Promise<AccessDecision>;
 
 export type ApiAccessRequest =
   | { kind: 'partner'; token: string; operation: ApiOperation }
@@ -22,25 +28,22 @@ function isAccessRequest(value: unknown): value is ApiAccessRequest {
 }
 
 // Shared by HTTP probes and the private RPC. Actor identity comes only from verified credentials, never from caller IDs.
-export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Promise<AccessDecision> {
+export async function authorizeApiAccess(deps: ApiAccessDependencies, input: unknown): Promise<AccessDecision> {
   if (!isAccessRequest(input)) return { allowed: false, error: 'invalid_request', status: 400 };
   const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
   try {
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString));
+    const { application } = deps;
     if (input.kind === 'partner') {
       if (!input.token) return unauthorized;
-      if (!env.WORKOS_CONNECT_ISSUER || !env.WORKOS_CONNECT_AUDIENCE) return { allowed: false, error: 'access_unavailable', status: 503 };
-      const provider = new WorkosPartnerAuthentication({ issuer: env.WORKOS_CONNECT_ISSUER, audience: env.WORKOS_CONNECT_AUDIENCE });
-      const identity = await provider.authenticate(input.token);
+      if (!deps.partner) return { allowed: false, error: 'access_unavailable', status: 503 };
+      const identity = await deps.partner.authenticate(input.token);
       return identity ? await application.partner(identity, input.operation) : unauthorized;
     }
-    const config = configuration(env);
-    if (!config) return { allowed: false, error: 'access_unavailable', status: 503 };
-    const origins = config.local ? [config.origin, 'http://localhost:5173'] : [config.origin];
-    if (!['GET', 'HEAD'].includes(input.method) && !origins.includes(input.origin)) return { allowed: false, error: 'forbidden', status: 403 };
+    if (!deps.web) return { allowed: false, error: 'access_unavailable', status: 503 };
+    if (!['GET', 'HEAD'].includes(input.method) && !deps.web.allowedOrigins.includes(input.origin)) return { allowed: false, error: 'forbidden', status: 403 };
     if (!input.cookie) return unauthorized;
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
-    const verified = await new WorkosAuthentication(config).authenticate(input.cookie, false);
+    const verified = await deps.web.authenticate(input.cookie, false);
     return verified ? await application.webUser(verified.identity, input.operation) : unauthorized;
   } catch {
     return { allowed: false, error: 'access_unavailable', status: 503 };
@@ -48,7 +51,7 @@ export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Prom
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize = authorizeApiAccess) {
+export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize: AuthorizeApiAccess) {
   for (const kind of ['partner', 'web'] as const) {
     app.all(`/api/v1/access/${kind}`, async c => {
       const requestedTrace = c.req.header('X-Trace-Id') ?? '';
@@ -66,7 +69,7 @@ export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize =
       const request: ApiAccessRequest = kind === 'partner'
         ? { kind, token, operation: 'quotes:create' }
         : { kind, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create' };
-      const decision = await authorize(c.env, request);
+      const decision = await authorize(request);
       if (!decision.allowed) {
         if (decision.status === 401 && kind === 'partner') c.header('WWW-Authenticate', 'Bearer realm="solventa"');
         return c.json({ error: decision.error, traceId }, decision.status);
