@@ -14,8 +14,9 @@
   },
   "dependencies": {
     "@solventa/assets": "0.0.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@solventa/contracts": "0.0.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

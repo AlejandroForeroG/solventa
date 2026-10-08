@@ -27,3 +27,4 @@ infra/.local/
 !.env.infra.example
 wrangler.local.json
 worker-dist/
+.omc/

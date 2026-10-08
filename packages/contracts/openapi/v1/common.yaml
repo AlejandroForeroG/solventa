@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: Solventa API
+  version: 1.0.0
+  description: Components shared by the version 1 domain specs, which reference them with $ref. Endpoint contracts live in one spec per domain.
+servers:
+  - url: /api/v1
+paths: {}
+components:
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Correlation id (UUID). Generated and returned by the server when absent. Never carries PII.
+      schema:
+        type: string
+        format: uuid
+  headers:
+    Deprecation:
+      description: Announcement date of the deprecation (RFC 9745). Present only on versions that have a sunset date.
+      schema:
+        type: string
+        example: '@1798782000'
+    Sunset:
+      description: Date the version stops answering (RFC 8594). Present only on versions that have a sunset date.
+      schema:
+        type: string
+        example: Sat, 06 Jun 2026 05:00:00 GMT
+    Link:
+      description: Successor version, when one exists (rel="successor-version").
+      schema:
+        type: string
+        example: </api/v2/quotes>; rel="successor-version"
+  schemas:
+    Error:
+      type: object
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          description: Stable snake_case code.
+        message:
+          type: string
+        traceId:
+          type: string
+          format: uuid

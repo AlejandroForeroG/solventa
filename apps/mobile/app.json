@@ -4,12 +4,24 @@
     "slug": "solventa",
     "version": "0.0.0",
     "orientation": "portrait",
+    "icon": "./assets/app-icon.png",
+    "scheme": "solventa",
     "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
+    "backgroundColor": "#0B6B5F",
     "android": {
-      "edgeToEdgeEnabled": true
+      "adaptiveIcon": {
+        "backgroundColor": "#0B6B5F",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      }
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/app-icon.png"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
     }
   }
 }
