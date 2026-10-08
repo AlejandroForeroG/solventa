@@ -30,7 +30,7 @@ Each request runs in this order: credential, access check, `Idempotency-Key`, va
 
 **Premium rule.** Monthly premium = amount × rate ÷ 1,000,000, rounded half up to a whole peso. The rate depends on the completed age: 18-30, 220; 31-40, 270; 41-50, 400; 51-60, 650; 61-70, 1000 (parts per million). The term (12 to 240 months) does not change the premium. This is a placeholder, not an actuarial tariff: replace it by publishing a new `ruleVersion`.
 
-**Configuration.** `QUOTE_HMAC_KEY` (at least 32 characters, different per environment) signs the document and the request. Locally, copy `.dev.vars.example` to `.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret; without it an authorized request returns 500 and writes nothing. Apply migrations `0006_partner_quotes.sql` and `0007_user_quotes.sql` before deploying this code. Partner tokens need Identity's `WORKOS_CONNECT_*` configuration; until it exists, the partner entry answers 503.
+**Configuration.** `QUOTE_HMAC_KEY` (at least 32 characters, different per environment) signs the document and the request. Locally, copy `.dev.vars.example` to `.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret; without it an authorized request returns 500 and writes nothing. Apply migrations `0006_partner_quotes.sql`, `0007_user_quotes.sql` and `0008_quote_idempotency_by_actor.sql` before deploying this code. Partner tokens need Identity's `WORKOS_CONNECT_*` configuration; until it exists, the partner entry answers 503.
 
 **Verification.**
 

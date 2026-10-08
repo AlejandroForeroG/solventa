@@ -77,8 +77,8 @@ export class SqlQuoteStore implements QuoteStore {
   private async find(client: Client, q: NewQuote): Promise<SaveResult | null> {
     const owner = ownerOf(q);
     const existing = await client.query<Row>(
-      `SELECT quote_code, request_hash, result FROM acquisition.quotes WHERE ${owner.column} = $1 AND subject_token = $2 AND idempotency_key = $3`,
-      [owner.actorId, q.subjectToken, q.idempotencyKey]);
+      `SELECT quote_code, request_hash, result FROM acquisition.quotes WHERE ${owner.column} = $1 AND idempotency_key = $2`,
+      [owner.actorId, q.idempotencyKey]);
     const row = existing.rows[0];
     if (!row) return null;
     return row.request_hash === q.requestFingerprint ? { kind: 'replayed', quote: fromRow(row) } : { kind: 'conflict' };
