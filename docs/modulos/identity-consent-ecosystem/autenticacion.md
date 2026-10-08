@@ -71,10 +71,11 @@ y datos sintéticos; no vacía la base del desarrollador.
 ## Fronteras pendientes
 
 The [API access guide](acceso-api.md) describes `quotes:create` probes,
-partner M2M credentials and web channel authorization. `/auth/session`
+partner M2M credentials and the web user operation policy. `/auth/session`
 does not return an access token: `subjectToken` is an internal identifier, not a
-Bearer credential. The web probe also requires an active, authorized channel;
-its RPC does not refresh cookies, so refresh remains in `/auth/session`.
+Bearer credential. Web access depends only on this session and its local
+record, never on a partner credential; its RPC neither refreshes cookies nor
+registers sessions, so refresh remains in `/auth/session`.
 
 Una sesión no concede consentimiento, permisos operativos ni acceso a otros
 propietarios. Móvil requiere login PKCE propio y almacenamiento seguro nativo;

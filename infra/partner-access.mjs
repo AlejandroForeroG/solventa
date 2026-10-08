@@ -12,19 +12,15 @@ export function validatePartnerAccessInput(environment, action, input, now = Dat
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw failure('invalid_input');
   const keys = action === 'register' ? ['partnerCode', 'provider', 'reference', 'scopes', 'expiresAt'] : ['provider', 'reference'];
   if (Object.keys(input).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(input, key))) throw failure('invalid_input');
-  if (!['workos-connect', 'solventa-web'].includes(input.provider) || !boundedString(input.reference, 2048)) throw failure('invalid_reference');
-  if (input.provider === 'solventa-web') {
-    if (!new RegExp(`^${environment}:[a-z0-9][a-z0-9-]{0,63}$`).test(input.reference)) throw failure('invalid_reference');
-  } else {
-    let tuple;
-    try { tuple = JSON.parse(input.reference); } catch { throw failure('invalid_reference'); }
-    if (!Array.isArray(tuple) || tuple.length !== 3 || !boundedString(tuple[0], 512) || !boundedString(tuple[1], 256) || !boundedString(tuple[2], 256)) throw failure('invalid_reference');
-    let issuer;
-    try { issuer = new URL(tuple[0]); } catch { throw failure('invalid_reference'); }
-    if (issuer.protocol !== 'https:' || !/^[a-z0-9-]+\.authkit\.app$/.test(issuer.hostname) || issuer.username || issuer.password || issuer.port || issuer.search || issuer.hash || issuer.pathname !== '/' || tuple[0] !== issuer.origin) throw failure('invalid_reference');
-    if (!/^org_[a-zA-Z0-9]+$/.test(tuple[1]) || !/^client_[a-zA-Z0-9]+$/.test(tuple[2])) throw failure('invalid_reference');
-    if (input.reference !== JSON.stringify(tuple)) throw failure('invalid_reference');
-  }
+  if (input.provider !== 'workos-connect' || !boundedString(input.reference, 2048)) throw failure('invalid_reference');
+  let tuple;
+  try { tuple = JSON.parse(input.reference); } catch { throw failure('invalid_reference'); }
+  if (!Array.isArray(tuple) || tuple.length !== 3 || !boundedString(tuple[0], 512) || !boundedString(tuple[1], 256) || !boundedString(tuple[2], 256)) throw failure('invalid_reference');
+  let issuer;
+  try { issuer = new URL(tuple[0]); } catch { throw failure('invalid_reference'); }
+  if (issuer.protocol !== 'https:' || !/^[a-z0-9-]+\.authkit\.app$/.test(issuer.hostname) || issuer.username || issuer.password || issuer.port || issuer.search || issuer.hash || issuer.pathname !== '/' || tuple[0] !== issuer.origin) throw failure('invalid_reference');
+  if (!/^org_[a-zA-Z0-9]+$/.test(tuple[1]) || !/^client_[a-zA-Z0-9]+$/.test(tuple[2])) throw failure('invalid_reference');
+  if (input.reference !== JSON.stringify(tuple)) throw failure('invalid_reference');
   if (action === 'register') {
     if (typeof input.partnerCode !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(input.partnerCode)) throw failure('invalid_partner_code');
     if (!Array.isArray(input.scopes) || input.scopes.length !== 1 || input.scopes[0] !== 'quotes:create') throw failure('invalid_scopes');
