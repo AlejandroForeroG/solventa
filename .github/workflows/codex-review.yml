@@ -40,10 +40,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: app
         with:
-          app-id: ${{ vars.CODEX_GATE_APP_ID }}
+          client-id: ${{ vars.CODEX_GATE_CLIENT_ID }}
           private-key: ${{ secrets.CODEX_GATE_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
