@@ -59,3 +59,26 @@ test('configuration and ambiguous commit errors are fatal without retry', async 
     assert.equal(attempts, 1);
   }
 });
+
+test('respects rate limit headers for 403/429 and the original deadline', async () => {
+  for (const status of [403, 429]) {
+    let attempts = 0;
+    const pauses = [];
+    const value = await requestJson('https://example.test', 'synthetic', async () => {
+      attempts++;
+      return attempts === 1 ? new Response(null, { status, headers: { 'retry-after': '3' } }) : Response.json({ ok: true });
+    }, async ms => { pauses.push(ms); });
+    assert.equal(value.ok, true);
+    assert.deepEqual(pauses, [3000]);
+  }
+  await assert.rejects(requestJson('https://example.test', 'synthetic', async () =>
+    new Response(null, { status: 403, headers: { 'retry-after': '30' } }), async () => {}, Date.now()+1000), /deadline/);
+  let attempts = 0;
+  const pauses = [];
+  await requestJson('https://example.test', 'synthetic', async () => {
+    attempts++;
+    return attempts === 1 ? new Response(null, { status:403, headers: { 'x-ratelimit-remaining':'0', 'x-ratelimit-reset':String(Math.ceil(Date.now()/1000)+2) } }) : Response.json({});
+  }, async ms => { pauses.push(ms); });
+  assert.equal(attempts, 2);
+  assert.ok(pauses[0] > 1000 && pauses[0] <= 4000);
+});

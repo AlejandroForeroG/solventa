@@ -3,21 +3,23 @@ on:
   pull_request_target:
     branches: [dev, staging, prod]
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: Open pull request number to recheck
-        required: true
-        type: string
+  issue_comment:
+    types: [created, edited]
 permissions:
   contents: read
   pull-requests: read
   statuses: write
 concurrency:
-  group: codex-review-${{ github.event.pull_request.number || inputs.pr }}
+  group: codex-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 jobs:
   review:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       (github.event.comment.body == '@codex review' ||
+        (github.event.comment.user.id == 199175422 &&
+         contains(github.event.comment.body, '<!-- codex-pull-request-review-summary -->'))))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,8 +35,7 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
@@ -44,10 +45,6 @@ jobs:
           [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
           [[ "$base" =~ ^(dev|staging|prod)$ ]] || exit 1
           [[ -z "$EVENT_HEAD" || "$EVENT_HEAD" == "$head" ]] || exit 1
-          # Manual retries must run the trusted workflow of repository default branch.
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]] || exit 1
-          fi
           echo "head=$head" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head" \

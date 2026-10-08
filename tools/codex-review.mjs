@@ -19,26 +19,36 @@ export function reviewCompleted(comments, reviews, head, resolvedSha) {
     review.commit_id === head && review.state === 'CHANGES_REQUESTED');
   return Boolean(sha && head.startsWith(sha) && resolvedSha === head && !rejected);
 }
-export async function requestJson(url, token, fetcher = fetch, pause = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+export async function requestJson(url, token, fetcher = fetch, pause = ms => new Promise(resolve => setTimeout(resolve, ms)), deadline = Date.now() + 12 * 60_000) {
   for (let attempt = 0; attempt < 3; attempt++) {
+    let delay = 500 * 2 ** attempt;
+    if (Date.now() >= deadline) throw new Error('GitHub API deadline exceeded');
     try {
       const response = await fetcher(url, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(30_000),
+          'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())),
       });
       if (response.ok) return response.json();
-      if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) {
-        throw new Error(`GitHub API returned ${response.status}`);
-      }
+      const retryAfter = Number(response.headers.get('retry-after'));
+      const limited = response.status === 429 || (response.status === 403 &&
+        (retryAfter > 0 || response.headers.get('x-ratelimit-remaining') === '0'));
+      const transient = limited || [500, 502, 503, 504].includes(response.status);
       await response.body?.cancel();
+      if (!transient || attempt === 2) throw new Error(`GitHub API returned ${response.status}`);
+      if (limited) {
+        const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000 - Date.now();
+        delay = retryAfter > 0 ? retryAfter * 1000 : reset > 0 ? reset + 1000 : 60_000;
+      }
     } catch (error) {
       if (attempt === 2 || !['TypeError', 'TimeoutError'].includes(error.name)) throw error;
     }
-    await pause(500 * 2 ** attempt);
+    if (delay >= deadline - Date.now()) throw new Error('GitHub rate limit or retry exceeds review deadline');
+    await pause(delay);
   }
 }
+let reviewDeadline;
 function api(path) {
-  return requestJson(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${path}`, process.env.GITHUB_TOKEN);
+  return requestJson(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${path}`, process.env.GITHUB_TOKEN, fetch, undefined, reviewDeadline);
 }
 async function list(path) {
   const result = [];
@@ -56,6 +66,7 @@ export async function waitForReview() {
     throw new Error('Missing or invalid review gate configuration');
   }
   const deadline = Date.now() + 12 * 60_000;
+  reviewDeadline = deadline;
   do {
     const pr = await api(`pulls/${number}`);
     if (pr.state !== 'open' || pr.head.sha !== head) throw new Error('PR closed or head changed; run the check for the new commit');
