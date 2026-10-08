@@ -64,7 +64,7 @@ The check happens before the call and is not repeated afterwards, so a revocatio
 ## Operation
 
 - **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns. Apply it before deploying this code. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code.
-- **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret of Identity; without it a grant answers 503 and a check denies. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
+- **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal; without it a grant answers 503 and a check denies. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`; the local configuration declares it as required, so `wrangler dev` loads it. In dev, staging and prod the operator loads it as a Worker secret of Identity, outside `IDENTITY_AUTH_JSON`, following the same `secret bulk` procedure as the [quote key](../acquisition-risk/README.md): an ignored `infra/.local/identity.<environment>.consent.secrets.json` containing only `CONSENT_SEAL_KEY`, uploaded to the matching Identity Worker before the consent PR is merged, and checked with `secret list`. Later deployments preserve it. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
 - **Routing:** the web Worker forwards `/api/v1/consents` and its sub-paths to Identity after the version gate.
 
 ## Limits
