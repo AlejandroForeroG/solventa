@@ -1,16 +1,18 @@
 const selector = document.getElementById('spec-select');
 const download = document.getElementById('download-spec');
 const status = document.getElementById('status');
-let reference;
+
+const header = document.querySelector('.docs-header');
+const syncHeaderHeight = () => document.documentElement.style.setProperty('--docs-header-height', `${header.getBoundingClientRect().height}px`);
+syncHeaderHeight();
+new ResizeObserver(syncHeaderHeight).observe(header);
 
 const specId = url => url.slice('/api/docs/'.length).replace(/\.json$/, '');
 
-async function showSpec(resetHash = false) {
+async function showSpec() {
   selector.disabled = true;
   status.hidden = false;
   status.textContent = 'Loading specification…';
-  reference?.destroy();
-  reference = undefined;
   download.hidden = true;
   try {
     const response = await fetch(selector.value, { cache: 'no-store', credentials: 'omit' });
@@ -18,9 +20,8 @@ async function showSpec(resetHash = false) {
     const spec = await response.json();
     const pageUrl = new URL(window.location.href);
     pageUrl.searchParams.set('spec', specId(selector.value));
-    if (resetHash) pageUrl.hash = '';
     window.history.replaceState(null, '', pageUrl);
-    reference = window.Scalar.createApiReference('#docs-reference', {
+    window.Scalar.createApiReference('#docs-reference', {
       content: spec,
       layout: 'modern',
       theme: 'none',
@@ -64,7 +65,13 @@ try {
   }
   const selectedSpec = catalog.find(entry => specId(entry.url) === requestedSpec);
   if (selectedSpec) selector.value = selectedSpec.url;
-  selector.addEventListener('change', () => showSpec(true));
+  selector.addEventListener('change', () => {
+    const pageUrl = new URL(window.location.href);
+    pageUrl.searchParams.set('spec', specId(selector.value));
+    pageUrl.hash = '';
+    // A fresh document also clears Scalar's pending lazy-navigation scroll state.
+    window.location.assign(pageUrl);
+  });
   await showSpec();
 } catch {
   selector.disabled = true;
