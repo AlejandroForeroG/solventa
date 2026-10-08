@@ -28,3 +28,5 @@ infra/.local/
 wrangler.local.json
 worker-dist/
 .omc/
+graphify-out/
+design_handoff_solventa/
