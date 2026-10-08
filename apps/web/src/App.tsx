@@ -1,9 +1,26 @@
 import { brandAssets } from '@solventa/assets/web';
 import { useEffect, useState } from 'react';
+import { useIntl } from 'react-intl';
+import { I18n, useLocale } from './i18n/I18n';
+import { locales } from './i18n/messages';
+import { LiveRegion, useAnnounce } from './quote/Live';
+import { QuoteFlow } from './quote/QuoteFlow';
 
 type Session = 'loading' | 'anonymous' | 'authenticated' | 'unavailable';
 
-export default function App() {
+function LocaleSwitch() {
+  const intl = useIntl();
+  const { locale, setLocale } = useLocale();
+  return <div className="locale-switch" role="group" aria-label={intl.formatMessage({ id: 'locale.group' })}>
+    {locales.map(code => <button key={code} type="button" className="locale-btn" aria-pressed={locale === code} lang={code.slice(0, 2)}
+      aria-label={intl.formatMessage({ id: 'locale.switchTo' }, { language: intl.formatMessage({ id: `locale.name.${code}` }) })}
+      onClick={() => setLocale(code)}>{intl.formatMessage({ id: `locale.${code}` })}</button>)}
+  </div>;
+}
+
+function Shell() {
+  const intl = useIntl();
+  const announce = useAnnounce();
   const [session, setSession] = useState<Session>('loading');
   const [busy, setBusy] = useState(false);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
@@ -15,6 +32,10 @@ export default function App() {
     } catch { setSession('unavailable'); }
   }
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (session === 'loading') announce(intl.formatMessage({ id: 'session.loading' }));
+    if (session === 'unavailable') announce(intl.formatMessage({ id: 'session.unavailable' }));
+  }, [session, announce, intl]);
   async function logout() {
     setBusy(true);
     try {
@@ -26,15 +47,30 @@ export default function App() {
     } catch { setSession('unavailable'); }
     finally { setBusy(false); }
   }
+  const t = (id: string) => intl.formatMessage({ id });
   return <div className="app-shell">
-    <header><img src={brandAssets.logo.green} alt="Solventa" width={174} /></header>
-    <main className="access-panel" aria-busy={session === 'loading' || busy}>
-      <h1>{session === 'authenticated' ? 'Tu sesión está activa' : 'Ingresa a Solventa'}</h1>
-      {session === 'loading' && <p role="status">Comprobando sesión…</p>}
-      {failed && session !== 'authenticated' && <p className="error" role="alert">No se completó el acceso. Intenta de nuevo.</p>}
-      {session === 'anonymous' && <a className="primary-action" href="/auth/login">Continuar</a>}
-      {session === 'authenticated' && <><p>Aplicación en preparación.</p><button onClick={() => void logout()} disabled={busy}>{busy ? 'Cerrando sesión…' : 'Cerrar sesión'}</button></>}
-      {session === 'unavailable' && <><p role="alert">No pudimos comprobar tu sesión.</p><button onClick={() => void load()}>Reintentar</button></>}
-    </main>
-  </div>
+    <header className="channel-header">
+      <img src={brandAssets.logo.green} alt="Solventa" width={174} />
+      <div className="header-tools">
+        <LocaleSwitch />
+        {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
+      </div>
+    </header>
+    {session === 'authenticated'
+      ? <main className="content" aria-busy={busy}>
+        <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span></div>
+        <QuoteFlow onSessionLost={() => setSession('anonymous')} />
+      </main>
+      : <main className="access-panel" aria-busy={session === 'loading'}>
+        <h1>{t('session.title')}</h1>
+        {session === 'loading' && <p>{t('session.loading')}</p>}
+        {failed && <p className="error">{t('session.failed')}</p>}
+        {session === 'anonymous' && <a className="primary-action" href="/auth/login">{t('session.continue')}</a>}
+        {session === 'unavailable' && <><p>{t('session.unavailable')}</p><button onClick={() => void load()}>{t('session.retry')}</button></>}
+      </main>}
+  </div>;
+}
+
+export default function App() {
+  return <I18n><LiveRegion><Shell /></LiveRegion></I18n>;
 }

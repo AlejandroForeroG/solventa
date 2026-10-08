@@ -35,8 +35,14 @@ try {
     assert.equal(status.databaseName, 'solventa_local');
   }
   assert.equal((await fetch(base+'/api/v1/quotes')).status,404);
+  const json={'content-type':'application/json'};
+  // An invalid partner token is 401 once partner verification is configured and 503 while it is not.
+  assert.ok([401,503].includes((await fetch(base+'/api/v1/quotes',{method:'POST',headers:{...json,authorization:'Bearer invalid.partner.token'},body:'{}'})).status));
+  assert.equal((await fetch(base+'/api/v1/quotes',{method:'POST',headers:json,body:'{}'})).status,401);
+  assert.equal((await fetch(base+'/api/v1/me/quotes',{method:'POST',headers:json,body:'{}'})).status,401);
+  assert.equal((await fetch(base+'/api/v1/me/quotes',{method:'POST',headers:{...json,authorization:'Bearer x'},body:'{}'})).status,400);
   assert.equal((await fetch(base+'/')).status,200);
-  console.log(JSON.stringify({ status:'passed', checks:['SQL through Workers','RPC service bindings','invalid-token rejection','static web','business API not enabled'], services:result.services }));
+  console.log(JSON.stringify({ status:'passed', checks:['SQL through Workers','RPC service bindings','invalid-token rejection','static web','quote API rejects missing and invalid credentials on both entries'], services:result.services }));
 } finally {
   child.kill('SIGINT');
   await new Promise(resolve => { if(exited) resolve(); else { child.once('exit',resolve); setTimeout(() => { child.kill('SIGTERM'); resolve(); },3000).unref(); } });

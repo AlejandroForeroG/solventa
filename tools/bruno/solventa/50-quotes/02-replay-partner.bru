@@ -1,0 +1,43 @@
+meta {
+  name: Replay partner quote
+  type: http
+  seq: 2
+}
+post {
+  url: {{baseUrl}}/api/v1/quotes
+  body: json
+  auth: none
+}
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{quoteIdempotencyKey}}
+  X-Trace-Id: 50000000-0000-4000-8000-000000000002
+}
+body:json {
+  {
+    "product": "vida_hipotecario",
+    "customer": {
+      "fullName": "Synthetic Bruno Customer",
+      "documentType": "CC",
+      "documentNumber": "1098765432",
+      "birthDate": "1992-03-14",
+      "city": "Bogotá D.C."
+    },
+    "credit": {
+      "partnerCreditId": "BRUNO-SYNTHETIC-1",
+      "amount": 320000000,
+      "termMonths": 180
+    }
+  }
+}
+script:pre-request {
+  if (!bru.getVar("accessToken") || bru.getVar("accessTokenBaseUrl") !== bru.getEnvVar("baseUrl")) throw new Error("Issue a partner token for this environment first.");
+  if (!bru.getEnvVar("quoteIdempotencyKey")) throw new Error("Keep the local quoteIdempotencyKey from the first request.");
+}
+tests {
+  test("Same actor, key and body replay the quote", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().quoteId).to.equal(bru.getVar("quoteId"));
+  });
+}

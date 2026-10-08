@@ -41,7 +41,7 @@ grant_type=client_credentials&client_id=<M2M_CLIENT_ID>&client_secret=<M2M_CLIEN
 
 Use the response's `access_token` to call `GET /api/v1/access/partner`. Renew it by requesting another token before expiry; this flow does not represent a user or require copying a web session. Do not store tokens or secrets in SQL, logs or Git. Token issuance errors come from WorkOS and do not use Solventa's error format.
 
-Dev and staging have separate public `WORKOS_CONNECT_*` values in Wrangler and Bruno. Local and prod remain empty until separately provisioned. Missing configuration makes partner token verification return `503 access_unavailable`; configured environments reject malformed or foreign-environment tokens with 401. Do not substitute another environment's credentials. M2M setup and a real call using its token must be verified separately from builds and tests with synthetic data.
+Dev, staging and prod have separate public `WORKOS_CONNECT_*` values in Wrangler and Bruno. Each has its own synthetic integration partner, M2M credential and local registration granting only `quotes:create`; client secrets remain outside Git. Local remains empty until separately provisioned. Missing configuration makes partner token verification return `503 access_unavailable`; configured environments reject malformed or foreign-environment tokens with 401. Do not substitute another environment's credentials. M2M setup and a real call using its token must be verified separately from builds and tests with synthetic data.
 
 ### Provisioning a partner in WorkOS
 

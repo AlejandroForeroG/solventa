@@ -94,8 +94,8 @@
         "APP_ENV": "prod",
         "AUTH_ORIGIN": "https://solventa-web-prod.ja-forerog1.workers.dev",
         "AUTH_REDIRECT_URI": "https://solventa-web-prod.ja-forerog1.workers.dev/auth/callback",
-        "WORKOS_CONNECT_ISSUER": "",
-        "WORKOS_CONNECT_AUDIENCE": ""
+        "WORKOS_CONNECT_ISSUER": "https://engaging-regalia-61.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F21P884580Q2GGF81NRV5"
       },
       "hyperdrive": [
         {

@@ -53,6 +53,20 @@ First application records version, checksum and timestamp in `<schema>.schema_mi
 
 Administrative application requires an authorized task and the final candidate approved for that environment. Freeze locally/CI-tested SQL; apply it from that checkout before integrating code that needs it. If the candidate is corrected after SQL application, preserve it and add another migration.
 
+### Running migrations as a teammate
+
+Any designated teammate with the approved candidate checkout and the environment's authorized operator bundle can run the existing provisioner. The privilege belongs to the operator credentials, not to a particular person's laptop or GitHub account. Obtain the bundle through the team's authorized secret channel; Git, PR comments, CI logs and chat messages must not carry the administrative URL or runtime passwords. Do not reuse another environment's bundle. A remote runtime role cannot apply DDL; each developer can apply the candidate migrations to their own local environment with `npm run infra:up`.
+
+From the repository root of the **exact candidate branch** to be deployed:
+
+1. Install locked dependencies with `npm ci`, update the local environment with `npm run infra:up`, then run the branch's required tests, including `npm run test:schema` and `npm run infra:local:schema-verify`. Read and review its new owner SQL and `runtime-grants.json` before touching a remote environment.
+2. Restore `.env.infra.dev`, its referenced CA file and `infra/.local/runtime.dev.json` from the approved dev bundle. On another environment, replace every `dev` occurrence consistently. These files must remain ignored with user-restricted access. The runtime state is required even for a SQL-only provision because existing roles must keep their original passwords.
+3. Coordinate a single operator for that environment. Run `node infra/migration-plan.mjs dev`: it opens an administrative **READ ONLY** transaction, checks all three ledgers and guards against the checkout, and prints only applied counts and pending file names. It never prints URLs, passwords or checksums. Review the affected objects and permissions against the candidate. Stop on a guard, unexpected object or changed applied checksum and use section 5.
+4. Run `node infra/database.mjs provision dev`, then `node infra/schema-verify.mjs dev --admin` and `node infra/database.mjs verify dev`. The provisioner applies pending migrations and reconciles runtime grants for **all three owners** in that environment; inspect their directories before running it. A repeat with the same applied checksums skips those migrations.
+5. Record the environment, candidate commit, applied migration names, verification outcome and operator in the team's private operational record. Then finish the PR, CI and Deploy checks. The Deploy job itself does not apply DDL.
+
+For the current Acquisition quote candidate, the pending files are `0006_partner_quotes.sql`, `0007_user_quotes.sql` and `0008_quote_idempotency_by_actor.sql`. They add a quote-code counter and actor-scoped idempotency; the `quote_counters` runtime grant is part of the same candidate. Apply from that candidate before integrating its Worker code. Repeat the process in staging only when promoting the tested base branch. A deployment on dev does not migrate staging.
+
 Restore `.env.infra.<environment>`, the CA and `infra/.local/runtime.<environment>.json` from custody. See [access and custody](README.md) and [read-only queries](read-only-sql.md). Never print administrative URLs or secrets. If users are provisioned without their runtime state, `runtime_state_missing` stops the process: restore the original rather than inventing passwords.
 
 Before mutation, inspect ledger, catalog and guards through an administrative READ ONLY connection to the environment. Distinguish expected pending-migration differences from changed checksums, unexpected objects or partial execution. Do not use `schema-verify` as a preflight requiring the new version to be already applied: strict comparison is necessary **after** application.
