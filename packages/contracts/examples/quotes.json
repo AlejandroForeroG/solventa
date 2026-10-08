@@ -1,0 +1,524 @@
+{
+  "asOf": "2026-10-06",
+  "rule": {
+    "version": "provisional-1",
+    "premium": "round(amount * ppm / 1000000), rounded half up to whole pesos",
+    "bands": [
+      {
+        "minAge": 18,
+        "maxAge": 30,
+        "ppm": 220
+      },
+      {
+        "minAge": 31,
+        "maxAge": 40,
+        "ppm": 270
+      },
+      {
+        "minAge": 41,
+        "maxAge": 50,
+        "ppm": 400
+      },
+      {
+        "minAge": 51,
+        "maxAge": 60,
+        "ppm": 650
+      },
+      {
+        "minAge": 61,
+        "maxAge": 70,
+        "ppm": 1000
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "base-example",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Laura Catalina Restrepo Ochoa",
+          "documentType": "CC",
+          "documentNumber": "1020884771",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-88-2026",
+          "amount": 320000000,
+          "termMonths": 180
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 34,
+        "premiumMonthly": 86400
+      }
+    },
+    {
+      "name": "lower-bound-exactly-18",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Uno",
+          "documentType": "CC",
+          "documentNumber": "1000000001",
+          "birthDate": "2008-10-06",
+          "city": "Medellín"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-01",
+          "amount": 50000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 18,
+        "premiumMonthly": 11000
+      }
+    },
+    {
+      "name": "upper-bound-exactly-70",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Dos",
+          "documentType": "CC",
+          "documentNumber": "1000000002",
+          "birthDate": "1956-10-06",
+          "city": "Cali"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-02",
+          "amount": 80000000,
+          "termMonths": 60
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 70,
+        "premiumMonthly": 80000
+      }
+    },
+    {
+      "name": "band-18-30",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Tres",
+          "documentType": "CC",
+          "documentNumber": "1000000003",
+          "birthDate": "2001-05-10",
+          "city": "Barranquilla"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-03",
+          "amount": 150000000,
+          "termMonths": 180
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 25,
+        "premiumMonthly": 33000
+      }
+    },
+    {
+      "name": "band-41-50",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Cuatro",
+          "documentType": "CC",
+          "documentNumber": "1000000004",
+          "birthDate": "1981-01-20",
+          "city": "Bucaramanga"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-04",
+          "amount": 200000000,
+          "termMonths": 240
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 45,
+        "premiumMonthly": 80000
+      }
+    },
+    {
+      "name": "band-51-60",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Cinco",
+          "documentType": "CC",
+          "documentNumber": "1000000005",
+          "birthDate": "1971-08-01",
+          "city": "Cartagena"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-05",
+          "amount": 100000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 55,
+        "premiumMonthly": 65000
+      }
+    },
+    {
+      "name": "rounds-to-whole-peso",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Laura Catalina Restrepo Ochoa",
+          "documentType": "CC",
+          "documentNumber": "1020884771",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-06",
+          "amount": 123456789,
+          "termMonths": 180
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 201,
+        "age": 34,
+        "premiumMonthly": 33333
+      }
+    },
+    {
+      "name": "age-74-out-of-range",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Laura Catalina Restrepo Ochoa",
+          "documentType": "CC",
+          "documentNumber": "1020884771",
+          "birthDate": "1952-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-88-2026",
+          "amount": 320000000,
+          "termMonths": 180
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "customer.birthDate",
+            "code": "age_out_of_range",
+            "params": {
+              "age": 74,
+              "min": 18,
+              "max": 70
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "age-71-one-year-over",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Seis",
+          "documentType": "CC",
+          "documentNumber": "1000000006",
+          "birthDate": "1955-10-06",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-07",
+          "amount": 80000000,
+          "termMonths": 60
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "customer.birthDate",
+            "code": "age_out_of_range",
+            "params": {
+              "age": 71,
+              "min": 18,
+              "max": 70
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "age-17-one-day-before-18",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Siete",
+          "documentType": "CC",
+          "documentNumber": "1000000007",
+          "birthDate": "2008-10-07",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-08",
+          "amount": 50000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": true,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "customer.birthDate",
+            "code": "age_out_of_range",
+            "params": {
+              "age": 17,
+              "min": 18,
+              "max": 70
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "term-below-minimum",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Ocho",
+          "documentType": "CC",
+          "documentNumber": "1000000008",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-09",
+          "amount": 50000000,
+          "termMonths": 11
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "credit.termMonths",
+            "code": "term_out_of_range",
+            "params": {
+              "min": 12,
+              "max": 240
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "term-above-maximum",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Nueve",
+          "documentType": "CC",
+          "documentNumber": "1000000009",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-10",
+          "amount": 50000000,
+          "termMonths": 241
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "credit.termMonths",
+            "code": "term_out_of_range",
+            "params": {
+              "min": 12,
+              "max": 240
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "zero-amount",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Diez",
+          "documentType": "CC",
+          "documentNumber": "1000000010",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-11",
+          "amount": 0,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "credit.amount",
+            "code": "amount_out_of_range",
+            "params": {
+              "min": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "non-numeric-document",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Once",
+          "documentType": "CC",
+          "documentNumber": "ABC123",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-12",
+          "amount": 50000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "customer.documentNumber",
+            "code": "invalid_format"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsupported-product",
+      "request": {
+        "product": "seguro_mascotas",
+        "customer": {
+          "fullName": "Cliente Sintetico Doce",
+          "documentType": "CC",
+          "documentNumber": "1000000012",
+          "birthDate": "1992-03-14",
+          "city": "Bogotá D.C."
+        },
+        "credit": {
+          "partnerCreditId": "CRE-13",
+          "amount": 50000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "product",
+            "code": "unsupported_product"
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing-city",
+      "request": {
+        "product": "vida_hipotecario",
+        "customer": {
+          "fullName": "Cliente Sintetico Trece",
+          "documentType": "CC",
+          "documentNumber": "1000000013",
+          "birthDate": "1992-03-14"
+        },
+        "credit": {
+          "partnerCreditId": "CRE-14",
+          "amount": 50000000,
+          "termMonths": 120
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "status": 400,
+        "errors": [
+          {
+            "field": "customer.city",
+            "code": "required"
+          }
+        ]
+      }
+    }
+  ],
+  "responses": {
+    "quote": {
+      "quoteId": "COT-2026-08843",
+      "premiumMonthly": 86400,
+      "currency": "COP",
+      "sumInsured": 320000000,
+      "termMonths": 180,
+      "validUntil": "2026-11-05T10:47:00-05:00",
+      "basis": "minimum_data",
+      "ruleVersion": "provisional-1",
+      "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+    },
+    "validationError": {
+      "error": "validation_error",
+      "message": "Some fields do not meet the rules.",
+      "errors": [
+        {
+          "field": "customer.birthDate",
+          "code": "age_out_of_range",
+          "params": {
+            "age": 74,
+            "min": 18,
+            "max": 70
+          }
+        }
+      ],
+      "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+    },
+    "accessErrors": {
+      "unauthorized": {
+        "error": "unauthorized",
+        "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+      },
+      "forbidden": {
+        "error": "forbidden",
+        "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+      },
+      "unavailable": {
+        "error": "access_unavailable",
+        "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+      }
+    }
+  }
+}
