@@ -104,6 +104,15 @@ describe('step 2: result', () => {
     expect(screen.getByText('Valid until Nov 5, 2026')).toBeInTheDocument();
   });
 
+  it('omits the validity instead of showing an invalid date when the response lacks a usable one', async () => {
+    const { user } = setup(vi.fn().mockResolvedValue({ kind: 'quote', quote: { ...quote, validUntil: 'not-a-date' } }));
+    await fill(user, valid, es);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    expect(await screen.findByText('$ 86.400')).toBeInTheDocument();
+    expect(screen.queryByText(/Vigente/)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Invalid Date/);
+  });
+
   it('lets the user correct the data and keeps what was typed', async () => {
     const { user } = setup(vi.fn().mockResolvedValue({ kind: 'quote', quote }));
     await fill(user, valid, es);
