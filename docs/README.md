@@ -1,36 +1,40 @@
-# Documentación de Solventa
+# Solventa documentation
 
-Esta carpeta contiene la documentación técnica vigente del producto. La organización sigue las responsabilidades de la vista funcional de la arquitectura. Los documentos describen el estado implementado y distinguen las capacidades pendientes.
+This directory contains the product's current technical documentation. Its organization follows the responsibilities in the architecture's functional view. Guides describe implemented behavior and identify pending capabilities. All product documentation and code identifiers use English; user communication remains in Spanish.
 
-## Módulos del sistema
+## System modules
 
-| Módulo | Responsabilidad | Código |
+| Module | Responsibility | Code |
 |---|---|---|
-| [Adquisición y Riesgo](modulos/acquisition-risk/README.md) | Cotización, pricing, perfilamiento, underwriting, ofertas y actualización autorizada de señales | `backend/acquisition-risk` |
-| [Identidad, Consentimiento y Ecosistema](modulos/identity-consent-ecosystem/README.md) | Identidad, autorización, consentimiento, dispositivos y socios | `backend/identity-consent-ecosystem` |
-| [Pólizas, Siniestros y Pagos](modulos/policy-claims-payments/README.md) | Emisión, pólizas, cobro, conciliación, siniestros, evidencia e indemnización | `backend/policy-claims-payments` |
+| [Acquisition & Risk](modules/acquisition-risk/README.md) | Quotes, pricing, profiling, underwriting, offers and authorized signal refresh | `backend/acquisition-risk` |
+| [Identity, Consent & Ecosystem](modules/identity-consent-ecosystem/README.md) | Identity, authorization, consent, devices and partners | `backend/identity-consent-ecosystem` |
+| [Policy, Claims & Payments](modules/policy-claims-payments/README.md) | Issuance, policies, collection, reconciliation, claims, evidence and indemnities | `backend/policy-claims-payments` |
 
-## Canales y componentes compartidos
+## Channels and shared components
 
-| Guía | Código |
+| Guide | Code |
 |---|---|
-| [Web](canales/web/README.md) | `apps/web` |
-| [Móvil](canales/mobile/README.md) | `apps/mobile` |
-| [Contratos y versionado de API](compartidos/contracts/README.md) | `packages/contracts` |
-| [Marca y recursos compartidos](compartidos/assets/README.md) | `packages/assets` |
+| [Web](channels/web/README.md) | `apps/web` |
+| [Mobile](channels/mobile/README.md) | `apps/mobile` |
+| [Contracts and API versioning](shared/contracts/README.md) | `packages/contracts` |
+| [Brand and shared assets](shared/assets/README.md) | `packages/assets` |
 
-## Guías transversales
+## Cross-cutting guides
 
-- [Estilo UI y sus fuentes](canales/estilo-ui.md).
-- [Instalación y desarrollo](desarrollo.md).
-- [Arquitectura y fronteras](arquitectura.md).
-- [Operación de infraestructura](infraestructura/README.md).
-- [Consultas SQL de solo lectura](infraestructura/consultas-sql.md).
-- [Modelo SQL, permisos y migraciones](infraestructura/modelo-datos.md).
-- [CI/CD y promoción de ambientes](infraestructura/ci-cd.md).
+- [UI style and its sources](channels/ui-style.md).
+- [Installation and development](development.md).
+- [Architecture and boundaries](architecture.md).
+- [Endpoints and business decisions](endpoint-standards.md).
+- [Purposeful testing](testing.md).
+- [Change review and acceptance criteria](change-review.md).
+- [Infrastructure operations](infrastructure/README.md).
+- [Read-only SQL access](infrastructure/read-only-sql.md).
+- [SQL model and permissions](infrastructure/data-model.md).
+- [Creating, applying and recovering migrations](infrastructure/migrations.md).
+- [CI/CD and environment promotion](infrastructure/ci-cd.md).
 
-## Mantener la documentación
+## Maintaining documentation
 
-Las reglas obligatorias están en [AGENTS.md](../AGENTS.md#required-documentation). Buscar primero el módulo y el tema existentes; actualizar esa guía en la misma rama y PR que cambia el comportamiento. Crear un documento solo si el tema aún no tiene uno, dentro de su módulo, y enlazarlo desde su índice.
+Mandatory rules are in [AGENTS.md](../AGENTS.md#required-documentation). Find the existing module and topic first; update its guide in the same branch and PR that changes behavior. Create a document only for a new topic, inside its module, and link it from the module index.
 
-Una explicación tiene un único documento de referencia. Los README junto al código sirven de enlaces hacia estas guías. Los cambios compartidos se documentan una vez en su guía transversal y se enlazan desde los módulos afectados. El historial queda en Git: mantener el texto vigente, retirar instrucciones obsoletas y no crear copias por rama, feature, sprint o ambiente.
+Each topic has one authoritative explanation. README files beside code link to these guides. Document shared changes once in their cross-cutting guide and link it from affected modules. Git preserves history: keep the current behavior, remove obsolete instructions and do not create copies per branch, feature, sprint or environment. Each PR links the guides it creates or updates on its source branch.

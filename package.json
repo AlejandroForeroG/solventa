@@ -48,7 +48,7 @@
     "deploy:prod": "npm run build --workspace @solventa/web && node infra/remote.mjs deploy prod",
     "infra:prod:verify": "node infra/remote.mjs verify prod",
     "prepare": "node tools/install-hooks.mjs",
-    "test:git": "node --test tools/git-policy.test.mjs",
+    "test:git": "node --test tools/git-policy.test.mjs tools/promotion-policy.test.mjs",
     "test:authentication": "tsx --test tests/authentication.test.ts",
     "test:authentication:sql": "tsx infra/authentication-smoke.mts",
     "lint:openapi": "node tools/lint-openapi.mjs",

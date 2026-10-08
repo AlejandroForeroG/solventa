@@ -1,3 +1,3 @@
 # Web
 
-Documentación: [guía vigente](../../docs/canales/web/README.md).
+Documentation: [current guide](../../docs/channels/web/README.md).

@@ -1,3 +1,3 @@
-# Desarrollo y promoción por PR
+# Development and promotion through PRs
 
-Documentación: [guía vigente](../docs/infraestructura/ci-cd.md).
+Documentation: [current guide](../docs/infrastructure/ci-cd.md).

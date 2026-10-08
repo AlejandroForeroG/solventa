@@ -1,3 +1,3 @@
-# Acquisición
+# Acquisition & Risk
 
-Documentación: [guía vigente](../../docs/modulos/acquisition-risk/README.md).
+Documentation: [current guide](../../docs/modules/acquisition-risk/README.md).
