@@ -110,6 +110,19 @@ try {
   await db.query("UPDATE identity.clients SET status = 'suspended' WHERE id = $1", [dave.clientId]);
   assert.deepEqual(await check(dave), { allowed: false, reason: 'consent_missing' });
 
+  const frank = await person();
+  const oldest = await grant(frank, 'k0');
+  assert.ok(oldest.status === 'created');
+  for (let i = 1; i <= 21; i++) {
+    advance(0.001);
+    const newer = await grant(frank, `k${i}`);
+    assert.ok(newer.status === 'created');
+    if (newer.status === 'created') await consents.revoke({ principal: frank, consentCode: newer.consent.consentId, traceId: traceId() });
+  }
+  assert.ok((await check(frank)).allowed, 'an older active consent is found behind more than 20 newer revoked ones');
+  if (oldest.status === 'created') await consents.revoke({ principal: frank, consentCode: oldest.consent.consentId, traceId: traceId() });
+  assert.deepEqual(await check(frank), { allowed: false, reason: 'consent_revoked' });
+
   const app = clientFor(runtime, config.ssl); await app.connect();
   try {
     await assert.rejects(app.query('DELETE FROM identity.consents'), /permission|denied|privilege/i);
@@ -120,7 +133,7 @@ try {
     + JSON.stringify((await db.query('SELECT payload FROM identity.outbox_events WHERE aggregate_type = $1', ['consent'])).rows);
   assert.ok(!/@|document|nombre|name/i.test(text));
 
-  console.log(JSON.stringify({ consentsSQL: 'passed', checks: ['grant+audit+outbox in one transaction', 'idempotent replay, conflict and concurrent retries', 'idempotency scoped to the user', 'seal verified after the round trip', 'revocation owner only and effective on the next check', 'decline audit without a consent', 'expiry denied, not revocable and audited once', 'tampered record denied', 'suspended user denied', 'runtime role cannot delete consents or edit audit', 'no personal data stored'] }));
+  console.log(JSON.stringify({ consentsSQL: 'passed', checks: ['grant+audit+outbox in one transaction', 'idempotent replay, conflict and concurrent retries', 'idempotency scoped to the user', 'seal verified after the round trip', 'revocation owner only and effective on the next check', 'decline audit without a consent', 'expiry denied, not revocable and audited once', 'an older active consent found behind more than 20 newer revoked ones', 'tampered record denied', 'suspended user denied', 'runtime role cannot delete consents or edit audit', 'no personal data stored'] }));
 } finally {
   await db?.end();
   if (created) await admin.query(`DROP DATABASE ${name} CASCADE`);

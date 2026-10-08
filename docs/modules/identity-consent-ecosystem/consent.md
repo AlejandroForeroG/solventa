@@ -37,7 +37,7 @@ Changing the purpose, a source, a scope, the validity or the wording requires a 
 
 ## Fresh access check
 
-Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study.
+Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study. The check searches only the usable consents of the user, so any number of newer revoked or expired ones never hides an active one.
 
 The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
 
