@@ -69,7 +69,7 @@ The check happens before the call and is not repeated afterwards, so a revocatio
 
 ## Limits
 
-- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired.
+- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the answer does not change: the failure is logged as `consent_expiry_audit_failed` with a short error code and the next read tries again.
 - Consent is checked against the actor's subject only; Identity does not read quotes, so `quoteRef` is not validated.
 - No source is queried yet. Real providers, their adapters and the use of the answer belong to the profiling work.
 
