@@ -53,7 +53,7 @@
     "test:runtime": "node --test tests/access-runtime.test.mjs",
     "test:authentication:sql": "tsx infra/authentication-smoke.mts",
     "lint:openapi": "node tools/lint-openapi.mjs",
-    "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts",
+    "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts tests/consents-contract.test.ts",
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts"
   },
   "devDependencies": {
