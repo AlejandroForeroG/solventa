@@ -33,12 +33,12 @@ export type QuoteOutcome =
 
 export const newIdempotencyKey = () => crypto.randomUUID();
 
-export function toRequestBody(values: QuoteValues) {
+export function toRequestBody(values: QuoteValues, idempotencyKey: string) {
   return {
     product: 'vida_hipotecario',
     customer: { fullName: values.fullName.trim(), documentType: 'CC', documentNumber: values.documentNumber.trim(), birthDate: values.birthDate, city: values.city.trim() },
-    // The partner credit reference is assigned by the channel, never typed by the customer.
-    credit: { partnerCreditId: `WEB-${Date.now().toString(36).toUpperCase()}`, amount: Number(values.amount), termMonths: Number(values.termMonths) }
+    // Derived from the key, so every retry of one attempt sends the same body and can be recognised as a repetition.
+    credit: { partnerCreditId: `WEB-${idempotencyKey.replace(/-/g, '').slice(0, 12).toUpperCase()}`, amount: Number(values.amount), termMonths: Number(values.termMonths) }
   };
 }
 
@@ -47,7 +47,7 @@ export async function requestQuote(values: QuoteValues, idempotencyKey: string, 
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey, 'accept-language': locale },
-    body: JSON.stringify(toRequestBody(values)),
+    body: JSON.stringify(toRequestBody(values, idempotencyKey)),
     signal
   });
   let response: Response;

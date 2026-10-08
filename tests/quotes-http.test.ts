@@ -33,13 +33,14 @@ function app() {
   return { store, access, http: createHttp({ quotes: useCase }) };
 }
 type Http = ReturnType<typeof createHttp>;
-type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; env?: string };
+type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; stream?: ReadableStream<Uint8Array>; env?: string };
 const send = (http: Http, path: string, headers: Record<string, string>, init: Init) =>
   http.request(path, {
     method: 'POST',
     headers: { 'idempotency-key': 'key-1', 'content-type': 'application/json', ...headers, ...init.headers },
-    body: init.raw ?? JSON.stringify(init.body ?? base)
-  }, { APP_ENV: init.env ?? 'dev' } as never);
+    body: init.stream ?? init.raw ?? JSON.stringify(init.body ?? base),
+    ...(init.stream ? { duplex: 'half' } : {})
+  } as RequestInit, { APP_ENV: init.env ?? 'dev' } as never);
 const partner = (http: Http, init: Init = {}) => send(http, '/api/v1/quotes', { authorization: 'Bearer partner-token' }, init);
 const web = (http: Http, init: Init = {}) => send(http, '/api/v1/me/quotes', { cookie: '__Host-solventa-session=sealed-cookie', origin: 'https://web.example' }, init);
 
@@ -99,6 +100,22 @@ for (const [name, call] of [['partner', partner], ['web user', web]] as const) {
     const missingKey = await call(http, { headers: { 'idempotency-key': '' } });
     assert.equal(missingKey.status, 400);
     assert.deepEqual((await missingKey.json()).errors, [{ field: 'Idempotency-Key', code: 'required' }]);
+  });
+
+  test(`${name}: an oversized body is refused without being read in full`, async () => {
+    const { http, store } = app();
+    const unbounded = () => {
+      let pulled = 0;
+      const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulled++; if (pulled > 500) controller.close(); else controller.enqueue(new Uint8Array(1024).fill(120)); } });
+      return { stream, pulled: () => pulled };
+    };
+    const undeclared = unbounded();
+    assert.equal((await call(http, { stream: undeclared.stream })).status, 400);
+    assert.ok(undeclared.pulled() < 40, `read ${undeclared.pulled()} KiB of an unbounded body`);
+    const declared = unbounded();
+    assert.equal((await call(http, { stream: declared.stream, headers: { 'content-length': '9999999' } })).status, 400);
+    assert.ok(declared.pulled() <= 1, 'a declared length over the limit is refused before reading (one chunk is the stream prefetch)');
+    assert.equal(store.saved.length, 0);
   });
 
   test(`${name}: Accept-Language changes the text only, never the amounts`, async () => {

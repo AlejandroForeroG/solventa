@@ -53,6 +53,8 @@ try {
     if (replay.status === 'replayed') assert.equal(replay.quote.quoteId, first.quote.quoteId);
     assert.equal((await call(credential, key, { ...request, credit: { ...request.credit, amount: 1000000 } })).status, 'idempotency_conflict', label);
 
+    assert.equal((await call(credential, key, { ...request, customer: { ...request.customer, documentNumber: '1099999999' } })).status, 'idempotency_conflict', `${label}: same key, other customer`);
+
     const racing = `race-${label}-${randomUUID()}`;
     const results = await Promise.all(Array.from({ length: 6 }, () => call(credential, racing)));
     assert.equal(results.filter(r => r.status === 'created').length, 1, `${label}: ${JSON.stringify(results.map(r => r.status))}`);
@@ -95,7 +97,7 @@ try {
     await probe.query('BEGIN'); await assert.rejects(insert(randomUUID(), randomUUID()), /CHECK constraint/); await probe.query('ROLLBACK');
     await assert.rejects(probe.query('DELETE FROM acquisition.quotes'), /privilege|permission|denied/i);
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote+audit+outbox in one transaction, for partner and web user', 'idempotent replay and key reuse conflict per actor', 'concurrent retries create one quote', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote+audit+outbox in one transaction, for partner and web user', 'idempotent replay and key reuse conflict per actor, also with another customer', 'concurrent retries create one quote', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
 } finally {
   const ids = (await admin.query('SELECT id FROM acquisition.quotes WHERE correlation_id = ANY($1::UUID[])', [traces])).rows.map(r => r.id);
   await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id = ANY($1::UUID[])', [ids]);

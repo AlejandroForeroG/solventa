@@ -26,11 +26,13 @@ Both entries run the same use case. Identity decides who the actor is through `a
 
 Each request runs in this order: credential, access check, `Idempotency-Key`, validation, calculation, write. Without a credential the answer is 401 and Identity is not called. Identity's answers keep their difference: 401 `unauthorized`, 403 `forbidden`, 503 `access_unavailable`; an RPC failure, a reply that does not validate or a call past the 2 s deadline blocks the quote as 503. A 400 names the field and the code, never the submitted value. Responses carry `X-Trace-Id` (UUID); the server generates one when the header is missing or invalid.
 
+**Body limit.** A body over 16 KiB is answered as a validation error (400) after the access check. It is refused from `Content-Length` before reading, or cancelled while reading when no length is declared, so it is never held in memory.
+
 **Who owns a quote.** A partner quote belongs to the partner and is keyed by a keyed hash of the customer's document. A web quote belongs to the user's `clientId` and uses the user's own `subjectToken`; the document in the body is not stored. Idempotency is scoped to the actor, so one key used by two users creates two quotes.
 
 **Premium rule.** Monthly premium = amount × rate ÷ 1,000,000, rounded half up to a whole peso. The rate depends on the completed age: 18-30, 220; 31-40, 270; 41-50, 400; 51-60, 650; 61-70, 1000 (parts per million). The term (12 to 240 months) does not change the premium. This is a placeholder, not an actuarial tariff: replace it by publishing a new `ruleVersion`.
 
-**Configuration.** `QUOTE_HMAC_KEY` (at least 32 characters, different per environment) signs the document and the request. Locally, copy `.dev.vars.example` to `.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret; without it an authorized request returns 500 and writes nothing. Apply migrations `0006_partner_quotes.sql` and `0007_user_quotes.sql` before deploying this code. Partner tokens need Identity's `WORKOS_CONNECT_*` configuration; until it exists, the partner entry answers 503.
+**Configuration.** `QUOTE_HMAC_KEY` (at least 32 characters, different per environment) signs the document and the request. Locally, copy `.dev.vars.example` to `.dev.vars`. In dev, staging and prod the operator loads it as a Worker secret; without it an authorized request returns 500 and writes nothing. Apply migrations `0006_partner_quotes.sql`, `0007_user_quotes.sql` and `0008_quote_idempotency_by_actor.sql` before deploying this code. Partner tokens need Identity's `WORKOS_CONNECT_*` configuration; until it exists, the partner entry answers 503.
 
 **Verification.**
 
