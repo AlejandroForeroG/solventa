@@ -30,6 +30,15 @@ paths:
         '400': {description: Invalid input}
 `);
   const catalog = buildApiDocs({ specsDirectory, outputDirectory });
+  const css = readFileSync(resolve(outputDirectory, 'viewer.css'), 'utf8');
+  const fonts = [...css.matchAll(/url\('\/api\/docs\/fonts\/([^']+\.woff2)'\)/g)].map(match => match[1]);
+  assert.equal(fonts.length, 6, 'all declared font faces must be bundled');
+  for (const font of fonts) {
+    const bytes = readFileSync(resolve(outputDirectory, 'fonts', font));
+    assert.equal(bytes.subarray(0, 4).toString(), 'wOF2');
+    assert.deepEqual(bytes, readFileSync(new URL(`../packages/assets/fonts/ibm-plex/${font}`, import.meta.url)));
+  }
+  assert.match(readFileSync(resolve(outputDirectory, 'fonts/LICENSE.txt'), 'utf8'), /SIL OPEN FONT LICENSE/);
   assert.deepEqual(catalog, [{ name: 'New domain API (v2)', url: '/api/docs/v2/new-domain.json' }]);
   const bundled = resolve(outputDirectory, 'v2/new-domain.json');
   assert.doesNotMatch(readFileSync(bundled, 'utf8'), /common\.yaml/);
