@@ -10,6 +10,14 @@ export default {
     if (path.startsWith('/auth/')) return env.IDENTITY.fetch(request);
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
+      if (gate.response) return gate.response;
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web') {
+        try { return withHeaders(await env.IDENTITY.fetch(request), gate.headers); }
+        catch {
+          const traceId = crypto.randomUUID();
+          return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
+        }
+      }
       return gate.response ?? withHeaders(Response.json({ error: 'not_implemented' }, { status: 404, headers }), gate.headers);
     }
     if (path.startsWith('/internal/')) {

@@ -31,6 +31,8 @@ Tests: `npm run test:authentication` and, with local SQL running, `npm run test:
 
 ## Pending boundaries
 
+The [API access foundation](api-access.md) reuses this session to authorize `quotes:create` probes and private RPC calls. `subjectToken` is an internal pseudonymous identifier, not a Bearer credential. Web access depends on the verified session, its local record and the explicit user operation policy, never on a partner credential. Business authorization neither refreshes cookies nor registers sessions; refresh remains in `/auth/session`.
+
 A session grants neither consent, operational permissions nor access to other owners. Mobile needs its own PKCE login and native secure storage; do not reuse web cookies or server keys. Device tables exist, but biometrics, device registration/revocation and native validation require implementation. A row does not establish biometrics.
 
 See [SQL model](../../infrastructure/data-model.md), [boundaries](../../architecture.md) and [operations](../../infrastructure/README.md).
