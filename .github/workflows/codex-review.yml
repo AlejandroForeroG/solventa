@@ -2,7 +2,7 @@ name: Codex review gate
 on:
   pull_request_target:
     branches: [dev, staging, prod]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   issue_comment:
     types: [created, edited]
 permissions:
@@ -81,7 +81,7 @@ jobs:
           PR_MERGE_SHA: ${{ steps.pr.outputs.merge }}
         run: node tools/codex-review.mjs
       - name: Publish final status on the reviewed integration commit
-        if: always() && steps.pr.outputs.head != ''
+        if: always() && !cancelled() && steps.pr.outputs.head != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           MERGE_SHA: ${{ steps.pr.outputs.merge }}

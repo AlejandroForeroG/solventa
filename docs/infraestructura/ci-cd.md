@@ -103,3 +103,5 @@ Los tres status obligatorios (`policy`, `validate`, `codex-review`) se publican 
 El job CI report usa statuses:write para publicar policy/validate reales sobre el candidato de integración. Deploy permite ese permiso al invocar CI reutilizable, aunque report se omite en los despliegues posteriores al merge. Codex detecta además límites secundarios por el mensaje oficial de GitHub cuando faltan cabeceras y espera un minuto dentro del deadline; la lectura interrumpida del cuerpo JSON también participa de los reintentos.
 
 Antes de publicar, CI compara además título, referencias y repositorio de origen con el evento validado. Una ejecución anterior a una edición del PR no puede acreditar los datos nuevos aunque conserve los mismos SHAs.
+
+Editar la base del PR vuelve a ejecutar el gate para su candidato actual. Una ejecución cancelada no publica el resultado final; la ejecución vigente conserva la responsabilidad de actualizar el status.

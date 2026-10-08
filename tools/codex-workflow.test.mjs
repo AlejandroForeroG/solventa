@@ -5,6 +5,7 @@ import YAML from 'yaml';
 const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/codex-review.yml', import.meta.url), 'utf8'));
 test('privileged review gate uses trusted triggers and its protected environment', () => {
   assert.deepEqual(Object.keys(workflow.on).sort(), ['issue_comment', 'pull_request_target']);
+  assert.ok(workflow.on.pull_request_target.types.includes('edited'));
   assert.equal(workflow.jobs.review.environment, 'codex-review-gate');
   assert.equal(workflow.permissions.contents, 'read');
   assert.equal(workflow.permissions['pull-requests'], 'read');
@@ -34,6 +35,7 @@ test('Codex and CI statuses target the PR test merge commit, not a shared head',
   assert.equal(gate.env.PR_MERGE_SHA, '${{ steps.pr.outputs.merge }}');
   const publish = workflow.jobs.review.steps.find(step => step.name === 'Publish final status on the reviewed integration commit');
   assert.equal(publish.env.MERGE_SHA, '${{ steps.pr.outputs.merge }}');
+  assert.match(publish.if, /!cancelled\(\)/);
   assert.match(publish.run, /statuses\/\$MERGE_SHA/);
   const ci = YAML.parse(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   assert.equal(ci.jobs.report.permissions.statuses, 'write');
