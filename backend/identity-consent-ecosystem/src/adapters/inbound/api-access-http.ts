@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import { ApiAccess } from '../../application/api-access';
-import type { AccessDecision } from '../../application/api-access';
+import { ApiAccess, isApiOperation } from '../../application/api-access';
+import type { AccessDecision, ApiOperation } from '../../application/api-access';
 import { SqlIdentitySessions } from '../outbound/identity-sessions';
 import { SqlPartnerAccess } from '../outbound/partner-access';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
@@ -9,19 +9,19 @@ import { WorkosPartnerAuthentication } from '../outbound/workos-partner-authenti
 import { configuration } from './authentication-http';
 
 export type ApiAccessRequest =
-  | { kind: 'partner'; token: string; scope: 'quotes:create' }
-  | { kind: 'web'; cookie: string; origin: string; method: string; scope: 'quotes:create' };
+  | { kind: 'partner'; token: string; operation: ApiOperation }
+  | { kind: 'web'; cookie: string; origin: string; method: string; operation: ApiOperation };
 
 function isAccessRequest(value: unknown): value is ApiAccessRequest {
   if (!value || typeof value !== 'object') return false;
-  if (!('scope' in value) || value.scope !== 'quotes:create' || !('kind' in value)) return false;
+  if (!('operation' in value) || !isApiOperation(value.operation) || !('kind' in value)) return false;
   if (value.kind === 'partner') return 'token' in value && typeof value.token === 'string' && value.token.length <= 8192;
   return value.kind === 'web' && 'cookie' in value && typeof value.cookie === 'string' && value.cookie.length <= 16384
     && 'origin' in value && typeof value.origin === 'string' && value.origin.length <= 256
     && 'method' in value && typeof value.method === 'string' && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(value.method);
 }
 
-// Shared by HTTP probes and the private RPC. The caller never supplies an actor ID.
+// Shared by HTTP probes and the private RPC. Actor identity comes only from verified credentials, never from caller IDs.
 export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Promise<AccessDecision> {
   if (!isAccessRequest(input)) return { allowed: false, error: 'invalid_request', status: 400 };
   const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
@@ -32,7 +32,7 @@ export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Prom
       if (!env.WORKOS_CONNECT_ISSUER || !env.WORKOS_CONNECT_AUDIENCE) return { allowed: false, error: 'access_unavailable', status: 503 };
       const provider = new WorkosPartnerAuthentication({ issuer: env.WORKOS_CONNECT_ISSUER, audience: env.WORKOS_CONNECT_AUDIENCE });
       const identity = await provider.authenticate(input.token);
-      return identity ? await application.partner(identity, input.scope) : unauthorized;
+      return identity ? await application.partner(identity, input.operation) : unauthorized;
     }
     const config = configuration(env);
     if (!config) return { allowed: false, error: 'access_unavailable', status: 503 };
@@ -41,7 +41,7 @@ export async function authorizeApiAccess(env: IdentityEnv, input: unknown): Prom
     if (!input.cookie) return unauthorized;
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
     const verified = await new WorkosAuthentication(config).authenticate(input.cookie, false);
-    return verified ? await application.web(verified.identity, env.APP_ENV, input.scope, env.WEB_CHANNEL_CREDENTIAL_REFERENCE) : unauthorized;
+    return verified ? await application.webUser(verified.identity, input.operation) : unauthorized;
   } catch {
     return { allowed: false, error: 'access_unavailable', status: 503 };
   }
@@ -64,8 +64,8 @@ export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize =
       if (kind === 'web' && authHeader !== undefined) return c.json({ error: 'invalid_request', traceId }, 400);
       const token = authHeader?.match(/^Bearer ([A-Za-z0-9_.-]+)$/i)?.[1] ?? '';
       const request: ApiAccessRequest = kind === 'partner'
-        ? { kind, token, scope: 'quotes:create' }
-        : { kind, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, scope: 'quotes:create' };
+        ? { kind, token, operation: 'quotes:create' }
+        : { kind, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create' };
       const decision = await authorize(c.env, request);
       if (!decision.allowed) {
         if (decision.status === 401 && kind === 'partner') c.header('WWW-Authenticate', 'Bearer realm="solventa"');

@@ -8,13 +8,13 @@ import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/a
 import web from '../apps/web/worker/index';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
-const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' }, WORKOS_CONNECT_ISSUER: '', WORKOS_CONNECT_AUDIENCE: '', WEB_CHANNEL_CREDENTIAL_REFERENCE: 'dev:v1' } as IdentityEnv;
+const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' }, WORKOS_CONNECT_ISSUER: '', WORKOS_CONNECT_AUDIENCE: '' } as IdentityEnv;
 
 test('access probes preserve trace without reflecting an arbitrary header, expose no credential and reject methods', async () => {
   const app = new Hono<{ Bindings: IdentityEnv }>();
   const actor = { kind: 'partner' as const, partnerId: crypto.randomUUID(), credentialId: crypto.randomUUID(), scopes: ['quotes:create'] };
   mountApiAccess(app, async (_env, input) => {
-    assert.deepEqual(input, { kind: 'partner', token: 'synthetic.jwt.token', scope: 'quotes:create' });
+    assert.deepEqual(input, { kind: 'partner', token: 'synthetic.jwt.token', operation: 'quotes:create' });
     return { allowed: true, actor };
   });
   const traceId = crypto.randomUUID();
@@ -39,8 +39,10 @@ test('missing credentials, unavailable M2M config, forged web cookie and mutatio
   assert.equal((await app.request(origin + '/api/v1/access/partner', { headers: { Authorization: 'Bearer synthetic.jwt.token' } }, env)).status, 503);
   assert.equal((await app.request(origin + '/api/v1/access/web', {}, env)).status, 401);
   assert.equal((await app.request(origin + '/api/v1/access/web', { headers: { Cookie: '__Host-solventa-session=forged' } }, env)).status, 401);
-  assert.deepEqual(await authorizeApiAccess(env, { kind: 'web', cookie: 'forged', origin: 'https://attacker.invalid', method: 'POST', scope: 'quotes:create' }), { allowed: false, error: 'forbidden', status: 403 });
-  assert.equal((await authorizeApiAccess(env, { kind: 'partner', token: '', scope: '*' })).status, 400);
+  assert.deepEqual(await authorizeApiAccess(env, { kind: 'web', cookie: 'forged', origin: 'https://attacker.invalid', method: 'POST', operation: 'quotes:create' }), { allowed: false, error: 'forbidden', status: 403 });
+  assert.equal((await authorizeApiAccess(env, { kind: 'partner', token: '', operation: '*' })).status, 400);
+  assert.equal((await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', operation: 'policies:issue' })).status, 400);
+  assert.equal((await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', scope: 'quotes:create' })).status, 400);
   assert.equal((await authorizeApiAccess(env, null)).status, 400);
 });
 
@@ -49,7 +51,7 @@ test('business access never refreshes or registers a web session', async t => {
     assert.equal(refresh, false);
     return null;
   });
-  const result = await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', scope: 'quotes:create' });
+  const result = await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', operation: 'quotes:create' });
   assert.deepEqual(result, { allowed: false, error: 'unauthorized', status: 401 });
 });
 
@@ -68,16 +70,35 @@ test('gateway forwards only the published probes and handles a failed identity b
   assert.equal(body.traceId, unavailable.headers.get('x-trace-id'));
 });
 
-test('web authorization selects the channel from server configuration and ignores supplied actor identifiers', async t => {
-  t.mock.method(WorkosAuthentication.prototype, 'authenticate', async () => ({ identity: { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true } }));
-  const principal = { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() };
-  const credential = { partnerId: crypto.randomUUID(), credentialId: crypto.randomUUID(), scopes: ['quotes:create'] };
-  t.mock.method(SqlIdentitySessions.prototype, 'find', async () => principal);
-  t.mock.method(SqlPartnerAccess.prototype, 'find', async (provider: string, reference: string) => {
-    assert.equal(provider, 'solventa-web');
-    assert.equal(reference, 'dev:v1');
-    return credential;
+test('web authorization uses only the verified session principal and never a partner credential or supplied ID', async t => {
+  const identity = { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true };
+  t.mock.method(WorkosAuthentication.prototype, 'authenticate', async (cookie: string, refresh: boolean) => {
+    assert.equal(cookie, 'synthetic');
+    assert.equal(refresh, false);
+    return { identity };
   });
-  const decision = await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', scope: 'quotes:create', channelReference: 'dev:attacker', partnerId: 'forged', clientId: 'forged' });
-  assert.deepEqual(decision, { allowed: true, actor: { ...credential, kind: 'web', principal } });
+  const principal = { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() };
+  const find = t.mock.method(SqlIdentitySessions.prototype, 'find', async () => principal);
+  const open = t.mock.method(SqlIdentitySessions.prototype, 'open', async () => assert.fail('unexpected_session_registration'));
+  t.mock.method(SqlPartnerAccess.prototype, 'find', async () => assert.fail('unexpected_partner_lookup'));
+  const decision = await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', operation: 'quotes:create', partnerId: 'forged', clientId: 'forged', subjectToken: 'forged' });
+  assert.deepEqual(decision, { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: ['quotes:create'] } });
+  assert.deepEqual(find.mock.calls.map(call => call.arguments), [[identity]]);
+  assert.equal(open.mock.callCount(), 0);
+  find.mock.mockImplementation(async () => null);
+  assert.deepEqual(await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', operation: 'quotes:create' }), { allowed: false, error: 'unauthorized', status: 401 });
+});
+
+test('web probe returns the user actor without partner identifiers', async () => {
+  const app = new Hono<{ Bindings: IdentityEnv }>();
+  const actor = { kind: 'user' as const, channel: 'web' as const, principal: { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() }, operations: ['quotes:create' as const] };
+  mountApiAccess(app, async (_env, input) => {
+    assert.deepEqual(input, { kind: 'web', cookie: 'sealed', origin: '', method: 'GET', operation: 'quotes:create' });
+    return { allowed: true, actor };
+  });
+  const response = await app.request(origin + '/api/v1/access/web', { headers: { Cookie: '__Host-solventa-session=sealed', 'X-Client-Id': 'forged' } }, env);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { actor: Record<string, unknown> };
+  assert.deepEqual(body.actor, actor);
+  assert.equal('partnerId' in body.actor || 'credentialId' in body.actor, false);
 });

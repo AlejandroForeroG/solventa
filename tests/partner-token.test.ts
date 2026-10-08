@@ -76,6 +76,20 @@ test('malformed and oversized tokens are denied without calling the key resolver
   assert.equal(called, false);
 });
 
+test('a token without kid against several compatible keys is invalid, not a provider outage', async () => {
+  const { claims, privateKey } = await fixture();
+  const second = await generateKeyPair('RS256');
+  const keys = [
+    { ...await exportJWK((await keyPair).publicKey), kid: 'synthetic-key', alg: 'RS256', use: 'sig' },
+    { ...await exportJWK(second.publicKey), kid: 'synthetic-rotated-key', alg: 'RS256', use: 'sig' },
+  ];
+  const provider = new WorkosPartnerAuthentication(config, createLocalJWKSet({ keys }));
+  const withoutKid = await new SignJWT(claims).setProtectedHeader({ alg: 'RS256', typ: 'JWT' }).sign(privateKey);
+  assert.equal(await provider.authenticate(withoutKid), null);
+  const selected = await new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'synthetic-rotated-key' }).sign(second.privateKey);
+  assert.equal((await provider.authenticate(selected))?.applicationId, 'client_partner');
+});
+
 test('JWKS provider failure remains unavailable instead of becoming an invalid credential', async () => {
   const { sign } = await fixture();
   for (const failure of [new errors.JWKSTimeout(), new errors.JWKSInvalid('invalid set'), new Error('network_failed')]) {

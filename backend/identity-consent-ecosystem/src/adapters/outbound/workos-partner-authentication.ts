@@ -73,7 +73,9 @@ export class WorkosPartnerAuthentication {
       if (error instanceof errors.JWTExpired || error instanceof errors.JWTClaimValidationFailed
         || error instanceof errors.JWSInvalid || error instanceof errors.JWTInvalid
         || error instanceof errors.JWSSignatureVerificationFailed || error instanceof errors.JOSEAlgNotAllowed
-        || error instanceof errors.JOSENotSupported || error instanceof errors.JWKSNoMatchingKey) return null;
+        || error instanceof errors.JOSENotSupported || error instanceof errors.JWKSNoMatchingKey
+        // Raised only after a key set was retrieved, when the token header does not select a single key.
+        || error instanceof errors.JWKSMultipleMatchingKeys) return null;
       throw new Error('partner_identity_provider_unavailable', { cause: error });
     }
   }
