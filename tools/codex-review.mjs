@@ -1,30 +1,44 @@
 import { pathToFileURL } from 'node:url';
 
 export const CODEX_BOT_ID = 199175422;
-export function reviewCompleted(comments, reviews, head) {
+export function reviewedSha(comments) {
   const summaries = comments.filter(comment =>
     comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot' &&
     comment.body?.includes('<!-- codex-pull-request-review-summary -->'));
   summaries.sort((a, b) => b.id - a.id);
-  const rows = summaries[0]?.body?.split('\n') ?? [];
-  const completed = rows.some(row => {
+  for (const row of summaries[0]?.body?.split('\n') ?? []) {
     const cells = row.split('|');
-    const sha = cells[3]?.match(/`([a-f0-9]{7,40})`/)?.[1];
-    return cells[1]?.includes('**Code Review**') &&
-      cells[2]?.includes('✅ **Completed**') && sha && head.startsWith(sha);
-  });
+    if (cells[1]?.includes('**Code Review**') && cells[2]?.includes('✅ **Completed**')) {
+      return cells[3]?.match(/`([a-f0-9]{7,40})`/)?.[1];
+    }
+  }
+}
+export function reviewCompleted(comments, reviews, head, resolvedSha) {
+  const sha = reviewedSha(comments);
   const rejected = reviews.some(review => review.user?.id === CODEX_BOT_ID &&
     review.commit_id === head && review.state === 'CHANGES_REQUESTED');
-  return Boolean(completed && !rejected);
+  return Boolean(sha && head.startsWith(sha) && resolvedSha === head && !rejected);
 }
-
-async function api(path) {
-  const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${path}`, {
-    headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
-  return response.json();
+export async function requestJson(url, token, fetcher = fetch, pause = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetcher(url, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(30_000),
+      });
+      if (response.ok) return response.json();
+      if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) {
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      if (attempt === 2 || !['TypeError', 'TimeoutError'].includes(error.name)) throw error;
+    }
+    await pause(500 * 2 ** attempt);
+  }
+}
+function api(path) {
+  return requestJson(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${path}`, process.env.GITHUB_TOKEN);
 }
 async function list(path) {
   const result = [];
@@ -46,7 +60,10 @@ export async function waitForReview() {
     const pr = await api(`pulls/${number}`);
     if (pr.state !== 'open' || pr.head.sha !== head) throw new Error('PR closed or head changed; run the check for the new commit');
     const [comments, reviews] = await Promise.all([list(`issues/${number}/comments`), list(`pulls/${number}/reviews`)]);
-    if (reviewCompleted(comments, reviews, head)) {
+    const sha = reviewedSha(comments);
+    // GitHub rejects ambiguous abbreviated SHAs; never use prefix equality alone.
+    const resolved = sha ? (await api(`commits/${sha}`)).sha : undefined;
+    if (reviewCompleted(comments, reviews, head, resolved)) {
       console.log(`Codex review completed for ${head}. GitHub separately requires resolved conversations.`);
       return;
     }
