@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
     branches: [dev, staging, prod]
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited]
   workflow_call:
     inputs:
       revision:
@@ -11,16 +11,10 @@ on:
 permissions:
   contents: read
   actions: read
-  pull-requests: read
 jobs:
   policy:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: read
-      statuses: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,10 +22,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Mark this candidate CI as pending
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node tools/ci-report.mjs pending
       - run: node tools/git-policy.mjs pr
       - name: Require a successful upstream deployment before promotion
         if: github.base_ref == 'staging' || github.base_ref == 'prod'
@@ -67,22 +57,3 @@ jobs:
       - run: npm run test:infra
       - if: always()
         run: npm run infra:down
-  report:
-    if: always() && github.event_name == 'pull_request'
-    needs: [policy, validate]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-      statuses: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - name: Report CI on this PR test merge commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          POLICY_RESULT: ${{ needs.policy.result }}
-          VALIDATE_RESULT: ${{ needs.validate.result }}
-        run: node tools/ci-report.mjs

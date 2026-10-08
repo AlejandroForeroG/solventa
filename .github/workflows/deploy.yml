@@ -5,8 +5,6 @@ on:
 permissions:
   contents: read
   actions: read
-  pull-requests: read
-  statuses: write
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
