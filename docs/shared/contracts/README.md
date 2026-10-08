@@ -25,6 +25,8 @@ The reference uses Solventa's green UI palette, warm neutral navigation, rounded
 
 The web test suite executes the viewer loader against its HTML in a DOM harness. It checks both domain-switch directions from a Schemas URL, navigation without the old hash, loading the selected contract in a fresh reference, and preserving shared operation links. These tests cover the navigation handoff; the real browser checks above remain necessary to verify Scalar's lazy rendering and visual layout.
 
+IBM Plex Sans (400/500/600/700) and Mono (400/600) are bundled from the shared [font assets](../assets/README.md) and loaded from `/api/docs/fonts/` using `@font-face` with `font-display: swap`. The same-origin font files and their `/api/docs/fonts/LICENSE.txt` use the same read-only, no-store and missing-asset protections as other documentation assets. The generator tests verify every CSS font reference is a bundled WOFF2 file with its license, and route tests cover GET/HEAD, rejected writes and SPA fallback. Verify the browser reports both families loaded and that header/sidebar alignment still holds after loading; do not infer an available font from its CSS family declaration alone.
+
 ## Maintaining API documentation
 
 Every API addition, change or removal must update its OpenAPI domain specification, affected examples/contract tests and the owning module's technical guide **in the same branch and PR as the implementation**. Document parameters, validation, request/response schemas, status/error codes, authentication/scopes and applicable deprecation notices. Follow the versioning rules below for compatibility. Use synthetic examples; never include tokens, cookies, credentials or personal data.

@@ -31,6 +31,11 @@ export function buildApiDocs({ specsDirectory = resolve(root, 'packages/contract
   for (const file of ['index.html', 'viewer.js', 'viewer.css']) {
     copyFileSync(resolve(root, 'tools/api-docs', file), resolve(outputDirectory, file));
   }
+  const fontsDirectory = resolve(root, 'packages/assets/fonts/ibm-plex');
+  mkdirSync(resolve(outputDirectory, 'fonts'), { recursive: true });
+  for (const file of readdirSync(fontsDirectory).filter(file => file.endsWith('.woff2') || file === 'LICENSE.txt')) {
+    copyFileSync(resolve(fontsDirectory, file), resolve(outputDirectory, 'fonts', file));
+  }
   return catalog;
 }
 
