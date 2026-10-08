@@ -49,6 +49,7 @@
 
 ## Required documentation
 
+- Every API addition, modification or removal must update its domain OpenAPI specification, affected examples/contract tests and owning module guide in the same branch and PR. Compare schemas, parameters, validation, responses/errors and authentication/scopes with the actual behavior. Follow [API contract maintenance](docs/shared/contracts/README.md#maintaining-api-documentation); CI/Deploy regenerate `/api/docs/` from those contracts, but generation does not establish implementation/spec agreement.
 - Every feature must include current technical documentation in `docs/` in the same branch and PR as its implementation. Fixes and refactors that change documented behavior, contracts, configuration or operation must update the affected guide before integration.
 - Search the [index](docs/README.md) and existing module/topic first. Update the existing document; create one only for a new topic and link it from the module index.
 - Follow the architecture modules under `docs/modules/acquisition-risk`, `docs/modules/identity-consent-ecosystem` and `docs/modules/policy-claims-payments`. Put channel guides in `docs/channels`, contracts/assets in `docs/shared`, and cross-cutting operation in `docs/infrastructure`.
