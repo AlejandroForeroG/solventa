@@ -1,3 +1,3 @@
-# Pólizas
+# Policy, Claims & Payments
 
-Documentación: [guía vigente](../../docs/modulos/policy-claims-payments/README.md).
+Documentation: [current guide](../../docs/modules/policy-claims-payments/README.md).

@@ -1,6 +1,6 @@
 # Solventa API in Bruno
 
-Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `prod`. The contract and access setup are in the [Identity guide](../../../docs/modulos/identity-consent-ecosystem/acceso-api.md); schemas are in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
+Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `prod`. The contract and access setup are in the [Identity guide](../../../docs/modules/identity-consent-ecosystem/api-access.md); schemas are in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
 
 | Folder | Checks | Requirement |
 |---|---|---|

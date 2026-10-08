@@ -1,3 +1,3 @@
-# Operación de infraestructura
+# Infrastructure operations
 
-Documentación: [guía vigente](../docs/infraestructura/README.md).
+Documentation: [current guide](../docs/infrastructure/README.md).

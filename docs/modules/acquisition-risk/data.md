@@ -1,0 +1,7 @@
+# Acquisition and risk data
+
+`quotes` stores the canonical request and idempotency key per partner/subject. Reusing a key with a different `request_hash` must be rejected in application: UNIQUE only prevents another row. JSON must contain minimal canonical data, without plaintext PII, secrets or unfiltered external responses. DDL does not inspect JSON; validate and tokenize in adapters.
+
+Profiles preserve source, validity and consent per revision. Decisions preserve rules, contract and `input_snapshot` for historical reconstruction. Runtime can only read/insert profiles and decisions, preserving that history. `offer_revisions` holds immutable terms per `(offer_id, version)`, referenced by the policy. Commit each change to `offers`, its historical revision, audit and outbox in one local transaction. `offers` is the current projection; never reconstruct an earlier offer from that mutable row. Runtime cannot update/delete `offer_revisions`. Offers distinguish `preliminary` and `definitive`; application must prevent issuance from a preliminary offer.
+
+See [permissions, events and SQL operations](../../infrastructure/data-model.md).
