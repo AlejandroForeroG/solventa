@@ -96,7 +96,6 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .denied-body { padding: 24px 28px 28px; }
 .trace { padding: 12px 14px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
 
-/* Step 3 (consent), safe exit and privacy dashboard. Semantic pairs come from the design tokens. */
 .btn-privacy { margin-left: auto; background: transparent; }
 .btn-danger { background: #fbe9e7; color: #8a241c; border-color: #f0c9c4; }
 .btn-danger:hover:not(:disabled) { background: #f6d6d1; }
