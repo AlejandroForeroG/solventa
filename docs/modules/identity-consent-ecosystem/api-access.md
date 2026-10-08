@@ -64,6 +64,8 @@ The access check does not refresh the cookie and never registers a session: if t
 
 ## Responses
 
+The web gateway gives each access probe's Identity Service Binding call a five-second deadline, cancels it on expiry and returns `503 access_unavailable`. Upstream failures preserve a valid caller-supplied UUID in `X-Trace-Id` and the response body; missing or invalid values receive a generated UUID. API version headers and `Cache-Control: no-store` also apply to these failures.
+
 `GET /api/v1/access/partner` and `GET /api/v1/access/web` check the fixed `quotes:create` operation. They do not accept an actor identifier or a client-selected operation. The actor is a discriminated union. Synthetic web response example:
 
 ```json
@@ -153,5 +155,7 @@ Identity owns `partners` and `partner_credentials`; each call checks their valid
 This foundation does not implement quoting, consent, quotas, biometrics, mobile authorization, Pact or a permission catalog for all future resources. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
 
 ## Verification
+
+The Identity composition root (`src/index.ts`) builds SQL and WorkOS adapters and injects the access authorizer through `createHttp({ authorizeApiAccess })`. The HTTP and RPC adapter share the same dependency-driven authorization function; HTTP tests use in-memory dependencies without patching production adapters. Existing `/auth/*` composition and behavior are unchanged.
 
 From the root: `npm run test:authentication` verifies sessions, JWT verification, partner and web user authorization and the HTTP adapter with synthetic data; `npm run test:contracts` checks the version registry/schemas, and `npm run lint:openapi` validates the specification. With local SQL prepared, `npm run test:partner-access:sql` exercises partner registration, revocation, concurrency and audit, plus web user access without partner records and after session revocation, in a temporary database. These tests do not create WorkOS applications or demonstrate real M2M token issuance. Probes and manual cases are in the Bruno collection linked above.
