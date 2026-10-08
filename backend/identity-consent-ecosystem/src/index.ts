@@ -54,7 +54,6 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
   async authorizeApiAccessV1(request: ApiAccessRequest) {
     return authorize(this.env, request);
   }
-  // Fresh check for another module before it queries a source; the answer is never cached.
   async verifyConsentV1(request: ConsentCheck) {
     return consentsFor(this.env).verify(request);
   }

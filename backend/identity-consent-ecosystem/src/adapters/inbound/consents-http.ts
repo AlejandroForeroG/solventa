@@ -9,7 +9,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 type Status = 200 | 201 | 400 | 401 | 403 | 404 | 409 | 503;
 type Handler = (c: Context<{ Bindings: IdentityEnv }>, principal: Principal, traceId: string, reply: (body: object, status: Status) => Response) => Promise<Response>;
 
-// Returns null as soon as the body is known to exceed the limit, without holding more than it allows.
 async function readLimited(request: Request): Promise<string | null> {
   const declared = Number(request.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;

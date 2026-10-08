@@ -48,7 +48,6 @@ try {
   const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 1 }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
   const check = (principal: typeof ana, scope = 'income_obligations_12m') => consents.verify({ subjectToken: principal.subjectToken, purposeCode: 'risk_profiling', scope });
 
-  // Grant: one transaction with the record, its audit event and its outbox event.
   const first = await grant(ana, 'k1', { textVersion: 1, quoteRef: 'COT-2026-00001' });
   assert.equal(first.status, 'created');
   if (first.status !== 'created') throw Error('unreachable');
@@ -60,7 +59,6 @@ try {
   assert.equal(row.source, 'web');
   assert.equal(row.quote_ref, 'COT-2026-00001');
 
-  // Idempotency belongs to the actor: the same key replays, another request conflicts, another user is independent.
   const replay = await grant(ana, 'k1', { textVersion: 1, quoteRef: 'COT-2026-00001' });
   assert.equal(replay.status, 'replayed');
   if (replay.status === 'replayed') assert.equal(replay.consent.consentId, first.consent.consentId);
@@ -71,12 +69,10 @@ try {
   assert.equal(racing.filter(r => r.status === 'replayed').length, 5);
   assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents WHERE client_id = $1', [ana.clientId]), 2);
 
-  // Fresh check: the seal survives the database round trip, and a foreign subject has nothing.
   const allowed = await check(ana);
   assert.ok(allowed.allowed, JSON.stringify(allowed));
   assert.deepEqual(await check({ ...ana, subjectToken: randomUUID() }), { allowed: false, reason: 'consent_missing' });
 
-  // Revocation: only the owner, effective on the next check, once.
   assert.deepEqual(await consents.revoke({ principal: luis, consentCode: first.consent.consentId, traceId: traceId() }), { status: 'not_found' });
   assert.ok((await check(ana)).allowed);
   const racingRevoke = await Promise.all(Array.from({ length: 4 }, () => consents.revoke({ principal: ana, consentCode: first.consent.consentId, traceId: traceId() })));
@@ -90,13 +86,11 @@ try {
   if (second) await consents.revoke({ principal: ana, consentCode: second.consentId, traceId: traceId() });
   assert.deepEqual(await check(ana), { allowed: false, reason: 'consent_revoked' });
 
-  // Decline: an audit event and nothing else.
   const before = await count('SELECT count(*)::INT4 FROM identity.consents');
   assert.deepEqual(await consents.decline({ principal: luis, body: { textVersion: 1 }, traceId: traceId() }), { status: 'declined' });
   assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents'), before);
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.audit_events WHERE action = 'consent.declined'"), 1);
 
-  // Expiry: denied, not revocable, and recorded once however many times it is observed.
   const bob = await person();
   const short = await grant(bob, 'k1');
   assert.ok(short.status === 'created');
@@ -106,27 +100,23 @@ try {
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.audit_events WHERE action = 'consent.expired' AND actor_reference = $1", [bob.subjectToken]), 1);
   if (short.status === 'created') assert.deepEqual(await consents.revoke({ principal: bob, consentCode: short.consent.consentId, traceId: traceId() }), { status: 'not_active' });
 
-  // Tampering: an extended validity breaks the seal.
   const carol = await person();
   const sealed = await grant(carol, 'k1');
   assert.ok(sealed.status === 'created' && (await check(carol)).allowed);
   await db.query("UPDATE identity.consents SET expires_at = expires_at + INTERVAL '365 days' WHERE client_id = $1", [carol.clientId]);
   assert.deepEqual(await check(carol), { allowed: false, reason: 'consent_invalid' });
 
-  // A suspended user has no usable consent.
   const dave = await person();
   await grant(dave, 'k1');
   await db.query("UPDATE identity.clients SET status = 'suspended' WHERE id = $1", [dave.clientId]);
   assert.deepEqual(await check(dave), { allowed: false, reason: 'consent_missing' });
 
-  // The runtime role can neither delete consents nor rewrite the audit trail.
   const app = clientFor(runtime, config.ssl); await app.connect();
   try {
     await assert.rejects(app.query('DELETE FROM identity.consents'), /permission|denied|privilege/i);
     await assert.rejects(app.query('UPDATE identity.audit_events SET outcome = $1', ['x']), /permission|denied|privilege/i);
   } finally { await app.end(); }
 
-  // No personal data in the audit trail or the events.
   const text = JSON.stringify((await db.query('SELECT actor_reference, action, resource_type FROM identity.audit_events')).rows)
     + JSON.stringify((await db.query('SELECT payload FROM identity.outbox_events WHERE aggregate_type = $1', ['consent'])).rows);
   assert.ok(!/@|document|nombre|name/i.test(text));

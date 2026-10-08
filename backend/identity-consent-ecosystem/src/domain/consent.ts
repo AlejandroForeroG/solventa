@@ -50,7 +50,6 @@ export function statusOf(consent: Pick<Consent, 'revokedAt' | 'expiresAt'>, now:
 
 export type TermsRequest = { textVersion: number; quoteRef: string | null };
 
-// Strict on purpose: an unknown field is a client that believes it is sending something Identity ignores.
 export function parseTermsRequest(body: unknown, allowed: readonly string[]): TermsRequest | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const record = body as Record<string, unknown>;

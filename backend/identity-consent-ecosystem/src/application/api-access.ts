@@ -18,7 +18,6 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
 const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
-// A web user acts only for their own principal. Permission to manage consent is not consent to query a source.
 const webUserOperations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
