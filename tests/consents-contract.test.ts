@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
+import { CURRENT_TERMS } from '../backend/identity-consent-ecosystem/src/domain/consent';
+import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
+import { messages } from '../apps/web/src/i18n/messages';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 const consents = parse(read('packages/contracts/openapi/v1/consents.yaml'));
@@ -73,5 +76,21 @@ test('a consent covers exactly the sources and scopes of its terms', () => {
   for (const consent of examples.consents) {
     assert.deepEqual(consent.sources, examples.terms.sources.map((s: { code: string }) => s.code));
     assert.deepEqual(consent.scopes, examples.terms.sources.map((s: { scope: string }) => s.scope));
+  }
+});
+
+test('Identity, the contract, Acquisition and the web catalogue describe the same sources and scopes', () => {
+  const codes = CURRENT_TERMS.sources.map(source => source.code);
+  const scopes = CURRENT_TERMS.sources.map(source => source.scope);
+  assert.deepEqual(CURRENT_TERMS.sources, examples.terms.sources);
+  assert.equal(CURRENT_TERMS.textVersion, examples.terms.textVersion);
+  assert.equal(CURRENT_TERMS.validityDays, examples.terms.validityDays);
+  assert.deepEqual(consents.components.schemas.SourceCode.enum, codes);
+  assert.deepEqual(consents.components.schemas.ScopeCode.enum, scopes);
+  assert.deepEqual([...SIGNAL_SCOPES], scopes, 'Acquisition asks for exactly the scopes Identity records');
+  for (const locale of ['es-CO', 'en-US'] as const) {
+    for (const source of CURRENT_TERMS.sources) {
+      for (const key of [`source.${source.code}.name`, `source.${source.code}.detail`, `kind.${source.kind}`]) assert.ok(messages[locale][key], `${locale} lacks ${key}`);
+    }
   }
 });
