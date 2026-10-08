@@ -10,12 +10,14 @@ import { requestQuote, toRequestBody, type Quote, type QuoteOutcome, type QuoteV
 import { Stepper } from './Stepper';
 import type { Locale } from '../i18n/messages';
 
+type ConsentStubs = { getTerms: unknown; grantConsent: unknown; declineConsent: unknown };
+
 const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e1b4d4c8aa0d1e2f3a4b5c6d7' };
 const valid: QuoteValues = { fullName: 'Cliente Sintetico Uno', documentNumber: '1000000001', birthDate: '1992-03-14', city: 'Bogotá D.C.', amount: '320000000', termMonths: '180' };
 
-function setup(request: (...args: never[]) => Promise<QuoteOutcome>, locale: Locale = 'es-CO', onContinue?: () => void) {
+function setup(request: (...args: never[]) => Promise<QuoteOutcome>, locale: Locale = 'es-CO', consent?: ConsentStubs) {
   const user = userEvent.setup();
-  const view = render(<I18n initial={locale}><LiveRegion><main><QuoteFlow request={request as never} onContinue={onContinue} /></main></LiveRegion></I18n>);
+  const view = render(<I18n initial={locale}><LiveRegion><main><QuoteFlow request={request as never} consent={consent as never} /></main></LiveRegion></I18n>);
   return { user, ...view };
 }
 async function fill(user: ReturnType<typeof userEvent.setup>, values: QuoteValues, labels: Record<keyof QuoteValues, RegExp>) {
@@ -121,20 +123,14 @@ describe('step 2: result', () => {
     expect(screen.getByLabelText(/Nombre completo/)).toHaveValue(valid.fullName);
   });
 
-  it('keeps the continue button disabled until the consent step exists', async () => {
-    const { user } = setup(vi.fn().mockResolvedValue({ kind: 'quote', quote }));
-    await fill(user, valid, es);
-    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
-    expect(await screen.findByRole('button', { name: 'Continuar a autorización de datos' })).toBeDisabled();
-  });
-
-  it('enables continue and calls back when a next step is provided', async () => {
-    const next = vi.fn();
-    const { user } = setup(vi.fn().mockResolvedValue({ kind: 'quote', quote }), 'es-CO', next);
+  it('opens the consent step from the result, with the stepper on step 3', async () => {
+    const consent = { getTerms: vi.fn().mockResolvedValue({ kind: 'unavailable' }), grantConsent: vi.fn(), declineConsent: vi.fn() };
+    const { user } = setup(vi.fn().mockResolvedValue({ kind: 'quote', quote }), 'es-CO', consent);
     await fill(user, valid, es);
     await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
     await user.click(await screen.findByRole('button', { name: 'Continuar a autorización de datos' }));
-    expect(next).toHaveBeenCalledOnce();
+    expect(consent.getTerms).toHaveBeenCalledOnce();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 3: Consentimiento');
   });
 });
 
