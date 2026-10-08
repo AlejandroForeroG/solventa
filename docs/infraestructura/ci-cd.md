@@ -85,3 +85,11 @@ El workflow `codex-review.yml` usa `pull_request_target`: su definición y el c�
 Para reintentar tras un timeout, comentar exactamente `@codex review` en el PR. Ese comentario solicita una nueva revisión y reinicia el gate desde el workflow de la rama predeterminada; las actualizaciones del resumen del bot también reinician la comprobación. No se permite workflow_dispatch, que podría cargar una definición del candidato. El workflow rechaza un PR cerrado o un head cambiado. Una revisión antigua jamás acredita el nuevo commit. Si se agota el plazo, mantiene el bloqueo con status failure.
 
 Los 403 con retry-after o x-ratelimit-remaining=0 se tratan como rate limiting; los 403 de permisos siguen siendo fatales. Se respeta retry-after/reset y el plazo global original, con tres intentos como máximo.
+
+### Identidad del gate
+
+El status se publica con la GitHub App privada `Solventa Codex Review Gate`, limitada a este repositorio: Commit statuses Read and write y Metadata Read-only obligatorio. No usa GitHub Actions como identidad del status. Las protecciones de dev/staging/prod deben exigir `codex-review` con el ID de esta App como fuente esperada; un status homónimo publicado por GitHub Actions no acredita la revisión.
+
+Guardar exclusivamente en el environment `codex-review-gate`: variable `CODEX_GATE_APP_ID` y secret `CODEX_GATE_PRIVATE_KEY`. Su política permite únicamente la rama predeterminada protegida `dev`, sin tags. No guardar la clave como secret general del repositorio ni en los ambientes del producto: un workflow del candidato no debe recibirla. Los tokens de instalación son temporales y limitados al repositorio y permiso statuses:write; el GITHUB_TOKEN del job conserva solo lecturas. El gate no recibe las credenciales de Cloudflare, WorkOS ni SQL.
+
+Los reintentos por comentario se limitan a OWNER, MEMBER o COLLABORATOR. Las actualizaciones del resumen oficial se aceptan mediante el ID verificado del bot. Si se renombra la rama predeterminada, actualizar primero la política del environment. La instalación inicial debe comprobar CI y revisión real antes de habilitar el requisito automático; después validar el bloqueo y aprobación en un nuevo PR antes de promover.

@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  statuses: write
 concurrency:
   group: codex-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
@@ -17,9 +16,11 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target' ||
       (github.event.issue.pull_request &&
-       (github.event.comment.body == '@codex review' ||
+       ((github.event.comment.body == '@codex review' &&
+         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
         (github.event.comment.user.id == 199175422 &&
          contains(github.event.comment.body, '<!-- codex-pull-request-review-summary -->'))))
+    environment: codex-review-gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -31,15 +32,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.CODEX_GATE_APP_ID }}
+          private-key: ${{ secrets.CODEX_GATE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-statuses: write
       - name: Resolve PR and publish pending status on its head
         id: pr
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          READ_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
-          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+          pr=$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
           head=$(jq -r '.head.sha' <<< "$pr")
           base=$(jq -r '.base.ref' <<< "$pr")
           [[ $(jq -r '.state' <<< "$pr") == open ]] || exit 1
@@ -61,7 +71,7 @@ jobs:
       - name: Publish final status on the reviewed head
         if: always() && steps.pr.outputs.head != ''
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           HEAD_SHA: ${{ steps.pr.outputs.head }}
           GATE_RESULT: ${{ steps.gate.outcome }}
         run: |
