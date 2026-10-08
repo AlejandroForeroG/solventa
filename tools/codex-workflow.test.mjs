@@ -7,6 +7,8 @@ const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/codex-rev
 test('privileged review gate uses trusted triggers and its protected environment', () => {
   assert.deepEqual(Object.keys(workflow.on).sort(), ['issue_comment', 'pull_request_target', 'workflow_run']);
   assert.deepEqual(workflow.on.workflow_run.workflows, ['Codex review event']);
+  assert.ok(workflow.on.issue_comment.types.includes('deleted'));
+  assert.ok(!workflow.jobs.review.if.includes('codex-pull-request-review-summary'));
   assert.ok(workflow.on.pull_request_target.types.includes('edited'));
   assert.equal(workflow.jobs.review.environment, 'codex-review-gate');
   assert.equal(workflow.permissions.contents, 'read');

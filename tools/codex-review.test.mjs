@@ -33,6 +33,11 @@ test('rejects a bot summary edited by a collaborator or without editorial eviden
   assert.equal(reviewCompleted([{ ...edited, editor: { id: CODEX_BOT_ID, type: 'Bot' } }], [], head, head), true);
   assert.equal(reviewCompleted([{ ...summary(), lastEditedAt: undefined }], [], head, head), false);
 });
+test('removing a marker cannot hide an edited bot comment behind an older summary', () => {
+  const tampered = { ...summary(), id: 2, body: 'Marker removed', lastEditedAt: '2026-10-08T00:00:00Z', editor: { id: 42, type: 'User' } };
+  assert.equal(reviewCompleted([summary(), tampered], [], head, head), false);
+  assert.equal(reviewCompleted([summary(), { ...summary(), id: 2, body: 'Official non-summary comment' }], [], head, head), true);
+});
 
 test('does not accept a different full commit with a colliding abbreviated SHA', () => {
   const other = head.slice(0, 7) + 'a'.repeat(33);

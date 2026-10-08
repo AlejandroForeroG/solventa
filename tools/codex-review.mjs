@@ -2,13 +2,14 @@ import { pathToFileURL } from 'node:url';
 
 export const CODEX_BOT_ID = 199175422;
 export function reviewedSha(comments) {
-  const summaries = comments.filter(comment =>
-    comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot' &&
-    comment.body?.includes('<!-- codex-pull-request-review-summary -->'));
+  const botComments = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot');
+  // Check editorial identity before content: removing a marker cannot hide tampering.
+  if (botComments.some(comment => !(comment.lastEditedAt === null ||
+      (typeof comment.lastEditedAt === 'string' && comment.editor?.type === 'Bot' && comment.editor.id === CODEX_BOT_ID)))) return;
+  const summaries = botComments.filter(comment => comment.body?.includes('<!-- codex-pull-request-review-summary -->'));
   summaries.sort((a, b) => b.id - a.id);
   const summary = summaries[0];
-  if (!summary || !(summary.lastEditedAt === null ||
-      (typeof summary.lastEditedAt === 'string' && summary.editor?.type === 'Bot' && summary.editor.id === CODEX_BOT_ID))) return;
+  if (!summary) return;
   for (const row of summary.body?.split('\n') ?? []) {
     const cells = row.split('|');
     if (cells[1]?.includes('**Code Review**') && cells[2]?.includes('✅ **Completed**')) {
@@ -70,16 +71,20 @@ async function list(path) {
   }
 }
 async function verifiedSummary(comments) {
-  const latest = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot' &&
-    comment.body?.includes('<!-- codex-pull-request-review-summary -->')).sort((a, b) => b.id - a.id)[0];
-  if (!latest) return [];
-  const result = await requestJson('https://api.github.com/graphql', process.env.GITHUB_TOKEN, fetch, undefined, reviewDeadline,
-    { method: 'POST', body: JSON.stringify({ query: 'query($id:ID!){node(id:$id){... on IssueComment{body lastEditedAt author{__typename ... on Bot{databaseId}} editor{__typename ... on Bot{databaseId}}}}}', variables: { id: latest.node_id } }) });
-  if (result.errors || !result.data?.node) throw Error('Cannot verify the summary editor');
-  const node = result.data.node;
-  return [{ id: latest.id, body: node.body, lastEditedAt: node.lastEditedAt,
-    user: { id: node.author?.databaseId, type: node.author?.__typename },
-    editor: { id: node.editor?.databaseId, type: node.editor?.__typename } }];
+  const bots = comments.filter(comment => comment.user?.id === CODEX_BOT_ID && comment.user?.type === 'Bot');
+  const verified = [];
+  for (let offset = 0; offset < bots.length; offset += 100) {
+    const ids = bots.slice(offset, offset + 100).map(comment => comment.node_id);
+    const result = await requestJson('https://api.github.com/graphql', process.env.GITHUB_TOKEN, fetch, undefined, reviewDeadline,
+      { method: 'POST', body: JSON.stringify({ query: 'query($ids:[ID!]!){nodes(ids:$ids){... on IssueComment{databaseId body lastEditedAt author{__typename ... on Bot{databaseId}} editor{__typename ... on Bot{databaseId}}}}}', variables: { ids } }) });
+    if (result.errors || !Array.isArray(result.data?.nodes) || result.data.nodes.length !== ids.length || result.data.nodes.some(node => !node)) throw Error('Cannot verify bot comment editors');
+    for (const node of result.data.nodes) {
+      verified.push({ id: node.databaseId, body: node.body, lastEditedAt: node.lastEditedAt,
+        user: { id: node.author?.databaseId, type: node.author?.__typename },
+        editor: { id: node.editor?.databaseId, type: node.editor?.__typename } });
+    }
+  }
+  return verified;
 }
 export async function waitForReview() {
   const number = process.env.PR_NUMBER;
