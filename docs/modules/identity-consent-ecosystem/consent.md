@@ -49,6 +49,18 @@ The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it d
 
 `subjectToken` is the internal pseudonymous identifier of the actor already authorized by the caller. `consent_invalid` means the stored record no longer matches its seal. The check is never cached, and the caller treats every `allowed: false` the same way: no source and no copy.
 
+### Guard in Acquisition
+
+Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
+
+| Consent check | Provider | Stored copy | Result |
+|---|---|---|---|
+| Denied or unavailable | Not called | Not read | `denied` with the reason |
+| Allowed, provider answers | Called | Not read | `available` |
+| Allowed, provider fails | Called | Read | `degraded` if the copy was captured under this same valid consent, otherwise `unavailable` |
+
+The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it, and the real provider adapter replaces the simulated one used in tests.
+
 ## Operation
 
 - **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns. Apply it before deploying this code. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code.

@@ -53,7 +53,7 @@
     "test:runtime": "node --test tests/access-runtime.test.mjs",
     "test:authentication:sql": "tsx infra/authentication-smoke.mts",
     "lint:openapi": "node tools/lint-openapi.mjs",
-    "test:consents": "tsx --test tests/consents.test.ts tests/consents-http.test.ts tests/web-worker-consents.test.ts",
+    "test:consents": "tsx --test tests/consents.test.ts tests/consents-http.test.ts tests/web-worker-consents.test.ts tests/consent-guard.test.ts",
     "test:consents:sql": "tsx infra/consents-smoke.mts",
     "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts tests/consents-contract.test.ts",
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts"
