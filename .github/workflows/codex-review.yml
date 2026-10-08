@@ -69,7 +69,10 @@ jobs:
           echo "head=$head" >> "$GITHUB_OUTPUT"
           echo "merge=$merge" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          MERGE_SHA="$merge" STATUS_STATE=pending STATUS_DESCRIPTION='Waiting for Codex on this commit' node tools/codex-status.mjs
+          echo "context=codex-review-$base" >> "$GITHUB_OUTPUT"
+          for revision in "$head" "$merge"; do
+            MERGE_SHA="$revision" STATUS_CONTEXT="codex-review-$base" STATUS_STATE=pending STATUS_DESCRIPTION='Waiting for Codex on this commit and environment' node tools/codex-status.mjs
+          done
       - name: Wait for the current commit review
         id: gate
         env:
@@ -83,6 +86,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           MERGE_SHA: ${{ steps.pr.outputs.merge }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          STATUS_CONTEXT: ${{ steps.pr.outputs.context }}
           STATUS_STATE: ${{ steps.gate.outcome == 'success' && 'success' || 'failure' }}
           STATUS_DESCRIPTION: ${{ steps.gate.outcome == 'success' && 'Codex completed review of this exact commit' || 'Codex review incomplete or failed; inspect this run' }}
-        run: node tools/codex-status.mjs
+        run: |
+          integration="$MERGE_SHA"
+          for revision in "$HEAD_SHA" "$integration"; do
+            MERGE_SHA="$revision" node tools/codex-status.mjs
+          done

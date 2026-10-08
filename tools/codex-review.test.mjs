@@ -166,6 +166,19 @@ test('retries interrupted 2xx JSON bodies and secondary limits without retry hea
 });
 import { publishCodexStatus } from './codex-status.mjs';
 
+test('environment review contexts retain App identity during uncertain-write reconciliation', async () => {
+  for (const environment of ['dev', 'staging', 'prod']) {
+    const config = { repository: 'AlejandroForeroG/solventa', merge: head, token: 'synthetic', context: `codex-review-${environment}`,
+      state: 'success', description: 'Reviewed', targetUrl: 'https://github.com/AlejandroForeroG/solventa/actions/runs/1' };
+    let writes = 0;
+    await publishCodexStatus(config, async (_url, options) => {
+      if (options.method === 'POST') { writes++; throw new TypeError('Interrupted write'); }
+      return Response.json([{ ...config, target_url: config.targetUrl, creator: { login: 'solventa-codex-review-gate[bot]' } }]);
+    }, async () => {});
+    assert.equal(writes, 1);
+  }
+});
+
 test('status publication reconciles an uncertain write before retrying', async () => {
   const config = { repository: 'AlejandroForeroG/solventa', merge: 'a'.repeat(40), token: 'test-token',
     state: 'success', description: 'Reviewed', targetUrl: 'https://github.com/AlejandroForeroG/solventa/actions/runs/1' };

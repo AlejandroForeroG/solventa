@@ -40,13 +40,18 @@ test('privileged review gate uses trusted triggers and its protected environment
   assert.match(resolve.run, /\.head\.sha/);
  });
 
-test('Codex and CI statuses target the PR test merge commit, not a shared head', () => {
+test('Codex publishes native head and integration evidence with environment-scoped context', () => {
   const gate = workflow.jobs.review.steps.find(step => step.id === 'gate');
   assert.equal(gate.env.PR_MERGE_SHA, '${{ steps.pr.outputs.merge }}');
   const publish = workflow.jobs.review.steps.find(step => step.name === 'Publish final status on the reviewed integration commit');
   assert.equal(publish.env.MERGE_SHA, '${{ steps.pr.outputs.merge }}');
   assert.match(publish.if, /!cancelled\(\)/);
-  assert.equal(publish.run, 'node tools/codex-status.mjs');
+  assert.equal(publish.env.HEAD_SHA, '${{ steps.pr.outputs.head }}');
+  assert.equal(publish.env.STATUS_CONTEXT, '${{ steps.pr.outputs.context }}');
+  assert.match(publish.run, /for revision in "\$HEAD_SHA" "\$integration"/);
+  const resolve = workflow.jobs.review.steps.find(step => step.id === 'pr');
+  assert.match(resolve.run, /context=codex-review-\$base/);
+  assert.match(resolve.run, /for revision in "\$head" "\$merge"/);
   const ci = YAML.parse(readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   assert.equal(ci.jobs.report.permissions.statuses, 'write');
   assert.deepEqual(ci.jobs.report.needs, ['policy', 'validate']);
