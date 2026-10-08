@@ -3,7 +3,9 @@ const download = document.getElementById('download-spec');
 const status = document.getElementById('status');
 let reference;
 
-async function showSpec() {
+const specId = url => url.slice('/api/docs/'.length).replace(/\.json$/, '');
+
+async function showSpec(resetHash = false) {
   selector.disabled = true;
   status.hidden = false;
   status.textContent = 'Loading specification…';
@@ -14,6 +16,10 @@ async function showSpec() {
     const response = await fetch(selector.value, { cache: 'no-store', credentials: 'omit' });
     if (!response.ok) throw new Error('Specification unavailable');
     const spec = await response.json();
+    const pageUrl = new URL(window.location.href);
+    pageUrl.searchParams.set('spec', specId(selector.value));
+    if (resetHash) pageUrl.hash = '';
+    window.history.replaceState(null, '', pageUrl);
     reference = window.Scalar.createApiReference('#docs-reference', {
       content: spec,
       layout: 'modern',
@@ -51,11 +57,14 @@ try {
   const catalog = await response.json();
   if (!Array.isArray(catalog) || !catalog.length) throw new Error('Empty catalog');
   document.getElementById('environment').textContent = response.headers.get('x-solventa-environment') ?? '';
+  const requestedSpec = new URL(window.location.href).searchParams.get('spec');
   for (const entry of catalog) {
     if (typeof entry.name !== 'string' || !/^\/api\/docs\/v[1-9][0-9]*\/[a-z][a-z0-9-]*\.json$/.test(entry.url)) throw new Error('Invalid catalog');
     selector.add(new Option(entry.name, entry.url));
   }
-  selector.addEventListener('change', showSpec);
+  const selectedSpec = catalog.find(entry => specId(entry.url) === requestedSpec);
+  if (selectedSpec) selector.value = selectedSpec.url;
+  selector.addEventListener('change', () => showSpec(true));
   await showSpec();
 } catch {
   selector.disabled = true;
