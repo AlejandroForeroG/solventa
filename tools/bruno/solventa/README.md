@@ -15,7 +15,7 @@ Do not run the entire collection as if every scenario shared the same state: a p
 
 ## Variables and secrets
 
-Environment files version `baseUrl`, `sessionCookieName`, `issuer` and `audience`. Dev and staging contain their configured public issuer/audience; local and prod remain empty until separately provisioned. `audience` documents the configuration expected by the API; the M2M request does not send it or allow selecting another audience.
+Environment files version `baseUrl`, `sessionCookieName`, `issuer` and `audience`. Dev, staging and prod contain their own configured public issuer/audience; local remains empty until separately provisioned. Use credentials registered for the selected environment. `audience` documents the configuration expected by the API; the M2M request does not send it or allow selecting another audience.
 
 Populate Bruno's local secret variables when needed:
 
@@ -34,7 +34,7 @@ Bruno and the browser do not automatically share cookies. The web case requires 
 
 1. Prepare local services using the [development guide](../../../docs/development.md), or select the corresponding deployed environment.
 2. Run `00-public`. A session 503 means web configuration must first be restored.
-3. For a partner, fill in issuer/audience and the registered application's secrets. Run `10-partner/01-token.bru` followed by `10-partner/02-access.bru`. Success is unavailable until external setup is complete.
+3. For a partner in dev, staging or prod, preserve the versioned issuer/audience and populate only the local secret variables with the application's credentials registered for that environment. Local requires its own issuer/audience and external provisioning first. Run `10-partner/01-token.bru` followed by `10-partner/02-access.bru`.
 4. Run `20-web/01-access.bru` with a test session. Refresh an expired session through `/auth/session` in the flow that created it. To check revocation, sign out in that flow and expect 401 from the same request.
 5. Run negative cases. `40-provisioned-negative` requires the specified state before each request; do not revoke shared credentials for a test.
 6. After the quote feature is deployed and the Acquisition migrations and `QUOTE_HMAC_KEY` are verified, set a fresh local `quoteIdempotencyKey` and run `50-quotes/01-create-partner.bru`, `02-replay-partner.bru` and `03-conflict-partner.bru` in order. The sample customer is synthetic. The first request returns 201, or 200 if this exact actor, key and body were already submitted; replay returns 200 and a changed body returns 409. For a web test session, run `04-create-web.bru` separately. A normal browser login and quote still need a browser flow test.
