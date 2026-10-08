@@ -1,0 +1,55 @@
+meta {
+  name: Create partner quote
+  type: http
+  seq: 1
+}
+post {
+  url: {{baseUrl}}/api/v1/quotes
+  body: json
+  auth: none
+}
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{quoteIdempotencyKey}}
+  X-Trace-Id: 50000000-0000-4000-8000-000000000001
+}
+body:json {
+  {
+    "product": "vida_hipotecario",
+    "customer": {
+      "fullName": "Synthetic Bruno Customer",
+      "documentType": "CC",
+      "documentNumber": "1098765432",
+      "birthDate": "1992-03-14",
+      "city": "Bogotá D.C."
+    },
+    "credit": {
+      "partnerCreditId": "BRUNO-SYNTHETIC-1",
+      "amount": 320000000,
+      "termMonths": 180
+    }
+  }
+}
+script:pre-request {
+  if (!bru.getVar("accessToken") || bru.getVar("accessTokenBaseUrl") !== bru.getEnvVar("baseUrl")) throw new Error("Issue a partner token for this environment first.");
+  if (!bru.getEnvVar("quoteIdempotencyKey")) throw new Error("Set a new local quoteIdempotencyKey for this attempt.");
+}
+script:post-response {
+  const body = res.getBody();
+  if ((res.getStatus() === 200 || res.getStatus() === 201) && body.quoteId) bru.setVar("quoteId", body.quoteId);
+}
+tests {
+  test("Partner quote created or replayed", function () {
+    expect([200, 201]).to.include(res.getStatus());
+    const body = res.getBody();
+    expect(body.quoteId).to.match(/^COT-\d{4}-\d{5}$/);
+    expect(body.currency).to.equal("COP");
+    expect(body.premiumMonthly).to.be.a("number");
+    expect(res.getHeader("x-trace-id")).to.equal(body.traceId);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+  });
+}
+docs {
+  Use only synthetic data. Set a fresh quoteIdempotencyKey in local Bruno variables for each new attempt. The first send returns 201; reusing the same key and body returns 200. A 500 or 503 may have an uncertain write outcome: retry unchanged with the same key. Do not publish token request or response bodies.
+}
