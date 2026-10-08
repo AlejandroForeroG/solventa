@@ -28,7 +28,7 @@ export async function unsealAttempt(value: string, password: string, origin: str
     return attempt;
   } catch { return null; }
 }
-function configuration(env: IdentityEnv): AuthConfiguration | null {
+export function configuration(env: IdentityEnv): AuthConfiguration | null {
   if (!env.WORKOS_API_KEY || !env.WORKOS_CLIENT_ID || !env.AUTH_COOKIE_PASSWORD || env.AUTH_COOKIE_PASSWORD.length < 32) return null;
   const origin = env.AUTH_ORIGIN;
   const expected = env.APP_ENV === 'local' ? 'http://localhost:8787' : `https://solventa-web-${env.APP_ENV}.ja-forerog1.workers.dev`;

@@ -1,0 +1,22 @@
+meta {
+  name: Sesion anonima
+  type: http
+  seq: 2
+}
+get {
+  url: {{baseUrl}}/auth/session
+  body: none
+  auth: none
+}
+headers {
+  Cookie: {{sessionCookieName}}=invalid-synthetic-cookie
+}
+tests {
+  test("Sin sesion valida", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().authenticated).to.equal(false);
+  });
+}
+docs {
+  Cookie deliberadamente invalida y sintetica. No iniciar login ni copiar una sesion real para este caso.
+}

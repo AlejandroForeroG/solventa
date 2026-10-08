@@ -1,0 +1,29 @@
+meta {
+  name: Acceso canal web autorizado
+  type: http
+  seq: 1
+}
+get {
+  url: {{baseUrl}}/api/v1/access/web
+  body: none
+  auth: none
+}
+headers {
+  X-Trace-Id: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
+  Cookie: {{sessionCookieName}}={{webSessionCookie}}
+}
+tests {
+  test("Contrato de acceso", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.traceId).to.equal("7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47");
+    expect(res.getHeader("x-trace-id")).to.equal(body.traceId);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+    expect(body.actor.kind).to.equal("web");
+    expect(body.actor.scopes).to.include("quotes:create");
+    expect(body.actor.partnerId).to.match(/^[0-9a-f-]{36}$/i);
+    expect(body.actor.credentialId).to.match(/^[0-9a-f-]{36}$/i);
+    expect(body.actor.principal.clientId).to.match(/^[0-9a-f-]{36}$/i);
+    expect(body.actor.principal.subjectToken).to.match(/^[0-9a-f-]{36}$/i);
+  });
+}

@@ -53,6 +53,7 @@ jobs:
       - run: npm run infra:up
       - run: npm run test:schema
       - run: npm run test:authentication:sql
+      - run: npm run test:partner-access:sql
       - run: npm run infra:local:schema-verify
       - run: npm run test:infra
       - if: always()

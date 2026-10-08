@@ -1,0 +1,6 @@
+.env
+.env.*
+*.local.bru
+*.local.json
+secrets.json
+reports/

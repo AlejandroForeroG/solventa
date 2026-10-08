@@ -70,6 +70,12 @@ y datos sintéticos; no vacía la base del desarrollador.
 
 ## Fronteras pendientes
 
+La [guía de acceso a la API](acceso-api.md) describe los sondeos `quotes:create`,
+las credenciales M2M de socios y la autorización del canal web. `/auth/session`
+no entrega un access token: `subjectToken` es un identificador interno, no una
+credencial Bearer. El sondeo web requiere además un canal activo y autorizado;
+su RPC no refresca cookies, por lo que el refresco permanece en `/auth/session`.
+
 Una sesión no concede consentimiento, permisos operativos ni acceso a otros
 propietarios. Móvil requiere login PKCE propio y almacenamiento seguro nativo;
 no reutilizar cookies web ni claves de servidor. Las tablas de dispositivos existen,

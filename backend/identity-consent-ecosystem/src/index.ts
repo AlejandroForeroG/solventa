@@ -2,6 +2,8 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createHttp } from './adapters/inbound/http';
 import { databaseProbe } from './adapters/outbound/database-probe';
+import { authorizeApiAccess } from './adapters/inbound/api-access-http';
+import type { ApiAccessRequest } from './adapters/inbound/api-access-http';
 
 // Composition root: platform wiring and operational probes stay outside the core.
 export default class extends WorkerEntrypoint<IdentityEnv> {
@@ -9,6 +11,9 @@ export default class extends WorkerEntrypoint<IdentityEnv> {
     return createHttp().fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'identity-consent-ecosystem', environment: this.env.APP_ENV }; }
+  async authorizeApiAccessV1(request: ApiAccessRequest) {
+    return authorizeApiAccess(this.env, request);
+  }
   async infraStatus() {
     const probe = await databaseProbe(this.env.IDENTITY_DB.connectionString);
     const database = probe.ready && probe.databaseName === `solventa_${this.env.APP_ENV}`;

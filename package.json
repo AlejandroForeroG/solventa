@@ -49,10 +49,11 @@
     "infra:prod:verify": "node infra/remote.mjs verify prod",
     "prepare": "node tools/install-hooks.mjs",
     "test:git": "node --test tools/git-policy.test.mjs",
-    "test:authentication": "tsx --test tests/authentication.test.ts",
+    "test:authentication": "tsx --test tests/authentication.test.ts tests/partner-token.test.ts tests/api-access.test.ts tests/api-access-http.test.ts",
     "test:authentication:sql": "tsx infra/authentication-smoke.mts",
     "lint:openapi": "node tools/lint-openapi.mjs",
-    "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts"
+    "test:contracts": "tsx --test tests/api-versioning.test.ts tests/decision-capture.test.ts",
+    "test:partner-access:sql": "tsx infra/partner-access-smoke.mts"
   },
   "devDependencies": {
     "@redocly/cli": "^2.59.0",
