@@ -33,14 +33,15 @@ export class ApiAccess {
     } catch { return unavailable; }
   }
 
-  async web(identity: VerifiedIdentity, environment: string, scope: string): Promise<AccessDecision> {
+  async web(identity: VerifiedIdentity, environment: string, scope: string, channelReference: string): Promise<AccessDecision> {
     if (scope !== supportedScope) return invalid;
     if (!['local', 'dev', 'staging', 'prod'].includes(environment)) return unavailable;
+    if (typeof channelReference !== 'string' || !new RegExp(`^${environment}:[a-z0-9][a-z0-9-]{0,63}$`).test(channelReference)) return unavailable;
     if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) return unauthorized;
     try {
       const principal = await this.sessions.find(identity);
       if (!principal) return unauthorized;
-      const credential = await this.repository.find('solventa-web', environment);
+      const credential = await this.repository.find('solventa-web', channelReference);
       if (!credential || !credential.scopes.includes(scope)) return forbidden;
       return { allowed: true, actor: { kind: 'web', partnerId: credential.partnerId, credentialId: credential.credentialId, scopes: [supportedScope], principal } };
     } catch { return unavailable; }

@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { mountApiAccess, authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { WorkosAuthentication } from '../backend/identity-consent-ecosystem/src/adapters/outbound/workos-authentication';
+import { SqlPartnerAccess } from '../backend/identity-consent-ecosystem/src/adapters/outbound/partner-access';
+import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
 import web from '../apps/web/worker/index';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
-const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' }, WORKOS_CONNECT_ISSUER: '', WORKOS_CONNECT_AUDIENCE: '' } as IdentityEnv;
+const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' }, WORKOS_CONNECT_ISSUER: '', WORKOS_CONNECT_AUDIENCE: '', WEB_CHANNEL_CREDENTIAL_REFERENCE: 'dev:v1' } as IdentityEnv;
 
 test('access probes preserve trace without reflecting an arbitrary header, expose no credential and reject methods', async () => {
   const app = new Hono<{ Bindings: IdentityEnv }>();
@@ -64,4 +66,18 @@ test('gateway forwards only the published probes and handles a failed identity b
   const body = await unavailable.json() as { error: string; traceId: string };
   assert.equal(body.error, 'access_unavailable');
   assert.equal(body.traceId, unavailable.headers.get('x-trace-id'));
+});
+
+test('web authorization selects the channel from server configuration and ignores supplied actor identifiers', async t => {
+  t.mock.method(WorkosAuthentication.prototype, 'authenticate', async () => ({ identity: { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true } }));
+  const principal = { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() };
+  const credential = { partnerId: crypto.randomUUID(), credentialId: crypto.randomUUID(), scopes: ['quotes:create'] };
+  t.mock.method(SqlIdentitySessions.prototype, 'find', async () => principal);
+  t.mock.method(SqlPartnerAccess.prototype, 'find', async (provider: string, reference: string) => {
+    assert.equal(provider, 'solventa-web');
+    assert.equal(reference, 'dev:v1');
+    return credential;
+  });
+  const decision = await authorizeApiAccess(env, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', scope: 'quotes:create', channelReference: 'dev:attacker', partnerId: 'forged', clientId: 'forged' });
+  assert.deepEqual(decision, { allowed: true, actor: { ...credential, kind: 'web', principal } });
 });

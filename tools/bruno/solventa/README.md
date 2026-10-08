@@ -1,45 +1,47 @@
-# Solventa API en Bruno
+# Solventa API in Bruno
 
-Abrir esta carpeta como colección en Bruno y elegir `local`, `dev`, `staging` o `prod`. El contrato y el alta de acceso están en la [guía de Identidad](../../../docs/modulos/identity-consent-ecosystem/acceso-api.md); los esquemas en [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
+Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `prod`. The contract and access setup are in the [Identity guide](../../../docs/modulos/identity-consent-ecosystem/acceso-api.md); schemas are in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
 
-| Carpeta | Qué comprueba | Requisito |
+| Folder | Checks | Requirement |
 |---|---|---|
-| `00-public` | Health 200 y sesión inválida 401 | Workers y autenticación web configurados |
-| `10-partner` | Emisión de token M2M y permiso de socio 200 | Connect y registro local del socio activos |
-| `20-web` | Sesión y permiso del canal web 200 | Sesión de prueba válida y canal habilitado |
-| `30-negative` | Sin token, token/cookie inválidos, mezcla de credenciales y método incorrecto | Configuración de verificación del ambiente completa |
-| `40-provisioned-negative` | Socio denegado y canal web inhabilitado 403 | Credenciales de prueba con ese estado; ejecutar casos por separado |
+| `00-public` | Health 200 and invalid session 401 | Configured Workers and web authentication |
+| `10-partner` | M2M token issuance and partner permission 200 | Active Connect setup and local partner registration |
+| `20-web` | Web session and channel permission 200 | Valid test session and enabled channel |
+| `30-negative` | Missing token, invalid token/cookie, mixed credentials and wrong method | Complete verification configuration for the environment |
+| `40-provisioned-negative` | Denied partner and disabled web channel 403 | Test credentials in the specified state; run cases separately |
 
-No ejecutar toda la colección como si todos los escenarios compartieran el mismo estado: el canal web no puede estar habilitado e inhabilitado al mismo tiempo. Los GET son sondeos, sin efectos de cotización. Las rutas no acreditan consentimiento ni login móvil.
+Do not run the entire collection as if every scenario shared the same state: the web channel cannot be enabled and disabled simultaneously. The GET requests are probes without quoting effects. These routes do not establish consent or mobile login.
 
-## Variables y secretos
+## Variables and secrets
 
-Los ambientes versionan `baseUrl`, `sessionCookieName` y los campos inicialmente vacíos `issuer` y `audience`. Completar estos dos últimos con los valores públicos propios del ambiente según la guía de Identidad. `audience` documenta la configuración esperada por la API; la solicitud M2M no la envía ni permite elegir otra audiencia.
+Environment files version `baseUrl`, `sessionCookieName` and the initially empty `issuer` and `audience` fields. Fill the latter two with the environment's public values according to the Identity guide. `audience` documents the configuration expected by the API; the M2M request does not send it or allow selecting another audience.
 
-En las variables secretas locales de Bruno, completar cuando se necesiten:
+Populate Bruno's local secret variables when needed:
 
-- `m2mClientId` y `m2mClientSecret`: credenciales de la aplicación M2M de prueba.
-- `webSessionCookie`: valor sellado de una sesión web de prueba autorizada; sin el nombre ni los atributos de la cookie.
-- `deniedPartnerToken`: JWT válido de una credencial local revocada/inactiva o sin `quotes:create`, para el caso 403.
+- `m2mClientId` and `m2mClientSecret`: credentials for the test M2M application.
+- `webSessionCookie`: sealed value of an authorized test web session, without the cookie name or attributes.
+- `deniedPartnerToken`: valid JWT for a revoked/inactive local credential or one without `quotes:create`, for the 403 case.
 
-Los archivos `.bru` solo declaran nombres de secretos. Bruno mantiene sus valores fuera del archivo de ambiente según su [documentación de secretos](https://docs.usebruno.com/secrets-management/secret-variables). No reemplazar las variables por valores en requests ni compartir informes con headers, cuerpos de emisión o cookies.
+The `.bru` files declare only secret names. Bruno keeps their values outside the environment file according to its [secret documentation](https://docs.usebruno.com/secrets-management/secret-variables). Do not replace variables with literal values in requests or share reports containing headers, token issuance bodies or cookies.
 
-La respuesta de emisión guarda `accessToken` como variable runtime mediante `bru.setVar`, sin `console.log` ni persistencia a environments. Volver a emitirlo al cambiar de ambiente o al expirar. No usar `bru.setEnvVar` para guardarlo: puede escribirlo en disco. El token pertenece al servidor del socio; no se copia a la aplicación móvil o web.
+The token issuance response stores `accessToken` as a runtime variable using `bru.setVar`, without `console.log` or persistence to environment files. Issue another token after switching environments or when it expires. Do not use `bru.setEnvVar` to store it: that method may write it to disk. The token belongs to the partner server; do not copy it to the mobile or web application.
 
-Bruno y el navegador no comparten automáticamente las cookies. El caso web requiere una sesión de prueba suministrada por un flujo autorizado; la colección no lee cookies HttpOnly del navegador. Para verificar el flujo normal sin transferir una sesión, usar el navegador autenticado y el ejemplo `fetch` de la guía. Los casos anónimos mandan una cookie sintética inválida: desactivar el cookie jar al ejecutarlos para evitar otras sesiones.
+Bruno and the browser do not automatically share cookies. The web case requires a test session supplied through an authorized flow; the collection does not read the browser's HttpOnly cookies. To verify the normal flow without transferring a session, use an authenticated browser and the guide's `fetch` example. Anonymous cases send an invalid synthetic cookie: disable the cookie jar when running them to avoid including other sessions.
 
-## Ejecución
+The server selects the active web channel credential using `WEB_CHANNEL_CREDENTIAL_REFERENCE`. This is not a Bruno variable or request parameter. Follow the Identity guide to register a replacement reference, activate it in server configuration and revoke the old reference. After rotation, the same web request must return the newly registered `credentialId`; an expired or revoked selected credential keeps returning 403 until its replacement is active.
 
-1. Preparar local con la [guía de desarrollo](../../../docs/desarrollo.md), o elegir el ambiente desplegado correspondiente.
-2. Ejecutar `00-public`. Un 503 de sesión significa que primero debe restaurarse la configuración web.
-3. Para socio, completar issuer/audience y secretos de la aplicación registrada. Ejecutar en orden `10-partner/01-token.bru` y `10-partner/02-access.bru`. Sin alta externa el éxito no está disponible.
-4. Ejecutar `20-web/01-access.bru` cuando se dispone de sesión de prueba y canal configurado. Una sesión expirada debe refrescarse por `/auth/session` en el flujo que la originó.
-5. Ejecutar negativos. `40-provisioned-negative` requiere preparar el estado descrito antes de cada solicitud, sin revocar credenciales compartidas para probar.
+## Running requests
 
-Con Bruno CLI ya instalado, desde esta carpeta puede ejecutarse el grupo público sin cookies:
+1. Prepare local services using the [development guide](../../../docs/desarrollo.md), or select the corresponding deployed environment.
+2. Run `00-public`. A session 503 means web configuration must first be restored.
+3. For a partner, fill in issuer/audience and the registered application's secrets. Run `10-partner/01-token.bru` followed by `10-partner/02-access.bru`. Success is unavailable until external setup is complete.
+4. Run `20-web/01-access.bru` with a test session and configured channel. Refresh an expired session through `/auth/session` in the flow that created it.
+5. Run negative cases. `40-provisioned-negative` requires the specified state before each request; do not revoke shared credentials for a test.
+
+With Bruno CLI installed, run the public group without cookies from this folder:
 
 ```sh
 bru run 00-public --env local --disable-cookies
 ```
 
-No pasar secretos con `--env-var` en comandos compartidos o registrados. Para comandos e informes consultar las [opciones oficiales](https://docs.usebruno.com/bru-cli/run/options); los informes de llamadas autenticadas deben omitir headers y cuerpos. Las pruebas incluidas comprueban status, error/actor, correlación y ausencia de caché donde aplica. No sustituyen contratos Pact, validación de carga ni el recorrido de cotización.
+Do not pass secrets through `--env-var` in shared or recorded commands. For commands and reports, see the [official options](https://docs.usebruno.com/bru-cli/run/options); authenticated request reports must omit headers and bodies. The included tests check status, error/actor, correlation and cache prevention where applicable. They do not replace Pact contracts, load validation or the quoting flow.

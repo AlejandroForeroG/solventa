@@ -5,9 +5,9 @@ Código: `backend/identity-consent-ecosystem`. Este módulo es la autoridad de i
 ## Documentos
 
 - [Autenticación web: rutas, sesión, configuración y pruebas](autenticacion.md).
-- [Acceso a la API: socios M2M, canal web, contrato y Bruno](acceso-api.md).
+- [API access: M2M partners, web channel, contract and Bruno](acceso-api.md).
 - [Datos de identidad, consentimiento y dispositivos](datos.md).
 - [Fronteras y comunicación entre backends](../../arquitectura.md).
 - [Operación](../../infraestructura/README.md).
 
-La autenticación web y los sondeos de acceso `quotes:create` para socios y canal web están implementados. El acceso M2M requiere alta y configuración WorkOS por ambiente. Cotización, consentimiento efectivo, cuotas, otros permisos de negocio, biometría y login móvil requieren sus casos de uso y validación. La existencia de tablas no acredita esos flujos.
+Web authentication and `quotes:create` access probes for partners and the web channel are implemented. M2M access requires WorkOS setup and configuration per environment. Quoting, effective consent, quotas, other business permissions, biometrics and mobile login still require their use cases and validation. The presence of tables does not demonstrate these flows.

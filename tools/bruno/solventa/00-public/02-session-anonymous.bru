@@ -1,5 +1,5 @@
 meta {
-  name: Sesion anonima
+  name: Anonymous session
   type: http
   seq: 2
 }
@@ -12,11 +12,11 @@ headers {
   Cookie: {{sessionCookieName}}=invalid-synthetic-cookie
 }
 tests {
-  test("Sin sesion valida", function () {
+  test("No valid session", function () {
     expect(res.getStatus()).to.equal(401);
     expect(res.getBody().authenticated).to.equal(false);
   });
 }
 docs {
-  Cookie deliberadamente invalida y sintetica. No iniciar login ni copiar una sesion real para este caso.
+  Deliberately invalid synthetic cookie. Do not sign in or copy a real session for this case.
 }

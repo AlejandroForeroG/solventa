@@ -1,36 +1,36 @@
-# Acceso a la API
+# API access
 
-Identidad comprueba la autenticación y el permiso `quotes:create` para socios y para el canal web. Los endpoints de esta guía son sondeos de acceso: devuelven el actor autorizado, sin crear cotizaciones ni consultar señales o consentimiento. El contrato público está en [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml) y las solicitudes reproducibles en [Bruno](../../../tools/bruno/solventa/README.md).
+Identity verifies authentication and the `quotes:create` permission for partners and the web channel. The endpoints in this guide are access probes: they return the authorized actor without creating quotes or querying signals or consent. The public contract is in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml), and reproducible requests are in [Bruno](../../../tools/bruno/solventa/README.md).
 
-## Ambientes
+## Environments
 
-| Ambiente | URL base |
+| Environment | Base URL |
 |---|---|
 | local | `http://localhost:8787` |
 | dev | `https://solventa-web-dev.ja-forerog1.workers.dev` |
 | staging | `https://solventa-web-staging.ja-forerog1.workers.dev` |
 | prod | `https://solventa-web-prod.ja-forerog1.workers.dev` |
 
-Cada ambiente tiene su configuración, credenciales y registros propios. La ruta pública entra por el Worker web; los backends son privados. La presencia de la ruta en código no aprovisiona una aplicación M2M ni sus permisos en WorkOS.
+Each environment has its own configuration, credentials and records. Public requests enter through the web Worker; backends are private. Having the route in code does not provision an M2M application or its permissions in WorkOS.
 
-## Elegir la identidad
+## Choosing an identity
 
-| Consumidor | Credencial | Comprobación |
+| Consumer | Credential | Verification |
 |---|---|---|
-| Servidor de un socio | Access token JWT de WorkOS Connect M2M, enviado como `Authorization: Bearer <token>` | Firma, issuer, audience, claims, scopes y registro local vigente del socio/credencial |
-| Navegador web de Solventa | Cookie sellada de la [sesión existente](autenticacion.md) | Sesión WorkOS, usuario/sesión local y credencial del canal web de este ambiente |
-| Aplicación móvil | Flujo nativo pendiente | No usar el secreto M2M ni las cookies web como solución móvil |
+| Partner server | WorkOS Connect M2M JWT access token, sent as `Authorization: Bearer <token>` | Signature, issuer, audience, claims, scopes and current local partner/credential record |
+| Solventa web browser | Sealed cookie from the [existing session](autenticacion.md) | WorkOS session, local user/session and this environment's web channel credential |
+| Mobile application | Native flow pending | Do not use the M2M secret or web cookies as a mobile authentication solution |
 
-`subjectToken` es el identificador seudónimo interno del cliente. No es un access token y no autentica peticiones. Tampoco sirve el secreto de `/internal/infra`, reservado al diagnóstico operativo. Una sesión de usuario no acredita por sí sola un socio, un permiso de negocio ni consentimiento.
+`subjectToken` is the customer's internal pseudonymous identifier. It is not an access token and does not authenticate requests. The `/internal/infra` secret is also unsuitable: it is reserved for operational diagnostics. A user session alone does not establish a partner identity, business permission or consent.
 
-## Socio: preparar WorkOS y obtener un token
+## Partner: configure WorkOS and obtain a token
 
-1. En el ambiente WorkOS correspondiente, preparar una organización para el socio y una aplicación Connect M2M asociada; habilitar el alcance `quotes:create` y crear sus credenciales según la [guía oficial de M2M](https://workos.com/docs/authkit/connect/m2m).
-2. Configurar `WORKOS_CONNECT_ISSUER` y `WORKOS_CONNECT_AUDIENCE` en `backend/identity-consent-ecosystem/wrangler.jsonc`, en `vars` de local o del ambiente remoto correspondiente. Son valores públicos; no añadirlos a `IDENTITY_AUTH_JSON`, que mantiene las tres claves secretas de sesión web. El issuer debe ser el origen HTTPS exacto de AuthKit, con un único subdominio formado por letras minúsculas, dígitos o guiones bajo `.authkit.app`, sin ruta ni barra final. La audience es el client ID del **ambiente**, no el client ID de la aplicación M2M. Los [claims oficiales de Connect](https://workos.com/docs/authkit/connect/token-claims) distinguen ambos valores.
-3. Registrar en SQL de Identidad el socio y la credencial local vinculados al issuer, organización y aplicación. Conceder únicamente los scopes acordados y una vigencia acotada. El registro local no crea recursos en WorkOS.
-4. Custodiar `client_id` y `client_secret` de M2M en el servidor del socio. Son distintos de `WORKOS_API_KEY` y de la configuración de sesión web de Solventa. El secreto M2M no se entrega a React ni a Expo.
+1. In the corresponding WorkOS environment, prepare an organization for the partner and an associated Connect M2M application; enable the `quotes:create` scope and create its credentials following the [official M2M guide](https://workos.com/docs/authkit/connect/m2m).
+2. Configure `WORKOS_CONNECT_ISSUER` and `WORKOS_CONNECT_AUDIENCE` in `backend/identity-consent-ecosystem/wrangler.jsonc`, under local `vars` or the corresponding remote environment. These are public values; do not add them to `IDENTITY_AUTH_JSON`, which retains the three web session secrets. The issuer must be the exact HTTPS AuthKit origin, with one subdomain containing lowercase letters, digits or hyphens under `.authkit.app`, without a path or trailing slash. The audience is the **environment** client ID, not the M2M application's client ID. The [official Connect claims reference](https://workos.com/docs/authkit/connect/token-claims) distinguishes these values.
+3. Register the partner and local credential in Identity's SQL store, linked to the issuer, organization and application. Grant only the agreed scopes and a bounded validity period. Local registration does not create WorkOS resources.
+4. Keep the M2M `client_id` and `client_secret` on the partner's server. They differ from `WORKOS_API_KEY` and Solventa's web session configuration. Do not distribute the M2M secret to React or Expo.
 
-El servidor del socio solicita un token con este intercambio HTTP; los marcadores se sustituyen en memoria con la configuración custodiada, nunca en archivos versionados:
+The partner's server requests a token using this HTTP exchange; replace placeholders in memory with the securely held configuration, never in versioned files:
 
 ```http
 POST <WORKOS_CONNECT_ISSUER>/oauth2/token
@@ -39,13 +39,13 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=client_credentials&client_id=<M2M_CLIENT_ID>&client_secret=<M2M_CLIENT_SECRET>&scope=quotes%3Acreate
 ```
 
-Usar `access_token` de la respuesta para llamar `GET /api/v1/access/partner`. Renovar solicitando otro token antes de su expiración; este flujo no representa un usuario ni requiere copiar la sesión web. No guardar tokens o secretos en SQL, logs o Git. Los errores de emisión provienen de WorkOS y no usan el formato de errores de Solventa.
+Use the response's `access_token` to call `GET /api/v1/access/partner`. Renew it by requesting another token before expiry; this flow does not represent a user or require copying a web session. Do not store tokens or secrets in SQL, logs or Git. Token issuance errors come from WorkOS and do not use Solventa's error format.
 
-Los valores `WORKOS_CONNECT_*` parten vacíos hasta completar el alta externa por ambiente. Si falta esa configuración, una verificación de token de socio responde `503 access_unavailable`. No sustituirla por credenciales de otro ambiente. El alta M2M y una llamada real con su token deben verificarse aparte del build y de las pruebas con datos sintéticos.
+The `WORKOS_CONNECT_*` values remain empty until external setup is completed for each environment. Missing configuration makes partner token verification return `503 access_unavailable`. Do not substitute another environment's credentials. M2M setup and a real call using its token must be verified separately from builds and tests with synthetic data.
 
-## Web: sesión y canal autorizado
+## Web: session and authorized channel
 
-El navegador inicia sesión mediante `/auth/login` y el callback existente. Después llama a `/auth/session` para comprobar o refrescar su sesión y a `/api/v1/access/web` con la cookie del mismo origen. La respuesta de acceso incluye el principal interno; no entrega tokens al navegador.
+The browser signs in through `/auth/login` and the existing callback. It then calls `/auth/session` to check or refresh its session, followed by `/api/v1/access/web` with the same-origin cookie. The access response includes the internal principal; it does not expose tokens to the browser.
 
 ```js
 const session = await fetch('/auth/session', { credentials: 'same-origin' });
@@ -53,16 +53,18 @@ if (!session.ok) throw new Error('session_unavailable');
 const access = await fetch('/api/v1/access/web', { credentials: 'same-origin' });
 const result = await access.json();
 if (!access.ok) throw new Error(result.error);
-// result.actor identifica el canal y el principal autorizado.
+// result.actor identifies the channel and authorized principal.
 ```
 
-El canal web es una credencial de servidor con `provider='solventa-web'` y `credential_reference=APP_ENV`. Debe pertenecer a un socio activo, estar vigente/no revocada y tener `quotes:create`. Su ausencia devuelve 403 aunque el usuario haya iniciado sesión. El cliente nunca selecciona el `partnerId`, el `credentialId` ni el `clientId` que se consideran autenticados. La ruta web rechaza con 400 una cabecera Authorization para impedir mezclar tipos de credencial.
+The web channel is a server credential with `provider='solventa-web'`. Identity selects its `credential_reference` through `WEB_CHANNEL_CREDENTIAL_REFERENCE` in `backend/identity-consent-ecosystem/wrangler.jsonc`, under the corresponding environment's `vars`. Initial references are `local:v1`, `dev:v1`, `staging:v1` and `prod:v1`. This is public server configuration, not a browser credential or Bearer token; do not add it to `IDENTITY_AUTH_JSON` or accept it from a request.
 
-La comprobación de acceso no refresca la cookie: si el token de sesión caducó, usar `/auth/session` y volver a intentar el sondeo una vez, según su resultado. Los futuros adaptadores de escrituras web deben enviar el método y el Origin reales al RPC: POST/PUT/PATCH/DELETE exigen Origin igual al configurado; local también admite `http://localhost:5173`. El RPC admite esos métodos y GET/HEAD; no admite OPTIONS. Los sondeos de esta guía solo admiten GET. No hay una API CORS genérica para páginas de terceros.
+The selected credential must belong to an active partner, be valid and unrevoked, and have `quotes:create`. Its absence returns 403 even when the user is signed in. The client never selects the authenticated `partnerId`, `credentialId` or `clientId`. The web route rejects an Authorization header with 400 to prevent mixing credential types.
 
-## Respuestas
+The access check does not refresh the cookie: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require the configured Origin; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
 
-`GET /api/v1/access/partner` y `GET /api/v1/access/web` comprueban el permiso fijo `quotes:create`. No reciben un identificador de actor ni un scope elegido por el cliente. Un ejemplo sintético de respuesta web:
+## Responses
+
+`GET /api/v1/access/partner` and `GET /api/v1/access/web` check the fixed `quotes:create` permission. They do not accept an actor identifier or a client-selected scope. Synthetic web response example:
 
 ```json
 {
@@ -80,70 +82,82 @@ La comprobación de acceso no refresca la cookie: si el token de sesión caducó
 }
 ```
 
-El actor socio tiene `kind:'partner'` y no incluye `principal`. Sus scopes efectivos son la intersección del JWT y de la credencial local; un permiso en uno solo no concede acceso. `X-Trace-Id` preserva un UUID válido de entrada o se genera en el servidor, y coincide con `traceId` del cuerpo. Las respuestas llevan `Cache-Control: no-store`.
+The partner actor has `kind:'partner'` and does not include `principal`. Its effective scopes are the intersection of the JWT and local credential scopes; a permission in only one does not grant access. `X-Trace-Id` preserves a valid incoming UUID or is generated by the server, and matches the body's `traceId`. Responses include `Cache-Control: no-store`.
 
-| HTTP | `error` | Interpretación |
+| HTTP | `error` | Meaning |
 |---|---|---|
-| 400 | `invalid_request` | Entrada inválida para la comprobación |
-| 401 | `unauthorized` | Credencial de autenticación ausente, inválida o expirada; sesión local de usuario inválida |
-| 403 | `forbidden` | Socio/credencial local ausente, inactiva, expirada o revocada; scope insuficiente u Origin no autorizado |
-| 405 | `method_not_allowed` | El sondeo solo acepta GET |
-| 503 | `access_unavailable` | Configuración ausente o verificación/SQL no disponible |
+| 400 | `invalid_request` | Invalid input for the check |
+| 401 | `unauthorized` | Missing, invalid or expired authentication credential; invalid local user session |
+| 403 | `forbidden` | Missing, inactive, expired or revoked local partner/credential; insufficient scope or unauthorized Origin |
+| 405 | `method_not_allowed` | The probe only accepts GET |
+| 503 | `access_unavailable` | Missing configuration or unavailable verification/SQL dependency |
 
-Los errores de acceso incluyen únicamente el código canónico y el UUID de correlación, sin datos del proveedor. Si no puede verificarse identidad o permiso, no se continúa con una operación protegida.
+Access errors include only the canonical code and correlation UUID, without provider data. If identity or permission cannot be verified, a protected operation must not proceed.
 
-## Contrato entre backends
+## Contract between backends
 
-Identidad expone por Service Binding el método `authorizeApiAccessV1`. No es una ruta HTTP pública. Adquisición puede usar su binding existente de Identidad antes de invocar el caso de uso de cotización. El adaptador consumidor construye una de estas entradas a partir de la petición real:
+Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a public HTTP route. Acquisition can use its existing Identity binding before invoking the quoting use case. The consumer adapter builds one of these inputs from the actual request:
 
 ```ts
 { kind: 'partner', token, scope: 'quotes:create' }
 { kind: 'web', cookie, origin, method, scope: 'quotes:create' }
 ```
 
-`cookie` contiene el valor de la cookie sellada, no toda la cabecera Cookie. `origin` es la cabecera Origin recibida; `method` es el método real. La respuesta es `{allowed:true,actor}` o `{allowed:false,error,status}`, con status 400, 401, 403 o 503. Esperar la llamada, aplicar el deadline del recorrido y convertir un fallo del RPC en indisponibilidad; nunca continuar con un actor parcial ni con IDs aportados por el cliente. El contexto de actor se obtiene de Identidad y se traduce al puerto propio del consumidor; no importar repositorios ni entidades de otro backend.
+`cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `method` is the actual method. The response is `{allowed:true,actor}` or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity and translate it into the consumer's own port; do not import another backend's repositories or entities.
 
-Una respuesta positiva vale para esa comprobación y no se almacena como permiso perpetuo. Cada uso verifica firma y estado local vigente; el RPC no renueva cookies. No duplicar llamadas a Identidad sin revisar el límite de una dependencia interna remota del recorrido. La autorización de consentimiento necesaria para señales es una capacidad adicional pendiente.
+A positive response applies to that check and must not be stored as permanent permission. Each use verifies the signature and current local state; the RPC does not renew cookies. Do not duplicate calls to Identity without reviewing the flow's limit of one internal remote dependency. Consent authorization for signals remains an additional pending capability.
 
-## Registrar y revocar acceso local
+## Registering and revoking local access
 
-Desde la raíz, ejecutar el operador de Identidad con ambiente explícito y un JSON local fuera de Git:
+From the repository root, run the Identity operator with an explicit environment and a local JSON file outside Git:
 
 ```sh
 node infra/partner-access.mjs local register infra/.local/partner-registration.json
 node infra/partner-access.mjs local revoke infra/.local/partner-revocation.json
 ```
 
-`register` recibe exactamente `partnerCode`, `provider`, `reference`, `scopes` y `expiresAt`. `partnerCode` tiene hasta 64 caracteres minúsculos, números, guion o guion bajo y empieza con letra/número. `scopes` es exactamente `["quotes:create"]`; `expiresAt` es una fecha UTC futura real con formato `YYYY-MM-DDTHH:mm:ssZ` o milisegundos `.sssZ`.
+`register` accepts exactly `partnerCode`, `provider`, `reference`, `scopes` and `expiresAt`. `partnerCode` contains up to 64 lowercase letters, digits, hyphens or underscores and starts with a letter or digit. `scopes` is exactly `["quotes:create"]`; `expiresAt` is a real future UTC date in `YYYY-MM-DDTHH:mm:ssZ` format, optionally including `.sssZ` milliseconds.
 
-Ejemplo sintético para el canal local; elegir una vigencia futura antes de ejecutar:
+For `provider='solventa-web'`, `reference` must match the selected environment followed by a colon and a revision: `${environment}:[a-z0-9][a-z0-9-]{0,63}`, for example `local:v1`. The revision starts with a lowercase letter or digit and can contain up to 64 lowercase letters, digits or hyphens. Registering a reference does not select it automatically: it must match the server's `WEB_CHANNEL_CREDENTIAL_REFERENCE` to authorize web access.
+
+Registration uses the database uniqueness constraint atomically: concurrent attempts for the same provider/reference produce one registration and `credential_exists` for the duplicate. The losing transaction leaves no extra partner or audit row. A serialization rejection permits one complete transaction retry after successful rollback; an uncertain commit is never retried automatically.
+
+Synthetic local channel example; choose a future expiry before running:
 
 ```json
 {
   "partnerCode": "web-local",
   "provider": "solventa-web",
-  "reference": "local",
+  "reference": "local:v1",
   "scopes": ["quotes:create"],
   "expiresAt": "2027-01-01T00:00:00Z"
 }
 ```
 
-Para M2M, `provider` es `workos-connect` y `reference` contiene el string producido por `JSON.stringify([issuer, organizationId, applicationId])`, sin espacios añadidos. Usar la organización `org_...` y la aplicación `client_...` verificadas del ambiente. No introducir el client secret ni el token en ese archivo. `revoke` recibe solo `provider` y `reference`, por ejemplo:
+For M2M, `provider` is `workos-connect` and `reference` contains the string produced by `JSON.stringify([issuer, organizationId, applicationId])`, without added whitespace. Use the environment's verified `org_...` organization and `client_...` application. Do not place the client secret or token in that file. `revoke` accepts only `provider` and `reference`, for example:
 
 ```json
-{ "provider": "solventa-web", "reference": "local" }
+{ "provider": "solventa-web", "reference": "local:v1" }
 ```
 
-El operador usa host/CA de `.env.infra.<ambiente>` y el estado custodiado `infra/.local/runtime.<ambiente>.json`, con el rol runtime `solventa_<ambiente>_identity` y TLS verificado. No ejecuta migraciones ni usa la credencial administrativa para sus operaciones; las tablas deben existir y la custodia debe estar restaurada según [infraestructura](../../infraestructura/README.md).
+The operator uses the host/CA from `.env.infra.<ambiente>` and the securely held state in `infra/.local/runtime.<ambiente>.json`, with runtime role `solventa_<ambiente>_identity` and verified TLS. It does not run migrations or use administrative credentials for its operations; tables must exist and credentials must be restored according to the [infrastructure guide](../../infraestructura/README.md). In these paths, `<ambiente>` means the selected environment.
 
-El alta crea o reutiliza un socio activo y registra la credencial con auditoría en la misma transacción. Una referencia existente devuelve `credential_exists`, incluso si está revocada; un socio inactivo devuelve `partner_inactive`. No reactiva registros. Revocar una referencia inexistente devuelve `credential_not_found`; repetir una revocación devuelve `changed:false`. La salida satisfactoria contiene ambiente, acción, IDs y `changed`, sin la referencia externa ni secretos. La recuperación de una credencial web ya revocada requiere un procedimiento explícito posterior; no borrar su historial para repetir el alta.
+Registration creates or reuses an active partner and records the credential with audit data in the same transaction. An existing reference returns `credential_exists`, including revoked references; an inactive partner returns `partner_inactive`. It does not reactivate records. Revoking an unknown reference returns `credential_not_found`; repeating a revocation returns `changed:false`. Successful output contains the environment, action, IDs and `changed`, without the external reference or secrets.
 
-## Persistencia y límites
+### Rotate or recover the web channel credential
 
-Identidad conserva `partners` y `partner_credentials`; cada llamada consulta su vigencia. La referencia M2M se forma como `JSON.stringify([issuer, organizationId, applicationId])`, usando claims ya verificados. SQL conserva identificadores y scopes, sin JWT, client secret ni cookie. La revocación local bloquea usos posteriores aunque el JWT siga firmado y dentro de su expiración. La verificación JWT no acredita revocación inmediata en WorkOS: no se hace introspección por petición.
+1. Register a new reference in the same environment, for example `local:v2`, using the same active `partnerCode`, `provider='solventa-web'`, `scopes:["quotes:create"]` and a new future `expiresAt`. Run the existing `register` command with that JSON. Preserve the old record; never reactivate a revoked credential or delete its history.
+2. Set that environment's `WEB_CHANNEL_CREDENTIAL_REFERENCE` to the new reference. Deploy the configuration through the required PR/CI flow, or restart local Workers for a local change. Check `GET /api/v1/access/web` with a valid session and confirm the returned `credentialId` matches the new registration before proceeding.
+3. Revoke the old reference with the existing `revoke` command. Keep the old and new registration/revocation audit records. If the old credential was already revoked, repeating revocation returns `changed:false`.
 
-Esta base no implementa cotización, consentimiento, cuotas, biometría, autorización móvil, Pact ni un catálogo de permisos para todos los futuros recursos. El alta y la revocación local tienen auditoría transaccional; los sondeos no generan todavía auditoría durable de rechazos ni alertas automáticas. La implementación de cada operación debe incorporar sus reglas, autorización de recurso, persistencia y pruebas. La referencia de sesión web permanece en [autenticación](autenticacion.md); la de evolución pública, en [contratos](../../compartidos/contracts/README.md).
+For remote environments, use the corresponding prefix, such as `dev:v2`; a local reference cannot authorize a remote channel. While a still-valid old reference remains selected, registering a replacement alone does not change access. If the old credential has already expired or been revoked, the channel remains denied until the replacement is registered and activated in the running configuration. Rotation changes no client request, cookie name or M2M reference format.
 
-## Comprobaciones
+## Persistence and limitations
 
-Desde la raíz: `npm run test:authentication` valida sesión, verificación JWT, autorización y adaptador HTTP con datos sintéticos; `npm run test:contracts` comprueba el registro de versión/esquemas, y `npm run lint:openapi` valida la especificación. Con SQL local preparado, `npm run test:partner-access:sql` ejercita persistencia de acceso en una base temporal. Estas pruebas no crean aplicaciones WorkOS ni demuestran emisión M2M real. Los sondeos y casos manuales están en la colección Bruno enlazada al inicio.
+Identity owns `partners` and `partner_credentials`; each call checks their validity. The M2M reference is built as `JSON.stringify([issuer, organizationId, applicationId])` using verified claims. SQL stores identifiers and scopes, without JWTs, client secrets or cookies. Local revocation blocks subsequent use even while the JWT remains signed and unexpired. JWT verification does not establish immediate revocation in WorkOS: there is no per-request introspection.
+
+This foundation does not implement quoting, consent, quotas, biometrics, mobile authorization, Pact or a permission catalog for all future resources. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](autenticacion.md); public API evolution is described in [contracts](../../compartidos/contracts/README.md).
+
+## Verification
+
+From the root: `npm run test:authentication` verifies sessions, JWT verification, authorization and the HTTP adapter with synthetic data; `npm run test:contracts` checks the version registry/schemas, and `npm run lint:openapi` validates the specification. With local SQL prepared, `npm run test:partner-access:sql` exercises access persistence in a temporary database. These tests do not create WorkOS applications or demonstrate real M2M token issuance. Probes and manual cases are in the Bruno collection linked above.
