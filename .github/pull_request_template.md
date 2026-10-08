@@ -16,6 +16,8 @@ Explain excluded scope and blockers. Do not claim a finished story merely becaus
 
 Link guides created or updated using GitHub URLs on this branch. If an internal fix has no documentation impact, explain why; every feature must be documented.
 
+For API additions, changes or removals, link the updated domain OpenAPI specification, affected examples/contract tests and owning module guide. Confirm that parameters, schemas, responses/errors and authentication/scopes match the implementation; the published viewer is regenerated from these contracts during the web build.
+
 ## Validation
 
 State executed checks, results and remaining limits. When functionality changes, update its unit tests and retain relevant regressions.

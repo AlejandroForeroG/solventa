@@ -45,6 +45,8 @@ All twelve SVGs are complete vectors: symbol and letters converted to paths, wit
 
 ## Editing or adding assets
 
+IBM Plex Sans (400/500/600/700) and Mono (400/600) complete WOFF2 files are centralized in `fonts/ibm-plex`, with their [pinned upstream versions and license](../../../packages/assets/fonts/ibm-plex/README.md). The API reference copies them into its same-origin public assets and declares `font-display: swap`; installing fonts on the user's device or accessing a font CDN is unnecessary. Other channels are unchanged by this reference-specific integration.
+
 Source geometry lives in `brand/source.json`. To change the brand, edit that source or colors/compositions in `scripts/generate.mjs`, then run from the root:
 
 ```sh
