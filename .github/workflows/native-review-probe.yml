@@ -1,0 +1,20 @@
+name: Native review protection probe
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened]
+permissions:
+  pull-requests: write
+jobs:
+  request-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit a real test-only blocking review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f event=REQUEST_CHANGES \
+            -f body='Temporary native protection probe. This PR must be closed without merge.' \
+            --jq '{id,state,user:.user.login}'
