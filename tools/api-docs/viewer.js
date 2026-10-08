@@ -3,6 +3,11 @@ const download = document.getElementById('download-spec');
 const status = document.getElementById('status');
 let reference;
 
+const header = document.querySelector('.docs-header');
+const syncHeaderHeight = () => document.documentElement.style.setProperty('--docs-header-height', `${header.getBoundingClientRect().height}px`);
+syncHeaderHeight();
+new ResizeObserver(syncHeaderHeight).observe(header);
+
 const specId = url => url.slice('/api/docs/'.length).replace(/\.json$/, '');
 
 async function showSpec(resetHash = false) {
@@ -41,6 +46,7 @@ async function showSpec(resetHash = false) {
       agent: { disabled: true },
       mcp: { disabled: true },
     });
+    if (resetHash) window.scrollTo({ top: 0, behavior: 'instant' });
     download.href = selector.value;
     download.hidden = false;
     status.hidden = true;
