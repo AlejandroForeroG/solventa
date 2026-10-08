@@ -67,7 +67,7 @@ function fixture(t) {
     return git('rev-parse', 'HEAD');
   };
   const mergeSha = candidate();
-  const checks = gitChecks(directory);
+  const checks = gitChecks(directory, start);
   const promotion = { base: 'staging', head: 'feat/quote', sourceSha, mergeSha, trialSha, deployedShas: [deployed], ...checks };
   return { git, commit, candidate, checks, promotion, deployed };
 }
@@ -79,12 +79,27 @@ test('a feature can reach staging after testing in dev without including unrelat
   verifyPromotion(f.promotion);
 });
 
-test('a new integration revision must be in a successful dev deployment', t => {
+test('a new base revision requires its own successful dev deployment', t => {
   const f = fixture(t);
+  f.git('switch', 'feat/quote');
+  const sourceSha = f.commit('fix', 'not deployed yet');
+  const mergeSha = f.candidate('candidate-untested');
+  assert.throws(() => verifyPromotion({ ...f.promotion, sourceSha, mergeSha }), /no successful dev deployment/);
+  assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [] }), /no successful dev deployment/);
+});
+
+test('deployment proof is immutable when the integration branch advances or is deleted', t => {
+  const f = fixture(t);
+  const testedIntegration = f.checks.deploymentTrial(f.deployed);
+  assert.equal(testedIntegration, f.promotion.trialSha);
+  verifyPromotion(f.promotion);
   f.git('switch', 'feat/quote-dev');
-  const untested = f.commit('fix', 'not deployed yet');
-  assert.throws(() => verifyPromotion({ ...f.promotion, trialSha: untested }), /no está incluida/);
-  assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [] }), /no está incluida/);
+  f.commit('quote', 'future work that has not been deployed');
+  verifyPromotion(f.promotion);
+  f.git('switch', 'candidate');
+  f.git('branch', '-D', 'feat/quote-dev');
+  assert.equal(f.checks.deploymentTrial(f.deployed), testedIntegration);
+  verifyPromotion(f.promotion);
 });
 
 test('a cherry-picked base change needs synchronization and a new trial deployment', t => {
@@ -96,11 +111,11 @@ test('a cherry-picked base change needs synchronization and a new trial deployme
   const sourceSha = f.git('rev-parse', 'HEAD');
   const mergeSha = f.candidate('candidate-fixed');
   const changed = { ...f.promotion, sourceSha, mergeSha };
-  assert.throws(() => verifyPromotion(changed), /no contiene el candidato/);
+  assert.throws(() => verifyPromotion(changed), /no successful dev deployment/);
   f.git('switch', 'feat/quote-dev');
   f.git('merge', '--no-ff', '-m', 'test(ci): synchronize corrected base', 'feat/quote');
   const trialSha = f.git('rev-parse', 'HEAD');
-  assert.throws(() => verifyPromotion({ ...changed, trialSha }), /no está incluida/);
+  assert.throws(() => verifyPromotion({ ...changed, trialSha }), /no successful dev deployment/);
   f.git('switch', 'dev');
   f.git('merge', '--no-ff', '-m', 'test(ci): integrate corrected trial', 'feat/quote-dev');
   verifyPromotion({ ...changed, trialSha, deployedShas: [f.git('rev-parse', 'HEAD')] });
@@ -111,7 +126,7 @@ test('an outdated base cannot promote an untested merge result', t => {
   f.git('switch', 'staging');
   f.commit('released-change', 'new staging dependency');
   const mergeSha = f.candidate('candidate-outdated');
-  assert.throws(() => verifyPromotion({ ...f.promotion, mergeSha }), /El merge cambia el candidato/);
+  assert.throws(() => verifyPromotion({ ...f.promotion, mergeSha }), /The merge changes the candidate/);
 });
 
 test('a descendant deployment that reverted or overwrote the trial does not validate it', t => {
@@ -122,7 +137,23 @@ test('a descendant deployment that reverted or overwrote the trial does not vali
     else f.commit('quote', 'another change replaced the trial behavior');
     const laterDeployment = f.git('rev-parse', 'HEAD');
     assert.equal(f.checks.isAncestor(f.promotion.trialSha, laterDeployment), true);
-    assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] }), /mismo contenido/);
+    assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] }), /tested integration tree/);
+    verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment, f.deployed] });
+  }
+});
+
+test('a deployed integration merge cannot replace or revert the candidate files', t => {
+  for (const change of ['revert', 'overwrite']) {
+    const f = fixture(t);
+    f.git('switch', 'feat/quote-dev');
+    if (change === 'revert') f.git('revert', '--no-edit', f.promotion.sourceSha);
+    else f.commit('quote', 'overwritten candidate');
+    f.git('switch', 'dev');
+    f.git('merge', '--no-ff', '-m', 'test(ci): deploy changed integration', 'feat/quote-dev');
+    const laterDeployment = f.git('rev-parse', 'HEAD');
+    assert.equal(f.checks.isAncestor(f.promotion.sourceSha, laterDeployment), true);
+    assert.equal(f.checks.sameTree(f.checks.deploymentTrial(laterDeployment), laterDeployment), true);
+    assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] }), /tested integration tree/);
     verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment, f.deployed] });
   }
 });
@@ -136,13 +167,13 @@ test('a release requires a successful deployment of the exact staging candidate'
   f.git('merge', '--no-ff', '-m', 'test(ci): release staged candidate', 'staging');
   const release = { base: 'prod', head: 'staging', sourceSha, mergeSha: f.git('rev-parse', 'HEAD'), deployedShas: [sourceSha], ...f.checks };
   verifyPromotion(release);
-  assert.throws(() => verifyPromotion({ ...release, deployedShas: [f.deployed] }), /no tiene Deploy exitoso en staging/);
-  assert.throws(() => verifyPromotion({ ...release, head: 'dev' }), /Prod solo recibe/);
+  assert.throws(() => verifyPromotion({ ...release, deployedShas: [f.deployed] }), /no successful staging deployment/);
+  assert.throws(() => verifyPromotion({ ...release, head: 'dev' }), /Prod only accepts/);
 });
 
-test('missing trials and invalid revisions fail closed', t => {
+test('missing merge proof and invalid revisions fail closed', t => {
   const f = fixture(t);
-  assert.throws(() => verifyPromotion({ ...f.promotion, trialSha: undefined }), /Falta la rama/);
-  assert.throws(() => verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' }), /rama base/);
+  assert.throws(() => verifyPromotion({ ...f.promotion, deploymentTrial: () => undefined }), /no successful dev deployment/);
+  assert.throws(() => verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' }), /base branch/);
   assert.throws(() => verifyPromotion({ ...f.promotion, sourceSha: 'invalid' }), /Invalid promotion revision/);
 });

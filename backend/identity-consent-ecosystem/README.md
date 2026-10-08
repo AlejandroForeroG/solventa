@@ -1,3 +1,3 @@
-# Identidad y autenticación
+# Identity and authentication
 
-Documentación: [guía vigente](../../docs/modulos/identity-consent-ecosystem/README.md).
+Documentation: [current guide](../../docs/modules/identity-consent-ecosystem/README.md).

@@ -1,3 +1,3 @@
-# Solventa móvil
+# Solventa mobile
 
-Documentación: [guía vigente](../../docs/canales/mobile/README.md).
+Documentation: [current guide](../../docs/channels/mobile/README.md).

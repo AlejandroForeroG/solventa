@@ -1,27 +1,27 @@
-## Cambio
+## Change
 
-Describe el problema y el comportamiento final.
+Describe the problem and final behavior in English.
 
-## Criterios técnicos del incremento
+## Technical acceptance criteria for this increment
 
-Indica si los criterios proceden de una historia/subtareas consultadas en Jira, del alcance aprobado por el usuario o de una fuente no disponible. Resume solo expectativas técnicas sanitizadas y autocontenidas; conserva enlaces privados y trazabilidad del ticket en Jira/contexto interno. El revisor de GitHub no hereda acceso a Jira ni a la conversación local.
+State whether criteria come from a consulted Jira story/subtasks, user-approved scope or an unavailable source. Include only sanitized, self-contained technical expectations; keep private ticket links and traceability in Jira/internal context. The GitHub reviewer does not inherit Jira access or the local conversation.
 
-| Criterio | Comportamiento esperado | Código/documentación | Evidencia ejecutada y SHA | Estado y límite |
+| Criterion | Expected behavior | Code/documentation | Executed evidence and SHA | State and limit |
 |---|---|---|---|---|
-| C1 | Expectativa observable de este incremento | Archivo o guía enlazada | Ejecución real; pendiente si no existe | Cubierto, fuera del incremento o bloqueado |
+| C1 | Observable expectation for this increment | Linked file or guide | Actual run; pending if unavailable | Covered, outside this increment or blocked |
 
-Explica el alcance excluido y cualquier bloqueo. No afirmar historia terminada por tener CI o revisión verde. Seguir [revisión de cambios](../docs/revision-cambios.md).
+Explain excluded scope and blockers. Do not claim a finished story merely because CI or review is green. Follow [change review](../docs/change-review.md).
 
-## Documentación
+## Documentation
 
-Enlaza las guías creadas o actualizadas con URLs de GitHub de esta rama. Si una corrección interna no afecta documentación, explica por qué; toda feature debe documentarse.
+Link guides created or updated using GitHub URLs on this branch. If an internal fix has no documentation impact, explain why; every feature must be documented.
 
-## Validación
+## Validation
 
-Indica las comprobaciones ejecutadas, sus resultados y los límites pendientes. Si cambia una funcionalidad, actualiza sus pruebas unitarias y conserva las regresiones pertinentes.
+State executed checks, results and remaining limits. When functionality changes, update its unit tests and retain relevant regressions.
 
-Enlaza la revisión de Codex completada sobre el SHA final e indica cómo se resolvieron sus hallazgos. No integrar mientras la revisión esté pendiente o exista un hallazgo que requiera decisión del usuario.
+Link completed Codex review of the final SHA and explain how findings were resolved. Do not integrate while review is pending or a finding needs a user decision.
 
-## Candidato
+## Candidate
 
-Para staging: enlaza la rama base, su rama `-dev` y el Deploy exitoso de dev que contiene esa revisión. Para prod: enlaza el Deploy exitoso del candidato staging. Declara migraciones o cambios de configuración requeridos antes de integrar.
+For staging: link the base branch, its `-dev` branch and the successful dev deployment containing that revision. For prod: link the successful deployment of the staging candidate. Declare migrations or configuration required before integration.

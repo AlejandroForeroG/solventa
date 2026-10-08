@@ -42,4 +42,4 @@ Docs: https://docs.expo.dev/eas/index.md
 
 ## Product documentation
 
-Follow the mandatory documentation rules in the root [AGENTS.md](../../AGENTS.md#required-documentation). Update the existing [mobile guide](../../docs/canales/mobile/README.md) in the same branch and PR for every feature or change to documented behavior. Link to the owning backend module for shared rules and contracts.
+Follow the mandatory documentation rules in the root [AGENTS.md](../../AGENTS.md#required-documentation). Update the existing [mobile guide](../../docs/channels/mobile/README.md) in the same branch and PR for every feature or change to documented behavior. Link to the owning backend module for shared rules and contracts.

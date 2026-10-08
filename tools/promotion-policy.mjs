@@ -5,9 +5,11 @@ import { validateBranch } from './git-policy.mjs';
 const shaPattern = /^[a-f0-9]{40}$/;
 
 function matchesDeployment(promotion, sha) {
-  return shaPattern.test(sha) && (promotion.base === 'prod'
-    ? sha === promotion.sourceSha
-    : promotion.isAncestor(promotion.trialSha, sha) && promotion.sameTree(promotion.trialSha, sha));
+  if (!shaPattern.test(sha)) return false;
+  if (promotion.base === 'prod') return sha === promotion.sourceSha;
+  const trialSha = promotion.deploymentTrial(sha);
+  return shaPattern.test(trialSha ?? '') && promotion.isAncestor(promotion.sourceSha, trialSha)
+    && promotion.sameCandidate(promotion.sourceSha, trialSha) && promotion.sameTree(trialSha, sha);
 }
 
 export function findDeployedSha(fetchPage, accepts) {
@@ -23,51 +25,61 @@ export function findDeployedSha(fetchPage, accepts) {
   }
 }
 
-export function verifyPromotion({ base, head, sourceSha, mergeSha, trialSha, deployedShas, sameTree, isAncestor }) {
+export function verifyPromotion({ base, head, sourceSha, mergeSha, deployedShas, sameTree, sameCandidate, isAncestor, deploymentTrial }) {
   if (!shaPattern.test(sourceSha) || !shaPattern.test(mergeSha)) throw Error('Invalid promotion revision');
-  if (!sameTree(sourceSha, mergeSha)) throw Error('El merge cambia el candidato: actualiza la rama base desde staging y vuelve a validarla en dev.');
+  if (!sameTree(sourceSha, mergeSha)) throw Error('The merge changes the candidate: update the base from staging and validate it again in dev.');
   if (base === 'prod') {
-    if (head !== 'staging') throw Error('Prod solo recibe releases desde staging.');
-    if (!deployedShas.includes(sourceSha)) throw Error('El candidato no tiene Deploy exitoso en staging.');
+    if (head !== 'staging') throw Error('Prod only accepts releases from staging.');
+    if (!deployedShas.includes(sourceSha)) throw Error('The candidate has no successful staging deployment.');
     return;
   }
   if (base !== 'staging') throw Error('Unsupported promotion target');
   validateBranch(head);
-  if (head.endsWith('-dev')) throw Error('Staging requiere la rama base.');
-  if (!shaPattern.test(trialSha ?? '')) throw Error('Falta la rama de integración correspondiente con sufijo -dev.');
-  if (!isAncestor(sourceSha, trialSha)) throw Error('La rama -dev no contiene el candidato base actual. Sincronízala y vuelve a probar en dev.');
-  if (!deployedShas.some(sha => matchesDeployment({ base, sourceSha, trialSha, sameTree, isAncestor }, sha))) {
-    throw Error('La revisión actual de la rama -dev no está incluida con su mismo contenido en un Deploy exitoso de dev.');
+  if (head.endsWith('-dev')) throw Error('Staging requires the base branch.');
+  if (!deployedShas.some(sha => matchesDeployment({ base, sourceSha, sameTree, sameCandidate, isAncestor, deploymentTrial }, sha))) {
+    throw Error('The base candidate has no successful dev deployment preserving its tested integration tree.');
   }
 }
 
-export function gitChecks(cwd = process.cwd()) {
+export function gitChecks(cwd = process.cwd(), baselineSha) {
+  const changedPaths = (a, b) => execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', a, b, '--'], { cwd, encoding: 'utf8', windowsHide: true }).split('\0').filter(Boolean);
   const succeeds = args => {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
     if (result.status === 0) return true;
     if (result.status === 1) return false;
-    throw Error('No se pudo comprobar el historial Git del candidato.');
+    throw Error('Cannot check the candidate Git history.');
   };
   return {
     sameTree: (a, b) => succeeds(['diff', '--quiet', a, b, '--']),
     isAncestor: (a, b) => succeeds(['merge-base', '--is-ancestor', a, b]),
+    sameCandidate: (source, trial) => {
+      if (!shaPattern.test(baselineSha ?? '')) throw Error('Invalid candidate baseline');
+      const changed = new Set(changedPaths(baselineSha, source));
+      return !changedPaths(source, trial).some(path => changed.has(path));
+    },
+    deploymentTrial: sha => {
+      const parents = execFileSync('git', ['show', '-s', '--format=%P', sha], { cwd, encoding: 'utf8', windowsHide: true }).trim().split(' ');
+      return parents.length === 2 && parents.every(parent => shaPattern.test(parent)) ? parents[1] : undefined;
+    },
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const { TARGET_BRANCH: base, SOURCE_BRANCH: head, SOURCE_SHA: sourceSha, REPOSITORY: repository } = process.env;
+    const { TARGET_BRANCH: base, SOURCE_BRANCH: head, SOURCE_SHA: sourceSha, BASELINE_SHA: baselineSha, REPOSITORY: repository } = process.env;
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '') || !['staging', 'prod'].includes(base)) throw Error('Invalid promotion context');
-    if (base === 'staging') validateBranch(head);
+    if (base === 'staging') {
+      validateBranch(head);
+      if (!shaPattern.test(baselineSha ?? '')) throw Error('Invalid candidate baseline');
+    }
     const mergeSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).trim();
-    const trialSha = base === 'staging' ? execFileSync('git', ['rev-parse', '--verify', `refs/remotes/origin/${head}-dev`], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim() : undefined;
     const upstream = base === 'staging' ? 'dev' : 'staging';
-    const promotion = { base, head, sourceSha, mergeSha, trialSha, ...gitChecks() };
+    const promotion = { base, head, sourceSha, mergeSha, ...gitChecks(process.cwd(), baselineSha) };
     const deployedSha = findDeployedSha(page => JSON.parse(execFileSync('gh', [
       'api', `repos/${repository}/actions/workflows/deploy.yml/runs?event=push&branch=${upstream}&per_page=100&page=${page}`,
       '--jq', '{count: (.workflow_runs | length), candidates: [.workflow_runs[] | select(.conclusion == "success") | .head_sha]}',
     ], { encoding: 'utf8', windowsHide: true, maxBuffer: 256 * 1024, timeout: 30_000 })), sha => matchesDeployment(promotion, sha));
     verifyPromotion({ ...promotion, deployedShas: deployedSha ? [deployedSha] : [] });
-    console.log(JSON.stringify({ target: base, candidate: sourceSha, upstream, status: 'passed' }));
+    console.log(JSON.stringify({ target: base, candidate: sourceSha, upstream, deployment: deployedSha, testedIntegration: base === 'staging' ? promotion.deploymentTrial(deployedSha) : undefined, status: 'passed' }));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
