@@ -1,0 +1,140 @@
+{
+  "consumer": {
+    "name": "solventa-web-spa"
+  },
+  "interactions": [
+    {
+      "description": "a logout with an active session",
+      "providerStates": [
+        {
+          "name": "an active session"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/auth/logout"
+      },
+      "response": {
+        "body": {
+          "logoutUrl": "https://auth.example.invalid/logout"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.logoutUrl": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^https://.+"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a logout without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/auth/logout"
+      },
+      "response": {
+        "body": {
+          "authenticated": false
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 401
+      }
+    },
+    {
+      "description": "a session check while authentication is unavailable",
+      "providerStates": [
+        {
+          "name": "authentication is not configured"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/auth/session"
+      },
+      "response": {
+        "body": {
+          "error": "authentication_unavailable"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 503
+      }
+    },
+    {
+      "description": "a session check with an active session",
+      "providerStates": [
+        {
+          "name": "an active session"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/auth/session"
+      },
+      "response": {
+        "body": {
+          "authenticated": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a session check without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/auth/session"
+      },
+      "response": {
+        "body": {
+          "authenticated": false
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 401
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "solventa-web"
+  }
+}

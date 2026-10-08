@@ -10,6 +10,7 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 | `openapi/v<N>/common.yaml` | Shared version components (`X-Trace-Id`, `Error`, deprecation headers); domain specs reference them with `$ref` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
+| `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
 ## API versioning
@@ -46,9 +47,37 @@ Set its `deprecatedAt` and `sunset` in `apiVersions`; in **every** spec in its d
 ```sh
 npm run lint:openapi     # Redocly checks all .yaml files in openapi/
 npm run test:contracts   # Versioning, registry/spec agreement and capture schema
+npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
 ```
 
-Both run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+
+## Consumer contracts (Pact)
+
+Pact records what a consumer actually uses from a provider and checks that the provider still satisfies it. OpenAPI describes what a provider offers; a pact describes what a consumer depends on, so a change that breaks a consumer fails CI before it is promoted. Pacts live in the repository; there is no Pact Broker, so `can-i-deploy` is not available and `npm run check` is the control.
+
+Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-web`), covering `GET /auth/session` (active, anonymous and authentication unavailable) and `POST /auth/logout` (active and anonymous). The SPA calls come from `apps/web/src/api/auth.ts`, the same module the application uses.
+
+| Path | Role |
+|---|---|
+| `tests/pact/*.consumer.test.ts` | Runs the real client against a Pact mock server and writes the pact to a temporary directory. The test fails if the result differs from the committed file (ignoring `metadata`, which holds the Pact library version) |
+| `tests/pact/web-worker.provider.test.ts` | Replays every committed pact against `apps/web/worker/index.ts` served over HTTP |
+| `tests/pact/pact-guard.test.ts` | Alters a copy of a committed pact and requires verification to fail, proving a broken contract blocks CI |
+| `tests/pact/support/` | Local HTTP server for a Worker `fetch`, pact file helpers and the provider states |
+
+Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` simulates the Identity binding, because a valid session needs WorkOS and SQL; those paths are covered by `tests/authentication.test.ts` and the SQL suites. Verification adds the `Origin` header to POST requests, as browsers do.
+
+To change an existing contract or add a consumer:
+
+1. Change the client or the provider and the consumer test together.
+2. Run `npm run pact:update` to regenerate `packages/contracts/pacts/` and review the diff.
+3. Run `npm run test:pact`. A provider mismatch fails here, which means the change is incompatible: keep the old behavior or publish a new API version.
+
+Run `npm run pact:update` only for an intentional contract change, never to make a failing check pass, and never edit the JSON by hand. CI only verifies; it does not update pacts. Changes that do not alter the calls to the API or their expected responses, such as styles or copy, need no update.
+
+Pact protects only what a consumer test declares. A new API call in the SPA without its consumer test is not detected, so add the test in the same change as the call.
+
+To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test. Specify only the fields the consumer reads and use matchers for values that vary.
 
 ## Historical capture
 

@@ -22,7 +22,7 @@ npm ci
 npm run check
 ```
 
-`check` checks Git/promotion policy, core dependencies, architecture tests, credentials and environment boundaries, API versioning/contracts (tests and OpenAPI lint), lint, types and builds. The mobile workspace exports for web; this does not validate native capabilities. All twelve remote Workers are packaged with `--dry-run` for dev, staging and prod. CI also starts CockroachDB with TLS and exercises real SQL and RPC through local Workers.
+`check` checks Git/promotion policy, core dependencies, architecture tests, credentials and environment boundaries, API versioning/contracts (tests, Pact consumer contracts and OpenAPI lint), lint, types and builds. The mobile workspace exports for web; this does not validate native capabilities. All twelve remote Workers are packaged with `--dry-run` for dev, staging and prod. CI also starts CockroachDB with TLS and exercises real SQL and RPC through local Workers.
 
 `npm ci` installs native Git hooks through `prepare`. `pre-commit` and `pre-push` validate the branch; `commit-msg` validates its message. Use lowercase branches `feat/<description>`, `fix/<description>`, `refactor/<description>` or `test/<description>`, with hyphens, and titles `feat|fix|refactor|test(module): description` up to 150 characters. Examples: `feat/add-login` and `feat(auth): add login`. The commit body may include more detail. Documentation, comments, tests and code identifiers use English; responses to the user use Spanish.
 

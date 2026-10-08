@@ -8,4 +8,6 @@ Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Servi
 
 The Worker applies API versioning to `/api/v<N>/...`: it adds deprecation headers and returns 410 when a version reaches its retirement date. See [contracts](../../shared/contracts/README.md).
 
+The SPA reaches `/auth/*` through `src/api/auth.ts`. Its calls are protected by a Pact contract with the web Worker; changing them requires updating the pact ([consumer contracts](../../shared/contracts/README.md#consumer-contracts-pact)).
+
 Logo and favicon come from `packages/assets`; preserve the green identity and loading, error and session states when extending the UI.
