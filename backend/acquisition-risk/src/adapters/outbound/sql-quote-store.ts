@@ -36,8 +36,10 @@ export class SqlQuoteStore implements QuoteStore {
     };
     const client = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
-    await timed('connect', () => client.connect());
+    let connected = false;
     try {
+      await timed('connect', () => client.connect());
+      connected = true;
       const found = await timed('lookup', () => this.find(client, q));
       if (found) { outcome = found.kind; return found; }
 
@@ -76,7 +78,7 @@ export class SqlQuoteStore implements QuoteStore {
       outcome = 'created';
       return { kind: 'created', quote: stored };
     } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
+      if (connected) await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       await timed('close', () => client.end().catch(() => {}));
