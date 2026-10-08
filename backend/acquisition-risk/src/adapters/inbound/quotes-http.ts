@@ -17,6 +17,33 @@ function safeCode(error: unknown): string {
   return typeof code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : 'unexpected_error';
 }
 
+// Returns null as soon as the body is known to exceed the limit, without holding more than it allows.
+async function readLimited(request: Request): Promise<string | null> {
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 // Identity's cookie names: no prefix locally, where the origin is plain HTTP.
 const sessionCookie = (appEnv: string) => (appEnv === 'local' ? '' : '__Host-') + 'solventa-session';
 
@@ -39,11 +66,10 @@ export function quotesHandler(quotes: CreateQuote, channel: 'partner' | 'web') {
     try {
       // A browser session and a partner token never mix: a web request carrying Authorization is malformed.
       if (channel === 'web' && c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
-      const raw = await c.req.text();
+      const raw = await readLimited(c.req.raw);
       let body: unknown = undefined;
-      let malformed = false;
-      if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) malformed = true;
-      else try { body = JSON.parse(raw); } catch { malformed = true; }
+      let malformed = raw === null;
+      if (raw !== null) try { body = JSON.parse(raw); } catch { malformed = true; }
 
       const result = await quotes.execute({ credential: credentialFrom(c, channel), idempotencyKey: c.req.header('idempotency-key') ?? null, body: malformed ? undefined : body, traceId });
       if (result.status === 'denied') {
