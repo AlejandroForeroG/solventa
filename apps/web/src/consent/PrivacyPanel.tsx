@@ -69,6 +69,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
       {items.map(item => {
         const from = shortDate(new Date(item.grantedAt));
         const sources = item.sources.map(code => intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })).join(' · ');
+        const scopes = item.scopes.map(code => intl.formatMessage({ id: `scope.${code}`, defaultMessage: code })).join(' · ');
         const period = item.revokedAt
           ? intl.formatMessage({ id: 'privacy.periodRevoked' }, { from, date: shortDate(new Date(item.revokedAt)) })
           : intl.formatMessage({ id: 'privacy.period' }, { from, to: shortDate(new Date(item.expiresAt)) });
@@ -80,6 +81,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
             </div>
             <p className="consent-item-purpose">{intl.formatMessage({ id: 'consent.purposeShort' })}</p>
             <p className="note">{sources}</p>
+            <p className="note">{intl.formatMessage({ id: 'privacy.scopes' }, { scopes })}</p>
             <p className="mono seal-line">{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
           </div>
           {item.status === 'active' && confirming !== item.consentId &&

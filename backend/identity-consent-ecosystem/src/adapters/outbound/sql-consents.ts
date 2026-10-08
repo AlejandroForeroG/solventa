@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import type { Principal } from '../../application/authentication';
+import { safeCode } from '../safe-code';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../application/ports/consents';
 import type { Consent, ScopeCode, SourceCode } from '../../domain/consent';
 
@@ -142,12 +143,17 @@ export class SqlConsents implements ConsentStore {
   async forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]> {
     const client = await this.connect();
     try {
-      const result = await client.query<Row>(
-        `SELECT ${prefixed} FROM identity.consents c JOIN identity.clients owner ON owner.id = c.client_id
-         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING = ANY(c.scopes) AND c.consent_code IS NOT NULL
-         ORDER BY c.granted_at DESC, c.id LIMIT 20`, [subjectToken, purposeCode, scope]);
-      await this.auditExpired(client, subjectToken, result.rows, now);
-      return result.rows.map(fromRow);
+      const of = `FROM identity.consents c JOIN identity.clients owner ON owner.id = c.client_id
+         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING = ANY(c.scopes) AND c.consent_code IS NOT NULL`;
+      const parameters = [subjectToken, purposeCode, scope];
+      // Only usable consents are searched, so newer revoked or expired ones never hide an active one; without
+      // any, the latest record is read just to explain the denial.
+      const usable = await client.query<Row>(
+        `SELECT ${prefixed} ${of} AND c.revoked_at IS NULL AND c.expires_at > $4 ORDER BY c.granted_at DESC, c.id LIMIT 20`, [...parameters, now]);
+      const rows = usable.rows.length ? usable.rows
+        : (await client.query<Row>(`SELECT ${prefixed} ${of} ORDER BY c.granted_at DESC, c.id LIMIT 1`, parameters)).rows;
+      await this.auditExpired(client, subjectToken, rows, now);
+      return rows.map(fromRow);
     } finally {
       await client.end().catch(() => {});
     }
@@ -165,15 +171,15 @@ export class SqlConsents implements ConsentStore {
        VALUES (gen_random_uuid(), 'consent', $1, $2, 1, $3, $4)`, [aggregateId, eventType, JSON.stringify(payload), traceId]);
   }
 
-  // Expiry has no moment of its own, so it is recorded once, the first time a read finds it.
-  // The consent answer never depends on this write.
+  // Expiry has no moment of its own, so it is recorded once, the first time a read finds it. The consent
+  // answer never depends on this write: a failure is logged and the next read tries again.
   private async auditExpired(client: Client, actor: string, rows: Row[], now: Date) {
     for (const row of rows.filter(r => !r.revoked_at && r.expires_at.getTime() <= now.getTime())) {
       await client.query(
         `INSERT INTO identity.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
          SELECT $1, 'consent.expired', 'consent', $2, 'success', gen_random_uuid(), now() + interval '${RETENTION}'
          WHERE NOT EXISTS (SELECT 1 FROM identity.audit_events WHERE resource_type = 'consent' AND resource_id = $2 AND action = 'consent.expired')`,
-        [actor, row.id]).catch(() => {});
+        [actor, row.id]).catch(error => console.error(JSON.stringify({ event: 'consent_expiry_audit_failed', code: safeCode(error) })));
     }
   }
 }
