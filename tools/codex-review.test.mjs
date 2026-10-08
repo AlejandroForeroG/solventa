@@ -94,6 +94,26 @@ test('respects rate limit headers for 403/429 and the original deadline', async 
   assert.equal(attempts, 2);
   assert.ok(pauses[0] > 1000 && pauses[0] <= 4000);
 });
+test('retries GraphQL rate limits carried by HTTP 200, but not query or permission errors', async () => {
+  for (const error of [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }, { message: 'You have exceeded a secondary rate limit' }]) {
+    let attempts = 0;
+    const pauses = [];
+    const value = await requestJson('https://api.github.com/graphql', 'synthetic', async () => {
+      attempts++;
+      return Response.json(attempts === 1 ? { errors: [error] } : { data: { nodes: [] } });
+    }, async ms => { pauses.push(ms); });
+    assert.equal(attempts, 2);
+    assert.deepEqual(pauses, [60_000]);
+    assert.deepEqual(value.data.nodes, []);
+  }
+  let attempts = 0;
+  const value = await requestJson('https://api.github.com/graphql', 'synthetic', async () => {
+    attempts++;
+    return Response.json({ errors: [{ type: 'FORBIDDEN', message: 'Access denied' }] });
+  }, async () => {});
+  assert.equal(attempts, 1);
+  assert.equal(value.errors[0].type, 'FORBIDDEN');
+});
 
 test('retries interrupted 2xx JSON bodies and secondary limits without retry headers', async () => {
   let attempts = 0;

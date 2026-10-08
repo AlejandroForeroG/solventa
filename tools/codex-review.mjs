@@ -33,9 +33,16 @@ export async function requestJson(url, token, fetcher = fetch, pause = ms => new
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
           'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(Math.min(30_000, deadline - Date.now())),
       });
-      if (response.ok) return await response.json();
+      let limited = false;
+      if (response.ok) {
+        const payload = await response.json();
+        limited = url === 'https://api.github.com/graphql' && Array.isArray(payload.errors) && payload.errors.length > 0 &&
+          payload.errors.every(error => error?.type === 'RATE_LIMITED' ||
+            (typeof error?.message === 'string' && /secondary rate limit|API rate limit exceeded/i.test(error.message)));
+        if (!limited) return payload;
+      }
       const retryAfter = Number(response.headers.get('retry-after'));
-      let limited = response.status === 429 || (response.status === 403 &&
+      limited ||= response.status === 429 || (response.status === 403 &&
         (retryAfter > 0 || response.headers.get('x-ratelimit-remaining') === '0'));
       if (response.status === 403 && !limited) {
         const payload = await response.json().catch(error => {
@@ -46,7 +53,7 @@ export async function requestJson(url, token, fetcher = fetch, pause = ms => new
       }
       const transient = limited || [500, 502, 503, 504].includes(response.status);
       if (!response.bodyUsed) await response.body?.cancel();
-      if (!transient || attempt === 2) throw new Error(`GitHub API returned ${response.status}`);
+      if (!transient || attempt === 2) throw new Error(response.ok && limited ? 'GitHub GraphQL rate limit persists' : `GitHub API returned ${response.status}`);
       if (limited) {
         const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000 - Date.now();
         delay = retryAfter > 0 ? retryAfter * 1000 : reset > 0 ? reset + 1000 : 60_000;
