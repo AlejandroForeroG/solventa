@@ -1,6 +1,6 @@
 # Solventa API in Bruno
 
-Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `prod`. The contract and access setup are in the [Identity guide](../../../docs/modulos/identity-consent-ecosystem/acceso-api.md); schemas are in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
+Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `prod`. The contract and access setup are in the [Identity guide](../../../docs/modules/identity-consent-ecosystem/api-access.md); schemas are in [OpenAPI](../../../packages/contracts/openapi/v1/identity-access.yaml).
 
 | Folder | Checks | Requirement |
 |---|---|---|
@@ -30,7 +30,7 @@ Bruno and the browser do not automatically share cookies. The web case requires 
 
 ## Running requests
 
-1. Prepare local services using the [development guide](../../../docs/desarrollo.md), or select the corresponding deployed environment.
+1. Prepare local services using the [development guide](../../../docs/development.md), or select the corresponding deployed environment.
 2. Run `00-public`. A session 503 means web configuration must first be restored.
 3. For a partner, fill in issuer/audience and the registered application's secrets. Run `10-partner/01-token.bru` followed by `10-partner/02-access.bru`. Success is unavailable until external setup is complete.
 4. Run `20-web/01-access.bru` with a test session. Refresh an expired session through `/auth/session` in the flow that created it. To check revocation, sign out in that flow and expect 401 from the same request.
