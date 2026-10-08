@@ -18,7 +18,7 @@ The automatic reviewer does not inherit a local conversation or a Jira connector
 - Identify the criterion source: consulted story/subtasks, user-approved scope or unavailable source. Do not publish private ticket keys/links, credentials, PII, partner data, conversations, owners or schedules.
 - Express observable expectations for the increment with local identifiers such as C1/C2. Include contracts, errors, authorization or limits needed to judge the change; do not copy the complete story or planning.
 - Map each criterion to files/guides accessible in the PR and evidence actually executed on an identified revision. A private reference is not evidence available to the reviewer.
-- Explain excluded scope and remaining blockers. If technical content cannot be shared safely, retain it in authorized context and disclose that GitHub review cannot check that criterion. Never claim the gate validated it.
+- Explain excluded scope and remaining blockers. If technical content cannot be shared safely, retain it in authorized context and disclose that GitHub review cannot check that criterion. Never claim CI or resolved conversations validated it.
 
 Example format, representing neither a real story nor executed results:
 
@@ -46,12 +46,12 @@ Record per criterion:
 
 A planned test has not been executed. An in-memory repository does not establish a SQL transaction; a mobile export does not establish biometrics; smoke does not establish the complete business flow. If evidence does not correspond to the final SHA, identify what changed and revalidate affected behavior.
 
-Resolve fixable findings within scope, update tests/documentation and request review of the final revision. If a finding is ambiguous, contradicts requirements, needs a product decision or cannot be resolved, explain it to the user and await their response before integration. Never mark a conversation resolved without fixing it or explicitly agreeing on its treatment.
+Resolve fixable findings within scope and update tests/documentation. Request another review when substantive changes warrant it. If a finding is ambiguous, contradicts requirements, needs a product decision or cannot be resolved, explain it to the user and await their response before integration. Never mark a conversation resolved without fixing it or explicitly agreeing on its treatment.
 
 ## What automation checks
 
-CI runs programmed Git policy, architecture, contract, type, lint, build and SQL integration checks. The review gate checks that Codex completed review on the current SHA, while GitHub enforces protections/conversations. Operational details belong in [CI/CD](infrastructure/ci-cd.md).
+CI runs programmed Git policy, architecture, contract, type, lint, build and SQL integration checks. GitHub's native protection requires all review conversations to be resolved before merging, alongside passing CI and applicable human approvals. No separate Codex status, custom review workflow or GitHub App is required. Operational details belong in [CI/CD](infrastructure/ci-cd.md).
 
-The gate does not retrieve Jira stories or automatically compare their criteria. AGENTS and the PR brief guide explicit reviewer checks; they are not a deterministic acceptance verifier. A Completed review may contain findings and does not mean human approval, full acceptance or a finished story. Evaluate findings and evidence before integrating, and keep Jira closure decisions under their own authorization.
+Conversation resolution does not prove that Codex completed a review, retrieve Jira stories or automatically compare their criteria. AGENTS and the PR brief guide explicit reviewer checks; they are not a deterministic acceptance verifier. A Completed review may contain findings and does not mean human approval, full acceptance or a finished story. Evaluate findings and evidence before integrating, and keep Jira closure decisions under their own authorization.
 
 [OpenAI's official review-rule documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md#add-code-review-rules) specifies `## Code Review Rules` in the applicable AGENTS file. General rules therefore live at the root and this guide provides the procedure; mechanical controls remain in CI.
