@@ -8,7 +8,7 @@
 | [Mockup móvil](https://mobile-seven-snowy.vercel.app/#f1) | Pantallas y navegación del canal móvil; contrastar con el recorrido y criterios vigentes |
 | [Marca y assets compartidos](../compartidos/assets/README.md) | Logos, variantes y consumo en cada canal |
 | [Fuente de marca](../../packages/assets/brand/source.json) y [generador](../../packages/assets/scripts/generate.mjs) | Geometría, colores y generación; los registros de `src` son generados |
-| [Estilos web](../../apps/web/src/index.css) | Implementación CSS actual, variables y estados de interacción |
+| [Estilos web](../../apps/web/src/index.css) | Estilos CSS base y estados de interacción implementados |
 | [Tema móvil](../../apps/mobile/src/theme/index.ts) | Tokens implementados de color y espaciado; reutilizarlos al extender el canal |
 | [Guía web](web/README.md) y [guía móvil](mobile/README.md) | Estructura y ejecución de cada canal |
 | [Autenticación](../modulos/identity-consent-ecosystem/autenticacion.md#configuración-y-ejecución) | Branding de la pantalla alojada en WorkOS |
