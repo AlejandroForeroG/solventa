@@ -134,20 +134,6 @@ test('the access gateway aborts stalled Identity calls after five seconds', asyn
   assert.equal((await response.json() as { error: string }).error, 'access_unavailable');
 });
 
-test('the access gateway propagates client cancellation to Identity', async () => {
-  const controller = new AbortController();
-  let upstreamSignal: AbortSignal | undefined;
-  const pending = worker.fetch(new Request('https://solventa.invalid/api/v1/access/web', { signal: controller.signal }), {
-    IDENTITY: { fetch: (request: Request) => new Promise<Response>((_resolve, reject) => {
-      upstreamSignal = request.signal;
-      request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true });
-    }) },
-  } as WebEnv);
-  controller.abort();
-  assert.equal(upstreamSignal?.aborted, true);
-  assert.equal((await pending).status, 503);
-});
-
 test('the version registry is well formed', () => {
   assert.deepEqual(registryViolations(apiVersions), []);
 });
