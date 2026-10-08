@@ -20,6 +20,9 @@ export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix:
   useEffect(() => { heading.current?.focus(); }, []);
   const creditEnd = new Date();
   creditEnd.setMonth(creditEnd.getMonth() + quote.termMonths);
+  // The response is untrusted: without a parseable date the validity is omitted rather than invented.
+  const validUntil = new Date(quote.validUntil);
+  const hasValidity = !Number.isNaN(validUntil.getTime());
   return <section className="step">
     <div className="banner banner-info">
       <span aria-hidden="true" className="banner-icon">i</span>
@@ -31,7 +34,7 @@ export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix:
           <h1 ref={heading} tabIndex={-1} className="section-label">{intl.formatMessage({ id: 'result.label' })}</h1>
           <p className="mono">{quote.quoteId}</p>
         </div>
-        <span className="pill pill-ok">{intl.formatMessage({ id: 'result.validUntil' }, { date: dayMonthYear(new Date(quote.validUntil)) })}</span>
+        {hasValidity && <span className="pill pill-ok">{intl.formatMessage({ id: 'result.validUntil' }, { date: dayMonthYear(validUntil) })}</span>}
       </div>
       <dl className="facts">
         <div>
