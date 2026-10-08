@@ -5,13 +5,13 @@ Rama de trabajo: `feat/<descripcion>`, `fix/<descripcion>`, `refactor/<descripci
 ## Flujo
 
 1. Implementar y probar en local; abrir PR desde una rama de trabajo hacia `dev`.
-2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. El PR hacia dev requiere checks verdes antes de integrar; no necesita revisión humana.
+2. CI valida política, arquitectura, pruebas, lint, tipos, builds y SQL/RPC local con TLS. Cada PR requiere checks verdes y revisión de Codex terminada para su commit actual antes de integrar; dev no necesita revisión humana.
 3. Al integrar en `dev`, Deploy repite CI, despliega los cuatro Workers de dev y verifica SQL, RPC y aislamiento.
 4. Probar el flujo real en dev; abrir PR `dev` → `staging`. CI exige que el commit de origen tenga un Deploy exitoso y que el árbol resultante coincida con el origen. Integrar con merge normal.
 5. Al integrar en `staging`, se ejecuta CI y despliegue de staging. Probar el candidato y abrir PR `staging` → `prod` con el mismo control de despliegue previo y contenido. Integrar con merge normal.
 6. Al integrar en `prod`, CI y Deploy publican y verifican producción. Revisar la ejecución y los flujos del producto.
 
-Las tres ramas de ambientes requieren PR, checks `policy` y `validate` con la rama actualizada y resolución de conversaciones; aplican también a administradores. Dev no exige aprobación humana. Staging y prod requieren una aprobación antes de integrar. No hacer pushes directos. La validación humana de negocio se documenta en el PR de promoción y la revisión. El control automático acredita el despliegue previo, no todos los criterios funcionales.
+Las tres ramas de ambientes requieren PR, checks `policy`, `validate` y `codex-review` con la rama actualizada y resolución de conversaciones; aplican también a administradores. Dev no exige aprobación humana. Staging y prod requieren una aprobación antes de integrar. No hacer pushes directos. La validación humana de negocio se documenta en el PR de promoción y la revisión. El control automático acredita el despliegue previo, no todos los criterios funcionales.
 
 Los merge commits cambian el SHA entre ambientes; se conserva el contenido del candidato, comprobado con git diff en el PR de promoción. No usar squash ni rebase entre ambientes, ni agregar cambios específicos en staging/prod. Squash se admite al integrar una feature en dev. `main` queda como referencia histórica, sin despliegue.
 
@@ -71,3 +71,9 @@ conexión administrativa READ ONLY; si existe schema_migration_failures, consult
 `SELECT version, checksum, error_code FROM <esquema>.schema_migration_failures` por
 propietario. No quitar marcas sin reconciliar. La verificación runtime no reemplaza
 este control administrativo ni recibe esas credenciales en CD.
+
+## Revisión obligatoria de Codex
+
+El check `codex-review` espera hasta 12 minutos por el resumen Completed publicado por el bot oficial para el SHA actual del PR. No acepta revisiones de commits anteriores, otro autor, revisión de seguridad ni estados Running/Failed. Un rechazo formal de Codex bloquea el check; GitHub exige además resolver las conversaciones. El job no usa secretos de ambientes ni despliega. Deploy vuelve a ejecutar las pruebas tras el merge; la revisión se exige antes de integrar el PR.
+
+Si Codex falla, agota su cuota o no termina, el check falla y el PR permanece bloqueado. Solicitar `@codex review` y volver a ejecutar el check fallido cuando termine. Después de subir correcciones, solicitar una nueva revisión del commit actual: la configuración de Codex revisa automáticamente al abrir el PR. No saltarse el check ni reutilizar la revisión anterior. El reconocimiento del resumen depende del formato actual del conector; un cambio de formato falla de forma cerrada y requiere actualizar el parser y sus pruebas.

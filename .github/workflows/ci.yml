@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
     branches: [dev, staging, prod]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_call:
     inputs:
       revision:
@@ -11,7 +11,23 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 jobs:
+  codex-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node --test tools/codex-review.test.mjs
+      - run: node tools/codex-review.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
   policy:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
