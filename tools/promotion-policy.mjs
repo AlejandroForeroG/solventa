@@ -17,8 +17,8 @@ export function verifyPromotion({ base, head, sourceSha, mergeSha, trialSha, dep
   if (head.endsWith('-dev')) throw Error('Staging requiere la rama base.');
   if (!shaPattern.test(trialSha ?? '')) throw Error('Falta la rama de integración correspondiente con sufijo -dev.');
   if (!isAncestor(sourceSha, trialSha)) throw Error('La rama -dev no contiene el candidato base actual. Sincronízala y vuelve a probar en dev.');
-  if (!deployedShas.some(sha => shaPattern.test(sha) && isAncestor(trialSha, sha))) {
-    throw Error('La revisión actual de la rama -dev no está incluida en un Deploy exitoso de dev.');
+  if (!deployedShas.some(sha => shaPattern.test(sha) && isAncestor(trialSha, sha) && sameTree(trialSha, sha))) {
+    throw Error('La revisión actual de la rama -dev no está incluida con su mismo contenido en un Deploy exitoso de dev.');
   }
 }
 

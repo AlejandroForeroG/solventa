@@ -46,7 +46,7 @@ Abrir PR **`feat/cotizacion` → `staging`** cuando su comportamiento esté vali
 El gate comprueba que:
 
 - El SHA actual de la base es ancestro del SHA actual de su rama remota `<base>-dev`.
-- Ese SHA de integración es ancestro de un Deploy exitoso de dev.
+- Ese SHA de integración es ancestro de un Deploy exitoso de dev y su árbol coincide con el desplegado. La ascendencia sola no basta: un descendiente que revierte o sobrescribe el contenido no acredita esa prueba. Sincronizar la rama de integración con dev antes de integrar si avanzó.
 - El árbol del merge candidato a staging coincide con el árbol de la base.
 
 Si staging avanzó, actualizar la base desde `origin/staging` mediante merge normal, resolver ahí la compatibilidad del candidato y sincronizarla en `-dev`. Repetir pruebas y PR/Deploy en dev antes de promover; no aprobar un resultado combinado que no se haya probado. El gate no acredita por sí solo pruebas de aceptación de negocio.
