@@ -37,7 +37,7 @@ export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }
     const spec = inputs[key];
     const id = fieldId(key);
     return <div className="field" key={key}>
-      <label htmlFor={id}>{intl.formatMessage({ id: spec.label })} <span aria-hidden="true">*</span></label>
+      <label htmlFor={id}>{intl.formatMessage({ id: spec.label })} <span className="required" aria-hidden="true">*</span></label>
       <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
         value={values[key]} onChange={event => onChange(key, event.target.value)}
         aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
