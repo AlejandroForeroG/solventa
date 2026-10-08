@@ -61,7 +61,7 @@ Si se necesita incorporar historia de un merge de prod de vuelta a staging, usar
 
 ## Protecciones y documentación del PR
 
-Las tres ramas requieren PR, checks `policy` y `validate`, rama actualizada y conversaciones resueltas; aplica también a administradores. Dev no exige aprobación humana. Staging/prod normalmente requieren una aprobación. Una excepción explícitamente autorizada solo afecta la promoción solicitada: mantener CI y restaurar el requisito temporal de aprobación.
+Las tres ramas requieren PR, checks `policy`, `validate` y `codex-review`, rama actualizada y conversaciones resueltas; aplica también a administradores. Dev no exige aprobación humana. Staging/prod normalmente requieren una aprobación. Una excepción explícitamente autorizada solo afecta la promoción solicitada: mantener CI y restaurar el requisito temporal de aprobación.
 
 Cada PR espera la revisión de Codex antes de integrarse. Comprobar su finalización real sobre el SHA actual del PR: un disparo, estado Running, CI verde o revisión de una versión anterior no bastan. Resolver los hallazgos corregibles dentro del alcance, actualizar pruebas/documentación y obtener revisión de la versión final. Si un hallazgo es ambiguo, no puede resolverse o requiere una decisión de producto/cambio de alcance, explicarlo al usuario y esperar su respuesta antes de integrar. No descartar hallazgos para desbloquear el merge. Esta revisión no sustituye CI ni la aprobación humana cuando sea exigida.
 
