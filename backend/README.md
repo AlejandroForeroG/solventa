@@ -1,3 +1,3 @@
-# Fronteras de los backends
+# Backend boundaries
 
-Documentación: [guía vigente](../docs/arquitectura.md).
+Documentation: [current guide](../docs/architecture.md).

@@ -1,3 +1,3 @@
-# Modelo SQL base
+# Base SQL model
 
-Documentación: [guía vigente](../docs/infraestructura/modelo-datos.md).
+Documentation: [current guide](../docs/infrastructure/data-model.md).
