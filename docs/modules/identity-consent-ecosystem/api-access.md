@@ -66,7 +66,7 @@ if (!access.ok) throw new Error(result.error);
 
 The web user identity comes only from the cryptographically verified sealed WorkOS cookie and the active local client and session that `/auth/callback` registered. The user must have a verified email; a missing, unknown, expired or revoked local session, an inactive client or a logout returns 401. The client never selects `clientId`, `subjectToken` or any partner identifier, and no partner registration, channel credential or server-selected reference participates in web access.
 
-The web user operation policy in `backend/identity-consent-ecosystem/src/application/api-access.ts` allows exactly `quotes:create`, and only for the user's own principal. It is not a role system: it grants no other operation, no access to other users' resources and no consent. Each future operation must add its own explicit rule, resource authorization and consent checks in the owning use case. The web route rejects an Authorization header with 400 to prevent mixing credential types.
+The web user operation policy in `backend/identity-consent-ecosystem/src/application/api-access.ts` allows `quotes:create` and, for the user's own consent only, `consents:read` and `consents:write` (see [Consent](consent.md)). A partner credential is never allowed the consent operations. It is not a role system: it grants no access to other users' resources, and permission to manage consent is not consent to query a source. Each future operation must add its own explicit rule, resource authorization and consent checks in the owning use case. The web route rejects an Authorization header with 400 to prevent mixing credential types.
 
 The access check does not refresh the cookie and never registers a session: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require the configured Origin and otherwise return 403; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
 
@@ -122,6 +122,8 @@ Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a p
 { kind: 'partner', token, operation: 'quotes:create' }
 { kind: 'web', cookie, origin, method, operation: 'quotes:create' }
 ```
+
+Identity's own [consent](consent.md) routes call the same function with `consents:read` or `consents:write`, for web users only: a partner credential is always forbidden those operations.
 
 `cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `method` is the actual method. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
 
