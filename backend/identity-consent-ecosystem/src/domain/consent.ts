@@ -4,6 +4,8 @@ export const VALIDITY_DAYS = 90;
 export type SourceCode = 'open_finance_bancolombia' | 'datacredito_experian' | 'ruaf' | 'registraduria';
 export type ScopeCode = 'income_obligations_12m' | 'payment_history_score' | 'affiliation_regime' | 'identity_validation';
 export type ConsentStatus = 'active' | 'revoked' | 'expired';
+export const LOCALES = ['es-CO', 'en-US'] as const;
+export type Locale = (typeof LOCALES)[number];
 export type TermsSource = { code: SourceCode; scope: ScopeCode; kind: 'open_finance' | 'credit_bureau' | 'open_data' };
 
 // Any change to the purpose, a source, a scope, the validity or the displayed wording needs a new textVersion.
@@ -19,6 +21,13 @@ export const CURRENT_TERMS = {
   ] satisfies TermsSource[]
 };
 
+// Fingerprint of the exact wording the customer reads in each language for the current text version. The web
+// catalogue is compared with it by a test, so a wording change cannot reach a record without a new version.
+export const WORDING_FINGERPRINT: Record<Locale, string> = {
+  'es-CO': '5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047',
+  'en-US': 'd2805eca2ed7561e214c8b8b7df3d37b513d378daf0a0b7f90f8b646c0794351'
+};
+
 export type Consent = {
   id: string;
   consentCode: string;
@@ -26,6 +35,8 @@ export type Consent = {
   clientId: string;
   purposeCode: string;
   textVersion: number;
+  locale: Locale;
+  wordingHash: string;
   sources: SourceCode[];
   scopes: ScopeCode[];
   grantedAt: Date;
@@ -49,6 +60,7 @@ export function statusOf(consent: Pick<Consent, 'revokedAt' | 'expiresAt'>, now:
 }
 
 export type TermsRequest = { textVersion: number; quoteRef: string | null };
+export type GrantRequest = TermsRequest & { locale: Locale };
 
 export function parseTermsRequest(body: unknown, allowed: readonly string[]): TermsRequest | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
@@ -60,8 +72,14 @@ export function parseTermsRequest(body: unknown, allowed: readonly string[]): Te
   return { textVersion, quoteRef: typeof quoteRef === 'string' ? quoteRef : null };
 }
 
+export function parseGrantRequest(body: unknown): GrantRequest | null {
+  const request = parseTermsRequest(body, ['textVersion', 'quoteRef', 'locale']);
+  const locale = (body as Record<string, unknown> | null)?.locale;
+  return request && LOCALES.some(known => known === locale) ? { ...request, locale: locale as Locale } : null;
+}
+
 // Canonical text sealed at grant time. Revocation is left out: it changes later and has its own audit event.
 export const sealContent = (c: Omit<Consent, 'consentCode' | 'revokedAt' | 'seal'>) => JSON.stringify([
-  c.id, c.version, c.clientId, c.purposeCode, c.textVersion, [...c.sources].sort(), [...c.scopes].sort(),
+  c.id, c.version, c.clientId, c.purposeCode, c.textVersion, c.locale, c.wordingHash, [...c.sources].sort(), [...c.scopes].sort(),
   c.grantedAt.toISOString(), c.expiresAt.toISOString(), c.quoteRef
 ]);

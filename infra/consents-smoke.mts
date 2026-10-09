@@ -44,24 +44,26 @@ try {
   const ana = await person();
   const luis = await person();
   const traceId = () => randomUUID();
-  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 1 }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
+  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 1, locale: 'es-CO' }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
   const check = (principal: typeof ana, scope = 'income_obligations_12m') => consents.verify({ subjectToken: principal.subjectToken, purposeCode: 'risk_profiling', scope });
 
-  const first = await grant(ana, 'k1', { textVersion: 1, quoteRef: 'COT-2026-00001' });
+  const first = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(first.status, 'created');
   if (first.status !== 'created') throw Error('unreachable');
   assert.match(first.consent.consentId, /^CNS-\d{4}-\d{5}$/);
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.audit_events WHERE action = 'consent.granted' AND actor_reference = $1", [ana.subjectToken]), 1);
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.outbox_events WHERE event_type = 'consent.granted'"), 1);
-  const row = (await db.query('SELECT sources, scopes, source, text_version, quote_ref FROM identity.consents WHERE consent_code = $1', [first.consent.consentId])).rows[0];
+  const row = (await db.query('SELECT sources, scopes, source, text_version, locale, wording_hash, quote_ref FROM identity.consents WHERE consent_code = $1', [first.consent.consentId])).rows[0];
   assert.deepEqual(row.sources, first.consent.sources);
   assert.equal(row.source, 'web');
   assert.equal(row.quote_ref, 'COT-2026-00001');
+  assert.equal(row.locale, 'es-CO');
+  assert.match(row.wording_hash, /^[0-9a-f]{64}$/);
 
-  const replay = await grant(ana, 'k1', { textVersion: 1, quoteRef: 'COT-2026-00001' });
+  const replay = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(replay.status, 'replayed');
   if (replay.status === 'replayed') assert.equal(replay.consent.consentId, first.consent.consentId);
-  assert.deepEqual(await grant(ana, 'k1', { textVersion: 1, quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
   assert.equal((await grant(luis, 'k1')).status, 'created');
   const racing = await Promise.all(Array.from({ length: 6 }, () => grant(ana, 'race')));
   assert.equal(racing.filter(r => r.status === 'created').length, 1, JSON.stringify(racing.map(r => r.status)));
