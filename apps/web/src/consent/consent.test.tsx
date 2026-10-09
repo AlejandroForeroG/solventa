@@ -192,11 +192,24 @@ describe('consent step failures', () => {
     await waitFor(() => expect(onSessionLost).toHaveBeenCalledOnce());
   });
 
-  it('a refusal never depends on the audit write', async () => {
-    const api = stubs({ declineConsent: vi.fn().mockResolvedValue({ kind: 'unavailable' }) });
+  it('a failed refusal stays on the screen and retries before announcing completion', async () => {
+    const api = stubs({ declineConsent: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(true)) });
     const { user, onDeclined } = setup(api);
     await user.click(await screen.findByRole('button', { name: 'No autorizo' }));
+    expect(await screen.findByText(/No pudimos registrar tu rechazo/, { selector: 'p' })).toBeInTheDocument();
+    expect(onDeclined).not.toHaveBeenCalled();
+    expect(live()).not.toHaveTextContent('Consentimiento no otorgado.');
+    await user.click(screen.getByRole('button', { name: 'No autorizo' }));
     await waitFor(() => expect(onDeclined).toHaveBeenCalledOnce());
+  });
+
+  it('an outdated refusal reloads terms without completing the refusal', async () => {
+    const api = stubs({ declineConsent: vi.fn().mockResolvedValue({ kind: 'outdated' }) });
+    const { user, onDeclined } = setup(api);
+    await user.click(await screen.findByRole('button', { name: 'No autorizo' }));
+    await waitFor(() => expect(api.getTerms).toHaveBeenCalledTimes(2));
+    expect(onDeclined).not.toHaveBeenCalled();
+    expect(await screen.findByRole('checkbox')).not.toBeChecked();
   });
 
   it('does not offer the authorization when the served terms are another text version than the one the screen shows', async () => {
@@ -385,6 +398,23 @@ describe('consent client', () => {
     for (const response of responses) fetchMock.mockImplementationOnce(async () => { if (response instanceof Error) throw response; return response; });
     return fetchMock;
   };
+
+  it('refuses altered or duplicate terms before the screen can authorize them', async () => {
+    const changed = [
+      { ...terms, purposeCode: 'advertising' }, { ...terms, validityDays: 91 }, { ...terms, textVersion: 2 },
+      { ...terms, sources: terms.sources.slice(1) },
+      { ...terms, sources: terms.sources.map((source, index) => index === 0 ? { ...source, code: 'another_provider' } : source) },
+      { ...terms, sources: terms.sources.map((source, index) => index === 0 ? { ...source, scope: 'another_scope' } : source) },
+      { ...terms, sources: terms.sources.map((source, index) => index === 0 ? { ...source, kind: 'open_data' } : source) },
+      { ...terms, sources: terms.sources.map((source, index) => index === 1 ? terms.sources[0] : source) }
+    ];
+    for (const value of changed) {
+      spy(json(value));
+      expect(await getTerms()).toEqual({ kind: 'unavailable' });
+    }
+    spy(json({ ...terms, sources: [...terms.sources].reverse() }));
+    expect((await getTerms()).kind).toBe('ok');
+  });
 
   it('sends the grant with the session cookie, the key and no identity of its own', async () => {
     const fetchMock = spy(json({ ...active }, 201));

@@ -144,6 +144,19 @@ try {
   await check(erin);
   assert.equal(await expiryAudits(), 1, 'the next read records the expiry that failed before');
 
+  // Cross the old five-digit limit and preserve exact INT8 values beyond JavaScript's safe integer range.
+  current = new Date('2095-07-01T15:00:00Z');
+  await db.query('INSERT INTO identity.consent_counters (year, last_value) VALUES (2095, 99998)');
+  const lastFive = await grant(ana, 'capacity-99999');
+  const firstSix = await grant(ana, 'capacity-100000');
+  assert.ok(lastFive.status === 'created' && lastFive.consent.consentId === 'CNS-2095-99999');
+  assert.ok(firstSix.status === 'created' && firstSix.consent.consentId === 'CNS-2095-100000');
+  assert.equal((await check(ana)).allowed, true);
+  assert.equal((await consents.revoke({ principal: ana, consentCode: 'CNS-2095-100000', traceId: traceId() })).status, 'revoked');
+  await db.query('UPDATE identity.consent_counters SET last_value = $1 WHERE year = 2095', ['9007199254740991']);
+  const wide = await grant(ana, 'capacity-exact-int8');
+  assert.ok(wide.status === 'created' && wide.consent.consentId === 'CNS-2095-9007199254740992');
+
   const app = clientFor(runtime, config.ssl); await app.connect();
   try {
     await assert.rejects(app.query('DELETE FROM identity.consents'), /permission|denied|privilege/i);
