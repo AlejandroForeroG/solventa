@@ -1,4 +1,5 @@
 import { fetchWithSession } from '../session-fetch';
+import { SUPPORTED_TERMS } from './wording';
 
 export type SourceKind = 'open_finance' | 'credit_bureau' | 'open_data';
 export type ConsentStatus = 'active' | 'revoked' | 'expired';
@@ -37,6 +38,11 @@ function asTerms(value: unknown): Terms | null {
   if (!isRecord(value) || typeof value.purposeCode !== 'string' || !Number.isInteger(value.textVersion) || !Number.isInteger(value.validityDays) || !Array.isArray(value.sources) || !value.sources.length) return null;
   const sources = value.sources.filter(isRecord).filter(s => typeof s.code === 'string' && typeof s.scope === 'string' && SOURCE_KINDS.includes(s.kind));
   if (sources.length !== value.sources.length) return null;
+  if (value.purposeCode !== SUPPORTED_TERMS.purposeCode || value.textVersion !== SUPPORTED_TERMS.textVersion
+    || value.validityDays !== SUPPORTED_TERMS.validityDays || sources.length !== SUPPORTED_TERMS.sources.length
+    || new Set(sources.map(s => s.code)).size !== sources.length
+    || !sources.every(source => SUPPORTED_TERMS.sources.some(expected => expected.code === source.code
+      && expected.scope === source.scope && expected.kind === source.kind))) return null;
   return { purposeCode: value.purposeCode, textVersion: value.textVersion as number, validityDays: value.validityDays as number, sources: sources as Terms['sources'] };
 }
 
