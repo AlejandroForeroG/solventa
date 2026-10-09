@@ -24,6 +24,17 @@ The result shows the quote's validity as "valid until" the date in the response'
 
 Styles follow the approved Design System values in `src/index.css`: IBM Plex Sans for text, Space Grotesk for headings and IBM Plex Mono for labels, identifiers and amounts, loaded from Google Fonts through `index.html` with system fallbacks. Every link, button and field shows the same keyboard focus ring (3 px, brand green, 2 px offset). Hover colours apply only to the element's own variant, and long trace identifiers wrap on narrow screens.
 
+## Consent and privacy dashboard
+
+`src/consent/` holds step 3 of the journey, the safe exit and the privacy dashboard. The contract is [consents.yaml](../../shared/contracts/README.md) and the rules are in [Consent](../../modules/identity-consent-ecosystem/consent.md). The browser calls `/api/v1/consents` with the same session cookie and the same renewal rule as the quote, through `src/session-fetch.ts`. Its calls are protected by a Pact contract with the web Worker; changing them requires updating the pact ([consumer contracts](../../shared/contracts/README.md#consumer-contracts-pact)).
+
+- **Step 3** loads the terms from `GET /api/v1/consents/terms` and shows the purpose, the sources with their type and the validity before anything can be authorized. "Authorize and continue" stays disabled until the mandatory checkbox is marked. Authorizing sends the text version this screen supports (`SUPPORTED_TEXT_VERSION`), the language of the interface and the quote reference; if Identity serves another version, the screen offers no authorization and asks to reload, and a grant for a version Identity no longer serves is refused. A retry reuses the same `Idempotency-Key` unless the language changes. If the text changed meanwhile, the terms are reloaded and the checkbox is cleared.
+- **Safe exit** follows "I do not authorize": it keeps the minimum-data estimate and states that no offer, policy or charge follows. A refusal never depends on the audit write succeeding.
+- **Privacy dashboard** opens from the header button, lists each authorization with its id, status, period, sources, scope and seal, and revokes an active one after an inline confirmation. A failed revocation leaves the authorization active and says so. Going back keeps what was typed in the quote.
+- Source names and types come from the catalogues by code; an unknown code falls back to the code itself. Dates use the `America/Bogota` time zone.
+
+After authorizing, the screen confirms the authorization and links to the dashboard. The personalized offer is a later step: the stepper keeps steps 4 to 7 locked.
+
 ```sh
 npm run test:web          # vitest: screens, languages, accessibility (axe) and API client
 ```
