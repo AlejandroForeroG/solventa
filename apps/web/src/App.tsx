@@ -1,12 +1,14 @@
 import { brandAssets } from '@solventa/assets/web';
 import { useEffect, useState } from 'react';
+import { fetchSession, requestLogout } from './api/auth';
+import type { SessionStatus } from './api/auth';
 import { useIntl } from 'react-intl';
 import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
 import { QuoteFlow } from './quote/QuoteFlow';
 
-type Session = 'loading' | 'anonymous' | 'authenticated' | 'unavailable';
+type Session = 'loading' | SessionStatus;
 
 function LocaleSwitch() {
   const intl = useIntl();
@@ -26,10 +28,7 @@ function Shell() {
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   async function load() {
     setSession('loading');
-    try {
-      const response = await fetch('/auth/session', { credentials: 'same-origin' });
-      setSession(response.ok ? 'authenticated' : response.status === 401 ? 'anonymous' : 'unavailable');
-    } catch { setSession('unavailable'); }
+    setSession(await fetchSession());
   }
   useEffect(() => { void load(); }, []);
   useEffect(() => {
@@ -39,11 +38,9 @@ function Shell() {
   async function logout() {
     setBusy(true);
     try {
-      const response = await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      if (response.status === 401) { setSession('anonymous'); return; }
-      if (!response.ok) throw new Error('logout_failed');
-      const { logoutUrl } = await response.json();
-      window.location.assign(logoutUrl);
+      const result = await requestLogout();
+      if (result.status === 'anonymous') { setSession('anonymous'); return; }
+      window.location.assign(result.logoutUrl);
     } catch { setSession('unavailable'); }
     finally { setBusy(false); }
   }
