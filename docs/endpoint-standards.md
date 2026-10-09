@@ -2,6 +2,8 @@
 
 Apply this guide when implementing a new business route and subsequent changes. Module code and docs evolve together. Examples explain the pattern; they neither create an endpoint nor establish implemented quoting or event publication.
 
+Every API addition, modification or removal must update its domain OpenAPI specification, affected examples/contract tests and owning module guide in the same branch and PR. Follow [contract maintenance and the published API reference](shared/contracts/README.md#maintaining-api-documentation). CI and Deploy rebuild `/api/docs/` from that revision's contracts; authors and reviewers still verify that the specification describes the actual endpoint behavior.
+
 ## Historical capture of each decision
 
 [decision-capture.v1.json](../packages/contracts/schemas/decision-capture.v1.json) defines the common capture. Create **one instance containing the data used for each decision**, rather than schema-file copies per endpoint. A request making several decisions can produce several captures with the same `correlationId`; a query making no decision need not invent one.

@@ -25,7 +25,9 @@
   "vars": {
     "APP_ENV": "local",
     "AUTH_ORIGIN": "http://localhost:8787",
-    "AUTH_REDIRECT_URI": "http://localhost:8787/auth/callback"
+    "AUTH_REDIRECT_URI": "http://localhost:8787/auth/callback",
+    "WORKOS_CONNECT_ISSUER": "",
+    "WORKOS_CONNECT_AUDIENCE": ""
   },
   "hyperdrive": [
     {
@@ -41,7 +43,9 @@
       "vars": {
         "APP_ENV": "dev",
         "AUTH_ORIGIN": "https://solventa-web-dev.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-dev.ja-forerog1.workers.dev/auth/callback"
+        "AUTH_REDIRECT_URI": "https://solventa-web-dev.ja-forerog1.workers.dev/auth/callback",
+        "WORKOS_CONNECT_ISSUER": "https://thorough-solar-66-solventa-dev.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F52THNNZZZ4WSGACX8KA4"
       },
       "hyperdrive": [
         {
@@ -64,7 +68,9 @@
       "vars": {
         "APP_ENV": "staging",
         "AUTH_ORIGIN": "https://solventa-web-staging.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-staging.ja-forerog1.workers.dev/auth/callback"
+        "AUTH_REDIRECT_URI": "https://solventa-web-staging.ja-forerog1.workers.dev/auth/callback",
+        "WORKOS_CONNECT_ISSUER": "https://essential-nightingale-37-staging.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F209CBGBJGD73ZM39ADW6"
       },
       "hyperdrive": [
         {
@@ -87,7 +93,9 @@
       "vars": {
         "APP_ENV": "prod",
         "AUTH_ORIGIN": "https://solventa-web-prod.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-prod.ja-forerog1.workers.dev/auth/callback"
+        "AUTH_REDIRECT_URI": "https://solventa-web-prod.ja-forerog1.workers.dev/auth/callback",
+        "WORKOS_CONNECT_ISSUER": "https://engaging-regalia-61.authkit.app",
+        "WORKOS_CONNECT_AUDIENCE": "client_01M47F21P884580Q2GGF81NRV5"
       },
       "hyperdrive": [
         {

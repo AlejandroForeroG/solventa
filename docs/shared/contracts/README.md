@@ -4,10 +4,51 @@ Code: `packages/contracts`. Spec, schema and type paths are relative to that pac
 
 Stable boundary contracts: public API versioning, OpenAPI specifications and schemas for data crossing boundaries. This package contains no shared domain entities, services or rules. A backend core (`domain`/`application`) cannot import it; adapters, the web Worker and tests consume it.
 
+## Published API reference
+
+The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
+
+| Environment | API reference |
+|---|---|
+| Dev | [OpenAPI viewer](https://solventa-web-dev.ja-forerog1.workers.dev/api/docs/) |
+| Staging | [OpenAPI viewer](https://solventa-web-staging.ja-forerog1.workers.dev/api/docs/) |
+| Prod | [OpenAPI viewer](https://solventa-web-prod.ja-forerog1.workers.dev/api/docs/) |
+| Local | [OpenAPI viewer](http://localhost:8787/api/docs/) after building web and starting the local Workers |
+
+Select a domain/version to inspect its operations, parameters, request/response schemas, examples and security requirements. The responsive reference includes sidebar navigation, search and request/response examples alongside operations. The `spec` query parameter preserves the selected domain/version when reloading or sharing operation links, for example `/api/docs/?spec=v1/quotes`. **OpenAPI JSON** opens the selected bundled specification; `/api/docs/catalog.json` lists available specifications. The viewer identifies its current environment. Relative `servers` URLs refer to that same environment.
+
+The web build runs `tools/build-api-docs.mjs` after Vite. It discovers every `packages/contracts/openapi/v<N>/*.yaml` specification containing paths, resolves its shared references with Redocly and emits JSON, a catalog and locally hosted Scalar assets under `apps/web/dist/api/docs/`. Component-only files such as `common.yaml` remain dependencies of domain specifications. Generated output is ignored; YAML is the single contract source. Adding a domain/version needs no handwritten viewer entry. Every CI build and environment Deploy regenerates the reference from the exact revision being deployed; each environment shows its own deployed revision, not a live copy of dev or GitHub.
+
+The viewer and JSON require no login and contain only public contracts with synthetic examples. `GET` and `HEAD` are supported; writes to documentation paths return 405. Missing JSON/script assets return 404 instead of the product SPA. Documentation responses use `Cache-Control: no-store` so a new deployment is visible after reloading. Scripts and brand assets are hosted on the same origin; CDN fonts, telemetry, agent features and the embedded API client/test requests are disabled. A same-origin content security policy also restricts network requests. Use the existing [API access guide](../../modules/identity-consent-ecosystem/api-access.md) and Bruno collection for authorized requests. This viewer does not bypass API authentication or authorization.
+
+The reference uses Solventa's green UI palette, warm neutral navigation, rounded example cards and semantic method/code colors, as explicitly requested for this viewer. Other technical documents retain their monochrome convention. Desktop navigation stays fixed below the measured header, with its own scroll area independent of document height; narrow screens use Scalar's collapsible navigation. The header offset updates when controls wrap or browser zoom changes, and no empty internal header row is reserved on desktop. Selecting another domain navigates to its query URL without an operation hash, loading a fresh reference at the top and clearing pending lazy-navigation scroll state. Verify the first load, short/long domain switches (including a switch immediately after navigating to Schemas), bottom-of-document navigation, mobile menu and keyboard focus when changing this layout.
+
+The web test suite executes the viewer loader against its HTML in a DOM harness. It checks both domain-switch directions from a Schemas URL, navigation without the old hash, loading the selected contract in a fresh reference, and preserving shared operation links. These tests cover the navigation handoff; the real browser checks above remain necessary to verify Scalar's lazy rendering and visual layout.
+
+IBM Plex Sans (400/500/600/700) and Mono (400/600) are bundled from the shared [font assets](../assets/README.md) and loaded from `/api/docs/fonts/` using `@font-face` with `font-display: swap`. The same-origin font files and their `/api/docs/fonts/LICENSE.txt` use the same read-only, no-store and missing-asset protections as other documentation assets. The generator tests verify every CSS font reference is a bundled WOFF2 file with its license, and route tests cover GET/HEAD, rejected writes and SPA fallback. Verify the browser reports both families loaded and that header/sidebar alignment still holds after loading; do not infer an available font from its CSS family declaration alone.
+
+## Maintaining API documentation
+
+Every API addition, change or removal must update its OpenAPI domain specification, affected examples/contract tests and the owning module's technical guide **in the same branch and PR as the implementation**. Document parameters, validation, request/response schemas, status/error codes, authentication/scopes and applicable deprecation notices. Follow the versioning rules below for compatibility. Use synthetic examples; never include tokens, cookies, credentials or personal data.
+
+Before integrating, run `npm run test:contracts`, `npm run lint:openapi` and `npm run check`, then inspect the generated viewer and JSON for the changed domain in dev. Promote the same tested base through the [Gitflow](../../infrastructure/ci-cd.md), and verify the reference in staging/prod after their Deploy succeeds. A generated viewer keeps published YAML current with deployment; it cannot detect every mismatch between implementation and an outdated specification. The author and reviewer must compare the changed endpoint behavior against its contract and tests.
+
+No remote configuration, SQL migration or secret is required for this viewer. Building web is sufficient to generate it:
+
+```sh
+npm run build --workspace @solventa/web
+npm run dev:backend
+```
+
+For the local stack setup, use [development](../../development.md) and [infrastructure operations](../../infrastructure/README.md). Vite's API proxy forwards documentation requests to the local web Worker, which serves the built reference.
+
 | Path | Content |
 |---|---|
 | `openapi/v<N>/<domain>.yaml` | Independent, valid OpenAPI spec per domain (quotes, consent…) inside its version directory |
 | `openapi/v<N>/common.yaml` | Shared version components (`X-Trace-Id`, `Error`, deprecation headers); domain specs reference them with `$ref` |
+| `openapi/v1/quotes.yaml` | Minimum-data quote for partners (`POST /quotes`) and web users (`POST /me/quotes`): responses 201, 200, 400, 401, 403, 409 and 503; access errors carry only the canonical code and the trace id |
+| `openapi/v1/identity-access.yaml` | Access probes `GET /access/partner` and `GET /access/web`: responses 200, 400, 401, 403, 405 and 503; `tests/identity-access-contract.test.ts` checks each real response, its headers and its status against this spec |
+| `examples/quotes.json` | Valid and invalid cases with synthetic data, checked against the spec by `tests/quotes-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
@@ -46,7 +87,7 @@ Set its `deprecatedAt` and `sunset` in `apiVersions`; in **every** spec in its d
 
 ```sh
 npm run lint:openapi     # Redocly checks all .yaml files in openapi/
-npm run test:contracts   # Versioning, registry/spec agreement and capture schema
+npm run test:contracts   # Versioning, registry/spec agreement, capture schema and responses of quotes and access probes against their schemas
 npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
 ```
 
@@ -56,7 +97,7 @@ All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for
 
 Pact records what a consumer actually uses from a provider and checks that the provider still satisfies it. OpenAPI describes what a provider offers; a pact describes what a consumer depends on, so a change that breaks a consumer fails CI before it is promoted. Pacts live in the repository; there is no Pact Broker, so `can-i-deploy` is not available and `npm run check` is the control.
 
-Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-web`), covering `GET /auth/session` (active, anonymous and authentication unavailable) and `POST /auth/logout` (active and anonymous). The SPA calls come from `apps/web/src/api/auth.ts`, the same module the application uses.
+Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-web`), covering `GET /auth/session` (active, anonymous and authentication unavailable), `POST /auth/logout` (active and anonymous) and `POST /api/v1/me/quotes` (created, invalid input, no session, no permission, reused idempotency key and service down). The calls come from `apps/web/src/api/auth.ts` and `apps/web/src/quote/api.ts`, the same modules the application uses. The partner endpoints (`POST /quotes`, `GET /access/partner`, `GET /access/web`) have no consumer code in the repository, so they have no pact; add one with the first real consumer.
 
 | Path | Role |
 |---|---|
@@ -65,7 +106,19 @@ Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-w
 | `tests/pact/pact-guard.test.ts` | Alters a copy of a committed pact and requires verification to fail, proving a broken contract blocks CI |
 | `tests/pact/support/` | Local HTTP server for a Worker `fetch`, pact file helpers and the provider states |
 
-Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` simulates the Identity binding, because a valid session needs WorkOS and SQL; those paths are covered by `tests/authentication.test.ts` and the SQL suites. Verification adds the `Origin` header to POST requests, as browsers do.
+Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` simulates the Identity binding, because a valid session needs WorkOS and SQL; those paths are covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
+
+### Pending coverage
+
+A pact exists only for a consumer that is implemented. These public endpoints are documented in OpenAPI but have no pact yet, because no client code in the repository calls them:
+
+| Endpoint | Consumer expected |
+|---|---|
+| `POST /api/v1/quotes` | A partner integration (bearer token) |
+| `GET /api/v1/access/partner` | A partner integration |
+| `GET /api/v1/access/web` | Any web or mobile client that probes access directly |
+
+The change that adds the first real consumer of one of these endpoints, or of any new public route, must add its consumer pact and provider states in the same branch and PR. Do not write a pact from a hand-built request that no real client sends: it would approve a contract nobody depends on. The mobile app must register its own consumer when it calls the web Worker. Private RPC between Workers is outside Pact, which covers only HTTP.
 
 To change an existing contract or add a consumer:
 

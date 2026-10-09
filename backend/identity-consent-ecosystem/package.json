@@ -13,6 +13,7 @@
   "dependencies": {
     "@workos-inc/node": "^11.0.0",
     "hono": "4.13.12",
+    "jose": "^6.2.12",
     "pg": "8.23.1"
   },
   "devDependencies": {

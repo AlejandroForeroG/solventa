@@ -59,6 +59,375 @@
       }
     },
     {
+      "description": "a quote request from a customer with access",
+      "providerStates": [
+        {
+          "name": "a customer with quote access"
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 320000000,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "basis": "minimum_data",
+          "currency": "COP",
+          "premiumMonthly": 86400,
+          "quoteId": "COT-2026-00001",
+          "ruleVersion": "2026.1",
+          "sumInsured": 320000000,
+          "termMonths": 180,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47",
+          "validUntil": "2026-10-21T15:00:00.000Z"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.premiumMonthly": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.quoteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^COT-\\d{4}-\\d{5}$"
+                }
+              ]
+            },
+            "$.ruleVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sumInsured": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.termMonths": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.validUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a quote request reusing an idempotency key",
+      "providerStates": [
+        {
+          "name": "the idempotency key was used with another request",
+          "params": {
+            "idempotencyKey": "11111111-1111-4111-8111-111111111111"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 320000000,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "error": "idempotency_key_reused"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "a quote request while the service is down",
+      "providerStates": [
+        {
+          "name": "the quote service is down"
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 320000000,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "error": "service_unavailable"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 503
+      }
+    },
+    {
+      "description": "a quote request with an invalid amount",
+      "providerStates": [
+        {
+          "name": "a customer with quote access"
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 0,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "error": "validation_error",
+          "errors": [
+            {
+              "code": "out_of_range",
+              "field": "credit.amount"
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.errors": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.errors[*].code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.errors[*].field": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 400
+      }
+    },
+    {
+      "description": "a quote request without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 320000000,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "error": "unauthorized"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 401
+      }
+    },
+    {
+      "description": "a quote request without permission",
+      "providerStates": [
+        {
+          "name": "a customer without permission to quote"
+        }
+      ],
+      "request": {
+        "body": {
+          "credit": {
+            "amount": 320000000,
+            "partnerCreditId": "WEB-111111111111",
+            "termMonths": 180
+          },
+          "customer": {
+            "birthDate": "1992-03-14",
+            "city": "Bogotá D.C.",
+            "documentNumber": "1020884771",
+            "documentType": "CC",
+            "fullName": "Laura Catalina Restrepo Ochoa"
+          },
+          "product": "vida_hipotecario"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept-language": "es-CO",
+          "idempotency-key": "11111111-1111-4111-8111-111111111111"
+        },
+        "method": "POST",
+        "path": "/api/v1/me/quotes"
+      },
+      "response": {
+        "body": {
+          "error": "forbidden"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "x-trace-id": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "matchingRules": {
+          "header": {
+            "x-trace-id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
       "description": "a session check while authentication is unavailable",
       "providerStates": [
         {
@@ -102,6 +471,27 @@
     },
     {
       "description": "a session check without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/auth/session"
+      },
+      "response": {
+        "body": {
+          "authenticated": false
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 401
+      }
+    },
+    {
+      "description": "the session renewal after a rejected quote request",
       "providerStates": [
         {
           "name": "no active session"

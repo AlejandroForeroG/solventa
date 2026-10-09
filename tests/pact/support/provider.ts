@@ -1,11 +1,15 @@
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
-import { createHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
+import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
+import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
+import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
+import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
 import { providerName } from './pact-files';
 import { serve } from './serve';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
+const sessionCookieName = '__Host-solventa-session';
 const identityEnv = {
   APP_ENV: 'dev',
   AUTH_ORIGIN: origin,
@@ -16,12 +20,13 @@ const identityEnv = {
   IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' },
 } as IdentityEnv;
 
-type IdentityBinding = { fetch: (request: Request) => Promise<Response> };
+type Binding = { fetch: (request: Request) => Promise<Response> };
+type World = { identity: Binding; acquisition: Binding; sessionCookie?: string };
 
 // The real Identity app answers the states that need no WorkOS or SQL.
 // It only accepts requests addressed to its configured origin, so the test server's address is replaced.
-function realIdentity(env: IdentityEnv): IdentityBinding {
-  const app = createHttp();
+function realIdentity(env: IdentityEnv): Binding {
+  const app = createIdentityHttp({ authorizeApiAccess: async () => { throw new Error('unexpected_business_authorization'); } });
   return {
     fetch: request => {
       const { pathname, search } = new URL(request.url);
@@ -31,32 +36,77 @@ function realIdentity(env: IdentityEnv): IdentityBinding {
 }
 
 // WorkOS and SQL are covered by tests/authentication.test.ts and the SQL suites, so a valid session is simulated.
-const activeSession: IdentityBinding = {
+const activeSession: Binding = {
   fetch: async request => new URL(request.url).pathname === '/auth/logout'
     ? Response.json({ logoutUrl: 'https://auth.example.invalid/logout' })
     : Response.json({ authenticated: true }),
 };
 
-const states: Record<string, () => IdentityBinding> = {
-  'an active session': () => activeSession,
-  'no active session': () => realIdentity(identityEnv),
-  'authentication is not configured': () => realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }),
+// The real quote handler and use case run with the in-memory access and store the HTTP tests use.
+// Identity's decision is simulated by the cookie value; its verification is covered by the access suites.
+function realAcquisition(store = new MemoryStore()): Binding {
+  const quotes = new CreateQuote({ access: new InMemoryAccess(), store, clock: { now: () => new Date('2026-10-06T15:00:00Z') }, protector });
+  const app = createAcquisitionHttp({ quotes });
+  return { fetch: request => Promise.resolve(app.request(request, undefined, { APP_ENV: 'dev' } as AcquisitionEnv)) };
+}
+
+const unavailableService: Binding = { fetch: async () => { throw new Error('service_down'); } };
+
+async function acquisitionWithQuote(idempotencyKey: string, cookie: string): Promise<Binding> {
+  const acquisition = realAcquisition();
+  await acquisition.fetch(new Request(`${origin}/api/v1/me/quotes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey, cookie: `${sessionCookieName}=${cookie}` },
+    body: JSON.stringify(seedQuoteRequest),
+  }));
+  return acquisition;
+}
+
+const seedQuoteRequest = {
+  product: 'vida_hipotecario',
+  customer: { fullName: 'Laura Catalina Restrepo Ochoa', documentType: 'CC', documentNumber: '1020884771', birthDate: '1992-03-14', city: 'Bogotá D.C.' },
+  credit: { partnerCreditId: 'CRE-88-2026', amount: 320000000, termMonths: 180 },
 };
+
+const authorizedCookie = 'sealed-cookie';
+
+type StateParameters = { idempotencyKey?: string } | undefined;
+const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  'an active session': () => ({ identity: activeSession }),
+  'no active session': () => ({}),
+  'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
+  'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),
+  'a customer without permission to quote': () => ({ sessionCookie: 'forbidden-origin-cookie' }),
+  'the idempotency key was used with another request': async parameters => ({
+    sessionCookie: authorizedCookie,
+    acquisition: await acquisitionWithQuote(parameters?.idempotencyKey ?? '', authorizedCookie),
+  }),
+  'the quote service is down': () => ({ sessionCookie: authorizedCookie, acquisition: unavailableService }),
+};
+
+const defaultWorld = (): World => ({ identity: realIdentity(identityEnv), acquisition: realAcquisition() });
 
 export async function verifyPact(pactFile: string): Promise<void> {
   const { provider } = JSON.parse(fs.readFileSync(pactFile, 'utf8'));
   if (provider.name !== providerName) throw new Error(`${pactFile} targets ${provider.name}, not ${providerName}`);
-  let identity = states['no active session']();
-  const server = await serve(request => worker.fetch(request, { APP_ENV: 'dev', IDENTITY: identity } as unknown as WebEnv));
+  let world = defaultWorld();
+  const server = await serve(request => worker.fetch(request, {
+    APP_ENV: 'dev',
+    get IDENTITY() { return world.identity; },
+    get ACQUISITION() { return world.acquisition; },
+  } as unknown as WebEnv));
   try {
     await new Verifier({
       provider: providerName,
       providerBaseUrl: server.url,
       pactUrls: [pactFile],
-      stateHandlers: Object.fromEntries(Object.entries(states).map(([state, binding]) => [state, async () => { identity = binding(); }])),
-      // Browsers always send Origin on POST, and Identity rejects a logout without it.
+      stateHandlers: Object.fromEntries(Object.entries(states).map(([state, build]) => [state, async (parameters?: unknown) => {
+        world = { ...defaultWorld(), ...await build(parameters as StateParameters) };
+      }])),
+      // The browser sends Origin on POST and the session cookie on same-origin requests; the contract does not carry them.
       requestFilter: (request, _response, next) => {
         if (request.method === 'POST') request.headers.origin = origin;
+        if (world.sessionCookie && request.url.startsWith('/api/')) request.headers.cookie = `${sessionCookieName}=${world.sessionCookie}`;
         next();
       },
       logLevel: 'error',

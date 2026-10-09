@@ -1,0 +1,22 @@
+meta {
+  name: Anonymous session
+  type: http
+  seq: 2
+}
+get {
+  url: {{baseUrl}}/auth/session
+  body: none
+  auth: none
+}
+headers {
+  Cookie: {{sessionCookieName}}=invalid-synthetic-cookie
+}
+tests {
+  test("No valid session", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().authenticated).to.equal(false);
+  });
+}
+docs {
+  Deliberately invalid synthetic cookie. Do not sign in or copy a real session for this case.
+}
