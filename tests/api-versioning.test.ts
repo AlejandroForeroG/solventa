@@ -93,7 +93,7 @@ test('paths outside a registered version are ignored', () => {
 });
 
 test('the web Worker keeps answering 404 for an unimplemented version without deprecation headers', async () => {
-  const response = await worker.fetch(new Request('https://solventa.invalid/api/v1/consents'), { APP_ENV: 'local' } as WebEnv);
+  const response = await worker.fetch(new Request('https://solventa.invalid/api/v1/offers'), { APP_ENV: 'local' } as WebEnv);
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: 'not_implemented' });
   assert.equal(response.headers.get('deprecation'), null);

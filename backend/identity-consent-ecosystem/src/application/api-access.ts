@@ -1,6 +1,6 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export type ApiOperation = 'quotes:create';
+export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -15,9 +15,10 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['quotes:create'];
-// A web user acts only for their own principal; this grants no consent and no other operation.
-const webUserOperations: readonly ApiOperation[] = ['quotes:create'];
+const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
+// Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
+const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
+const webUserOperations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
 const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
@@ -33,6 +34,7 @@ export class ApiAccess {
 
   async partner(identity: PartnerIdentity, operation: string): Promise<AccessDecision<PartnerActor>> {
     if (!isApiOperation(operation)) return invalid;
+    if (!partnerOperations.includes(operation)) return forbidden;
     if (!identity.issuer || !identity.organizationId || !identity.applicationId) return unauthorized;
     try {
       const reference = JSON.stringify([identity.issuer, identity.organizationId, identity.applicationId]);

@@ -45,5 +45,10 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "consent_counters": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }
