@@ -5,6 +5,7 @@ import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlConsents } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-consents';
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { Consents } from '../backend/identity-consent-ecosystem/src/application/consents';
+import { sealContent } from '../backend/identity-consent-ecosystem/src/domain/consent';
 
 // Real SQL against a disposable local database, with the Identity runtime role and its grants. Synthetic data only.
 const config = await settings('local');
@@ -30,10 +31,12 @@ try {
 
   let current = new Date();
   const advance = (days: number) => { current = new Date(current.getTime() + days * 24 * 60 * 60 * 1000); };
+  const store = new SqlConsents(runtime.toString());
+  const integrity = new HmacIntegrity('synthetic-seal-key-for-the-smoke-test-0123456789');
   const consents = new Consents({
-    store: new SqlConsents(runtime.toString()),
+    store,
     platform: { now: () => new Date(current), newId: () => randomUUID() },
-    integrity: new HmacIntegrity('synthetic-seal-key-for-the-smoke-test-0123456789')
+    integrity
   });
   const person = async () => {
     const principal = { clientId: randomUUID(), subjectToken: randomUUID() };
@@ -44,10 +47,21 @@ try {
   const ana = await person();
   const luis = await person();
   const traceId = () => randomUUID();
-  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 1, locale: 'es-CO' }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
+  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 2, locale: 'es-CO' }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
   const check = (principal: typeof ana, scope = 'income_obligations_12m') => consents.verify({ subjectToken: principal.subjectToken, purposeCode: 'risk_profiling', scope });
+  const allPages = async (principal: typeof ana) => {
+    const items: Awaited<ReturnType<Consents['list']>>['items'] = [];
+    let after: string | undefined;
+    do {
+      const page = await consents.list(principal, after);
+      assert.ok(page.items.length <= 50);
+      items.push(...page.items); after = page.nextCursor ?? undefined;
+    } while (after);
+    assert.equal(new Set(items.map(c => c.consentId)).size, items.length);
+    return items;
+  };
 
-  const first = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
+  const first = await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(first.status, 'created');
   if (first.status !== 'created') throw Error('unreachable');
   assert.match(first.consent.consentId, /^CNS-\d{4}-\d{5}$/);
@@ -60,11 +74,15 @@ try {
   assert.equal(row.locale, 'es-CO');
   assert.match(row.wording_hash, /^[0-9a-f]{64}$/);
 
-  const replay = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
+  const replay = await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(replay.status, 'replayed');
   if (replay.status === 'replayed') assert.equal(replay.consent.consentId, first.consent.consentId);
-  assert.deepEqual(await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
   assert.equal((await grant(luis, 'k1')).status, 'created');
+  for (let i = 0; i < 50; i++) assert.equal((await grant(luis, `active-${i}`)).status, 'created');
+  const activeList = await allPages(luis);
+  assert.equal(activeList.length, 51, 'every active authorization is reachable across bounded pages');
+  assert.ok(activeList.every(c => c.status === 'active'));
   const racing = await Promise.all(Array.from({ length: 6 }, () => grant(ana, 'race')));
   assert.equal(racing.filter(r => r.status === 'created').length, 1, JSON.stringify(racing.map(r => r.status)));
   assert.equal(racing.filter(r => r.status === 'replayed').length, 5);
@@ -82,13 +100,13 @@ try {
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.outbox_events WHERE event_type = 'consent.revoked'"), 1);
   const stillValid = await check(ana);
   assert.ok(stillValid.allowed, 'the second consent of the same user is still valid');
-  const second = (await consents.list(ana)).find(c => c.status === 'active');
+  const second = (await consents.list(ana)).items.find(c => c.status === 'active');
   assert.ok(second);
   if (second) await consents.revoke({ principal: ana, consentCode: second.consentId, traceId: traceId() });
   assert.deepEqual(await check(ana), { allowed: false, reason: 'consent_revoked' });
 
   const before = await count('SELECT count(*)::INT4 FROM identity.consents');
-  assert.deepEqual(await consents.decline({ principal: luis, body: { textVersion: 1 }, traceId: traceId() }), { status: 'declined' });
+  assert.deepEqual(await consents.decline({ principal: luis, body: { textVersion: 2 }, traceId: traceId() }), { status: 'declined' });
   assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents'), before);
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.audit_events WHERE action = 'consent.declined'"), 1);
 
@@ -115,13 +133,20 @@ try {
   const frank = await person();
   const oldest = await grant(frank, 'k0');
   assert.ok(oldest.status === 'created');
-  for (let i = 1; i <= 21; i++) {
+  for (let i = 1; i <= 55; i++) {
     advance(0.001);
     const newer = await grant(frank, `k${i}`);
     assert.ok(newer.status === 'created');
     if (newer.status === 'created') await consents.revoke({ principal: frank, consentCode: newer.consent.consentId, traceId: traceId() });
   }
-  assert.ok((await check(frank)).allowed, 'an older active consent is found behind more than 20 newer revoked ones');
+  assert.ok((await check(frank)).allowed, 'an older active consent is found behind more than 50 newer revoked ones');
+  const firstPage = await consents.list(frank);
+  assert.equal(firstPage.items.length, 50);
+  assert.ok(firstPage.nextCursor);
+  assert.equal((await consents.list(luis, firstPage.nextCursor)).items.length, 0, 'cursor ownership is checked');
+  const visible = await allPages(frank);
+  assert.equal(visible.length, 56, 'all authorizations remain reachable across bounded pages');
+  assert.ok(oldest.status === 'created' && visible.some(c => c.consentId === oldest.consent.consentId && c.status === 'active'));
   if (oldest.status === 'created') await consents.revoke({ principal: frank, consentCode: oldest.consent.consentId, traceId: traceId() });
   assert.deepEqual(await check(frank), { allowed: false, reason: 'consent_revoked' });
 
@@ -156,6 +181,26 @@ try {
   await db.query('UPDATE identity.consent_counters SET last_value = $1 WHERE year = 2095', ['9007199254740991']);
   const wide = await grant(ana, 'capacity-exact-int8');
   assert.ok(wide.status === 'created' && wide.consent.consentId === 'CNS-2095-9007199254740992');
+
+  // Restore a synthetic historical record to its v1 wording, then simulate its lost-response retry after deployment.
+  const legacyOwner = await person();
+  const legacyGrant = await grant(legacyOwner, 'legacy-key');
+  assert.ok(legacyGrant.status === 'created');
+  const legacy = (await store.forSubject(legacyOwner.subjectToken, 'risk_profiling', 'income_obligations_12m', current))[0];
+  legacy.textVersion = 1;
+  legacy.wordingHash = '5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047';
+  const legacySeal = await integrity.seal(sealContent(legacy));
+  const requestHash = await integrity.digest(JSON.stringify([1, null, 'es-CO']));
+  await db.query('UPDATE identity.consents SET text_version = 1, wording_hash = $2, seal = $3, request_hash = $4 WHERE id = $1', [legacy.id, legacy.wordingHash, legacySeal, requestHash]);
+  const grantsBefore = await count('SELECT count(*)::INT4 FROM identity.consents');
+  const eventsBefore = await count('SELECT count(*)::INT4 FROM identity.outbox_events');
+  const legacyReplay = await grant(legacyOwner, 'legacy-key', { textVersion: 1, locale: 'es-CO' });
+  assert.ok(legacyReplay.status === 'replayed' && legacyReplay.consent.consentId === legacyGrant.consent.consentId && legacyReplay.consent.seal === legacySeal);
+  assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents'), grantsBefore);
+  assert.equal(await count('SELECT count(*)::INT4 FROM identity.outbox_events'), eventsBefore);
+  assert.deepEqual(await grant(legacyOwner, 'legacy-key', { textVersion: 1, locale: 'en-US' }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(legacyOwner, 'unused-legacy-key', { textVersion: 1, locale: 'es-CO' }), { status: 'terms_outdated' });
+  assert.ok((await check(legacyOwner)).allowed);
 
   const app = clientFor(runtime, config.ssl); await app.connect();
   try {
