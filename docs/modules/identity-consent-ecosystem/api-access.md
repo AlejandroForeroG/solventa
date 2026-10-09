@@ -19,7 +19,7 @@ Each environment has its own configuration, credentials and records. Public requ
 |---|---|---|
 | Partner server | WorkOS Connect M2M JWT access token, sent as `Authorization: Bearer <token>` | Signature, issuer, audience, claims, scopes and current local partner/credential record |
 | Solventa web browser | Sealed cookie from the [existing session](authentication.md) | WorkOS session with verified email, active local user/session and the web user operation policy |
-| Mobile application | Native flow pending | Do not use the M2M secret or web cookies as a mobile authentication solution |
+| Mobile application | WorkOS user JWT after native PKCE | [Native connection](mobile-authentication.md): verified account plus active local session, never an M2M secret or web cookie |
 
 `subjectToken` is the customer's internal pseudonymous identifier. It is not an access token and does not authenticate requests. The `/internal/infra` secret is also unsuitable: it is reserved for operational diagnostics. Partner and web user identities are independent: a user session never establishes a partner identity, and a partner credential never authorizes a web user. A user session alone is not a general business permission or consent.
 
@@ -121,6 +121,7 @@ Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a p
 ```ts
 { kind: 'partner', token, operation: 'quotes:create' }
 { kind: 'web', cookie, origin, method, operation: 'quotes:create' }
+{ kind: 'mobile', token, operation: 'quotes:create' }
 ```
 
 Identity's own [consent](consent.md) routes call the same function with `consents:read` or `consents:write`, for web users only: a partner credential is always forbidden those operations.
@@ -162,7 +163,7 @@ Registration creates or reuses an active partner and records the credential with
 
 Identity owns `partners` and `partner_credentials`; each call checks their validity. Web users have no rows in these tables. The M2M reference is built as `JSON.stringify([issuer, organizationId, applicationId])` using verified claims. SQL stores identifiers and scopes, without JWTs, client secrets or cookies. Local revocation blocks subsequent use even while the JWT remains signed and unexpired. JWT verification does not establish immediate revocation in WorkOS: there is no per-request introspection.
 
-This foundation does not implement quoting, consent, quotas, biometrics, mobile authorization, Pact or a permission catalog for all future resources. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
+These probes do not perform quoting, consent, quotas, biometrics or implement a permission catalog for all future resources. The native authorization probe and session lifecycle are described in [native authentication](mobile-authentication.md); native business HTTP routes and UI remain separate work. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
 
 ## Verification
 
