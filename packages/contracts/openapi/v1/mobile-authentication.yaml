@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: Solventa mobile authentication
+  version: 1.1.0
+  description: Native WorkOS PKCE configuration, local session registration, inspection and revocation. No biometrics, device attestation or business writes are performed.
+servers:
+  - url: /api/v1
+tags:
+  - name: Mobile
+    description: Identity-owned native session connection.
+paths:
+  /mobile/config:
+    get:
+      operationId: getMobileConfiguration
+      summary: Read public native login configuration
+      tags: [Mobile]
+      security: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Public environment-specific client configuration. No API key or token is returned.
+          headers: &headers
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Configuration'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /mobile/session:
+    post:
+      operationId: registerMobileSession
+      summary: Register the signed-in native user in Solventa
+      tags: [Mobile]
+      description: Send the WorkOS user access token after PKCE login. The backend verifies signature, exact client/issuer, time claims and provider email verification, then registers the local client/session transactionally. Active retries return the same principal; revoked, expired or suspended local sessions cannot be reopened. No body is required or used; client IDs supplied by callers never establish identity. Cookies are rejected. Tokens are never persisted in SQL.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses: &sessionResponses
+        '200':
+          description: Active local session for the verified native user.
+          headers: *headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      operationId: getMobileSession
+      summary: Inspect the active native session
+      tags: [Mobile]
+      description: Verifies the current user token and active local session without registering, refreshing or extending it. Send no cookies. Refresh an expired access token through WorkOS on the device, then retry once; a revoked or expired local session requires a new login.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses: *sessionResponses
+    delete:
+      operationId: revokeMobileSession
+      summary: Sign out the native session
+      tags: [Mobile]
+      description: Verifies the user token and atomically revokes the existing local session or creates an already-revoked blocking reference for a pending bootstrap, including client mapping, outbox and audit in the same owner transaction. SQL failure returns 503 without a partial active registration and stops provider revocation. After local commit, it revokes the WorkOS session. Provider failure returns 503 while local revocation stays effective; retry with the same still-valid token. Already-revoked or missing provider sessions are safe retries. The app clears its secure tokens after successful logout, or retains a secure pending logout for bounded retries when offline. No cookies or body are needed.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Local and provider revocation completed.
+          headers: *headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Logout'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /access/mobile:
+    get:
+      operationId: getMobileAccess
+      summary: Check the native user for quotes:create
+      tags: [Mobile]
+      description: Requires a verified WorkOS user token and an active session already registered through POST /mobile/session. Returns the mobile user actor. Never registers, refreshes, creates a quote or grants consent. Existing quote and consent routes retain their own channel contracts; this probe does not add native business endpoints.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Active native user passed the permission probe.
+          headers: *headers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Access'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS AuthKit USER access token obtained through native code+PKCE. Never a server API key, Connect M2M token, refresh token or web cookie.
+  headers:
+    TraceId:
+      description: Valid supplied UUID or a generated UUID, also present in the body.
+      schema: { type: string, format: uuid }
+    NoStore:
+      description: Session responses must not be cached.
+      schema: { type: string, enum: [no-store] }
+  schemas:
+    Configuration:
+      type: object
+      additionalProperties: false
+      required: [clientId, redirectUri, authorizationEndpoint, tokenEndpoint, traceId]
+      properties:
+        clientId: { type: string, pattern: '^client_[a-zA-Z0-9]+$' }
+        redirectUri: { type: string, enum: ['solventa://auth/callback'] }
+        authorizationEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authorize'] }
+        tokenEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authenticate'] }
+        traceId: { type: string, format: uuid }
+    Principal:
+      type: object
+      additionalProperties: false
+      required: [clientId, subjectToken]
+      properties:
+        clientId: { type: string, format: uuid }
+        subjectToken:
+          type: string
+          format: uuid
+          description: Pseudonymous local identifier, never an authentication credential.
+    Session:
+      type: object
+      additionalProperties: false
+      required: [principal, channel, traceId]
+      properties:
+        principal:
+          $ref: '#/components/schemas/Principal'
+        channel: { type: string, enum: [mobile] }
+        traceId: { type: string, format: uuid }
+    Access:
+      type: object
+      additionalProperties: false
+      required: [actor, traceId]
+      properties:
+        actor:
+          type: object
+          additionalProperties: false
+          required: [kind, channel, principal, operations]
+          properties:
+            kind: { type: string, enum: [user] }
+            channel: { type: string, enum: [mobile] }
+            principal:
+              $ref: '#/components/schemas/Principal'
+            operations:
+              type: array
+              minItems: 1
+              maxItems: 1
+              items: { type: string, enum: ['quotes:create'] }
+        traceId: { type: string, format: uuid }
+    Logout:
+      type: object
+      additionalProperties: false
+      required: [status, traceId]
+      properties:
+        status: { type: string, enum: [signed_out] }
+        traceId: { type: string, format: uuid }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error: { type: string, enum: [invalid_request, unauthorized, forbidden, method_not_allowed, access_unavailable] }
+        traceId: { type: string, format: uuid }
+  responses:
+    InvalidRequest:
+      description: Native bearer request included cookies, or private authorization input was invalid.
+      headers: *headers
+      content: &errorContent
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, foreign or expired token; unverified/deleted user; absent, expired, suspended or revoked local session.
+      headers:
+        <<: *headers
+        WWW-Authenticate:
+          description: Bearer authentication challenge.
+          schema: { type: string, example: 'Bearer realm="solventa"' }
+      content: *errorContent
+    Forbidden:
+      description: Operation is outside the native user's current permission policy.
+      headers: *headers
+      content: *errorContent
+    MethodNotAllowed:
+      description: Method is not supported on this route.
+      headers:
+        <<: *headers
+        Allow:
+          description: Allowed methods for this route.
+          schema: { type: string }
+      content: *errorContent
+    Unavailable:
+      description: Configuration, provider verification, SQL registration/lookup or revocation is unavailable. A failed provider logout does not undo local revocation.
+      headers: *headers
+      content: *errorContent
