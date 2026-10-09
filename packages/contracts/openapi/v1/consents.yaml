@@ -204,8 +204,8 @@ components:
   schemas:
     ConsentId:
       type: string
-      pattern: '^CNS-[0-9]{4}-[0-9]{5}$'
-      description: Readable consent code, unique per year (CNS-YYYY-NNNNN).
+      pattern: '^CNS-[0-9]{4}-[0-9]{5,19}$'
+      description: Readable consent code, unique per year, with at least five counter digits and up to the INT8 counter capacity.
       example: CNS-2026-00001
     SourceCode:
       type: string
