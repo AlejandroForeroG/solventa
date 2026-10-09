@@ -34,7 +34,13 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
 // Composition root: platform wiring and operational probes stay outside the core.
 export default class extends WorkerEntrypoint<IdentityEnv> {
   async fetch(request: Request): Promise<Response> {
-    return createHttp({ authorizeApiAccess: input => authorize(this.env, input) }).fetch(request, this.env, this.ctx);
+    return createHttp({
+      authorizeApiAccess: input => authorize(this.env, input),
+      authentication: {
+        provider: config => new WorkosAuthentication(config),
+        sessions: connectionString => new SqlIdentitySessions(connectionString),
+      },
+    }).fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'identity-consent-ecosystem', environment: this.env.APP_ENV }; }
   async authorizeApiAccessV1(request: ApiAccessRequest) {
