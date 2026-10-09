@@ -5,7 +5,6 @@ import { useAnnounce } from '../quote/Live';
 import { consentApi, newIdempotencyKey, type Consent, type ConsentApi, type Terms } from './api';
 import { SUPPORTED_TEXT_VERSION } from './wording';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 type Load = 'loading' | 'ready' | 'error' | 'mismatch';
 type Problem = 'none' | 'grant' | 'decline' | 'outdated';
 
@@ -29,7 +28,6 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   const pending = useRef<AbortController | null>(null);
   // The same key for the same terms, so a repeated click or a retry never records two authorizations.
   const key = useRef(newIdempotencyKey());
-  const [started] = useState(() => new Date());
 
   const fetchTerms = useCallback(async () => {
     pending.current?.abort();
@@ -99,7 +97,6 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
     </section>;
   }
 
-  const until = new Date(started.getTime() + terms.validityDays * DAY_MS);
   return <section className="step">
     {problem !== 'none' && <div className="banner banner-error">
       <span aria-hidden="true" className="banner-icon">!</span>
@@ -118,7 +115,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
           <h2 className="section-label consent-gap">{intl.formatMessage({ id: 'consent.validity' })}</h2>
           <p className="validity">
             <span className="pill pill-open_finance">{intl.formatMessage({ id: 'consent.validityDays' }, { days: terms.validityDays })}</span>
-            <span>{intl.formatMessage({ id: 'consent.validityRange' }, { from: dayMonthYear(started), to: dayMonthYear(until) })}</span>
+            <span>{intl.formatMessage({ id: 'consent.validityStart' })}</span>
           </p>
           <p className="note">{intl.formatMessage({ id: 'consent.revokeNote' })}</p>
         </div>

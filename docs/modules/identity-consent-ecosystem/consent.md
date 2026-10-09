@@ -4,7 +4,7 @@ Identity owns the consent record. A customer authorizes, once and explicitly, th
 
 A web session is not consent. Having a consent is not a business permission either: each use of a source checks it again.
 
-## Authorization terms (text version 1)
+## Authorization terms (text version 2)
 
 The terms are defined in Identity and served by `GET /api/v1/consents/terms`; the web channel renders them and never defines them.
 
@@ -15,14 +15,14 @@ The terms are defined in Identity and served by `GET /api/v1/consents/terms`; th
 | Sources and scopes | `open_finance_bancolombia` / `income_obligations_12m` (Open Finance), `datacredito_experian` / `payment_history_score` (credit bureau), `ruaf` / `affiliation_regime` (open data), `registraduria` / `identity_validation` (open data) |
 | Not part of the authorization | Public DANE statistics: aggregate data that identifies no one. They are still listed as a source of the offer and in the audit trail. |
 
-The customer confirms with a mandatory checkbox. The wording of version 1:
+Before authorization, the screen states the duration from the recorded grant rather than predicting calendar dates using the device clock. The confirmation and privacy panel show the actual dates returned by Identity. Version 1 remains recoverable in Git; existing sealed grants retain their original wording, dates and validity. The customer confirms with a mandatory checkbox. The wording of version 2:
 
 | Locale | Wording |
 |---|---|
 | es-CO | Autorizo a Solventa a consultar las fuentes listadas con el propósito y la vigencia descritos. Quedará registro verificable de esta autorización. |
 | en-US | I authorize Solventa to query the listed sources for the purpose and validity described. A verifiable record of this authorization will be kept. |
 
-Changing the purpose, a source, a scope, the validity or the wording requires a new `textVersion`, new fingerprints (below) and keeping the previous wording recoverable in Git. A grant that names an older version is refused with `terms_outdated`, and the customer sees the new text before authorizing again. A consent covers exactly the sources and scopes of the version it was granted under; there is no partial grant.
+Changing the purpose, a source, a scope, the validity or the wording requires a new `textVersion`, new fingerprints (below) and keeping the previous wording recoverable in Git. A new grant that names an older version is refused with `terms_outdated`, and the customer sees the new text before authorizing again. An existing idempotency key is checked before refusing older terms: an identical committed version 1 request replays its original grant, while changed data conflicts and an unused key cannot create a stale grant. A consent covers exactly the sources and scopes of the version it was granted under; there is no partial grant.
 
 ## Wording fingerprint
 
@@ -37,6 +37,7 @@ To change the wording: edit the messages, add the new `textVersion` and fingerpr
 - **Who:** only the authenticated web user, for their own subject. No identifier is taken from the body. Writes need the configured `Origin`, and an `Authorization` header is rejected, as in [API access](api-access.md).
 - **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key. Five digits are the minimum width, not an annual limit: the counter grows through the exact INT8 range, up to 19 digits. Existing five-digit codes remain valid.
 - **Status:** `active`, `revoked` or `expired` is computed from `revoked_at` and `expires_at` on every read; it is not stored, so it cannot go stale.
+- **Panel:** returns at most 50 records per page, newest first with stable ID ordering for equal timestamps. Pass `nextCursor` as `after` until it is null to reach every authorization. Previous/next controls render only the current page; a revocation preserves the anchor. Unknown or foreign cursors return an empty page; malformed cursors return 400. Contract revision 1.1.0 adds optional cursor fields compatibly.
 - **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked.
 - **Seal:** a keyed hash of the consent content, including the language and the wording fingerprint, shown in the panel so a later change to the record can be detected.
 - **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows. The screen advances only after the refusal is recorded; a failed write offers a retry and outdated terms are reloaded, without granting access.
@@ -71,7 +72,7 @@ The check happens before the call and is not repeated afterwards, so a revocatio
 
 ## Operation
 
-`0007_consent_code_capacity.sql` widens the consent-code constraint without changing the already applied `0006_consent_records.sql`. Apply both pending files in order before this revision; dev already containing 0006 applies only 0007. The new constraint preserves old codes and supports six or more counter digits. The client verifies the exact supported purpose, duration and unique source/scope/kind set before offering authorization; unexpected terms are treated as unavailable.
+`0008_consent_pagination.sql` adds the client/grant-date index for bounded keyset reads. Apply it before deploying the pagination change; it preserves existing records and grants. `0007_consent_code_capacity.sql` widens the consent-code constraint without changing the already applied `0006_consent_records.sql`. Apply both pending files in order before this revision; dev already containing 0006 applies only 0007. The new constraint preserves old codes and supports six or more counter digits. The client verifies the exact supported purpose, duration and unique source/scope/kind set before offering authorization; unexpected terms are treated as unavailable.
 
 - **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns, among them the language and the wording fingerprint. Apply it before deploying this code, following the [migration guide](../../infrastructure/migrations.md): the read-only plan first, then the apply and `schema-verify --admin`. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code. Apply the file as it stands in the merged revision: an applied migration is never edited.
 - **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal; without it a grant answers 503 and a check denies. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`; the local configuration declares it as required, so `wrangler dev` loads it. In dev, staging and prod the operator loads it as a Worker secret of Identity, outside `IDENTITY_AUTH_JSON`, before the consent PR is merged. It is not declared as required for those environments, so a deployment does not fail without it. Later deployments preserve it. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
