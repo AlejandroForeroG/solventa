@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { CURRENT_TERMS, WORDING_FINGERPRINT } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { messages } from '../apps/web/src/i18n/messages';
-import { CONSENT_WORDING_KEYS, SUPPORTED_TEXT_VERSION } from '../apps/web/src/consent/wording';
+import { CONSENT_WORDING_KEYS, SUPPORTED_TEXT_VERSION, SUPPORTED_TERMS } from '../apps/web/src/consent/wording';
 import { createHash } from 'node:crypto';
 
 const read = (path: string) => readFileSync(path, 'utf8');
@@ -25,6 +25,16 @@ const schema = (name: string) => {
   return check;
 };
 const day = 24 * 60 * 60 * 1000;
+
+test('the web supported semantics match the terms its wording describes', () => {
+  assert.deepEqual(SUPPORTED_TERMS, CURRENT_TERMS);
+});
+
+test('consent codes preserve five digits and grow across the annual capacity boundary', () => {
+  const check = schema('ConsentId');
+  for (const code of ['CNS-2026-99999', 'CNS-2026-100000', 'CNS-2026-9007199254740992']) assert.equal(check(code), true);
+  for (const code of ['CNS-2026-9999', 'CNS-2026-12345678901234567890']) assert.equal(check(code), false);
+});
 
 test('every operation needs the web session and declares the failure statuses of its flow', () => {
   const operations = {
