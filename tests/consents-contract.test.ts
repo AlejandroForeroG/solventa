@@ -7,6 +7,8 @@ import { parse } from 'yaml';
 import { CURRENT_TERMS, WORDING_FINGERPRINT } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { messages } from '../apps/web/src/i18n/messages';
+import { CONSENT_WORDING_KEYS, SUPPORTED_TEXT_VERSION } from '../apps/web/src/consent/wording';
+import { createHash } from 'node:crypto';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 const consents = parse(read('packages/contracts/openapi/v1/consents.yaml'));
@@ -104,4 +106,16 @@ test('the examples carry the fingerprint of the wording of their language', () =
     assert.equal(consent.wordingHash, WORDING_FINGERPRINT[consent.locale as 'es-CO' | 'en-US'], consent.consentId);
   }
   assert.deepEqual(new Set(examples.consents.map((c: { locale: string }) => c.locale)), new Set(['es-CO', 'en-US']));
+});
+
+test('the wording the customer reads matches the fingerprints Identity approved, and the web supports the served version', () => {
+  assert.equal(SUPPORTED_TEXT_VERSION, CURRENT_TERMS.textVersion);
+  for (const locale of ['es-CO', 'en-US'] as const) {
+    const wording = CONSENT_WORDING_KEYS.map(key => {
+      assert.ok(messages[locale][key], `${locale} lacks ${key}`);
+      return [key, messages[locale][key]];
+    });
+    const fingerprint = createHash('sha256').update(JSON.stringify(wording)).digest('hex');
+    assert.equal(fingerprint, WORDING_FINGERPRINT[locale], `The ${locale} wording changed (fingerprint now ${fingerprint}): add a new text version, its fingerprints in Identity and SUPPORTED_TEXT_VERSION`);
+  }
 });
