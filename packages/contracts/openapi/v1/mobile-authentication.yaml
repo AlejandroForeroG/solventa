@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.0.0
+  version: 1.1.0
   description: Native WorkOS PKCE configuration, local session registration, inspection and revocation. No biometrics, device attestation or business writes are performed.
 servers:
   - url: /api/v1
@@ -73,7 +73,7 @@ paths:
       operationId: revokeMobileSession
       summary: Sign out the native session
       tags: [Mobile]
-      description: Verifies the user token, ensures a local record even for a pending bootstrap, revokes the local session and then revokes the WorkOS session. Provider failure returns 503 while local revocation stays effective; retry with the same still-valid token. Already-revoked or missing provider sessions are safe retries. The app clears its secure tokens after successful logout, or retains a secure pending logout for bounded retries when offline. No cookies or body are needed.
+      description: Verifies the user token and atomically revokes the existing local session or creates an already-revoked blocking reference for a pending bootstrap, including client mapping, outbox and audit in the same owner transaction. SQL failure returns 503 without a partial active registration and stops provider revocation. After local commit, it revokes the WorkOS session. Provider failure returns 503 while local revocation stays effective; retry with the same still-valid token. Already-revoked or missing provider sessions are safe retries. The app clears its secure tokens after successful logout, or retains a secure pending logout for bounded retries when offline. No cookies or body are needed.
       security:
         - MobileBearer: []
       parameters:
