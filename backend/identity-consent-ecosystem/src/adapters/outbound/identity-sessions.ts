@@ -12,7 +12,14 @@ export class SqlIdentitySessions implements IdentitySessions {
       const result = await operation(db);
       await db.query('COMMIT');
       return result;
-    } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+    } catch (error) {
+      let rolledBack = false;
+      await db.query('ROLLBACK').then(() => { rolledBack = true; }).catch(() => {});
+      if (rolledBack && error && typeof error === 'object' && 'code' in error && error.code === '40001') {
+        throw new Error('session_transaction_retry', { cause: error });
+      }
+      throw error;
+    }
     finally { await db.end().catch(() => {}); }
   }
   async open(identity: VerifiedIdentity): Promise<Principal> {
@@ -47,6 +54,27 @@ export class SqlIdentitySessions implements IdentitySessions {
         AND c.status='active' AND s.revoked_at IS NULL AND s.expires_at>now()`, [identity.sessionReference, identity.providerSubject])).rows[0];
       return row ? { clientId: row.id, subjectToken: row.subject_token } : null;
     });
+  }
+  async register(identity: VerifiedIdentity): Promise<Principal | null> {
+    const active = await this.find(identity);
+    if (active) return active;
+    try { return await this.open(identity); }
+    catch (error) {
+      // A replay never updates expiry or clears revocation; the original session wins.
+      if (error instanceof Error && ['session_already_registered', 'client_inactive'].includes(error.message)) return this.find(identity);
+      // Retry a known rejected transaction once, never an uncertain commit.
+      if ((error instanceof Error && error.message === 'session_transaction_retry')
+        || (error && typeof error === 'object' && 'code' in error && error.code === '23505')) {
+        const principal = await this.find(identity);
+        if (principal) return principal;
+        try { return await this.open(identity); }
+        catch (retryError) {
+          if (retryError instanceof Error && ['session_already_registered', 'client_inactive'].includes(retryError.message)) return this.find(identity);
+          throw retryError;
+        }
+      }
+      throw error;
+    }
   }
   async revoke(identity: VerifiedIdentity): Promise<void> {
     await this.transaction(async db => {

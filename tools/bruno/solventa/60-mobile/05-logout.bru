@@ -1,0 +1,22 @@
+meta {
+  name: Sign out native session
+  type: http
+  seq: 5
+}
+delete {
+  url: {{baseUrl}}/api/v1/mobile/session
+  body: none
+  auth: none
+}
+headers {
+  Authorization: Bearer {{mobileAccessToken}}
+}
+tests {
+  test("Native connection contract", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+    const body = res.getBody();
+    expect(body.traceId).to.equal(res.getHeader("x-trace-id"));
+    expect(body).to.have.property("status");
+  });
+}
