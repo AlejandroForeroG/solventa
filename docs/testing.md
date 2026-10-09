@@ -22,7 +22,7 @@ For example, when a calculation rule changes, test inputs and results for the ne
 |---|---|---|
 | Domain | Rules, invariants and boundaries | Own values, no platform |
 | Application | Orchestration, errors, consent, idempotency and decision capture | In-memory ports |
-| HTTP/contract | Input, status, response and OpenAPI/Pact compatibility when implemented | `createHttp(deps)` without real SQL |
+| HTTP/contract | Input, status, response and OpenAPI/Pact compatibility | `createHttp(deps)` without real SQL |
 | SQL adapter | Constraints, persistence/transactions, catalog and permissions | Real local/temporary database |
 | Integration | Bindings, coordination and errors between services | Local Workers and SQL |
 | E2E/native | User flow and device capabilities | Real browser/device |
@@ -35,4 +35,6 @@ Use the existing runner: `node --test` for `.mjs` tools and `tsx --test` for Typ
 
 Run the affected suite first, then `npm run check` for code changes. [Migrations](infrastructure/migrations.md) and SQL adapters require their additional real tests. Once appropriate checks pass, do not repeat or broaden testing without a new change, failure or uncertainty that justifies it.
 
-In the PR, link new/updated documentation and state the behavior each relevant suite protects, executed commands and actual results. Do not claim pending Pact contracts or use cases exist.
+The CI `validate` job runs the authentication, partner-access, quote and consent SQL suites after starting its local database and checking fresh migrations. Each suite is mandatory: a missing script or file, or a failing assertion, fails CI. These steps also run in post-merge Deploy through the reusable CI workflow and use only local synthetic data, without remote administrative credentials. The final schema and SQL/RPC checks run afterwards, and container shutdown runs even after a failure.
+
+In the PR, link new/updated documentation and state the behavior each relevant suite protects, executed commands and actual results. Pact currently covers the SPA session, logout, quote and consent calls to the web Worker (`/auth/session`, `/auth/logout`, `POST /api/v1/me/quotes`, `/api/v1/consents` and its sub-paths); do not claim consumer contracts or use cases that do not exist. See [contracts](shared/contracts/README.md#consumer-contracts-pact).

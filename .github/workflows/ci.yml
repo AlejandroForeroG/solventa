@@ -40,6 +40,7 @@ jobs:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
       WRANGLER_SEND_METRICS: 'false'
+      SCARF_ANALYTICS: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +55,8 @@ jobs:
       - run: npm run test:schema
       - run: npm run test:authentication:sql
       - run: npm run test:partner-access:sql
+      - run: npm run test:quotes:sql
+      - run: npm run test:consents:sql
       - run: npm run infra:local:schema-verify
       - run: npm run test:infra
       - if: always()
