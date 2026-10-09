@@ -16,12 +16,19 @@ import { SqlPartnerAccess } from './adapters/outbound/partner-access';
 import { WorkosAuthentication } from './adapters/outbound/workos-authentication';
 import { WorkosPartnerAuthentication } from './adapters/outbound/workos-partner-authentication';
 import { configuration } from './adapters/inbound/authentication-http';
+import { WorkosMobileAuthentication } from './adapters/outbound/workos-mobile-authentication';
+import { MobileSessions } from './application/mobile-sessions';
 
 async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecision> {
   try {
     const config = configuration(env);
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
-      application: new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString)),
+      application,
+      mobile: config ? {
+        authenticate: token => new WorkosMobileAuthentication({ clientId: config.clientId, apiKey: config.apiKey }).authenticate(token),
+        authorize: (identity, operation) => application.mobileUser(identity, operation),
+      } : null,
       partner: env.WORKOS_CONNECT_ISSUER && env.WORKOS_CONNECT_AUDIENCE ? {
         authenticate: token => new WorkosPartnerAuthentication({ issuer: env.WORKOS_CONNECT_ISSUER, audience: env.WORKOS_CONNECT_AUDIENCE }).authenticate(token),
       } : null,
@@ -48,6 +55,7 @@ function consentsFor(env: ConsentEnv) {
 
 export default class extends WorkerEntrypoint<ConsentEnv> {
   async fetch(request: Request): Promise<Response> {
+    const config = configuration(this.env);
     return createHttp({
       authorizeApiAccess: input => authorize(this.env, input),
       authentication: {
@@ -55,6 +63,11 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         sessions: connectionString => new SqlIdentitySessions(connectionString),
       },
       consents: consentsFor(this.env),
+      mobile: config ? {
+        configuration: { clientId: config.clientId, redirectUri: 'solventa://auth/callback' },
+        provider: new WorkosMobileAuthentication({ clientId: config.clientId, apiKey: config.apiKey }),
+        sessions: new MobileSessions(new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)),
+      } : null,
     }).fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'identity-consent-ecosystem', environment: this.env.APP_ENV }; }

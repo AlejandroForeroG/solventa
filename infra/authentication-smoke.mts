@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
+import { MobileSessions } from '../backend/identity-consent-ecosystem/src/application/mobile-sessions';
 
 // Real SQL integration in a generated, disposable local database only (ESM).
 const config=await settings('local');
@@ -31,18 +32,50 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.outbox_events')).rows[0].count,1);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count,1);
   await assert.rejects(repo.open(identity),/session_already_registered/);
+  assert.deepEqual(await repo.register(identity),principal);
+  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count,1);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.clients')).rows[0].count,1);
   await db.query("UPDATE identity.clients SET status='suspended'");
   assert.equal(await repo.find(identity),null);
+  assert.equal(await repo.register(identity),null);
   await assert.rejects(repo.open({...identity,sessionReference:'synthetic_new'}),/client_inactive/);
   await db.query("UPDATE identity.clients SET status='active'");
   assert.equal(await repo.find({...identity,providerSubject:'wrong_owner'}),null);
+  assert.equal(await repo.register({...identity,providerSubject:'wrong_owner'}),null);
   await repo.revoke(identity);
   assert.equal(await repo.find(identity),null);
+  assert.equal(await repo.register(identity),null);
+  const mobileIdentity={providerSubject:'mobile_'+randomUUID(),sessionReference:'mobile_'+randomUUID(),emailVerified:true};
+  const mobileRegistrations=await Promise.all([repo.register(mobileIdentity),repo.register(mobileIdentity)]);
+  assert.ok(mobileRegistrations[0]);
+  assert.deepEqual(mobileRegistrations[0],mobileRegistrations[1]);
+  await db.query("UPDATE identity.authentication_sessions SET created_at=now()-INTERVAL '2 seconds',expires_at=now()-INTERVAL '1 second' WHERE provider_session=$1",[mobileIdentity.sessionReference]);
+  assert.equal(await repo.register(mobileIdentity),null);
+  const pending={providerSubject:'pending_'+randomUUID(),sessionReference:'pending_'+randomUUID(),emailVerified:true};
+  await new MobileSessions(repo).revoke(pending);
+  assert.equal(await repo.register(pending),null);
+  await repo.revokeOrBlock(pending);
+  assert.equal((await db.query(`SELECT count(*)::INT4 FROM identity.audit_events a
+    JOIN identity.authentication_sessions s ON s.id=a.resource_id WHERE s.provider_session=$1`,[pending.sessionReference])).rows[0].count,1);
+  assert.equal((await db.query('SELECT revoked_at IS NOT NULL AS blocked FROM identity.authentication_sessions WHERE provider_session=$1',[pending.sessionReference])).rows[0].blocked,true);
+  const tables=['clients','external_identities','authentication_sessions','audit_events','outbox_events'];
+  const counts=[];
+  for(const table of tables)counts.push((await db.query(`SELECT count(*)::INT4 FROM identity.${table}`)).rows[0].count);
+  const failedLogout={providerSubject:'failed_logout_'+randomUUID(),sessionReference:'failed_logout_'+randomUUID(),emailVerified:true};
+  await db.query('REVOKE INSERT ON identity.audit_events FROM solventa_local_identity');
+  try {await assert.rejects(repo.revokeOrBlock(failedLogout),/permission|privilege/i);}
+  finally {await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity');}
+  for(const [index,table] of tables.entries())assert.equal((await db.query(`SELECT count(*)::INT4 FROM identity.${table}`)).rows[0].count,counts[index]);
+  assert.equal(await repo.find(failedLogout),null);
+  const racingLogout={providerSubject:'racing_logout_'+randomUUID(),sessionReference:'racing_logout_'+randomUUID(),emailVerified:true};
+  await Promise.all([repo.register(racingLogout),repo.revokeOrBlock(racingLogout)]);
+  assert.equal(await repo.find(racingLogout),null);
+  assert.equal(await repo.register(racingLogout),null);
+  await assert.rejects(repo.revokeOrBlock({...mobileIdentity,providerSubject:'wrong_logout_owner'}),/session_owner_mismatch/);
   await repo.revoke(identity);
-  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count,2);
-  assert.deepEqual((await db.query('SELECT DISTINCT actor_reference FROM identity.audit_events')).rows.map(row=>row.actor_reference),[principal.subjectToken]);
-  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation']}));
+  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference=$1',[principal.subjectToken])).rows[0].count,2);
+  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.authentication_sessions WHERE provider_session=$1',[mobileIdentity.sessionReference])).rows[0].count,1);
+  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race']}));
 } finally {
   await db?.end();
   if(created)await admin.query(`DROP DATABASE ${name} CASCADE`);

@@ -7,7 +7,7 @@ export interface PartnerAccessRepository {
   find(provider: string, reference: string): Promise<PartnerCredential | null>;
 }
 export type PartnerActor = { kind: 'partner'; partnerId: string; credentialId: string; scopes: ApiOperation[] };
-export type UserActor = { kind: 'user'; channel: 'web'; principal: Principal; operations: ApiOperation[] };
+export type UserActor = { kind: 'user'; channel: 'web' | 'mobile'; principal: Principal; operations: ApiOperation[] };
 export type AccessActor = PartnerActor | UserActor;
 export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed: true; actor: Actor } | {
   allowed: false;
@@ -52,6 +52,15 @@ export class ApiAccess {
       const principal = await this.sessions.find(identity);
       if (!principal) return unauthorized;
       return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation] } };
+    } catch { return unavailable; }
+  }
+  async mobileUser(identity: VerifiedIdentity, operation: string): Promise<AccessDecision<UserActor>> {
+    if (!isApiOperation(operation)) return invalid;
+    if (operation !== 'quotes:create') return forbidden;
+    if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) return unauthorized;
+    try {
+      const principal = await this.sessions.find(identity);
+      return principal ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal, operations: [operation] } } : unauthorized;
     } catch { return unavailable; }
   }
 }
