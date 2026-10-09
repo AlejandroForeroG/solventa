@@ -71,8 +71,18 @@ The check happens before the call and is not repeated afterwards, so a revocatio
 
 ## Operation
 
-- **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns. Apply it before deploying this code. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code.
-- **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal; without it a grant answers 503 and a check denies. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`; the local configuration declares it as required, so `wrangler dev` loads it. In dev, staging and prod the operator loads it as a Worker secret of Identity, outside `IDENTITY_AUTH_JSON`, following the same `secret bulk` procedure as the [quote key](../acquisition-risk/README.md): an ignored `infra/.local/identity.<environment>.consent.secrets.json` containing only `CONSENT_SEAL_KEY`, uploaded to the matching Identity Worker before the consent PR is merged, and checked with `secret list`. Later deployments preserve it. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
+- **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns, among them the language and the wording fingerprint. Apply it before deploying this code, following the [migration guide](../../infrastructure/migrations.md): the read-only plan first, then the apply and `schema-verify --admin`. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code. Apply the file as it stands in the merged revision: an applied migration is never edited.
+- **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal; without it a grant answers 503 and a check denies. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`; the local configuration declares it as required, so `wrangler dev` loads it. In dev, staging and prod the operator loads it as a Worker secret of Identity, outside `IDENTITY_AUTH_JSON`, before the consent PR is merged. It is not declared as required for those environments, so a deployment does not fail without it. Later deployments preserve it. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
+
+The operator keeps an environment-specific, ignored `infra/.local/identity.<environment>.consent.secrets.json` containing only `CONSENT_SEAL_KEY`, with its length and environment verified. It is uploaded to the matching Identity Worker as for the [quote key](../acquisition-risk/README.md), and only the names are listed afterwards:
+
+```sh
+node node_modules/wrangler/bin/wrangler.js secret bulk infra/.local/identity.dev.consent.secrets.json --config backend/identity-consent-ecosystem/wrangler.jsonc --env dev --profile solventa-universidad
+node node_modules/wrangler/bin/wrangler.js secret list --config backend/identity-consent-ecosystem/wrangler.jsonc --env dev --profile solventa-universidad
+```
+
+Replace `dev` consistently for staging or prod. `secret bulk` publishes a new Worker version, so perform it as a coordinated environment operation. The file belongs in authorized custody and never in Git or a request body.
+
 - **Routing:** the web Worker forwards `/api/v1/consents` and its sub-paths to Identity after the version gate.
 
 ## Limits
