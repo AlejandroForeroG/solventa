@@ -38,10 +38,24 @@ function rig(identity?: IdentityConsentRpc) {
   const snapshots = new CountingSnapshots();
   const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50), provider, snapshots });
   const ask = (subjectToken = ANA.subjectToken, scope: SignalScope = 'income_obligations_12m') => read.execute({ subjectToken, scope, traceId: TRACE });
-  const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 1, locale: 'es-CO' }, traceId: TRACE });
+  const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 2, locale: 'es-CO' }, traceId: TRACE });
   return { store, time, consents, provider, snapshots, rpcCalls, ask, grant };
 }
 const untouched = (r: ReturnType<typeof rig>) => assert.deepEqual({ provider: r.provider.calls, copies: r.snapshots.reads }, { provider: 0, copies: 0 });
+
+test('Acquisition accepts expanded consent counters and refuses IDs outside the contract', async () => {
+  for (const consentId of ['CNS-2026-99999', 'CNS-2026-100000', 'CNS-2026-9007199254740992', 'CNS-2026-9223372036854775807']) {
+    const r = rig({ verifyConsentV1: async () => ({ allowed: true, consent: { consentId, textVersion: 2, expiresAt: '2027-01-06T15:00:00Z' } }) });
+    const result = await r.ask();
+    assert.ok(result.status === 'available' && result.consentId === consentId);
+    assert.equal(r.provider.calls, 1);
+  }
+  for (const consentId of ['CNS-2026-9999', 'CNS-2026-12345678901234567890']) {
+    const r = rig({ verifyConsentV1: async () => ({ allowed: true, consent: { consentId, textVersion: 2, expiresAt: '2027-01-06T15:00:00Z' } }) });
+    assert.deepEqual(await r.ask(), { status: 'denied', reason: 'unavailable' });
+    untouched(r);
+  }
+});
 
 test('without a consent neither the provider nor a stored copy is reached', async () => {
   const r = rig();
@@ -51,7 +65,7 @@ test('without a consent neither the provider nor a stored copy is reached', asyn
 
 test('declining the authorization leaves the source untouched', async () => {
   const r = rig();
-  await r.consents.decline({ principal: ANA, body: { textVersion: 1 }, traceId: TRACE });
+  await r.consents.decline({ principal: ANA, body: { textVersion: 2 }, traceId: TRACE });
   assert.deepEqual(await r.ask(), { status: 'denied', reason: 'consent_missing' });
   untouched(r);
 });
@@ -114,7 +128,7 @@ test('if Identity cannot answer, is slow or answers something unexpected, access
     ['never answers', () => new Promise(() => {})],
     ['not an object', async () => 'yes'],
     ['allowed without consent', async () => ({ allowed: true })],
-    ['allowed with a malformed consent', async () => ({ allowed: true, consent: { consentId: 'x', textVersion: 1, expiresAt: 'tomorrow' } })],
+    ['allowed with a malformed consent', async () => ({ allowed: true, consent: { consentId: 'x', textVersion: 2, expiresAt: 'tomorrow' } })],
     ['unknown reason', async () => ({ allowed: false, reason: 'because' })]
   ];
   for (const [label, reply] of replies) {

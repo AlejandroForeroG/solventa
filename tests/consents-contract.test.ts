@@ -40,7 +40,7 @@ test('every operation needs the web session and declares the failure statuses of
   const operations = {
     getConsentTerms: ['200', '401', '403', '503'],
     grantConsent: ['200', '201', '400', '401', '403', '409', '503'],
-    listConsents: ['200', '401', '403', '503'],
+    listConsents: ['200', '400', '401', '403', '503'],
     declineConsent: ['204', '400', '401', '403', '409', '503'],
     revokeConsent: ['200', '400', '401', '403', '404', '409', '503']
   };
@@ -58,6 +58,7 @@ test('the examples satisfy the contract', () => {
     ['ConsentTerms', examples.terms],
     ['GrantRequest', examples.grantRequest],
     ['DeclineRequest', examples.declineRequest],
+    ['ConsentList', examples.list],
     ['ConsentError', examples.errors[0]],
     ['ConsentError', examples.errors[1]],
     ...examples.consents.map((consent: unknown): [string, unknown] => ['Consent', consent])
@@ -66,6 +67,14 @@ test('the examples satisfy the contract', () => {
     const check = schema(name);
     assert.ok(check(value), `${name}: ${JSON.stringify(check.errors)}`);
   }
+});
+
+test('contract revision 1.1.0 documents compatible bounded pagination', () => {
+  assert.equal(consents.info.version, '1.1.0');
+  assert.ok(consents.paths['/consents'].get.parameters.some((p: { name?: string }) => p.name === 'after'));
+  assert.equal(schema('ConsentList')({ items: [], traceId: examples.terms.traceId }), true, 'the original response is still valid');
+  assert.equal(schema('ConsentList')({ items: [], nextCursor: 'bad', traceId: examples.terms.traceId }), false);
+  assert.equal(schema('ConsentList')({ items: Array(51).fill(examples.consents[0]), nextCursor: null, traceId: examples.terms.traceId }), false);
 });
 
 test('a request cannot carry fields the contract does not define', () => {

@@ -1,4 +1,4 @@
-export const SUPPORTED_TEXT_VERSION = 1;
+export const SUPPORTED_TEXT_VERSION = 2;
 
 // The semantics this version's localized wording describes. Refuse different terms before showing authorization.
 export const SUPPORTED_TERMS = {
@@ -14,7 +14,7 @@ export const SUPPORTED_TERMS = {
 // The messages that make up what the customer reads and accepts. Changing any of them requires a new text version
 // and the new fingerprints in Identity: a test compares both.
 export const CONSENT_WORDING_KEYS = [
-  'consent.purpose', 'consent.purposeText', 'consent.purposeNote', 'consent.validity', 'consent.validityDays', 'consent.validityRange',
+  'consent.purpose', 'consent.purposeText', 'consent.purposeNote', 'consent.validity', 'consent.validityDays', 'consent.validityStart',
   'consent.revokeNote', 'consent.sources', 'consent.dane', 'consent.check',
   'source.open_finance_bancolombia.name', 'source.open_finance_bancolombia.detail',
   'source.datacredito_experian.name', 'source.datacredito_experian.detail',

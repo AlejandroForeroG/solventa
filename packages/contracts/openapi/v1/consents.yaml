@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Consents
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Explicit, informed consent to query the customer's financial and open data. Identity owns the
     record. A consent is created only by the authenticated web user for their own subject, lasts
@@ -88,21 +88,28 @@ paths:
       tags: [Consents]
       description: >
         Privacy panel. Returns only the consents of the user of the session, newest first, with
-        their status at the time of the request.
+        their status at the time of the request. Returns at most 50 records per page. Follow
+        nextCursor with the after parameter until it is null to reach every authorization.
       security:
         - WebSession: []
         - LocalWebSession: []
       parameters:
         - $ref: './common.yaml#/components/parameters/TraceId'
+        - name: after
+          in: query
+          required: false
+          description: Last consent code from the preceding page. Omit for the first page. An unknown or foreign code returns an empty page.
+          schema: { $ref: '#/components/schemas/ConsentId' }
       responses:
         '200':
-          description: The user's consents; empty when there are none.
+          description: A bounded page of the user's consents; empty when there are none.
           headers:
             X-Trace-Id: { $ref: '#/components/headers/TraceId' }
             Cache-Control: { $ref: '#/components/headers/NoStore' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ConsentList' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/Unavailable' }
@@ -337,7 +344,13 @@ components:
       properties:
         items:
           type: array
+          maxItems: 50
           items: { $ref: '#/components/schemas/Consent' }
+        nextCursor:
+          type: string
+          nullable: true
+          pattern: '^CNS-[0-9]{4}-[0-9]{5,19}$'
+          description: Last code to pass as after for the next page, or null when there are no more records. Optional for compatibility with the original recent-list response.
         traceId:
           type: string
           format: uuid
