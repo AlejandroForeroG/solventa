@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Consents } from '../backend/identity-consent-ecosystem/src/application/consents';
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
-import { CURRENT_TERMS, statusOf } from '../backend/identity-consent-ecosystem/src/domain/consent';
+import { CURRENT_TERMS, WORDING_FINGERPRINT, statusOf } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import { ANA, LUIS, MemoryConsents, SEAL_KEY, TRACE, clock } from './support/consent-fakes';
 
 function setup(key = SEAL_KEY) {
@@ -11,13 +11,13 @@ function setup(key = SEAL_KEY) {
   return { store, time, consents: new Consents({ store, platform: time, integrity: new HmacIntegrity(key) }) };
 }
 const grant = (consents: Consents, over: Partial<{ principal: typeof ANA; idempotencyKey: string | null; body: unknown }> = {}) =>
-  consents.grant({ principal: ANA, idempotencyKey: 'key-1', body: { textVersion: 1 }, traceId: TRACE, ...over });
+  consents.grant({ principal: ANA, idempotencyKey: 'key-1', body: { textVersion: 1, locale: 'es-CO' }, traceId: TRACE, ...over });
 const check = (over: Partial<{ subjectToken: string; purposeCode: string; scope: string }> = {}) =>
   ({ subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m', ...over });
 
 test('a grant covers exactly the sources and scopes of the text version, lasts 90 days and is sealed', async () => {
   const { consents } = setup();
-  const result = await grant(consents, { body: { textVersion: 1, quoteRef: 'COT-2026-00001' } });
+  const result = await grant(consents, { body: { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' } });
   assert.equal(result.status, 'created');
   if (result.status !== 'created') return;
   assert.deepEqual(result.consent.sources, CURRENT_TERMS.sources.map(s => s.code));
@@ -42,7 +42,7 @@ test('a retry with the same key returns the same consent; another request with t
   const retry = await grant(consents);
   assert.equal(retry.status, 'replayed');
   if (first.status === 'created' && retry.status === 'replayed') assert.equal(retry.consent.consentId, first.consent.consentId);
-  assert.deepEqual(await grant(consents, { body: { textVersion: 1, quoteRef: 'COT-2026-00002' } }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(consents, { body: { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00002' } }), { status: 'idempotency_conflict' });
   assert.equal(store.consents.length, 1);
   assert.equal(store.audit.filter(e => e.action === 'consent.granted').length, 1);
 });
@@ -56,7 +56,7 @@ test('the same key used by two users creates two consents', async () => {
 
 test('an outdated text version is refused and nothing is written', async () => {
   const { consents, store } = setup();
-  assert.deepEqual(await grant(consents, { body: { textVersion: 2 } }), { status: 'terms_outdated' });
+  assert.deepEqual(await grant(consents, { body: { textVersion: 2, locale: 'es-CO' } }), { status: 'terms_outdated' });
   assert.deepEqual(await consents.decline({ principal: ANA, body: { textVersion: 0 }, traceId: TRACE }), { status: 'invalid' });
   assert.deepEqual(await consents.decline({ principal: ANA, body: { textVersion: 2 }, traceId: TRACE }), { status: 'terms_outdated' });
   assert.equal(store.consents.length + store.audit.length, 0);
@@ -65,7 +65,7 @@ test('an outdated text version is refused and nothing is written', async () => {
 test('malformed requests are invalid: missing key, long key, unknown or mistyped fields', async () => {
   const { consents, store } = setup();
   for (const idempotencyKey of [null, '', 'x'.repeat(129)]) assert.deepEqual(await grant(consents, { idempotencyKey }), { status: 'invalid' });
-  for (const body of [null, 'x', [], {}, { textVersion: '1' }, { textVersion: 1.5 }, { textVersion: 1, subjectToken: 'x' }, { textVersion: 1, quoteRef: 'COT-26-1' }, { textVersion: 1, clientId: ANA.clientId }]) {
+  for (const body of [null, 'x', [], {}, { textVersion: '1', locale: 'es-CO' }, { textVersion: 1.5, locale: 'es-CO' }, { textVersion: 1 }, { textVersion: 1, locale: 'fr-FR' }, { textVersion: 1, locale: null }, { textVersion: 1, locale: 'es-CO', subjectToken: 'x' }, { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-26-1' }, { textVersion: 1, locale: 'es-CO', clientId: ANA.clientId }]) {
     assert.deepEqual(await grant(consents, { body }), { status: 'invalid' }, JSON.stringify(body));
   }
   assert.equal((await grant(consents, { idempotencyKey: 'x'.repeat(128) })).status, 'created');
@@ -168,4 +168,25 @@ test('status follows the dates and a revocation wins over expiry', () => {
   assert.equal(statusOf({ revokedAt: null, expiresAt }, new Date(expiresAt.getTime() - 1)), 'active');
   assert.equal(statusOf({ revokedAt: null, expiresAt }, expiresAt), 'expired');
   assert.equal(statusOf({ revokedAt: granted, expiresAt }, new Date(expiresAt.getTime() + 1)), 'revoked');
+});
+
+test('the record keeps the language the customer read and the fingerprint of that wording, and both are sealed', async () => {
+  const { consents, store } = setup();
+  for (const locale of ['es-CO', 'en-US'] as const) {
+    const result = await grant(consents, { idempotencyKey: `key-${locale}`, body: { textVersion: 1, locale } });
+    assert.ok(result.status === 'created' && result.consent.locale === locale && result.consent.wordingHash === WORDING_FINGERPRINT[locale]);
+  }
+  assert.notEqual(WORDING_FINGERPRINT['es-CO'], WORDING_FINGERPRINT['en-US']);
+  assert.deepEqual(store.consents.map(c => c.locale), ['es-CO', 'en-US']);
+  assert.equal((await consents.verify(check())).allowed, true);
+
+  store.consents[1].wordingHash = WORDING_FINGERPRINT['es-CO'];
+  store.consents[0].locale = 'en-US';
+  assert.deepEqual(await consents.verify(check()), { allowed: false, reason: 'consent_invalid' });
+});
+
+test('the same key with the same data in another language is a conflict, not a replay', async () => {
+  const { consents } = setup();
+  assert.equal((await grant(consents)).status, 'created');
+  assert.deepEqual(await grant(consents, { body: { textVersion: 1, locale: 'en-US' } }), { status: 'idempotency_conflict' });
 });

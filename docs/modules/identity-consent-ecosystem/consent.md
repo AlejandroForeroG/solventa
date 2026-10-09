@@ -22,7 +22,15 @@ The customer confirms with a mandatory checkbox. The wording of version 1:
 | es-CO | Autorizo a Solventa a consultar las fuentes listadas con el propósito y la vigencia descritos. Quedará registro verificable de esta autorización. |
 | en-US | I authorize Solventa to query the listed sources for the purpose and validity described. A verifiable record of this authorization will be kept. |
 
-Changing the purpose, a source, a scope, the validity or the wording requires a new `textVersion`. A grant that names an older version is refused with `terms_outdated`, and the customer sees the new text before authorizing again. A consent covers exactly the sources and scopes of the version it was granted under; there is no partial grant.
+Changing the purpose, a source, a scope, the validity or the wording requires a new `textVersion`, new fingerprints (below) and keeping the previous wording recoverable in Git. A grant that names an older version is refused with `terms_outdated`, and the customer sees the new text before authorizing again. A consent covers exactly the sources and scopes of the version it was granted under; there is no partial grant.
+
+## Wording fingerprint
+
+The wording the customer reads lives in the web catalogues. To prove later what was authorized, Identity keeps, for the current text version and each language, the SHA-256 fingerprint of the messages listed in `CONSENT_WORDING_KEYS` (`apps/web/src/consent/wording.ts`): purpose, validity, sources with their type and detail, scopes, the DANE note and the checkbox. A grant carries the `locale` the customer read; the record stores it with the fingerprint Identity approved for that version and language, and the seal covers both. A test compares the catalogue with `WORDING_FINGERPRINT` and fails when a listed message changes without the matching update, so a wording change cannot reach a record under the old version.
+
+The web shows only the text version it supports (`SUPPORTED_TEXT_VERSION`). It sends that version, not the one Identity serves: if Identity moved to another version, the grant is refused with `terms_outdated`, and a screen that finds a different version when it loads the terms does not offer the authorization. Titles, buttons and error messages are not part of the wording.
+
+To change the wording: edit the messages, add the new `textVersion` and fingerprints in Identity, update `SUPPORTED_TEXT_VERSION`, and keep the old text in Git history. The fingerprint is a proof of match, not a copy of the text.
 
 ## Rules
 
@@ -30,7 +38,7 @@ Changing the purpose, a source, a scope, the validity or the wording requires a 
 - **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key.
 - **Status:** `active`, `revoked` or `expired` is computed from `revoked_at` and `expires_at` on every read; it is not stored, so it cannot go stale.
 - **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked.
-- **Seal:** a keyed hash of the consent content, shown in the panel so a later change to the record can be detected.
+- **Seal:** a keyed hash of the consent content, including the language and the wording fingerprint, shown in the panel so a later change to the record can be detected.
 - **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows.
 - **Audit:** grant, decline, revocation and expiry leave an event without personal data and with the correlation ID.
 - **Quote reference:** an optional `quoteRef` is stored as a reference. Identity does not read Acquisition data to validate it.
