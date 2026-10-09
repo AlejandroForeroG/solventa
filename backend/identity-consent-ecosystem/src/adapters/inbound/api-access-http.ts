@@ -6,6 +6,7 @@ import type { VerifiedIdentity } from '../../application/authentication';
 
 export type ApiAccessDependencies = {
   application: Pick<ApiAccess, 'partner' | 'webUser'>;
+  mobile?: { authenticate(token: string): Promise<VerifiedIdentity | null>; authorize(identity: VerifiedIdentity, operation: string): Promise<AccessDecision> } | null;
   partner: { authenticate(token: string): Promise<PartnerIdentity | null> } | null;
   web: {
     authenticate(cookie: string, refresh: boolean): Promise<{ identity: VerifiedIdentity } | null>;
@@ -16,12 +17,13 @@ export type AuthorizeApiAccess = (input: unknown) => Promise<AccessDecision>;
 
 export type ApiAccessRequest =
   | { kind: 'partner'; token: string; operation: ApiOperation }
+  | { kind: 'mobile'; token: string; operation: ApiOperation }
   | { kind: 'web'; cookie: string; origin: string; method: string; operation: ApiOperation };
 
 function isAccessRequest(value: unknown): value is ApiAccessRequest {
   if (!value || typeof value !== 'object') return false;
   if (!('operation' in value) || !isApiOperation(value.operation) || !('kind' in value)) return false;
-  if (value.kind === 'partner') return 'token' in value && typeof value.token === 'string' && value.token.length <= 8192;
+  if (value.kind === 'partner' || value.kind === 'mobile') return 'token' in value && typeof value.token === 'string' && value.token.length <= 8192;
   return value.kind === 'web' && 'cookie' in value && typeof value.cookie === 'string' && value.cookie.length <= 16384
     && 'origin' in value && typeof value.origin === 'string' && value.origin.length <= 256
     && 'method' in value && typeof value.method === 'string' && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(value.method);
@@ -33,6 +35,12 @@ export async function authorizeApiAccess(deps: ApiAccessDependencies, input: unk
   const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
   try {
     const { application } = deps;
+    if (input.kind === 'mobile') {
+      if (!input.token) return unauthorized;
+      if (!deps.mobile) return { allowed: false, error: 'access_unavailable', status: 503 };
+      const identity = await deps.mobile.authenticate(input.token);
+      return identity ? await deps.mobile.authorize(identity, input.operation) : unauthorized;
+    }
     if (input.kind === 'partner') {
       if (!input.token) return unauthorized;
       if (!deps.partner) return { allowed: false, error: 'access_unavailable', status: 503 };
