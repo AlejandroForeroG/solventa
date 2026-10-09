@@ -52,6 +52,12 @@ function realAcquisition(store = new MemoryStore()): Binding {
 
 const unavailableService: Binding = { fetch: async () => { throw new Error('service_down'); } };
 
+const seedQuoteRequest = {
+  product: 'vida_hipotecario',
+  customer: { fullName: 'Laura Catalina Restrepo Ochoa', documentType: 'CC', documentNumber: '1020884771', birthDate: '1992-03-14', city: 'Bogotá D.C.' },
+  credit: { partnerCreditId: 'CRE-88-2026', amount: 320000000, termMonths: 180 },
+};
+
 async function acquisitionWithQuote(idempotencyKey: string, cookie: string): Promise<Binding> {
   const acquisition = realAcquisition();
   await acquisition.fetch(new Request(`${origin}/api/v1/me/quotes`, {
@@ -61,12 +67,6 @@ async function acquisitionWithQuote(idempotencyKey: string, cookie: string): Pro
   }));
   return acquisition;
 }
-
-const seedQuoteRequest = {
-  product: 'vida_hipotecario',
-  customer: { fullName: 'Laura Catalina Restrepo Ochoa', documentType: 'CC', documentNumber: '1020884771', birthDate: '1992-03-14', city: 'Bogotá D.C.' },
-  credit: { partnerCreditId: 'CRE-88-2026', amount: 320000000, termMonths: 180 },
-};
 
 const authorizedCookie = 'sealed-cookie';
 
