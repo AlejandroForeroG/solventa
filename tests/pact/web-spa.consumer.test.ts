@@ -2,6 +2,7 @@ import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { fetchSession, requestLogout } from '../../apps/web/src/api/auth';
+import { declineConsent, getTerms, grantConsent, listConsents, revokeConsent } from '../../apps/web/src/consent/api';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
@@ -137,5 +138,151 @@ describe('SPA quote request', () => {
       .withRequest({ ...quoteRequest, body: toRequestBody(quoteValues, quoteKey) })
       .willRespondWith({ status: 503 });
     await pact.executeTest(async server => assert.deepEqual(await submitQuote(server.url), { kind: 'unavailable' }));
+  });
+});
+
+const consentKey = '22222222-2222-4222-8222-222222222222';
+const consentRef = 'COT-2026-00001';
+const consentPost = { method: 'POST', headers: { 'content-type': 'application/json' } };
+const grantRequest = { ...consentPost, path: '/api/v1/consents', headers: { ...consentPost.headers, 'idempotency-key': consentKey } };
+const grantBody = { textVersion: 1, locale: 'es-CO', quoteRef: consentRef };
+const consentBody = (overrides: object = {}) => ({
+  consentId: MatchersV3.regex('^CNS-\\d{4}-\\d{5}$', 'CNS-2026-00001'),
+  status: MatchersV3.regex('^(active|revoked|expired)$', 'active'),
+  sources: MatchersV3.eachLike('open_finance_bancolombia'),
+  scopes: MatchersV3.eachLike('income_obligations_12m'),
+  grantedAt: MatchersV3.iso8601DateTimeWithMillis('2026-10-08T15:00:00.000Z'),
+  expiresAt: MatchersV3.iso8601DateTimeWithMillis('2027-01-06T15:00:00.000Z'),
+  revokedAt: null,
+  seal: MatchersV3.regex('^[0-9a-f]{64}$', 'a'.repeat(64)),
+  ...overrides,
+});
+
+describe('SPA consent terms', () => {
+  test('receives the authorization terms', async () => {
+    pact.given('a customer ready to authorize consent').uponReceiving('a request for the consent terms')
+      .withRequest({ method: 'GET', path: '/api/v1/consents/terms' })
+      .willRespondWith({
+        status: 200,
+        headers: jsonResponse,
+        body: {
+          purposeCode: MatchersV3.string('risk_profiling'),
+          textVersion: MatchersV3.integer(1),
+          validityDays: MatchersV3.integer(90),
+          sources: MatchersV3.eachLike({
+            code: MatchersV3.string('ruaf'),
+            scope: MatchersV3.string('affiliation_regime'),
+            kind: MatchersV3.regex('^(open_finance|credit_bureau|open_data)$', 'open_data'),
+          }),
+        },
+      });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => getTerms());
+      assert.equal(outcome.kind, 'ok');
+      if (outcome.kind === 'ok') assert.equal(outcome.value.textVersion, 1);
+    });
+  });
+
+  test('asks the visitor to sign in when the session cannot be renewed', async () => {
+    pact.given('no active session').uponReceiving('a request for the consent terms without a session')
+      .withRequest({ method: 'GET', path: '/api/v1/consents/terms' })
+      .willRespondWith({ status: 401 });
+    pact.given('no active session').uponReceiving('the session renewal after a rejected consent request')
+      .withRequest({ method: 'GET', path: '/auth/session' })
+      .willRespondWith({ status: 401 });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => getTerms()), { kind: 'unauthenticated' }));
+  });
+
+  test('reports the service as unavailable when Identity does not answer', async () => {
+    pact.given('the consent service is down').uponReceiving('a request for the consent terms while the service is down')
+      .withRequest({ method: 'GET', path: '/api/v1/consents/terms' })
+      .willRespondWith({ status: 503 });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => getTerms()), { kind: 'unavailable' }));
+  });
+});
+
+describe('SPA consent authorization', () => {
+  test('receives the created consent', async () => {
+    pact.given('a customer ready to authorize consent').uponReceiving('a consent authorization')
+      .withRequest({ ...grantRequest, body: grantBody })
+      .willRespondWith({ status: 201, headers: jsonResponse, body: consentBody() });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => grantConsent(grantBody, consentKey));
+      assert.equal(outcome.kind, 'ok');
+      if (outcome.kind === 'ok') assert.match(outcome.value.consentId, /^CNS-\d{4}-\d{5}$/);
+    });
+  });
+
+  test('receives the same consent when the request is retried', async () => {
+    pact.given('the consent was already granted with the idempotency key', { idempotencyKey: consentKey }).uponReceiving('a retried consent authorization')
+      .withRequest({ ...grantRequest, body: grantBody })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: consentBody() });
+    await pact.executeTest(async server => assert.equal((await withServer(server.url, () => grantConsent(grantBody, consentKey))).kind, 'ok'));
+  });
+
+  test('reports an outdated text version', async () => {
+    const outdated = { ...grantBody, textVersion: 2 };
+    pact.given('a customer ready to authorize consent').uponReceiving('a consent authorization with an outdated text version')
+      .withRequest({ ...grantRequest, body: outdated })
+      .willRespondWith({ status: 409, headers: jsonResponse, body: { error: MatchersV3.equal('terms_outdated') } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => grantConsent(outdated, consentKey)), { kind: 'outdated' }));
+  });
+
+  test('reports a reused idempotency key as a conflict', async () => {
+    pact.given('the idempotency key was used for another consent request', { idempotencyKey: consentKey }).uponReceiving('a consent authorization reusing an idempotency key')
+      .withRequest({ ...grantRequest, body: grantBody })
+      .willRespondWith({ status: 409, headers: jsonResponse, body: { error: MatchersV3.equal('idempotency_key_reused') } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => grantConsent(grantBody, consentKey)), { kind: 'conflict' }));
+  });
+
+  test('reports the service as unavailable when Identity does not answer', async () => {
+    pact.given('the consent service is down').uponReceiving('a consent authorization while the service is down')
+      .withRequest({ ...grantRequest, body: grantBody })
+      .willRespondWith({ status: 503 });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => grantConsent(grantBody, consentKey)), { kind: 'unavailable' }));
+  });
+});
+
+describe('SPA consent refusal', () => {
+  test('records the refusal without content', async () => {
+    pact.given('a customer ready to authorize consent').uponReceiving('a consent refusal')
+      .withRequest({ ...consentPost, path: '/api/v1/consents/declines', body: { textVersion: 1 } })
+      .willRespondWith({ status: 204 });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => declineConsent(1)), { kind: 'ok', value: true }));
+  });
+});
+
+describe('SPA privacy panel', () => {
+  test('receives the consents of the customer', async () => {
+    pact.given('a customer with an active consent').uponReceiving('a request for the consents of the customer')
+      .withRequest({ method: 'GET', path: '/api/v1/consents' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { items: MatchersV3.eachLike(consentBody()) } });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => listConsents());
+      assert.equal(outcome.kind, 'ok');
+      if (outcome.kind === 'ok') assert.equal(outcome.value.length, 1);
+    });
+  });
+
+  test('receives the revoked consent', async () => {
+    pact.given('a customer with an active consent').uponReceiving('a consent revocation')
+      .withRequest({ ...consentPost, path: '/api/v1/consents/CNS-2026-00001/revoke', body: {} })
+      .willRespondWith({
+        status: 200,
+        headers: jsonResponse,
+        body: consentBody({ status: MatchersV3.equal('revoked'), revokedAt: MatchersV3.iso8601DateTimeWithMillis('2026-10-08T15:00:00.000Z') }),
+      });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => revokeConsent('CNS-2026-00001'));
+      assert.equal(outcome.kind, 'ok');
+      if (outcome.kind === 'ok') assert.equal(outcome.value.status, 'revoked');
+    });
+  });
+
+  test('reports a consent that does not exist', async () => {
+    pact.given('a customer ready to authorize consent').uponReceiving('a revocation of an unknown consent')
+      .withRequest({ ...consentPost, path: '/api/v1/consents/CNS-2026-99999/revoke', body: {} })
+      .willRespondWith({ status: 404 });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => revokeConsent('CNS-2026-99999')), { kind: 'notFound' }));
   });
 });

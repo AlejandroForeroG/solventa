@@ -46,7 +46,7 @@ paths:
       operationId: getWebAccess
       summary: Check the authenticated web user for quotes:create
       tags: [Access]
-      description: Requires a valid sealed WorkOS cookie for a user with a verified email and an active local user/session. The web user operation policy allows only quotes:create; no partner registration is involved and the response grants no consent. Rejects an Authorization header with 400. Does not refresh the cookie; use GET /auth/session before retrying an expired access token.
+      description: Requires a valid sealed WorkOS cookie for a user with a verified email and an active local user/session. The probe checks quotes:create; the consent operations of the web user policy are defined in consents.yaml. No partner registration is involved and the response grants no consent. Rejects an Authorization header with 400. Does not refresh the cookie; use GET /auth/session before retrying an expired access token.
       security:
         - WebSession: []
         - LocalWebSession: []
