@@ -47,9 +47,13 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `openapi/v<N>/<domain>.yaml` | Independent, valid OpenAPI spec per domain (quotes, consent…) inside its version directory |
 | `openapi/v<N>/common.yaml` | Shared version components (`X-Trace-Id`, `Error`, deprecation headers); domain specs reference them with `$ref` |
 | `openapi/v1/quotes.yaml` | Minimum-data quote for partners (`POST /quotes`) and web users (`POST /me/quotes`): responses 201, 200, 400, 401, 403, 409 and 503; access errors carry only the canonical code and the trace id |
+| `openapi/v1/identity-access.yaml` | Access probes `GET /access/partner` and `GET /access/web`: responses 200, 400, 401, 403, 405 and 503; `tests/identity-access-contract.test.ts` checks each real response, its headers and its status against this spec |
 | `examples/quotes.json` | Valid and invalid cases with synthetic data, checked against the spec by `tests/quotes-contract.test.ts` |
+| `openapi/v1/consents.yaml` | Consent of the authenticated web user: terms, grant, decline, list and revoke; responses 200, 201, 204, 400, 401, 403, 404, 409 and 503, with only the canonical code and the trace id in errors |
+| `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
+| `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
 ## API versioning
@@ -85,10 +89,50 @@ Set its `deprecatedAt` and `sunset` in `apiVersions`; in **every** spec in its d
 
 ```sh
 npm run lint:openapi     # Redocly checks all .yaml files in openapi/
-npm run test:contracts   # Versioning, registry/spec agreement and capture schema
+npm run test:contracts   # Versioning, registry/spec agreement, capture schema and responses of quotes and access probes against their schemas
+npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
 ```
 
-Both run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+
+## Consumer contracts (Pact)
+
+Pact records what a consumer actually uses from a provider and checks that the provider still satisfies it. OpenAPI describes what a provider offers; a pact describes what a consumer depends on, so a change that breaks a consumer fails CI before it is promoted. Pacts live in the repository; there is no Pact Broker, so `can-i-deploy` is not available and `npm run check` is the control.
+
+Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-web`), covering `GET /auth/session` (active, anonymous and authentication unavailable), `POST /auth/logout` (active and anonymous) and `POST /api/v1/me/quotes` (created, invalid input, no session, no permission, reused idempotency key and service down) and the five consent routes: `GET /api/v1/consents/terms` (served, no session and service down), `POST /api/v1/consents` (created, retried with the same key, outdated text version, reused key and service down), `POST /api/v1/consents/declines`, `GET /api/v1/consents` and `POST /api/v1/consents/{id}/revoke` (revoked and unknown consent). The calls come from `apps/web/src/api/auth.ts`, `apps/web/src/quote/api.ts` and `apps/web/src/consent/api.ts`, the same modules the application uses. The consent states run the real Identity routes with in-memory consents; SQL and WorkOS are replaced, as for the other states. The partner endpoints (`POST /quotes`, `GET /access/partner`, `GET /access/web`) have no consumer code in the repository, so they have no pact; add one with the first real consumer.
+
+| Path | Role |
+|---|---|
+| `tests/pact/*.consumer.test.ts` | Runs the real client against a Pact mock server and writes the pact to a temporary directory. The test fails if the result differs from the committed file (ignoring `metadata`, which holds the Pact library version) |
+| `tests/pact/web-worker.provider.test.ts` | Replays every committed pact against `apps/web/worker/index.ts` served over HTTP |
+| `tests/pact/pact-guard.test.ts` | Alters a copy of a committed pact and requires verification to fail, proving a broken contract blocks CI |
+| `tests/pact/support/` | Local HTTP server for a Worker `fetch`, pact file helpers and the provider states |
+
+Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` also runs the real Identity routes, with only the WorkOS adapter and the session store replaced through the `authentication` argument of `createHttp`, which only `src/index.ts` fills with the real adapters, because a valid session needs credentials and a database; the behavior of those two is covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
+
+### Pending coverage
+
+A pact exists only for a consumer that is implemented. These public endpoints are documented in OpenAPI but have no pact yet, because no client code in the repository calls them:
+
+| Endpoint | Consumer expected |
+|---|---|
+| `POST /api/v1/quotes` | A partner integration (bearer token) |
+| `GET /api/v1/access/partner` | A partner integration |
+| `GET /api/v1/access/web` | Any web or mobile client that probes access directly |
+
+The change that adds the first real consumer of one of these endpoints, or of any new public route, must add its consumer pact and provider states in the same branch and PR. Do not write a pact from a hand-built request that no real client sends: it would approve a contract nobody depends on. The mobile app must register its own consumer when it calls the web Worker. Private RPC between Workers is outside Pact, which covers only HTTP.
+
+To change an existing contract or add a consumer:
+
+1. Change the client or the provider and the consumer test together.
+2. Run `npm run pact:update` to regenerate `packages/contracts/pacts/` and review the diff.
+3. Run `npm run test:pact`. A provider mismatch fails here, which means the change is incompatible: keep the old behavior or publish a new API version.
+
+Run `npm run pact:update` only for an intentional contract change, never to make a failing check pass, and never edit the JSON by hand. CI only verifies; it does not update pacts. Changes that do not alter the calls to the API or their expected responses, such as styles or copy, need no update.
+
+Pact protects only what a consumer test declares. A new API call in the SPA without its consumer test is not detected, so add the test in the same change as the call.
+
+To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test and its name in `verifiedProviders` (`tests/pact/support/pact-files.ts`); the guard test fails for a pact whose provider is not listed there. Specify only the fields the consumer reads and use matchers for values that vary.
 
 ## Historical capture
 

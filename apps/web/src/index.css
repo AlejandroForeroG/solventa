@@ -95,3 +95,46 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .denied-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #a32b22; color: #fff; font: 700 13px 'IBM Plex Mono', ui-monospace, monospace; }
 .denied-body { padding: 24px 28px 28px; }
 .trace { padding: 12px 14px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+
+.btn-privacy { margin-left: auto; background: transparent; }
+.btn-danger { background: #fbe9e7; color: #8a241c; border-color: #f0c9c4; }
+.btn-danger:hover:not(:disabled) { background: #f6d6d1; }
+.validity { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 14px; color: #3a424e; }
+.consent-card { padding: 0; overflow: hidden; }
+.consent-head { padding: 24px 30px 18px; border-bottom: 1px solid #edebe6; }
+.consent-head h1 { margin-bottom: 6px; }
+.consent-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding: 24px 30px; }
+@media (max-width: 720px) { .consent-body { grid-template-columns: 1fr; padding: 20px; } .consent-head { padding: 20px; } }
+.consent-text { margin: 0 0 6px; font-weight: 600; color: #12151a; }
+.consent-gap { margin-top: 22px; }
+.sources { display: grid; gap: 8px; margin: 0 0 14px; padding: 0; list-style: none; }
+.source-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 11px 13px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; }
+.source-name { display: block; font-size: 13px; font-weight: 600; color: #12151a; }
+.pill-open_finance { background: #eceafb; color: #4438b8; }
+.pill-credit_bureau { background: #f1efea; color: #3a424e; }
+.pill-open_data { background: #e4f1ee; color: #0b6b5f; }
+.pill-status-active { background: #e6f3ec; color: #175c3a; }
+.pill-status-revoked { background: #fbe9e7; color: #8a241c; }
+.pill-status-expired { background: #f1efea; color: #3a424e; }
+.consent-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 30px; background: #faf9f7; border-top: 1px solid #edebe6; }
+.check { display: flex; align-items: flex-start; gap: 10px; max-width: 460px; }
+.check input { width: 16px; height: 16px; margin-top: 2px; accent-color: #0b6b5f; }
+.check label { font-size: 13px; color: #3a424e; }
+.actions-end { margin-top: 0; justify-content: flex-end; }
+.declined-card { max-width: 760px; padding: 0; overflow: hidden; }
+.declined-body { padding: 22px 30px 28px; }
+.kept { display: grid; gap: 10px; margin: 0 0 4px; padding: 0; list-style: none; color: #3a424e; line-height: 1.5; font-size: 14px; }
+.kept li { display: flex; gap: 10px; }
+.mark { flex: none; width: 14px; font-weight: 700; text-align: center; }
+.mark-ok { color: #1f7a4d; }
+.mark-no { color: #a32b22; }
+.privacy { max-width: 900px; }
+.consents { display: grid; gap: 12px; margin: 0 0 20px; padding: 0; list-style: none; }
+.consent-item { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 20px; padding: 20px 22px; background: #fff; border: 1px solid #e3e1dc; border-radius: 14px; }
+.consent-item-main { flex: 1 1 320px; }
+.consent-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
+.consent-item-purpose { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #12151a; }
+.seal-line { margin-top: 8px; font-size: 11.5px; font-weight: 400; color: #6b7583; overflow-wrap: anywhere; }
+.confirm { flex: 1 1 100%; padding: 14px 16px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; }
+.confirm p { margin: 0 0 6px; }
+.privacy-foot { margin-bottom: 16px; }

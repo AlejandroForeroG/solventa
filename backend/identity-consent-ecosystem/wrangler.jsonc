@@ -116,7 +116,8 @@
     "required": [
       "WORKOS_API_KEY",
       "WORKOS_CLIENT_ID",
-      "AUTH_COOKIE_PASSWORD"
+      "AUTH_COOKIE_PASSWORD",
+      "CONSENT_SEAL_KEY"
     ]
   }
 }

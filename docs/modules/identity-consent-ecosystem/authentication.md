@@ -21,7 +21,7 @@ In Authentication, enable email/password and Magic Auth; keep social providers d
 
 In Branding, use SVGs from `packages/assets/brand`: green logo/icon for light mode and white for dark mode, IBM Plex Sans and System appearance. Light/dark colors: background `#F7F6F3`/`#062F2A`, button/links `#0B6B5F`/`#12D9B8`, button text `#FFFFFF`/`#062F2A`. The editor permits copying branding alone between environments; save and check the actual AuthKit page afterward. Language follows AuthKit localization according to browser preferences.
 
-Local: restore those three values in this backend's `.dev.vars`. From the root, run `npm run infra:up`, `npm run build --workspace @solventa/web` and `npm run dev:backend`. Open `http://localhost:8787`. Vite on 5173 redirects `/auth` to the Worker; callback returns to 8787.
+Local: restore those three values in this backend's `.dev.vars`, plus `CONSENT_SEAL_KEY` (at least 32 characters) for [consent](consent.md); `wrangler dev` refuses to start without a declared secret. From the root, run `npm run infra:up`, `npm run build --workspace @solventa/web` and `npm run dev:backend`. Open `http://localhost:8787`. Vite on 5173 redirects `/auth` to the Worker; callback returns to 8787.
 
 CD restores `IDENTITY_AUTH_JSON` from each GitHub Environment: an object containing `environment` and `secrets` with those three keys. Local custody: `infra/.local/identity.<environment>.secrets.json`; never print it. Missing configuration or a different environment blocks deployment.
 
