@@ -87,11 +87,18 @@ export class SqlConsents implements ConsentStore {
     return row.request_hash === c.requestHash ? { kind: 'replayed', consent: fromRow(row) } : { kind: 'conflict' };
   }
 
-  async list(principal: Principal, limit: number, now: Date): Promise<Consent[]> {
+  async list(principal: Principal, historyLimit: number, now: Date): Promise<Consent[]> {
     const client = await this.connect();
     try {
       const result = await client.query<Row>(
-        `SELECT ${plain} FROM identity.consents WHERE client_id = $1 AND consent_code IS NOT NULL ORDER BY granted_at DESC, id LIMIT $2`, [principal.clientId, limit]);
+        `SELECT ${plain} FROM (
+          SELECT ${plain} FROM identity.consents
+          WHERE client_id = $1 AND consent_code IS NOT NULL AND revoked_at IS NULL AND expires_at > $3
+          UNION ALL
+          (SELECT ${plain} FROM identity.consents
+           WHERE client_id = $1 AND consent_code IS NOT NULL AND (revoked_at IS NOT NULL OR expires_at <= $3)
+           ORDER BY granted_at DESC, id LIMIT $2)
+        ) AS visible ORDER BY granted_at DESC, id`, [principal.clientId, historyLimit, now]);
       await this.auditExpired(client, principal.subjectToken, result.rows, now);
       return result.rows.map(fromRow);
     } finally {

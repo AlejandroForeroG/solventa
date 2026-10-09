@@ -88,7 +88,8 @@ paths:
       tags: [Consents]
       description: >
         Privacy panel. Returns only the consents of the user of the session, newest first, with
-        their status at the time of the request.
+        their status at the time of the request. Includes every active consent and the newest 50
+        inactive records; the history limit never hides a revocable authorization.
       security:
         - WebSession: []
         - LocalWebSession: []

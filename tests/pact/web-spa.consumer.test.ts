@@ -146,7 +146,7 @@ const consentKey = '22222222-2222-4222-8222-222222222222';
 const consentRef = 'COT-2026-00001';
 const consentPost = { method: 'POST', headers: { 'content-type': 'application/json' } };
 const grantRequest = { ...consentPost, path: '/api/v1/consents', headers: { ...consentPost.headers, 'idempotency-key': consentKey } };
-const grantBody = { textVersion: 1, locale: 'es-CO', quoteRef: consentRef };
+const grantBody = { textVersion: 2, locale: 'es-CO', quoteRef: consentRef };
 const consentBody = (overrides: object = {}) => ({
   consentId: MatchersV3.regex('^CNS-\\d{4}-\\d{5,19}$', 'CNS-2026-00001'),
   status: MatchersV3.regex('^(active|revoked|expired)$', 'active'),
@@ -174,7 +174,7 @@ describe('SPA consent terms', () => {
     await pact.executeTest(async server => {
       const outcome = await withServer(server.url, () => getTerms());
       assert.equal(outcome.kind, 'ok');
-      if (outcome.kind === 'ok') assert.equal(outcome.value.textVersion, 1);
+      if (outcome.kind === 'ok') assert.equal(outcome.value.textVersion, 2);
     });
   });
 
@@ -216,7 +216,7 @@ describe('SPA consent authorization', () => {
   });
 
   test('reports an outdated text version', async () => {
-    const outdated = { ...grantBody, textVersion: 2 };
+    const outdated = { ...grantBody, textVersion: 3 };
     pact.given('a customer ready to authorize consent').uponReceiving('a consent authorization with an outdated text version')
       .withRequest({ ...grantRequest, body: outdated })
       .willRespondWith({ status: 409, headers: jsonResponse, body: { error: MatchersV3.equal('terms_outdated') } });
@@ -241,9 +241,9 @@ describe('SPA consent authorization', () => {
 describe('SPA consent refusal', () => {
   test('records the refusal without content', async () => {
     pact.given('a customer ready to authorize consent').uponReceiving('a consent refusal')
-      .withRequest({ ...consentPost, path: '/api/v1/consents/declines', body: { textVersion: 1 } })
+      .withRequest({ ...consentPost, path: '/api/v1/consents/declines', body: { textVersion: 2 } })
       .willRespondWith({ status: 204 });
-    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => declineConsent(1)), { kind: 'ok', value: true }));
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => declineConsent(2)), { kind: 'ok', value: true }));
   });
 });
 
