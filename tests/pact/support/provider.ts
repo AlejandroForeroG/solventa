@@ -3,6 +3,7 @@ import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
 import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
+import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
 import { providerName } from './pact-files';
@@ -23,10 +24,10 @@ const identityEnv = {
 type Binding = { fetch: (request: Request) => Promise<Response> };
 type World = { identity: Binding; acquisition: Binding; sessionCookie?: string };
 
-// The real Identity app answers the states that need no WorkOS or SQL.
-// It only accepts requests addressed to its configured origin, so the test server's address is replaced.
-function realIdentity(env: IdentityEnv): Binding {
-  const app = createIdentityHttp({ authorizeApiAccess: async () => { throw new Error('unexpected_business_authorization'); } });
+// The real Identity app answers every state. It only accepts requests addressed to its configured origin,
+// so the test server's address is replaced.
+function realIdentity(env: IdentityEnv, authentication?: AuthenticationCollaborators): Binding {
+  const app = createIdentityHttp({ authorizeApiAccess: async () => { throw new Error('unexpected_business_authorization'); }, authentication });
   return {
     fetch: request => {
       const { pathname, search } = new URL(request.url);
@@ -35,11 +36,23 @@ function realIdentity(env: IdentityEnv): Binding {
   };
 }
 
-// WorkOS and SQL are covered by tests/authentication.test.ts and the SQL suites, so a valid session is simulated.
-const activeSession: Binding = {
-  fetch: async request => new URL(request.url).pathname === '/auth/logout'
-    ? Response.json({ logoutUrl: 'https://auth.example.invalid/logout' })
-    : Response.json({ authenticated: true }),
+// The routes are real; only WorkOS and SQL are replaced for a valid session, because they need credentials and a database.
+// Their own behavior is covered by tests/authentication.test.ts and the SQL suites.
+const activeSessionCookie = 'active-session';
+const identity = { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true };
+const activeSessionProvider: AuthenticationCollaborators = {
+  provider: () => ({
+    authenticate: async cookie => (cookie === activeSessionCookie ? { identity } : null),
+    revoke: async () => {},
+    logoutUrl: () => 'https://auth.example.invalid/logout',
+    begin: async () => { throw new Error('unexpected_login'); },
+    exchange: async () => { throw new Error('unexpected_callback'); },
+  }),
+  sessions: () => ({
+    find: async () => ({ clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() }),
+    revoke: async () => {},
+    open: async () => { throw new Error('unexpected_session_registration'); },
+  }),
 };
 
 // The real quote handler and use case run with the in-memory access and store the HTTP tests use.
@@ -72,7 +85,7 @@ const authorizedCookie = 'sealed-cookie';
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
-  'an active session': () => ({ identity: activeSession }),
+  'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
   'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),
@@ -106,7 +119,7 @@ export async function verifyPact(pactFile: string): Promise<void> {
       // The browser sends Origin on POST and the session cookie on same-origin requests; the contract does not carry them.
       requestFilter: (request, _response, next) => {
         if (request.method === 'POST') request.headers.origin = origin;
-        if (world.sessionCookie && request.url.startsWith('/api/')) request.headers.cookie = `${sessionCookieName}=${world.sessionCookie}`;
+        if (world.sessionCookie && /^\/(api|auth)\//.test(request.url)) request.headers.cookie = `${sessionCookieName}=${world.sessionCookie}`;
         next();
       },
       logLevel: 'error',

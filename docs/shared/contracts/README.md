@@ -106,7 +106,7 @@ Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-w
 | `tests/pact/pact-guard.test.ts` | Alters a copy of a committed pact and requires verification to fail, proving a broken contract blocks CI |
 | `tests/pact/support/` | Local HTTP server for a Worker `fetch`, pact file helpers and the provider states |
 
-Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` simulates the Identity binding, because a valid session needs WorkOS and SQL; those paths are covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
+Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` also runs the real Identity routes, with only the WorkOS adapter and the session store replaced through the optional `authentication` argument of `createHttp`, because a valid session needs credentials and a database; the behavior of those two is covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
 
 ### Pending coverage
 
@@ -130,7 +130,7 @@ Run `npm run pact:update` only for an intentional contract change, never to make
 
 Pact protects only what a consumer test declares. A new API call in the SPA without its consumer test is not detected, so add the test in the same change as the call.
 
-To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test. Specify only the fields the consumer reads and use matchers for values that vary.
+To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test and its name in `verifiedProviders` (`tests/pact/support/pact-files.ts`); the guard test fails for a pact whose provider is not listed there. Specify only the fields the consumer reads and use matchers for values that vary.
 
 ## Historical capture
 

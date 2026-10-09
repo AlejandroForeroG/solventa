@@ -5,6 +5,8 @@ import path from 'node:path';
 
 export const committedPactsDir = path.resolve(__dirname, '../../../packages/contracts/pacts');
 export const providerName = 'solventa-web';
+// Every provider with a verification test. A pact for any other provider fails the guard until it is added here.
+export const verifiedProviders = [providerName];
 
 const updating = process.env.PACT_UPDATE === 'true';
 
@@ -14,8 +16,15 @@ export function pactOutputDir(): string {
   return updating ? committedPactsDir : fs.mkdtempSync(path.join(os.tmpdir(), 'solventa-pact-'));
 }
 
-export function committedPactFiles(): string[] {
-  return fs.readdirSync(committedPactsDir).filter(name => name.endsWith('.json')).map(name => path.join(committedPactsDir, name));
+export function pactProvider(file: string): string {
+  return JSON.parse(fs.readFileSync(file, 'utf8')).provider.name;
+}
+
+export function committedPactFiles(provider?: string): string[] {
+  return fs.readdirSync(committedPactsDir)
+    .filter(name => name.endsWith('.json'))
+    .map(name => path.join(committedPactsDir, name))
+    .filter(file => provider === undefined || pactProvider(file) === provider);
 }
 
 function readWithoutMetadata(file: string) {

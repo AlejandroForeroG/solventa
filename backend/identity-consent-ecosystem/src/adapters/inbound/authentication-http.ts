@@ -4,6 +4,7 @@ import { Authentication } from '../../application/authentication';
 import { SqlIdentitySessions } from '../outbound/identity-sessions';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
+import type { IdentitySessions } from '../../application/authentication';
 
 type AuthEnv = { Bindings: IdentityEnv };
 type Attempt = { state: string; codeVerifier: string; expires: number };
@@ -40,7 +41,17 @@ function writeCookie(c: Context<AuthEnv>, config: AuthConfiguration, value: stri
   setCookie(c, cookieName(config, attempt), value, { httpOnly: true, secure: !config.local, sameSite: 'Lax', path: '/', maxAge: value ? (attempt ? 600 : 604800) : 0 });
 }
 
-export function mountAuthentication(app: Hono<AuthEnv>) {
+export type AuthenticationCollaborators = {
+  provider(config: AuthConfiguration): Pick<WorkosAuthentication, 'begin' | 'exchange' | 'authenticate' | 'revoke' | 'logoutUrl'>;
+  sessions(connectionString: string): IdentitySessions;
+};
+const productionCollaborators: AuthenticationCollaborators = {
+  provider: config => new WorkosAuthentication(config),
+  sessions: connectionString => new SqlIdentitySessions(connectionString),
+};
+
+// Collaborators are replaceable so contract tests can run these routes without WorkOS or SQL.
+export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators = productionCollaborators) {
   app.use('/auth/*', async (c, next) => { c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff'); await next(); });
   app.all('/auth/*', async c => {
     const config = configuration(c.env);
@@ -53,8 +64,8 @@ export function mountAuthentication(app: Hono<AuthEnv>) {
     const origins = config.local ? [config.origin, 'http://localhost:5173'] : [config.origin];
     if (path === '/auth/logout' && !origins.includes(c.req.header('Origin') ?? '')) return c.json({ error: 'invalid_origin' }, 403);
     try {
-      const provider = new WorkosAuthentication(config);
-      const application = new Authentication(new SqlIdentitySessions(c.env.IDENTITY_DB.connectionString));
+      const provider = collaborators.provider(config);
+      const application = new Authentication(collaborators.sessions(c.env.IDENTITY_DB.connectionString));
       if (path === '/auth/login') {
         const begin = await provider.begin();
         writeCookie(c, config, await sealAttempt({ state: begin.state, codeVerifier: begin.codeVerifier, expires: Date.now()+600000 }, config.cookiePassword, config.origin), true);

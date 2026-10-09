@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { committedPactFiles } from './support/pact-files';
+import { committedPactFiles, providerName } from './support/pact-files';
 import { verifyPact } from './support/provider';
 
-const pactFiles = committedPactFiles();
+const pactFiles = committedPactFiles(providerName);
 
 test('there are committed pacts to verify', () => assert.ok(pactFiles.length > 0));
 
