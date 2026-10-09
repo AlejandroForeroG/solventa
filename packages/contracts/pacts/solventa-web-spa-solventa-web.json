@@ -48,7 +48,7 @@
               "matchers": [
                 {
                   "match": "regex",
-                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
                 }
               ]
             },
@@ -283,7 +283,7 @@
               "matchers": [
                 {
                   "match": "regex",
-                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
                 }
               ]
             },
@@ -754,9 +754,24 @@
           "purposeCode": "risk_profiling",
           "sources": [
             {
+              "code": "open_finance_bancolombia",
+              "kind": "open_finance",
+              "scope": "income_obligations_12m"
+            },
+            {
+              "code": "datacredito_experian",
+              "kind": "credit_bureau",
+              "scope": "payment_history_score"
+            },
+            {
               "code": "ruaf",
               "kind": "open_data",
               "scope": "affiliation_regime"
+            },
+            {
+              "code": "registraduria",
+              "kind": "open_data",
+              "scope": "identity_validation"
             }
           ],
           "textVersion": 1,
@@ -764,68 +779,6 @@
         },
         "headers": {
           "Content-Type": "application/json"
-        },
-        "matchingRules": {
-          "body": {
-            "$.purposeCode": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.sources": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type",
-                  "min": 1
-                }
-              ]
-            },
-            "$.sources[*].code": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.sources[*].kind": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "regex",
-                  "regex": "^(open_finance|credit_bureau|open_data)$"
-                }
-              ]
-            },
-            "$.sources[*].scope": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.textVersion": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "integer"
-                }
-              ]
-            },
-            "$.validityDays": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "integer"
-                }
-              ]
-            }
-          }
         },
         "status": 200
       }
@@ -909,7 +862,7 @@
               "matchers": [
                 {
                   "match": "regex",
-                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
                 }
               ]
             },
@@ -1020,7 +973,7 @@
               "matchers": [
                 {
                   "match": "regex",
-                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
                 }
               ]
             },
