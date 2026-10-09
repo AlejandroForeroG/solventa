@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
+import { consentApi, type Consent, type ConsentApi } from '../consent/api';
+import { ConsentStep } from '../consent/ConsentStep';
+import { ConsentDeclined, ConsentGranted } from '../consent/ConsentOutcome';
 import { useFormatters, useLocale } from '../i18n/I18n';
 import { newIdempotencyKey, requestQuote as defaultRequest, type Quote, type QuoteValues } from './api';
 import { checkLocally, fromServer, type FieldKey, type FieldProblem } from './fields';
@@ -8,10 +11,15 @@ import { QuoteForm } from './QuoteForm';
 import { Denied, Loading, QuoteResult } from './QuoteResult';
 import { Stepper } from './Stepper';
 
-type Phase = 'form' | 'loading' | 'result' | 'denied';
+type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
 
-export function QuoteFlow({ request = defaultRequest, onContinue, onSessionLost }: { request?: typeof defaultRequest; onContinue?: () => void; onSessionLost?: () => void }) {
+export function QuoteFlow({ request = defaultRequest, consent = consentApi, onOpenPrivacy, onSessionLost }: {
+  request?: typeof defaultRequest;
+  consent?: Pick<ConsentApi, 'getTerms' | 'grantConsent' | 'declineConsent'>;
+  onOpenPrivacy?: () => void;
+  onSessionLost?: () => void;
+}) {
   const intl = useIntl();
   const { locale } = useLocale();
   const { cop } = useFormatters();
@@ -21,6 +29,7 @@ export function QuoteFlow({ request = defaultRequest, onContinue, onSessionLost 
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [granted, setGranted] = useState<Consent | null>(null);
   const [deniedTrace, setDeniedTrace] = useState<string | undefined>();
   // A retry of the same data reuses the key, so a repeated click never creates two quotes.
   const key = useRef(newIdempotencyKey());
@@ -61,10 +70,13 @@ export function QuoteFlow({ request = defaultRequest, onContinue, onSessionLost 
   }
 
   return <>
-    <Stepper current={phase === 'result' ? 2 : 1} available={2} />
+    <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : 3} available={3} />
     {(phase === 'form') && <QuoteForm values={values} problems={problems} banner={banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
     {phase === 'loading' && <Loading />}
-    {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={onContinue} />}
+    {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
+    {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
+    {phase === 'granted' && granted && <ConsentGranted consent={granted} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
+    {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;
 }
