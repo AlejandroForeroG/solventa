@@ -48,7 +48,7 @@ export type Consent = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const QUOTE_REF = /^COT-[0-9]{4}-[0-9]{5}$/;
-const CONSENT_CODE = /^CNS-[0-9]{4}-[0-9]{5}$/;
+const CONSENT_CODE = /^CNS-[0-9]{4}-[0-9]{5,19}$/;
 
 export const isConsentCode = (value: unknown): value is string => typeof value === 'string' && CONSENT_CODE.test(value);
 export const expiryFor = (grantedAt: Date) => new Date(grantedAt.getTime() + VALIDITY_DAYS * DAY_MS);
