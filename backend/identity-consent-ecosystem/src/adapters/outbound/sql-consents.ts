@@ -2,22 +2,22 @@ import { Client } from 'pg';
 import type { Principal } from '../../application/authentication';
 import { safeCode } from '../safe-code';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../application/ports/consents';
-import type { Consent, ScopeCode, SourceCode } from '../../domain/consent';
+import type { Consent, Locale, ScopeCode, SourceCode } from '../../domain/consent';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
 const SERIALIZATION_FAILURE = '40001';
 
 type Row = {
   id: string; consent_code: string; version: string; client_id: string; purpose: string; text_version: string;
-  sources: SourceCode[]; scopes: ScopeCode[]; granted_at: Date; expires_at: Date; revoked_at: Date | null;
+  locale: Locale; wording_hash: string; sources: SourceCode[]; scopes: ScopeCode[]; granted_at: Date; expires_at: Date; revoked_at: Date | null;
   quote_ref: string | null; seal: string; request_hash?: string;
 };
-const COLUMNS = ['id', 'consent_code', 'version', 'client_id', 'purpose', 'text_version', 'sources', 'scopes', 'granted_at', 'expires_at', 'revoked_at', 'quote_ref', 'seal', 'request_hash'];
+const COLUMNS = ['id', 'consent_code', 'version', 'client_id', 'purpose', 'text_version', 'locale', 'wording_hash', 'sources', 'scopes', 'granted_at', 'expires_at', 'revoked_at', 'quote_ref', 'seal', 'request_hash'];
 const plain = COLUMNS.join(', ');
 const prefixed = COLUMNS.map(column => `c.${column}`).join(', ');
 const fromRow = (row: Row): Consent => ({
   id: row.id, consentCode: row.consent_code, version: Number(row.version), clientId: row.client_id, purposeCode: row.purpose,
-  textVersion: Number(row.text_version), sources: row.sources, scopes: row.scopes, grantedAt: row.granted_at, expiresAt: row.expires_at,
+  textVersion: Number(row.text_version), locale: row.locale, wordingHash: row.wording_hash, sources: row.sources, scopes: row.scopes, grantedAt: row.granted_at, expiresAt: row.expires_at,
   revokedAt: row.revoked_at, quoteRef: row.quote_ref, seal: row.seal
 });
 
@@ -57,10 +57,10 @@ export class SqlConsents implements ConsentStore {
       const code = `CNS-${c.year}-${String(counter.rows[0].last_value).padStart(5, '0')}`;
       await client.query('BEGIN');
       const inserted = await client.query<{ id: string }>(
-        `INSERT INTO identity.consents (id, version, client_id, purpose, scopes, source, granted_at, expires_at, correlation_id, consent_code, text_version, sources, quote_ref, seal, idempotency_key, request_hash)
-         VALUES ($1, $2, $3, $4, $5, 'web', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        `INSERT INTO identity.consents (id, version, client_id, purpose, scopes, source, granted_at, expires_at, correlation_id, consent_code, text_version, sources, quote_ref, seal, idempotency_key, request_hash, locale, wording_hash)
+         VALUES ($1, $2, $3, $4, $5, 'web', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT DO NOTHING RETURNING id`,
-        [c.id, c.version, c.clientId, c.purposeCode, c.scopes, c.grantedAt, c.expiresAt, c.traceId, code, c.textVersion, c.sources, c.quoteRef, c.seal, c.idempotencyKey, c.requestHash]);
+        [c.id, c.version, c.clientId, c.purposeCode, c.scopes, c.grantedAt, c.expiresAt, c.traceId, code, c.textVersion, c.sources, c.quoteRef, c.seal, c.idempotencyKey, c.requestHash, c.locale, c.wordingHash]);
       if (!inserted.rows[0]) {
         // A concurrent retry won the race: discard our work and answer from its row.
         await client.query('ROLLBACK');

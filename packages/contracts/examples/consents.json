@@ -35,6 +35,8 @@
       "status": "active",
       "purposeCode": "risk_profiling",
       "textVersion": 1,
+      "locale": "es-CO",
+      "wordingHash": "5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -59,6 +61,8 @@
       "status": "revoked",
       "purposeCode": "risk_profiling",
       "textVersion": 1,
+      "locale": "en-US",
+      "wordingHash": "d2805eca2ed7561e214c8b8b7df3d37b513d378daf0a0b7f90f8b646c0794351",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -83,6 +87,8 @@
       "status": "expired",
       "purposeCode": "risk_profiling",
       "textVersion": 1,
+      "locale": "es-CO",
+      "wordingHash": "5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -104,6 +110,7 @@
   ],
   "grantRequest": {
     "textVersion": 1,
+    "locale": "es-CO",
     "quoteRef": "COT-2026-00001"
   },
   "declineRequest": {

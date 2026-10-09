@@ -38,7 +38,7 @@ function rig(identity?: IdentityConsentRpc) {
   const snapshots = new CountingSnapshots();
   const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50), provider, snapshots });
   const ask = (subjectToken = ANA.subjectToken, scope: SignalScope = 'income_obligations_12m') => read.execute({ subjectToken, scope, traceId: TRACE });
-  const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 1 }, traceId: TRACE });
+  const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 1, locale: 'es-CO' }, traceId: TRACE });
   return { store, time, consents, provider, snapshots, rpcCalls, ask, grant };
 }
 const untouched = (r: ReturnType<typeof rig>) => assert.deepEqual({ provider: r.provider.calls, copies: r.snapshots.reads }, { provider: 0, copies: 0 });

@@ -73,7 +73,7 @@ const post = (body: unknown, headers: Record<string, string>, signal?: AbortSign
 export const getTerms = (signal?: AbortSignal) =>
   send('/api/v1/consents/terms', { signal }, async response => asTerms(await response.json()), [200]);
 
-export const grantConsent = (request: { textVersion: number; quoteRef?: string }, idempotencyKey: string, signal?: AbortSignal) =>
+export const grantConsent = (request: { textVersion: number; locale: string; quoteRef?: string }, idempotencyKey: string, signal?: AbortSignal) =>
   send('/api/v1/consents', post(request, { 'idempotency-key': idempotencyKey }, signal), async response => asConsent(await response.json()), [200, 201]);
 
 export const declineConsent = (textVersion: number, signal?: AbortSignal) =>

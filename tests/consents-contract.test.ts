@@ -4,9 +4,11 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
-import { CURRENT_TERMS } from '../backend/identity-consent-ecosystem/src/domain/consent';
+import { CURRENT_TERMS, WORDING_FINGERPRINT } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { messages } from '../apps/web/src/i18n/messages';
+import { CONSENT_WORDING_KEYS, SUPPORTED_TEXT_VERSION } from '../apps/web/src/consent/wording';
+import { createHash } from 'node:crypto';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 const consents = parse(read('packages/contracts/openapi/v1/consents.yaml'));
@@ -59,6 +61,9 @@ test('the examples satisfy the contract', () => {
 test('a request cannot carry fields the contract does not define', () => {
   assert.equal(schema('GrantRequest')({ textVersion: 1, subjectToken: 'x' }), false);
   assert.equal(schema('GrantRequest')({}), false);
+  assert.equal(schema('GrantRequest')({ textVersion: 1 }), false, 'the language is required');
+  assert.equal(schema('GrantRequest')({ textVersion: 1, locale: 'fr-FR' }), false);
+  assert.equal(schema('GrantRequest')({ textVersion: 1, locale: 'en-US' }), true);
   assert.equal(schema('GrantRequest')({ textVersion: 1, quoteRef: 'COT-26-1' }), false);
 });
 
@@ -92,5 +97,25 @@ test('Identity, the contract, Acquisition and the web catalogue describe the sam
     for (const source of CURRENT_TERMS.sources) {
       for (const key of [`source.${source.code}.name`, `source.${source.code}.detail`, `kind.${source.kind}`, `scope.${source.scope}`]) assert.ok(messages[locale][key], `${locale} lacks ${key}`);
     }
+  }
+});
+
+test('the examples carry the fingerprint of the wording of their language', () => {
+  for (const consent of examples.consents) {
+    assert.equal(consent.textVersion, CURRENT_TERMS.textVersion);
+    assert.equal(consent.wordingHash, WORDING_FINGERPRINT[consent.locale as 'es-CO' | 'en-US'], consent.consentId);
+  }
+  assert.deepEqual(new Set(examples.consents.map((c: { locale: string }) => c.locale)), new Set(['es-CO', 'en-US']));
+});
+
+test('the wording the customer reads matches the fingerprints Identity approved, and the web supports the served version', () => {
+  assert.equal(SUPPORTED_TEXT_VERSION, CURRENT_TERMS.textVersion);
+  for (const locale of ['es-CO', 'en-US'] as const) {
+    const wording = CONSENT_WORDING_KEYS.map(key => {
+      assert.ok(messages[locale][key], `${locale} lacks ${key}`);
+      return [key, messages[locale][key]];
+    });
+    const fingerprint = createHash('sha256').update(JSON.stringify(wording)).digest('hex');
+    assert.equal(fingerprint, WORDING_FINGERPRINT[locale], `The ${locale} wording changed (fingerprint now ${fingerprint}): add a new text version, its fingerprints in Identity and SUPPORTED_TEXT_VERSION`);
   }
 });

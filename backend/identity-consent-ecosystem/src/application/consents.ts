@@ -1,4 +1,4 @@
-import { CURRENT_TERMS, PURPOSE_RISK_PROFILING, expiryFor, isConsentCode, parseTermsRequest, sealContent, statusOf } from '../domain/consent';
+import { CURRENT_TERMS, PURPOSE_RISK_PROFILING, WORDING_FINGERPRINT, expiryFor, isConsentCode, parseGrantRequest, parseTermsRequest, sealContent, statusOf } from '../domain/consent';
 import type { Consent, ConsentStatus } from '../domain/consent';
 import type { Principal } from './authentication';
 import type { ConsentStore, Integrity, Platform } from './ports/consents';
@@ -9,6 +9,8 @@ export type ConsentView = {
   status: ConsentStatus;
   purposeCode: string;
   textVersion: number;
+  locale: string;
+  wordingHash: string;
   sources: string[];
   scopes: string[];
   grantedAt: string;
@@ -35,13 +37,13 @@ export class Consents {
 
   async grant(input: { principal: Principal; idempotencyKey: string | null; body: unknown; traceId: string }) {
     const { store, platform, integrity } = this.deps;
-    const request = parseTermsRequest(input.body, ['textVersion', 'quoteRef']);
+    const request = parseGrantRequest(input.body);
     if (!request || !input.idempotencyKey || input.idempotencyKey.length > MAX_KEY) return { status: 'invalid' } as const;
     if (request.textVersion !== CURRENT_TERMS.textVersion) return { status: 'terms_outdated' } as const;
     const grantedAt = platform.now();
     const base = {
       id: platform.newId(), version: 1, clientId: input.principal.clientId, purposeCode: CURRENT_TERMS.purposeCode,
-      textVersion: CURRENT_TERMS.textVersion, sources: CURRENT_TERMS.sources.map(s => s.code), scopes: CURRENT_TERMS.sources.map(s => s.scope),
+      textVersion: CURRENT_TERMS.textVersion, locale: request.locale, wordingHash: WORDING_FINGERPRINT[request.locale], sources: CURRENT_TERMS.sources.map(s => s.code), scopes: CURRENT_TERMS.sources.map(s => s.scope),
       grantedAt, expiresAt: expiryFor(grantedAt), quoteRef: request.quoteRef
     };
     const result = await store.grant({
@@ -49,7 +51,7 @@ export class Consents {
       seal: await integrity.seal(sealContent(base)),
       subjectToken: input.principal.subjectToken,
       idempotencyKey: input.idempotencyKey,
-      requestHash: await integrity.digest(JSON.stringify([request.textVersion, request.quoteRef])),
+      requestHash: await integrity.digest(JSON.stringify([request.textVersion, request.quoteRef, request.locale])),
       year: Number(grantedAt.toLocaleString('en-CA', { timeZone: 'America/Bogota', year: 'numeric' })),
       traceId: input.traceId
     });
@@ -105,7 +107,7 @@ export class Consents {
   private view(consent: Consent, now: Date): ConsentView {
     return {
       consentId: consent.consentCode, version: consent.version, status: statusOf(consent, now), purposeCode: consent.purposeCode,
-      textVersion: consent.textVersion, sources: consent.sources, scopes: consent.scopes, grantedAt: consent.grantedAt.toISOString(),
+      textVersion: consent.textVersion, locale: consent.locale, wordingHash: consent.wordingHash, sources: consent.sources, scopes: consent.scopes, grantedAt: consent.grantedAt.toISOString(),
       expiresAt: consent.expiresAt.toISOString(), revokedAt: consent.revokedAt?.toISOString() ?? null, quoteRef: consent.quoteRef, seal: consent.seal
     };
   }
