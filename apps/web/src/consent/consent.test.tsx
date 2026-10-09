@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { I18n } from '../i18n/I18n';
+import { I18n, useLocale } from '../i18n/I18n';
 import type { Locale } from '../i18n/messages';
 import { LiveRegion } from '../quote/Live';
 import { QuoteFlow } from '../quote/QuoteFlow';
@@ -10,6 +10,7 @@ import type { Quote } from '../quote/api';
 import { declineConsent, getTerms, grantConsent, listConsents, revokeConsent, type Consent, type ConsentApi, type Outcome, type Terms } from './api';
 import { ConsentDeclined, ConsentGranted } from './ConsentOutcome';
 import { ConsentStep } from './ConsentStep';
+import { SUPPORTED_TEXT_VERSION } from './wording';
 import { PrivacyPanel } from './PrivacyPanel';
 
 const terms: Terms = {
@@ -81,7 +82,7 @@ describe.each(['es-CO', 'en-US'] as const)('consent step in %s', locale => {
     await user.click(screen.getByRole('button', { name: t.authorize }));
     await waitFor(() => expect(onGranted).toHaveBeenCalledWith(active));
     expect(api.grantConsent).toHaveBeenCalledOnce();
-    expect(api.grantConsent.mock.calls[0][0]).toEqual({ textVersion: 1, quoteRef: 'COT-2026-08843' });
+    expect(api.grantConsent.mock.calls[0][0]).toEqual({ textVersion: SUPPORTED_TEXT_VERSION, locale, quoteRef: 'COT-2026-08843' });
     expect(api.grantConsent.mock.calls[0][1]).toMatch(/^[0-9a-f-]{36}$/);
     expect(live()).toHaveTextContent(/2027/);
   });
@@ -196,6 +197,30 @@ describe('consent step failures', () => {
     const { user, onDeclined } = setup(api);
     await user.click(await screen.findByRole('button', { name: 'No autorizo' }));
     await waitFor(() => expect(onDeclined).toHaveBeenCalledOnce());
+  });
+
+  it('does not offer the authorization when the served terms are another text version than the one the screen shows', async () => {
+    const api = stubs({ getTerms: vi.fn().mockResolvedValue(ok({ ...terms, textVersion: SUPPORTED_TEXT_VERSION + 1 })) });
+    setup(api);
+    expect(await screen.findByText(/no corresponde a los términos vigentes/, { selector: 'p' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Autorizar y continuar' })).toBeNull();
+    expect(api.grantConsent).not.toHaveBeenCalled();
+  });
+
+  it('sends the language the customer reads, and a new key when the language changes after a failed attempt', async () => {
+    const api = stubs({ grantConsent: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(active)) });
+    const user = userEvent.setup();
+    function Switch() { const { setLocale } = useLocale(); return <button type="button" onClick={() => setLocale('en-US')}>to-english</button>; }
+    render(wrap('es-CO', <><Switch /><ConsentStep api={api as never} onGranted={vi.fn()} onDeclined={vi.fn()} /></>));
+    await user.click(await screen.findByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Autorizar y continuar' }));
+    await screen.findByText(/No se consultó ninguna fuente/, { selector: 'p' });
+    await user.click(screen.getByRole('button', { name: 'to-english' }));
+    await user.click(await screen.findByRole('button', { name: 'Authorize and continue' }));
+    await waitFor(() => expect(api.grantConsent).toHaveBeenCalledTimes(2));
+    expect(api.grantConsent.mock.calls.map(call => call[0].locale)).toEqual(['es-CO', 'en-US']);
+    expect(api.grantConsent.mock.calls[1][1]).not.toBe(api.grantConsent.mock.calls[0][1]);
   });
 
   it('prevents a double submit while the grant is in flight', async () => {
@@ -332,7 +357,7 @@ describe('from the quote to the authorization', () => {
     await user.click(await screen.findByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Autorizar y continuar' }));
     expect(await screen.findByRole('heading', { name: 'Autorización registrada' })).toHaveFocus();
-    expect(api.grantConsent.mock.calls[0][0]).toEqual({ textVersion: 1, quoteRef: 'COT-2026-08843' });
+    expect(api.grantConsent.mock.calls[0][0]).toEqual({ textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-08843' });
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 3: Consentimiento');
     await user.click(screen.getByRole('button', { name: 'Ver panel de privacidad' }));
     expect(onOpenPrivacy).toHaveBeenCalledOnce();
@@ -363,18 +388,18 @@ describe('consent client', () => {
 
   it('sends the grant with the session cookie, the key and no identity of its own', async () => {
     const fetchMock = spy(json({ ...active }, 201));
-    const outcome = await grantConsent({ textVersion: 1, quoteRef: 'COT-2026-00001' }, 'key-1');
+    const outcome = await grantConsent({ textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' }, 'key-1');
     expect(outcome).toEqual({ kind: 'ok', value: { consentId: 'CNS-2026-00003', status: 'active', sources, scopes, grantedAt: active.grantedAt, expiresAt: active.expiresAt, revokedAt: null, seal: active.seal } });
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe('/api/v1/consents');
     expect(init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
     expect(new Headers(init?.headers).get('idempotency-key')).toBe('key-1');
-    expect(JSON.parse(String(init?.body))).toEqual({ textVersion: 1, quoteRef: 'COT-2026-00001' });
+    expect(JSON.parse(String(init?.body))).toEqual({ textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   });
 
   it('renews the session once on a 401 and repeats the same grant with the same key', async () => {
     const fetchMock = spy(json({ error: 'unauthorized' }, 401), json({ authenticated: true }), json(active, 201));
-    expect((await grantConsent({ textVersion: 1 }, 'key-9')).kind).toBe('ok');
+    expect((await grantConsent({ textVersion: 1, locale: 'es-CO' }, 'key-9')).kind).toBe('ok');
     expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['/api/v1/consents', '/auth/session', '/api/v1/consents']);
     expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('idempotency-key')).toBe('key-9');
   });
@@ -385,8 +410,8 @@ describe('consent client', () => {
   });
 
   it('tells apart an outdated text, another conflict, a missing consent and an outage', async () => {
-    spy(json({ error: 'terms_outdated' }, 409)); expect(await grantConsent({ textVersion: 1 }, 'k')).toEqual({ kind: 'outdated' });
-    spy(json({ error: 'idempotency_key_reused' }, 409)); expect(await grantConsent({ textVersion: 1 }, 'k')).toEqual({ kind: 'conflict' });
+    spy(json({ error: 'terms_outdated' }, 409)); expect(await grantConsent({ textVersion: 1, locale: 'es-CO' }, 'k')).toEqual({ kind: 'outdated' });
+    spy(json({ error: 'idempotency_key_reused' }, 409)); expect(await grantConsent({ textVersion: 1, locale: 'es-CO' }, 'k')).toEqual({ kind: 'conflict' });
     spy(json({ error: 'not_found' }, 404)); expect(await revokeConsent('CNS-2026-00009')).toEqual({ kind: 'notFound' });
     spy(json({ error: 'consent_not_active' }, 409)); expect(await revokeConsent('CNS-2026-00001')).toEqual({ kind: 'conflict' });
     spy(json({ error: 'access_unavailable' }, 503)); expect(await declineConsent(1)).toEqual({ kind: 'unavailable' });
@@ -396,7 +421,7 @@ describe('consent client', () => {
   it('does not trust a malformed answer', async () => {
     spy(json({ ...terms, sources: [] })); expect(await getTerms()).toEqual({ kind: 'unavailable' });
     spy(json({ items: [{ ...active, status: 'pending' }] })); expect(await listConsents()).toEqual({ kind: 'unavailable' });
-    spy(new Response('not json', { status: 201 })); expect(await grantConsent({ textVersion: 1 }, 'k')).toEqual({ kind: 'unavailable' });
+    spy(new Response('not json', { status: 201 })); expect(await grantConsent({ textVersion: 1, locale: 'es-CO' }, 'k')).toEqual({ kind: 'unavailable' });
   });
 
   it('declining answers 204 and revoking encodes the id in the path', async () => {

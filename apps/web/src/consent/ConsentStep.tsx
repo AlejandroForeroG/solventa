@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useFormatters } from '../i18n/I18n';
+import { useFormatters, useLocale } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
 import { consentApi, newIdempotencyKey, type Consent, type ConsentApi, type Terms } from './api';
+import { SUPPORTED_TEXT_VERSION } from './wording';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-type Load = 'loading' | 'ready' | 'error';
+type Load = 'loading' | 'ready' | 'error' | 'mismatch';
 type Problem = 'none' | 'grant' | 'outdated';
 
 export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined, onSessionLost }: {
@@ -17,6 +18,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
 }) {
   const intl = useIntl();
   const { dayMonthYear } = useFormatters();
+  const { locale } = useLocale();
   const announce = useAnnounce();
   const [load, setLoad] = useState<Load>('loading');
   const [terms, setTerms] = useState<Terms | null>(null);
@@ -34,7 +36,8 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
     pending.current = new AbortController();
     try {
       const outcome = await api.getTerms(pending.current.signal);
-      if (outcome.kind === 'ok') { setTerms(outcome.value); setLoad('ready'); announce(intl.formatMessage({ id: 'live.consent' })); }
+      if (outcome.kind === 'ok' && outcome.value.textVersion !== SUPPORTED_TEXT_VERSION) { setLoad('mismatch'); announce(intl.formatMessage({ id: 'consent.versionMismatch' })); }
+      else if (outcome.kind === 'ok') { setTerms(outcome.value); setLoad('ready'); announce(intl.formatMessage({ id: 'live.consent' })); }
       else if (outcome.kind === 'unauthenticated') onSessionLost?.();
       else { setLoad('error'); announce(intl.formatMessage({ id: 'consent.errorTerms' })); }
     } catch { /* aborted: the user left the screen */ }
@@ -42,13 +45,14 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
 
   useEffect(() => { void fetchTerms(); return () => pending.current?.abort(); }, [fetchTerms]);
   useEffect(() => { if (load !== 'loading') heading.current?.focus(); }, [load]);
+  useEffect(() => { key.current = newIdempotencyKey(); }, [locale]);
 
   function reload() { setLoad('loading'); void fetchTerms(); }
 
   async function authorize() {
     if (!terms || !checked || busy !== 'idle') return;
     setBusy('authorizing'); setProblem('none');
-    const outcome = await api.grantConsent({ textVersion: terms.textVersion, ...(quoteRef ? { quoteRef } : {}) }, key.current);
+    const outcome = await api.grantConsent({ textVersion: SUPPORTED_TEXT_VERSION, locale, ...(quoteRef ? { quoteRef } : {}) }, key.current);
     setBusy('idle');
     if (outcome.kind === 'ok') {
       announce(intl.formatMessage({ id: 'live.consentGranted' }, { date: dayMonthYear(new Date(outcome.value.expiresAt)) }));
@@ -59,6 +63,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
       key.current = newIdempotencyKey(); setChecked(false); setProblem('outdated');
       announce(intl.formatMessage({ id: 'live.consentOutdated' })); reload();
     } else {
+      if (outcome.kind === 'conflict') key.current = newIdempotencyKey();
       setProblem('grant'); announce(intl.formatMessage({ id: 'live.consentError' }));
     }
   }
@@ -66,7 +71,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   async function decline() {
     if (!terms || busy !== 'idle') return;
     setBusy('declining');
-    const outcome = await api.declineConsent(terms.textVersion);
+    const outcome = await api.declineConsent(SUPPORTED_TEXT_VERSION);
     setBusy('idle');
     if (outcome.kind === 'unauthenticated') { announce(intl.formatMessage({ id: 'live.sessionExpired' })); onSessionLost?.(); return; }
     // Declining enables nothing, so it never depends on the audit write succeeding.
@@ -80,10 +85,10 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
       <p>{intl.formatMessage({ id: 'consent.loadingDetail' })}</p>
     </section>;
   }
-  if (load === 'error' || !terms) {
+  if (load === 'error' || load === 'mismatch' || !terms) {
     return <section className="step">
       <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'consent.title' })}</h1>
-      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{intl.formatMessage({ id: 'consent.errorTerms' })}</p></div>
+      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{intl.formatMessage({ id: load === 'mismatch' ? 'consent.versionMismatch' : 'consent.errorTerms' })}</p></div>
       <button type="button" className="btn btn-primary" onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
     </section>;
   }
