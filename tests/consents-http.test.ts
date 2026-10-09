@@ -51,7 +51,7 @@ const call = (http: Http, method: string, path: string, init: { as?: string | nu
       ...(method === 'POST' ? { origin, 'content-type': 'application/json' } : {}),
       ...init.headers
     },
-    body: method === 'POST' ? init.raw ?? JSON.stringify(init.body ?? { textVersion: 1 }) : undefined
+    body: method === 'POST' ? init.raw ?? JSON.stringify(init.body ?? { textVersion: 1, locale: 'es-CO' }) : undefined
   }, env);
 const grant = (http: Http, key = 'key-1', init: Parameters<typeof call>[3] = {}) =>
   call(http, 'POST', '/api/v1/consents', { ...init, headers: { 'idempotency-key': key, ...init.headers } });
@@ -136,19 +136,21 @@ test('a partner credential can never manage consent', async () => {
 
 test('invalid requests are 400 and a stale text or reused key is 409', async () => {
   const { http, store } = app();
-  assert.equal((await call(http, 'POST', '/api/v1/consents', { body: { textVersion: 1 } })).status, 400, 'missing Idempotency-Key');
+  assert.equal((await call(http, 'POST', '/api/v1/consents', { body: { textVersion: 1, locale: 'es-CO' } })).status, 400, 'missing Idempotency-Key');
   assert.equal((await grant(http, 'k', { raw: '{not json' })).status, 400);
-  assert.equal((await grant(http, 'k', { body: { textVersion: 1, subjectToken: 'x' } })).status, 400);
+  assert.equal((await grant(http, 'k', { body: { textVersion: 1, locale: 'es-CO', subjectToken: 'x' } })).status, 400);
+  assert.equal((await grant(http, 'k', { body: { textVersion: 1 } })).status, 400, 'a grant without the language');
+  assert.equal((await grant(http, 'k', { body: { textVersion: 1, locale: 'fr-FR' } })).status, 400);
   assert.equal((await call(http, 'POST', '/api/v1/consents/declines', { body: { textVersion: 'one' } })).status, 400);
   assert.equal((await call(http, 'POST', '/api/v1/consents/not-a-code/revoke', { body: {} })).status, 400);
-  const outdated = await grant(http, 'k', { body: { textVersion: 2 } });
+  const outdated = await grant(http, 'k', { body: { textVersion: 2, locale: 'es-CO' } });
   assert.equal(outdated.status, 409);
   assert.equal((await outdated.json()).error, 'terms_outdated');
   assert.equal((await call(http, 'POST', '/api/v1/consents/declines', { body: { textVersion: 2 } })).status, 409);
   assert.equal(store.consents.length, 0);
 
   assert.equal((await grant(http, 'same')).status, 201);
-  const reused = await grant(http, 'same', { body: { textVersion: 1, quoteRef: 'COT-2026-00009' } });
+  const reused = await grant(http, 'same', { body: { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00009' } });
   assert.equal(reused.status, 409);
   assert.equal((await reused.json()).error, 'idempotency_key_reused');
   for (const error of ['terms_outdated', 'idempotency_key_reused']) assert.ok(schema('ConsentError')({ error, traceId: TRACE }));

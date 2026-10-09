@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
-import { CURRENT_TERMS } from '../backend/identity-consent-ecosystem/src/domain/consent';
+import { CURRENT_TERMS, WORDING_FINGERPRINT } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { messages } from '../apps/web/src/i18n/messages';
 
@@ -59,6 +59,9 @@ test('the examples satisfy the contract', () => {
 test('a request cannot carry fields the contract does not define', () => {
   assert.equal(schema('GrantRequest')({ textVersion: 1, subjectToken: 'x' }), false);
   assert.equal(schema('GrantRequest')({}), false);
+  assert.equal(schema('GrantRequest')({ textVersion: 1 }), false, 'the language is required');
+  assert.equal(schema('GrantRequest')({ textVersion: 1, locale: 'fr-FR' }), false);
+  assert.equal(schema('GrantRequest')({ textVersion: 1, locale: 'en-US' }), true);
   assert.equal(schema('GrantRequest')({ textVersion: 1, quoteRef: 'COT-26-1' }), false);
 });
 
@@ -93,4 +96,12 @@ test('Identity, the contract, Acquisition and the web catalogue describe the sam
       for (const key of [`source.${source.code}.name`, `source.${source.code}.detail`, `kind.${source.kind}`, `scope.${source.scope}`]) assert.ok(messages[locale][key], `${locale} lacks ${key}`);
     }
   }
+});
+
+test('the examples carry the fingerprint of the wording of their language', () => {
+  for (const consent of examples.consents) {
+    assert.equal(consent.textVersion, CURRENT_TERMS.textVersion);
+    assert.equal(consent.wordingHash, WORDING_FINGERPRINT[consent.locale as 'es-CO' | 'en-US'], consent.consentId);
+  }
+  assert.deepEqual(new Set(examples.consents.map((c: { locale: string }) => c.locale)), new Set(['es-CO', 'en-US']));
 });
