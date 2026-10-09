@@ -16,28 +16,36 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
   const announce = useAnnounce();
   const [load, setLoad] = useState<Load>('loading');
   const [items, setItems] = useState<Consent[]>([]);
+  const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([undefined]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const pending = useRef<AbortController | null>(null);
+  const after = pageCursors[pageCursors.length - 1];
 
   const fetchItems = useCallback(async () => {
     pending.current?.abort();
     pending.current = new AbortController();
     try {
-      const outcome = await api.listConsents(pending.current.signal);
-      if (outcome.kind === 'ok') { setItems(outcome.value); setLoad('ready'); }
+      const outcome = await api.listConsents(pending.current.signal, after);
+      if (outcome.kind === 'ok') { setItems(outcome.value.items); setNextCursor(outcome.value.nextCursor); setLoad('ready'); }
       else if (outcome.kind === 'unauthenticated') onSessionLost?.();
       else { setLoad('error'); announce(intl.formatMessage({ id: 'live.privacyError' })); }
     } catch { /* aborted: the user left the screen */ }
-  }, [api, announce, intl, onSessionLost]);
+  }, [api, announce, intl, onSessionLost, after]);
 
   const reload = useCallback(() => { setLoad('loading'); void fetchItems(); }, [fetchItems]);
   useEffect(() => { void fetchItems(); return () => pending.current?.abort(); }, [fetchItems]);
   useEffect(() => { heading.current?.focus(); announce(intl.formatMessage({ id: 'live.privacy' })); }, [announce, intl]);
+  useEffect(() => { if (load === 'ready') heading.current?.focus(); }, [load]);
   useEffect(() => { if (confirming) confirmButton.current?.focus(); }, [confirming]);
+
+  function changePage(cursors: (string | undefined)[]) {
+    setConfirming(null); setFailed(null); setLoad('loading'); setPageCursors(cursors);
+  }
 
   async function revoke(id: string) {
     setBusy(true); setFailed(null);
@@ -100,6 +108,10 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
         </li>;
       })}
     </ul>}
+    {load === 'ready' && (pageCursors.length > 1 || nextCursor) && <div className="actions">
+      {pageCursors.length > 1 && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage(pageCursors.slice(0, -1))}>{intl.formatMessage({ id: 'privacy.previous' })}</button>}
+      {nextCursor && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage([...pageCursors, nextCursor])}>{intl.formatMessage({ id: 'privacy.next' })}</button>}
+    </div>}
     <p className="note privacy-foot">{intl.formatMessage({ id: 'privacy.foot' })}</p>
     <div className="actions"><button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'privacy.back' })}</button></div>
   </section>;

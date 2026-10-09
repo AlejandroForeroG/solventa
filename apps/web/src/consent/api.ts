@@ -19,6 +19,7 @@ export type Consent = {
   revokedAt: string | null;
   seal: string;
 };
+export type ConsentPage = { items: Consent[]; nextCursor: string | null };
 
 export type Outcome<T> =
   | { kind: 'ok'; value: T }
@@ -85,11 +86,14 @@ export const grantConsent = (request: { textVersion: number; locale: string; quo
 export const declineConsent = (textVersion: number, signal?: AbortSignal) =>
   send<true>('/api/v1/consents/declines', post({ textVersion }, {}, signal), async () => true, [204]);
 
-export const listConsents = (signal?: AbortSignal) =>
-  send('/api/v1/consents', { signal }, async response => {
+export const listConsents = (signal?: AbortSignal, after?: string) =>
+  send<ConsentPage>(`/api/v1/consents${after === undefined ? '' : `?after=${encodeURIComponent(after)}`}`, { signal }, async response => {
     const body = await response.json();
     const items = isRecord(body) && Array.isArray(body.items) ? body.items.map(asConsent) : null;
-    return items && items.every(item => item !== null) ? items as Consent[] : null;
+    const nextCursor = isRecord(body) ? body.nextCursor ?? null : null;
+    if (nextCursor !== null && (typeof nextCursor !== 'string' || !/^CNS-[0-9]{4}-[0-9]{5,19}$/.test(nextCursor) || nextCursor === after)) return null;
+    return items && items.length <= 50 && items.every(item => item !== null)
+      ? { items: items as Consent[], nextCursor } : null;
   }, [200]);
 
 export const revokeConsent = (consentId: string, signal?: AbortSignal) =>
