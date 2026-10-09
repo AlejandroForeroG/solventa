@@ -131,6 +131,9 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'the quote service is down': () => ({ sessionCookie: authorizedCookie, acquisition: unavailableService }),
   'a customer ready to authorize consent': () => consentWorld(),
   'a customer with an active consent': () => consentWorld(world => world.grant('seed-key', consentRequestSeed)),
+  'a customer with 51 active consents': () => consentWorld(async world => {
+    for (let i = 0; i < 51; i++) await world.grant(`page-${i}`, consentRequestSeed);
+  }),
   'the consent was already granted with the idempotency key': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', consentRequestSeed)),
   'the idempotency key was used for another consent request': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', { ...consentRequestSeed, locale: 'en-US' })),
   'the consent service is down': () => ({ sessionCookie: consentCookie, identity: unavailableService }),
