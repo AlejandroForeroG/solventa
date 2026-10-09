@@ -4,7 +4,7 @@ Identity owns the consent record. A customer authorizes, once and explicitly, th
 
 A web session is not consent. Having a consent is not a business permission either: each use of a source checks it again.
 
-## Authorization terms (text version 1)
+## Authorization terms (text version 2)
 
 The terms are defined in Identity and served by `GET /api/v1/consents/terms`; the web channel renders them and never defines them.
 
@@ -15,7 +15,7 @@ The terms are defined in Identity and served by `GET /api/v1/consents/terms`; th
 | Sources and scopes | `open_finance_bancolombia` / `income_obligations_12m` (Open Finance), `datacredito_experian` / `payment_history_score` (credit bureau), `ruaf` / `affiliation_regime` (open data), `registraduria` / `identity_validation` (open data) |
 | Not part of the authorization | Public DANE statistics: aggregate data that identifies no one. They are still listed as a source of the offer and in the audit trail. |
 
-The customer confirms with a mandatory checkbox. The wording of version 1:
+Before authorization, the screen states the duration from the recorded grant rather than predicting calendar dates using the device clock. The confirmation and privacy panel show the actual dates returned by Identity. Version 1 remains recoverable in Git; existing sealed grants retain their original wording, dates and validity. The customer confirms with a mandatory checkbox. The wording of version 2:
 
 | Locale | Wording |
 |---|---|
@@ -37,6 +37,7 @@ To change the wording: edit the messages, add the new `textVersion` and fingerpr
 - **Who:** only the authenticated web user, for their own subject. No identifier is taken from the body. Writes need the configured `Origin`, and an `Authorization` header is rejected, as in [API access](api-access.md).
 - **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key. Five digits are the minimum width, not an annual limit: the counter grows through the exact INT8 range, up to 19 digits. Existing five-digit codes remain valid.
 - **Status:** `active`, `revoked` or `expired` is computed from `revoked_at` and `expires_at` on every read; it is not stored, so it cannot go stale.
+- **Panel:** includes every active consent and the newest 50 inactive records, ordered newest first. The history limit never hides a revocable authorization.
 - **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked.
 - **Seal:** a keyed hash of the consent content, including the language and the wording fingerprint, shown in the panel so a later change to the record can be detected.
 - **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows. The screen advances only after the refusal is recorded; a failed write offers a retry and outdated terms are reloaded, without granting access.

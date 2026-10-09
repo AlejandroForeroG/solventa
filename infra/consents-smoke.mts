@@ -44,10 +44,10 @@ try {
   const ana = await person();
   const luis = await person();
   const traceId = () => randomUUID();
-  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 1, locale: 'es-CO' }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
+  const grant = (principal: typeof ana, key: string, body: unknown = { textVersion: 2, locale: 'es-CO' }) => consents.grant({ principal, idempotencyKey: key, body, traceId: traceId() });
   const check = (principal: typeof ana, scope = 'income_obligations_12m') => consents.verify({ subjectToken: principal.subjectToken, purposeCode: 'risk_profiling', scope });
 
-  const first = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
+  const first = await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(first.status, 'created');
   if (first.status !== 'created') throw Error('unreachable');
   assert.match(first.consent.consentId, /^CNS-\d{4}-\d{5}$/);
@@ -60,11 +60,15 @@ try {
   assert.equal(row.locale, 'es-CO');
   assert.match(row.wording_hash, /^[0-9a-f]{64}$/);
 
-  const replay = await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
+  const replay = await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' });
   assert.equal(replay.status, 'replayed');
   if (replay.status === 'replayed') assert.equal(replay.consent.consentId, first.consent.consentId);
-  assert.deepEqual(await grant(ana, 'k1', { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(ana, 'k1', { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00002' }), { status: 'idempotency_conflict' });
   assert.equal((await grant(luis, 'k1')).status, 'created');
+  for (let i = 0; i < 50; i++) assert.equal((await grant(luis, `active-${i}`)).status, 'created');
+  const activeList = await consents.list(luis);
+  assert.equal(activeList.length, 51, 'the history cap must not limit active authorizations');
+  assert.ok(activeList.every(c => c.status === 'active'));
   const racing = await Promise.all(Array.from({ length: 6 }, () => grant(ana, 'race')));
   assert.equal(racing.filter(r => r.status === 'created').length, 1, JSON.stringify(racing.map(r => r.status)));
   assert.equal(racing.filter(r => r.status === 'replayed').length, 5);
@@ -88,7 +92,7 @@ try {
   assert.deepEqual(await check(ana), { allowed: false, reason: 'consent_revoked' });
 
   const before = await count('SELECT count(*)::INT4 FROM identity.consents');
-  assert.deepEqual(await consents.decline({ principal: luis, body: { textVersion: 1 }, traceId: traceId() }), { status: 'declined' });
+  assert.deepEqual(await consents.decline({ principal: luis, body: { textVersion: 2 }, traceId: traceId() }), { status: 'declined' });
   assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents'), before);
   assert.equal(await count("SELECT count(*)::INT4 FROM identity.audit_events WHERE action = 'consent.declined'"), 1);
 
@@ -115,13 +119,16 @@ try {
   const frank = await person();
   const oldest = await grant(frank, 'k0');
   assert.ok(oldest.status === 'created');
-  for (let i = 1; i <= 21; i++) {
+  for (let i = 1; i <= 55; i++) {
     advance(0.001);
     const newer = await grant(frank, `k${i}`);
     assert.ok(newer.status === 'created');
     if (newer.status === 'created') await consents.revoke({ principal: frank, consentCode: newer.consent.consentId, traceId: traceId() });
   }
-  assert.ok((await check(frank)).allowed, 'an older active consent is found behind more than 20 newer revoked ones');
+  assert.ok((await check(frank)).allowed, 'an older active consent is found behind more than 50 newer revoked ones');
+  const visible = await consents.list(frank);
+  assert.equal(visible.length, 51, 'all active consents plus the latest 50 inactive records');
+  assert.ok(oldest.status === 'created' && visible.some(c => c.consentId === oldest.consent.consentId && c.status === 'active'));
   if (oldest.status === 'created') await consents.revoke({ principal: frank, consentCode: oldest.consent.consentId, traceId: traceId() });
   assert.deepEqual(await check(frank), { allowed: false, reason: 'consent_revoked' });
 

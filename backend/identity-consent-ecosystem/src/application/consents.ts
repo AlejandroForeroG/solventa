@@ -26,7 +26,7 @@ export type ConsentDecision =
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
 
 const MAX_KEY = 128;
-const LIST_LIMIT = 50;
+const HISTORY_LIMIT = 50;
 const SCOPES: readonly string[] = CURRENT_TERMS.sources.map(source => source.scope);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -69,7 +69,7 @@ export class Consents {
 
   async list(principal: Principal) {
     const now = this.deps.platform.now();
-    return (await this.deps.store.list(principal, LIST_LIMIT, now)).map(consent => this.view(consent, now));
+    return (await this.deps.store.list(principal, HISTORY_LIMIT, now)).map(consent => this.view(consent, now));
   }
 
   async revoke(input: { principal: Principal; consentCode: string; traceId: string }) {

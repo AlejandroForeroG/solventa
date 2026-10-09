@@ -14,7 +14,7 @@
         "body": {
           "locale": "es-CO",
           "quoteRef": "COT-2026-00001",
-          "textVersion": 1
+          "textVersion": 2
         },
         "headers": {
           "Content-Type": "application/json",
@@ -125,7 +125,7 @@
         "body": {
           "locale": "es-CO",
           "quoteRef": "COT-2026-00001",
-          "textVersion": 1
+          "textVersion": 2
         },
         "headers": {
           "Content-Type": "application/json",
@@ -167,7 +167,7 @@
         "body": {
           "locale": "es-CO",
           "quoteRef": "COT-2026-00001",
-          "textVersion": 1
+          "textVersion": 2
         },
         "headers": {
           "Content-Type": "application/json",
@@ -191,7 +191,7 @@
         "body": {
           "locale": "es-CO",
           "quoteRef": "COT-2026-00001",
-          "textVersion": 2
+          "textVersion": 3
         },
         "headers": {
           "Content-Type": "application/json",
@@ -231,7 +231,7 @@
       ],
       "request": {
         "body": {
-          "textVersion": 1
+          "textVersion": 2
         },
         "headers": {
           "Content-Type": "application/json"
@@ -774,7 +774,7 @@
               "scope": "identity_validation"
             }
           ],
-          "textVersion": 1,
+          "textVersion": 2,
           "validityDays": 90
         },
         "headers": {
@@ -939,7 +939,7 @@
         "body": {
           "locale": "es-CO",
           "quoteRef": "COT-2026-00001",
-          "textVersion": 1
+          "textVersion": 2
         },
         "headers": {
           "Content-Type": "application/json",
