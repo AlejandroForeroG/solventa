@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Consents
+  version: 1.1.0
+  description: >
+    Explicit, informed consent to query the customer's financial and open data. Identity owns the
+    record. A consent is created only by the authenticated web user for their own subject, lasts
+    90 days and can be revoked at any time. Whether a consent is active is decided on every use, so
+    a revocation blocks later queries immediately. Granting, declining and revoking write an audit
+    event without personal data.
+servers:
+  - url: /api/v1
+tags:
+  - name: Consents
+    description: Terms, grant, decline, list and revoke consents of the authenticated web user.
+paths:
+  /consents/terms:
+    get:
+      operationId: getConsentTerms
+      summary: Get the current authorization terms
+      tags: [Consents]
+      description: >
+        Purpose, sources, scopes and validity of the current text version. The customer sees these
+        before being asked to authorize.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: The terms in force.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentTerms' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /consents:
+    post:
+      operationId: grantConsent
+      summary: Authorize the use of financial data
+      tags: [Consents]
+      description: >
+        Creates a consent for the user of the session, bound to the sources and scopes of the text
+        version the customer was shown. The same Idempotency-Key with the same request returns the
+        original consent (200); with another request it is a conflict. A text version that is no
+        longer current is refused so the customer never authorizes text they did not see.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrantRequest' }
+      responses:
+        '201':
+          description: Consent created.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentResponse' }
+        '200':
+          description: Identical retry; the original consent is returned.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      operationId: listConsents
+      summary: List the consents of the authenticated user
+      tags: [Consents]
+      description: >
+        Privacy panel. Returns only the consents of the user of the session, newest first, with
+        their status at the time of the request. Returns at most 50 records per page. Follow
+        nextCursor with the after parameter until it is null to reach every authorization.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+        - name: after
+          in: query
+          required: false
+          description: Last consent code from the preceding page. Omit for the first page. An unknown or foreign code returns an empty page.
+          schema: { $ref: '#/components/schemas/ConsentId' }
+      responses:
+        '200':
+          description: A bounded page of the user's consents; empty when there are none.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentList' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /consents/declines:
+    post:
+      operationId: declineConsent
+      summary: Record that the customer did not authorize
+      tags: [Consents]
+      description: >
+        Creates no consent and enables no query. It only leaves an audit event without personal
+        data, so a refusal is as traceable as a grant.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclineRequest' }
+      responses:
+        '204':
+          description: Refusal recorded.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /consents/{consentId}/revoke:
+    post:
+      operationId: revokeConsent
+      summary: Revoke a consent
+      tags: [Consents]
+      description: >
+        Revokes a consent of the user of the session. Later queries are denied from this moment.
+        Decisions already taken are kept for audit. Revoking an already revoked consent returns it
+        unchanged. A consent of another user is reported as not found.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ConsentId' }
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: The consent, revoked.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Remote sealed HttpOnly session from the web login flow.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local-only sealed HttpOnly session for http://localhost:8787.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated key, 1 to 128 characters. Retrying the same request with the same key never creates a second consent.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  headers:
+    TraceId:
+      description: Valid supplied UUID or a UUID generated by the server; also present in the response body.
+      schema:
+        type: string
+        format: uuid
+    NoStore:
+      description: Consent responses must not be cached.
+      schema:
+        type: string
+        enum: [no-store]
+  schemas:
+    ConsentId:
+      type: string
+      pattern: '^CNS-[0-9]{4}-[0-9]{5,19}$'
+      description: Readable consent code, unique per year, with at least five counter digits and up to the INT8 counter capacity.
+      example: CNS-2026-00001
+    SourceCode:
+      type: string
+      enum: [open_finance_bancolombia, datacredito_experian, ruaf, registraduria]
+    ScopeCode:
+      type: string
+      enum: [income_obligations_12m, payment_history_score, affiliation_regime, identity_validation]
+    ConsentStatus:
+      type: string
+      enum: [active, revoked, expired]
+      description: Computed from the dates at the time of the request, never stored.
+    TermsSource:
+      type: object
+      required: [code, scope, kind]
+      properties:
+        code: { $ref: '#/components/schemas/SourceCode' }
+        scope: { $ref: '#/components/schemas/ScopeCode' }
+        kind:
+          type: string
+          enum: [open_finance, credit_bureau, open_data]
+    ConsentTerms:
+      type: object
+      required: [purposeCode, textVersion, validityDays, sources, traceId]
+      properties:
+        purposeCode:
+          type: string
+          enum: [risk_profiling]
+          description: Calculate the risk profile and personalize the premium of the mortgage life insurance tied to the credit. Not used for advertising and not shared with third parties.
+        textVersion:
+          type: integer
+          minimum: 1
+        validityDays:
+          type: integer
+          enum: [90]
+        sources:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/TermsSource' }
+        traceId:
+          type: string
+          format: uuid
+    Locale:
+      type: string
+      enum: [es-CO, en-US]
+    GrantRequest:
+      type: object
+      additionalProperties: false
+      required: [textVersion, locale]
+      properties:
+        textVersion:
+          type: integer
+          minimum: 1
+          description: Version of the text the customer was shown. The consent covers exactly the sources and scopes of that version.
+        locale:
+          allOf:
+            - $ref: '#/components/schemas/Locale'
+          description: Language of the wording the customer read. Together with the text version it identifies that wording, and the record keeps a fingerprint of it.
+        quoteRef:
+          type: string
+          pattern: '^COT-[0-9]{4}-[0-9]{5}$'
+          description: Quote that prompted the request. Stored as a reference; Identity does not read Acquisition data to check it.
+    DeclineRequest:
+      type: object
+      additionalProperties: false
+      required: [textVersion]
+      properties:
+        textVersion:
+          type: integer
+          minimum: 1
+    Consent:
+      type: object
+      required: [consentId, version, status, purposeCode, textVersion, locale, wordingHash, sources, scopes, grantedAt, expiresAt, revokedAt, quoteRef, seal]
+      properties:
+        consentId: { $ref: '#/components/schemas/ConsentId' }
+        version:
+          type: integer
+          minimum: 1
+        status: { $ref: '#/components/schemas/ConsentStatus' }
+        purposeCode:
+          type: string
+          enum: [risk_profiling]
+        textVersion:
+          type: integer
+          minimum: 1
+        locale: { $ref: '#/components/schemas/Locale' }
+        wordingHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Fingerprint of the exact wording of this text version and language, as approved by Identity when the consent was granted.
+        sources:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SourceCode' }
+        scopes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ScopeCode' }
+        grantedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Exactly 90 days after grantedAt.
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        quoteRef:
+          type: string
+          pattern: '^COT-[0-9]{4}-[0-9]{5}$'
+          nullable: true
+        seal:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Keyed hash of the consent content, so any later change to the record can be detected.
+    ConsentResponse:
+      allOf:
+        - $ref: '#/components/schemas/Consent'
+        - type: object
+          required: [traceId]
+          properties:
+            traceId:
+              type: string
+              format: uuid
+    ConsentList:
+      type: object
+      required: [items, traceId]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/Consent' }
+        nextCursor:
+          type: string
+          nullable: true
+          pattern: '^CNS-[0-9]{4}-[0-9]{5,19}$'
+          description: Last code to pass as after for the next page, or null when there are no more records. Optional for compatibility with the original recent-list response.
+        traceId:
+          type: string
+          format: uuid
+    ConsentError:
+      allOf:
+        - $ref: './common.yaml#/components/schemas/Error'
+        - type: object
+          properties:
+            error:
+              type: string
+              enum: [invalid_request, unauthorized, forbidden, not_found, terms_outdated, idempotency_key_reused, consent_not_active, access_unavailable]
+  responses:
+    InvalidRequest:
+      description: Missing or malformed input, a missing Idempotency-Key, or an Authorization header on the web entry; error is invalid_request.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }
+    Unauthorized:
+      description: Missing, invalid or expired session; error is unauthorized. Renew it through /auth/session and retry once.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }
+    Forbidden:
+      description: A write from an origin that is not configured, or an operation outside the web user policy; error is forbidden.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }
+    NotFound:
+      description: The consent does not exist or belongs to another user; error is not_found.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }
+    Conflict:
+      description: terms_outdated (the text version is no longer current), idempotency_key_reused (same key, another request) or consent_not_active (an expired consent cannot be revoked).
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }
+    Unavailable:
+      description: Verification or persistence is unavailable. Nothing was recorded; error is access_unavailable.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConsentError' }

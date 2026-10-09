@@ -1,4 +1,5 @@
 import type { Locale } from '../i18n/messages';
+import { fetchWithSession } from '../session-fetch';
 
 export type QuoteValues = {
   fullName: string;
@@ -43,21 +44,14 @@ export function toRequestBody(values: QuoteValues, idempotencyKey: string) {
 }
 
 export async function requestQuote(values: QuoteValues, idempotencyKey: string, locale: Locale, signal?: AbortSignal): Promise<QuoteOutcome> {
-  const post = () => fetch('/api/v1/me/quotes', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey, 'accept-language': locale },
-    body: JSON.stringify(toRequestBody(values, idempotencyKey)),
-    signal
-  });
   let response: Response;
   try {
-    response = await post();
-    if (response.status === 401) {
-      // The quote never renews the cookie: /auth/session does, and the quote is retried once.
-      const renewed = await fetch('/auth/session', { credentials: 'same-origin', signal }).then(r => r.ok, () => false);
-      if (renewed) response = await post();
-    }
+    response = await fetchWithSession('/api/v1/me/quotes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey, 'accept-language': locale },
+      body: JSON.stringify(toRequestBody(values, idempotencyKey)),
+      signal
+    });
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
     return { kind: 'unavailable' };

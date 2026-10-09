@@ -4,6 +4,7 @@ import { Authentication } from '../backend/identity-consent-ecosystem/src/applic
 import { sealAttempt, unsealAttempt } from '../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { WorkosAuthentication } from '../backend/identity-consent-ecosystem/src/adapters/outbound/workos-authentication';
+import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
 
 const password = 'a'.repeat(64);
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
@@ -25,7 +26,7 @@ test('OAuth transaction is encrypted, expires and cannot cross environments', as
   assert.equal(await unsealAttempt(await sealAttempt({...attempt,expires:Date.now()-1},password,origin),password,origin),null);
 });
 test('missing session, forged callback, CSRF and wrong methods fail closed', async () => {
-  const app=createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_business_authorization') });
+  const app=createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_business_authorization'), authentication: { provider: config => new WorkosAuthentication(config), sessions: url => new SqlIdentitySessions(url) } });
   assert.equal((await app.request(origin+'/auth/session',{},env)).status,401);
   const invalidSession=await app.request(origin+'/auth/session',{headers:{Cookie:'__Host-solventa-session=forged_cookie'}},env);
   assert.equal(invalidSession.status,401);
