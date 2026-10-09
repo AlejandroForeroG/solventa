@@ -44,7 +44,7 @@ Use the public gateway for the selected environment:
 | staging | `https://solventa-web-staging.ja-forerog1.workers.dev` | `client_01M47F209CBGBJGD73ZM39ADW6` |
 | prod | `https://solventa-web-prod.ja-forerog1.workers.dev` | `client_01M47F21P884580Q2GGF81NRV5` |
 
-Read `GET <base>/api/v1/mobile/config` before login; its `clientId` is the selected environment's public client ID and its `redirectUri` is `solventa://auth/callback`. Never mix the client/token with another base. An `EXPO_PUBLIC_*` value is bundled into the application, so only public configuration belongs there. The consent ZIP's sealing key and WorkOS API key are server credentials and are not needed by this flow.
+Read `GET <base>/api/v1/mobile/config` before login; its `clientId` is the selected environment's public client ID and its `redirectUri` is `solventa://auth/callback`. Never mix the client/token with another base. An `EXPO_PUBLIC_*` value is bundled into the application, so only public configuration belongs there. Consent sealing keys and the WorkOS API key are server credentials and are not needed by this flow.
 
 ### Fit the feature into the existing folders
 
@@ -92,7 +92,7 @@ import './src/shared/polyfills';
 import 'expo-router/entry';
 ```
 
-Do not initialize it only in a screen or after the SDK import. Follow [Expo's custom-entry instructions](https://docs.expo.dev/router/installation/#custom-entry-point) and verify PKCE generation on the native development build. The official WorkOS sample currently uses SDK 54; use Expo's installer for this application's SDK 57 and do not copy its dependency versions wholesale.
+Do not initialize it only in a screen or after the SDK import. Follow [Expo's custom-entry instructions](https://docs.expo.dev/router/installation/) and verify PKCE generation on the native development build. The official WorkOS sample currently uses SDK 54; use Expo's installer for this application's SDK 57 and do not copy its dependency versions wholesale.
 
 Configure native bundle/package identifiers and a development build profile before building. Preserve `scheme: "solventa"`. Rebuild after native configuration/plugin changes. Follow [Expo authentication](https://docs.expo.dev/guides/authentication/), [SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/) and the [official WorkOS Expo example](https://github.com/workos/expo-authkit-example), adapting its sample library placement to the feature structure above. Those examples do not replace the callback state checks or Solventa registration below.
 
