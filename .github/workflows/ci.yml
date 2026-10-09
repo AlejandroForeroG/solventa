@@ -40,6 +40,7 @@ jobs:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
       WRANGLER_SEND_METRICS: 'false'
+      SCARF_ANALYTICS: 'false'
     steps:
       - uses: actions/checkout@v4
         with:

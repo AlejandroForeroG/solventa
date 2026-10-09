@@ -6,6 +6,7 @@ import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/i
 import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
 import type { IdentitySessions } from '../backend/identity-consent-ecosystem/src/application/authentication';
 import web from '../apps/web/worker/index';
+import { unexpectedAuthentication } from './support/authentication-fakes';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' }, WORKOS_CONNECT_ISSUER: '', WORKOS_CONNECT_AUDIENCE: '' } as IdentityEnv;
@@ -24,7 +25,7 @@ function dependencies(): ApiAccessDependencies {
 
 test('access probes preserve trace without reflecting an arbitrary header, expose no credential and reject methods', async () => {
   const actor = { kind: 'partner' as const, partnerId: crypto.randomUUID(), credentialId: crypto.randomUUID(), scopes: ['quotes:create' as const] };
-  const app = createHttp({ authorizeApiAccess: async input => {
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async input => {
     assert.deepEqual(input, { kind: 'partner', token: 'synthetic.jwt.token', operation: 'quotes:create' });
     return { allowed: true, actor };
   } });
@@ -43,7 +44,7 @@ test('access probes preserve trace without reflecting an arbitrary header, expos
 
 test('missing credentials, unavailable M2M config, forged web cookie and mutation CSRF fail closed', async () => {
   const deps = dependencies();
-  const app = createHttp({ authorizeApiAccess: input => authorizeApiAccess(deps, input) });
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: input => authorizeApiAccess(deps, input) });
   const missing = await app.request(origin + '/api/v1/access/partner', {}, env);
   assert.equal(missing.status, 401);
   assert.equal(missing.headers.get('www-authenticate'), 'Bearer realm="solventa"');
@@ -108,7 +109,7 @@ test('web authorization uses only the verified session principal and never a par
 
 test('web probe returns the user actor without partner identifiers', async () => {
   const actor = { kind: 'user' as const, channel: 'web' as const, principal: { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() }, operations: ['quotes:create' as const] };
-  const app = createHttp({ authorizeApiAccess: async input => {
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async input => {
     assert.deepEqual(input, { kind: 'web', cookie: 'sealed', origin: '', method: 'GET', operation: 'quotes:create' });
     return { allowed: true, actor };
   } });
@@ -121,7 +122,7 @@ test('web probe returns the user actor without partner identifiers', async () =>
 
 test('injected provider failures remain unavailable and invalid credentials remain unauthorized', async () => {
   const deps = dependencies();
-  const app = createHttp({ authorizeApiAccess: input => authorizeApiAccess(deps, input) });
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: input => authorizeApiAccess(deps, input) });
   const request = { headers: { Authorization: 'Bearer synthetic.jwt.token' } };
   deps.partner = { authenticate: async () => { throw new Error('private_provider_detail'); } };
   const unavailable = await app.request(origin + '/api/v1/access/partner', request, env);

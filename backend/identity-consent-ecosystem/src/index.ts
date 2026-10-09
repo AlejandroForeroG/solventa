@@ -48,7 +48,14 @@ function consentsFor(env: ConsentEnv) {
 
 export default class extends WorkerEntrypoint<ConsentEnv> {
   async fetch(request: Request): Promise<Response> {
-    return createHttp({ authorizeApiAccess: input => authorize(this.env, input), consents: consentsFor(this.env) }).fetch(request, this.env, this.ctx);
+    return createHttp({
+      authorizeApiAccess: input => authorize(this.env, input),
+      authentication: {
+        provider: config => new WorkosAuthentication(config),
+        sessions: connectionString => new SqlIdentitySessions(connectionString),
+      },
+      consents: consentsFor(this.env),
+    }).fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'identity-consent-ecosystem', environment: this.env.APP_ENV }; }
   async authorizeApiAccessV1(request: ApiAccessRequest) {
