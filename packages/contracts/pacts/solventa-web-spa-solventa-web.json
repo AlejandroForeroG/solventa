@@ -4,6 +4,357 @@
   },
   "interactions": [
     {
+      "description": "a consent authorization",
+      "providerStates": [
+        {
+          "name": "a customer ready to authorize consent"
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "quoteRef": "COT-2026-00001",
+          "textVersion": 1
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "consentId": "CNS-2026-00001",
+          "expiresAt": "2027-01-06T15:00:00.000Z",
+          "grantedAt": "2026-10-08T15:00:00.000Z",
+          "revokedAt": null,
+          "scopes": [
+            "income_obligations_12m"
+          ],
+          "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": [
+            "open_finance_bancolombia"
+          ],
+          "status": "active"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                }
+              ]
+            },
+            "$.expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a consent authorization reusing an idempotency key",
+      "providerStates": [
+        {
+          "name": "the idempotency key was used for another consent request",
+          "params": {
+            "idempotencyKey": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "quoteRef": "COT-2026-00001",
+          "textVersion": 1
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "error": "idempotency_key_reused"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "a consent authorization while the service is down",
+      "providerStates": [
+        {
+          "name": "the consent service is down"
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "quoteRef": "COT-2026-00001",
+          "textVersion": 1
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "status": 503
+      }
+    },
+    {
+      "description": "a consent authorization with an outdated text version",
+      "providerStates": [
+        {
+          "name": "a customer ready to authorize consent"
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "quoteRef": "COT-2026-00001",
+          "textVersion": 2
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "error": "terms_outdated"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "a consent refusal",
+      "providerStates": [
+        {
+          "name": "a customer ready to authorize consent"
+        }
+      ],
+      "request": {
+        "body": {
+          "textVersion": 1
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents/declines"
+      },
+      "response": {
+        "status": 204
+      }
+    },
+    {
+      "description": "a consent revocation",
+      "providerStates": [
+        {
+          "name": "a customer with an active consent"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents/CNS-2026-00001/revoke"
+      },
+      "response": {
+        "body": {
+          "consentId": "CNS-2026-00001",
+          "expiresAt": "2027-01-06T15:00:00.000Z",
+          "grantedAt": "2026-10-08T15:00:00.000Z",
+          "revokedAt": "2026-10-08T15:00:00.000Z",
+          "scopes": [
+            "income_obligations_12m"
+          ],
+          "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": [
+            "open_finance_bancolombia"
+          ],
+          "status": "revoked"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                }
+              ]
+            },
+            "$.expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.revokedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a logout with an active session",
       "providerStates": [
         {
@@ -388,6 +739,370 @@
       }
     },
     {
+      "description": "a request for the consent terms",
+      "providerStates": [
+        {
+          "name": "a customer ready to authorize consent"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents/terms"
+      },
+      "response": {
+        "body": {
+          "purposeCode": "risk_profiling",
+          "sources": [
+            {
+              "code": "ruaf",
+              "kind": "open_data",
+              "scope": "affiliation_regime"
+            }
+          ],
+          "textVersion": 1,
+          "validityDays": 90
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.purposeCode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.sources[*].code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sources[*].kind": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(open_finance|credit_bureau|open_data)$"
+                }
+              ]
+            },
+            "$.sources[*].scope": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.textVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.validityDays": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for the consent terms while the service is down",
+      "providerStates": [
+        {
+          "name": "the consent service is down"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents/terms"
+      },
+      "response": {
+        "status": 503
+      }
+    },
+    {
+      "description": "a request for the consent terms without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents/terms"
+      },
+      "response": {
+        "status": 401
+      }
+    },
+    {
+      "description": "a request for the consents of the customer",
+      "providerStates": [
+        {
+          "name": "a customer with an active consent"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.items": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                }
+              ]
+            },
+            "$.items[*].expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[*].grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[*].scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.items[*].sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a retried consent authorization",
+      "providerStates": [
+        {
+          "name": "the consent was already granted with the idempotency key",
+          "params": {
+            "idempotencyKey": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "quoteRef": "COT-2026-00001",
+          "textVersion": 1
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "consentId": "CNS-2026-00001",
+          "expiresAt": "2027-01-06T15:00:00.000Z",
+          "grantedAt": "2026-10-08T15:00:00.000Z",
+          "revokedAt": null,
+          "scopes": [
+            "income_obligations_12m"
+          ],
+          "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": [
+            "open_finance_bancolombia"
+          ],
+          "status": "active"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5}$"
+                }
+              ]
+            },
+            "$.expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a revocation of an unknown consent",
+      "providerStates": [
+        {
+          "name": "a customer ready to authorize consent"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v1/consents/CNS-2026-99999/revoke"
+      },
+      "response": {
+        "status": 404
+      }
+    },
+    {
       "description": "a session check while authentication is unavailable",
       "providerStates": [
         {
@@ -419,6 +1134,21 @@
     },
     {
       "description": "a session check without a session",
+      "providerStates": [
+        {
+          "name": "no active session"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/auth/session"
+      },
+      "response": {
+        "status": 401
+      }
+    },
+    {
+      "description": "the session renewal after a rejected consent request",
       "providerStates": [
         {
           "name": "no active session"
