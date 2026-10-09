@@ -4,8 +4,13 @@ import worker from '../../../apps/web/worker/index';
 import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
+import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
+import { HmacIntegrity } from '../../../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
+import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
+import { Consents } from '../../../backend/identity-consent-ecosystem/src/application/consents';
 import { unexpectedAuthentication } from '../../support/authentication-fakes';
+import { ANA, MemoryConsents, SEAL_KEY, TRACE, clock } from '../../support/consent-fakes';
 import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
 import { providerName } from './pact-files';
 import { serve } from './serve';
@@ -25,10 +30,38 @@ const identityEnv = {
 type Binding = { fetch: (request: Request) => Promise<Response> };
 type World = { identity: Binding; acquisition: Binding; sessionCookie?: string };
 
+// Only the session cookie value decides who the customer is; any other value is an anonymous visitor.
+const consentCookie = 'consent-session';
+const consentAccess = {
+  application: new ApiAccess({ find: async () => null }, {
+    find: async identity => (identity.providerSubject === consentCookie ? ANA : null),
+    open: async () => { throw new Error('unexpected_session_registration'); },
+    revoke: async () => { throw new Error('unexpected_logout'); },
+  }),
+  partner: null,
+  web: {
+    authenticate: async (cookie: string) => (cookie === consentCookie ? { identity: { providerSubject: consentCookie, sessionReference: 'session_synthetic', emailVerified: true } } : null),
+    allowedOrigins: [origin],
+  },
+};
+
+function freshConsents() {
+  const consents = new Consents({ store: new MemoryConsents(), platform: clock(), integrity: new HmacIntegrity(SEAL_KEY) });
+  return { consents, grant: (idempotencyKey: string, body: object) => consents.grant({ principal: ANA, idempotencyKey, body, traceId: TRACE }) };
+}
+
+const consentRequestSeed = { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' };
+
+async function consentWorld(seed?: (world: ReturnType<typeof freshConsents>) => Promise<unknown>): Promise<Partial<World>> {
+  const world = freshConsents();
+  await seed?.(world);
+  return { identity: realIdentity(identityEnv, unexpectedAuthentication, world.consents), sessionCookie: consentCookie };
+}
+
 // The real Identity app answers every state, with WorkOS and SQL replaced by in-memory collaborators.
 // It only accepts requests addressed to its configured origin, so the test server's address is replaced.
-function realIdentity(env: IdentityEnv, authentication: AuthenticationCollaborators = unexpectedAuthentication): Binding {
-  const app = createIdentityHttp({ authorizeApiAccess: async () => { throw new Error('unexpected_business_authorization'); }, authentication });
+function realIdentity(env: IdentityEnv, authentication: AuthenticationCollaborators = unexpectedAuthentication, consents = freshConsents().consents): Binding {
+  const app = createIdentityHttp({ authorizeApiAccess: input => authorizeApiAccess(consentAccess, input), authentication, consents });
   return {
     fetch: request => {
       const { pathname, search } = new URL(request.url);
@@ -96,6 +129,11 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
     acquisition: await acquisitionWithQuote(parameters?.idempotencyKey ?? '', authorizedCookie),
   }),
   'the quote service is down': () => ({ sessionCookie: authorizedCookie, acquisition: unavailableService }),
+  'a customer ready to authorize consent': () => consentWorld(),
+  'a customer with an active consent': () => consentWorld(world => world.grant('seed-key', consentRequestSeed)),
+  'the consent was already granted with the idempotency key': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', consentRequestSeed)),
+  'the idempotency key was used for another consent request': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', { ...consentRequestSeed, locale: 'en-US' })),
+  'the consent service is down': () => ({ sessionCookie: consentCookie, identity: unavailableService }),
 };
 
 const defaultWorld = (): World => ({ identity: realIdentity(identityEnv), acquisition: realAcquisition() });
