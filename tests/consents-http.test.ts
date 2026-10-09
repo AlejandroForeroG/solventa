@@ -100,6 +100,21 @@ test('declining answers 204 without a body and leaves no consent', async () => {
   assert.equal(store.audit.length, 1);
 });
 
+test('list pagination is bounded, owner-scoped and rejects malformed cursors', async () => {
+  const { http } = app();
+  for (let i = 0; i < 55; i++) assert.equal((await grant(http, `page-${i}`)).status, 201);
+  const first = await (await call(http, 'GET', '/api/v1/consents')).json();
+  assert.equal(first.items.length, 50);
+  assert.ok(first.nextCursor);
+  assert.ok(schema('ConsentList')(first));
+  const next = await (await call(http, 'GET', `/api/v1/consents?after=${first.nextCursor}`)).json();
+  assert.equal(next.items.length, 5);
+  assert.equal(next.nextCursor, null);
+  assert.equal(new Set([...first.items, ...next.items].map(c => c.consentId)).size, 55);
+  assert.deepEqual((await (await call(http, 'GET', `/api/v1/consents?after=${first.nextCursor}`, { as: 'luis' })).json()).items, []);
+  assert.equal((await call(http, 'GET', '/api/v1/consents?after=invalid')).status, 400);
+});
+
 test('without a valid session nothing is read or written', async () => {
   const { http, store } = app();
   for (const [method, path] of [['GET', '/api/v1/consents/terms'], ['GET', '/api/v1/consents'], ['POST', '/api/v1/consents'], ['POST', '/api/v1/consents/declines'], ['POST', '/api/v1/consents/CNS-2026-00001/revoke']] as const) {

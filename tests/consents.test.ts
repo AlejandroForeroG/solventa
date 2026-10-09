@@ -15,6 +15,18 @@ const grant = (consents: Consents, over: Partial<{ principal: typeof ANA; idempo
 const check = (over: Partial<{ subjectToken: string; purposeCode: string; scope: string }> = {}) =>
   ({ subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m', ...over });
 
+async function allConsents(consents: Consents, principal = ANA) {
+  const items: Awaited<ReturnType<Consents['list']>>['items'] = [];
+  let after: string | undefined;
+  do {
+    const page = await consents.list(principal, after);
+    assert.ok(page.items.length <= 50);
+    items.push(...page.items);
+    after = page.nextCursor ?? undefined;
+  } while (after);
+  return items;
+}
+
 test('a grant covers exactly the sources and scopes of the text version, lasts 90 days and is sealed', async () => {
   const { consents } = setup();
   const result = await grant(consents, { body: { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' } });
@@ -86,9 +98,9 @@ test('the panel lists only the consents of the user, newest first, with status c
   time.advance(95);
   await grant(consents, { idempotencyKey: 'new' });
   await grant(consents, { principal: LUIS });
-  const items = await consents.list(ANA);
+  const { items } = await consents.list(ANA);
   assert.deepEqual(items.map(i => i.status), ['active', 'expired']);
-  assert.equal((await consents.list(LUIS)).length, 1);
+  assert.equal((await consents.list(LUIS)).items.length, 1);
 });
 
 test('revoking stops the next use; revoking twice returns the same record; another user cannot revoke it', async () => {
@@ -112,7 +124,7 @@ test('revoking stops the next use; revoking twice returns the same record; anoth
   assert.deepEqual(await consents.revoke({ principal: ANA, consentCode: 'nope', traceId: TRACE }), { status: 'invalid' });
 });
 
-test('every active authorization remains listed and revocable beyond the history cap', async () => {
+test('bounded pages keep every active authorization reachable and revocable beyond the recent list', async () => {
   const { consents, time } = setup();
   const oldest = await grant(consents, { idempotencyKey: 'oldest' });
   assert.ok(oldest.status === 'created');
@@ -122,16 +134,20 @@ test('every active authorization remains listed and revocable beyond the history
     assert.ok(newer.status === 'created');
     await consents.revoke({ principal: ANA, consentCode: newer.consent.consentId, traceId: TRACE });
   }
-  const items = await consents.list(ANA);
-  assert.equal(items.length, 51);
+  const firstPage = await consents.list(ANA);
+  assert.equal(firstPage.items.length, 50);
+  assert.ok(firstPage.nextCursor);
+  const items = await allConsents(consents);
+  assert.equal(items.length, 56);
+  assert.equal(new Set(items.map(c => c.consentId)).size, 56);
   assert.ok(items.some(c => c.consentId === oldest.consent.consentId && c.status === 'active'));
   assert.equal((await consents.revoke({ principal: ANA, consentCode: oldest.consent.consentId, traceId: TRACE })).status, 'revoked');
   assert.equal((await consents.verify(check())).allowed, false);
-  assert.equal((await consents.list(LUIS)).length, 0);
+  assert.equal((await consents.list(LUIS, firstPage.nextCursor)).items.length, 0);
 
   for (let i = 0; i < 51; i++) await grant(consents, { idempotencyKey: `active-${i}` });
-  const allActive = (await consents.list(ANA)).filter(c => c.status === 'active');
-  assert.equal(allActive.length, 51, 'the cap applies only to inactive history');
+  const allActive = (await allConsents(consents)).filter(c => c.status === 'active');
+  assert.equal(allActive.length, 51, 'every active authorization is reachable across bounded pages');
 });
 
 test('version 1 grants keep their original sealed validity after the wording revision', async () => {
@@ -141,8 +157,15 @@ test('version 1 grants keep their original sealed validity after the wording rev
   legacy.textVersion = 1;
   legacy.wordingHash = '5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047';
   legacy.seal = await new HmacIntegrity(SEAL_KEY).seal(sealContent(legacy));
+  legacy.requestHash = await new HmacIntegrity(SEAL_KEY).digest(JSON.stringify([1, null, 'es-CO']));
   const decision = await consents.verify(check());
   assert.ok(decision.allowed && decision.consent.textVersion === 1);
+  const replay = await grant(consents, { body: { textVersion: 1, locale: 'es-CO' } });
+  assert.ok(replay.status === 'replayed' && replay.consent.consentId === legacy.consentCode && replay.consent.textVersion === 1);
+  assert.equal(store.consents.length, 1);
+  assert.equal(store.audit.filter(e => e.action === 'consent.granted').length, 1);
+  assert.deepEqual(await grant(consents, { body: { textVersion: 1, locale: 'en-US' } }), { status: 'idempotency_conflict' });
+  assert.deepEqual(await grant(consents, { principal: LUIS, body: { textVersion: 1, locale: 'es-CO' } }), { status: 'terms_outdated' });
   assert.deepEqual(await grant(consents, { idempotencyKey: 'stale', body: { textVersion: 1, locale: 'es-CO' } }), { status: 'terms_outdated' });
   assert.equal((await consents.revoke({ principal: ANA, consentCode: legacy.consentCode, traceId: TRACE })).status, 'revoked');
 });

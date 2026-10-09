@@ -26,7 +26,7 @@ export type ConsentDecision =
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
 
 const MAX_KEY = 128;
-const HISTORY_LIMIT = 50;
+const PAGE_SIZE = 50;
 const SCOPES: readonly string[] = CURRENT_TERMS.sources.map(source => source.scope);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -39,7 +39,14 @@ export class Consents {
     const { store, platform, integrity } = this.deps;
     const request = parseGrantRequest(input.body);
     if (!request || !input.idempotencyKey || input.idempotencyKey.length > MAX_KEY) return { status: 'invalid' } as const;
-    if (request.textVersion !== CURRENT_TERMS.textVersion) return { status: 'terms_outdated' } as const;
+    const requestHash = await integrity.digest(JSON.stringify([request.textVersion, request.quoteRef, request.locale]));
+    if (request.textVersion !== CURRENT_TERMS.textVersion) {
+      // A committed authorization remains replayable after a terms revision; stale text cannot create a new grant.
+      const existing = await store.findGrant(input.principal, input.idempotencyKey, requestHash);
+      if (!existing) return { status: 'terms_outdated' } as const;
+      if (existing.kind === 'conflict') return { status: 'idempotency_conflict' } as const;
+      return { status: 'replayed', consent: this.view(existing.consent, platform.now()) } as const;
+    }
     const grantedAt = platform.now();
     const base = {
       id: platform.newId(), version: 1, clientId: input.principal.clientId, purposeCode: CURRENT_TERMS.purposeCode,
@@ -51,7 +58,7 @@ export class Consents {
       seal: await integrity.seal(sealContent(base)),
       subjectToken: input.principal.subjectToken,
       idempotencyKey: input.idempotencyKey,
-      requestHash: await integrity.digest(JSON.stringify([request.textVersion, request.quoteRef, request.locale])),
+      requestHash,
       year: Number(grantedAt.toLocaleString('en-CA', { timeZone: 'America/Bogota', year: 'numeric' })),
       traceId: input.traceId
     });
@@ -67,9 +74,11 @@ export class Consents {
     return { status: 'declined' } as const;
   }
 
-  async list(principal: Principal) {
+  async list(principal: Principal, after?: string) {
     const now = this.deps.platform.now();
-    return (await this.deps.store.list(principal, HISTORY_LIMIT, now)).map(consent => this.view(consent, now));
+    const rows = await this.deps.store.list(principal, PAGE_SIZE + 1, now, after);
+    const items = rows.slice(0, PAGE_SIZE).map(consent => this.view(consent, now));
+    return { items, nextCursor: rows.length > PAGE_SIZE ? items[items.length - 1].consentId : null };
   }
 
   async revoke(input: { principal: Principal; consentCode: string; traceId: string }) {

@@ -3,6 +3,7 @@ import { getCookie } from 'hono/cookie';
 import type { Consents } from '../../application/consents';
 import type { Principal } from '../../application/authentication';
 import { safeCode } from '../safe-code';
+import { isConsentCode } from '../../domain/consent';
 import type { AuthorizeApiAccess } from './api-access-http';
 
 const MAX_BODY_BYTES = 4 * 1024;
@@ -69,7 +70,11 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
 
   app.get('/api/v1/consents/terms', route('consents:read', async (_c, _principal, _traceId, reply) => reply(consents.terms(), 200)));
 
-  app.get('/api/v1/consents', route('consents:read', async (_c, principal, _traceId, reply) => reply({ items: await consents.list(principal) }, 200)));
+  app.get('/api/v1/consents', route('consents:read', async (c, principal, _traceId, reply) => {
+    const after = c.req.query('after');
+    if (after !== undefined && !isConsentCode(after)) return reply({ error: 'invalid_request' }, 400);
+    return reply(await consents.list(principal, after), 200);
+  }));
 
   app.post('/api/v1/consents', route('consents:write', async (c, principal, traceId, reply) => {
     const result = await consents.grant({ principal, idempotencyKey: c.req.header('Idempotency-Key') ?? null, body: await readJson(c.req.raw), traceId });

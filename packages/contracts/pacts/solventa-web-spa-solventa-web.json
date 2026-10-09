@@ -841,7 +841,8 @@
               ],
               "status": "active"
             }
-          ]
+          ],
+          "nextCursor": null
         },
         "headers": {
           "Content-Type": "application/json"
@@ -1098,6 +1099,2293 @@
       },
       "response": {
         "status": 401
+      }
+    },
+    {
+      "description": "the first bounded consent page",
+      "providerStates": [
+        {
+          "name": "a customer with 51 active consents"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            },
+            {
+              "consentId": "CNS-2026-00001",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            }
+          ],
+          "nextCursor": "CNS-2026-00050"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.items": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 50
+                }
+              ]
+            },
+            "$.items[*].consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^CNS-\\d{4}-\\d{5,19}$"
+                }
+              ]
+            },
+            "$.items[*].expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[*].grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[*].scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.items[*].sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                },
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                },
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                }
+              ]
+            },
+            "$.nextCursor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the next consent page using its cursor",
+      "providerStates": [
+        {
+          "name": "a customer with 51 active consents"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/consents",
+        "query": {
+          "after": [
+            "CNS-2026-00050"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "consentId": "CNS-2026-00051",
+              "expiresAt": "2027-01-06T15:00:00.000Z",
+              "grantedAt": "2026-10-08T15:00:00.000Z",
+              "revokedAt": null,
+              "scopes": [
+                "income_obligations_12m"
+              ],
+              "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "sources": [
+                "open_finance_bancolombia"
+              ],
+              "status": "active"
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.items[0].consentId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.items[0].expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[0].grantedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.items[0].scopes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[0].seal": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{64}$"
+                }
+              ]
+            },
+            "$.items[0].sources": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[0].status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(active|revoked|expired)$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       }
     },
     {
