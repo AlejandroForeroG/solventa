@@ -67,8 +67,32 @@ Keep non-route logic out of `src/app`; keep the existing welcome/brand component
 Use a development build or signed native build; Expo Go cannot validate this OAuth return. Install the Expo-compatible modules from `apps/mobile`:
 
 ```sh
-npx expo install expo-dev-client expo-web-browser expo-crypto expo-secure-store @workos-inc/node
+npx expo install expo-dev-client expo-web-browser expo-crypto expo-secure-store expo-standard-web-crypto @workos-inc/node
 ```
+
+Initialize WebCrypto **before importing WorkOS**; installing `expo-crypto` alone does not set up the global APIs that PKCE uses. Follow the [official example's polyfill](https://github.com/workos/expo-authkit-example/blob/main/src/polyfills.ts), using `expo-standard-web-crypto` for random values and Expo Crypto for `subtle.digest`. Suggested `src/shared/polyfills.ts`:
+
+```ts
+import { polyfillWebCrypto } from 'expo-standard-web-crypto';
+import { digest } from 'expo-crypto';
+
+polyfillWebCrypto();
+if (!globalThis.crypto.subtle) {
+  Object.defineProperty(globalThis.crypto, 'subtle', {
+    value: { digest },
+    configurable: true,
+  });
+}
+```
+
+This digest fallback supplies the operation used for PKCE, not a complete WebCrypto implementation for other cryptographic features. In `apps/mobile/package.json`, change the current `main: "expo-router/entry"` to `main: "index.ts"`; create `apps/mobile/index.ts` with the polyfill first and Router last:
+
+```ts
+import './src/shared/polyfills';
+import 'expo-router/entry';
+```
+
+Do not initialize it only in a screen or after the SDK import. Follow [Expo's custom-entry instructions](https://docs.expo.dev/router/installation/#custom-entry-point) and verify PKCE generation on the native development build. The official WorkOS sample currently uses SDK 54; use Expo's installer for this application's SDK 57 and do not copy its dependency versions wholesale.
 
 Configure native bundle/package identifiers and a development build profile before building. Preserve `scheme: "solventa"`. Rebuild after native configuration/plugin changes. Follow [Expo authentication](https://docs.expo.dev/guides/authentication/), [SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/) and the [official WorkOS Expo example](https://github.com/workos/expo-authkit-example), adapting its sample library placement to the feature structure above. Those examples do not replace the callback state checks or Solventa registration below.
 
