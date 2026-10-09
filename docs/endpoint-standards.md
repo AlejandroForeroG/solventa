@@ -1,6 +1,6 @@
 # Endpoints and business decisions
 
-Apply this guide when implementing a new business route and subsequent changes. Module code and docs evolve together. Examples explain the pattern; they neither create an endpoint nor establish implemented quoting, Pact or event publication.
+Apply this guide when implementing a new business route and subsequent changes. Module code and docs evolve together. Examples explain the pattern; they neither create an endpoint nor establish implemented quoting or event publication.
 
 Every API addition, modification or removal must update its domain OpenAPI specification, affected examples/contract tests and owning module guide in the same branch and PR. Follow [contract maintenance and the published API reference](shared/contracts/README.md#maintaining-api-documentation). CI and Deploy rebuild `/api/docs/` from that revision's contracts; authors and reviewers still verify that the specification describes the actual endpoint behavior.
 
@@ -91,4 +91,4 @@ Before retirement, a version with `sunset` retains `Deprecation`, `Sunset` and `
 
 Use [purposeful tests](testing.md). For the implemented capability, cover calculations/rules and boundaries, actual consent, schema-compliant captures and version preservation, joint persistence, idempotency with a different payload, and errors without partial success. HTTP tests check invalid input, denied access and contractual output with in-memory dependencies; web Worker tests check headers on successes/errors and zero backend calls after retirement.
 
-Domain OpenAPI specs, module guides and tests change with behavior. The PR links those guides. Documenting examples does not replace implementation or its tests.
+A route consumed by the SPA or another client also needs its consumer pact, updated in the same change ([consumer contracts](shared/contracts/README.md#consumer-contracts-pact)). Domain OpenAPI specs, module guides and tests change with behavior. The PR links those guides. Documenting examples does not replace implementation or its tests.

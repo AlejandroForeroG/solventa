@@ -4,11 +4,11 @@ Migrations implement architecture aggregates with UUIDs, timestamps, versions an
 
 | Owner | Business tables |
 |---|---|
-| identity | clients, external_identities, authentication_sessions, partners, partner_credentials, consents, registered_devices |
+| identity | clients, external_identities, authentication_sessions, partners, partner_credentials, consents, consent_counters, registered_devices |
 | acquisition | quotes, quote_counters, risk_profiles, underwriting_decisions, offers, offer_revisions, signal_refresh_jobs |
 | policy | policies, claims, indemnities, payments, evidence_metadata |
 
-Each owner adds `audit_events`, `outbox_events` and `inbox_events`: 28 tables, plus three administrative `schema_migrations` ledgers. No foreign keys cross schemas; external references are validated through a contract/event, never a query to another owner's tables.
+Each owner adds `audit_events`, `outbox_events` and `inbox_events`: 29 tables, plus three administrative `schema_migrations` ledgers. No foreign keys cross schemas; external references are validated through a contract/event, never a query to another owner's tables.
 
 ## Data by module
 

@@ -1,0 +1,213 @@
+{
+  "asOf": "2026-10-08T16:00:00Z",
+  "terms": {
+    "purposeCode": "risk_profiling",
+    "textVersion": 2,
+    "validityDays": 90,
+    "sources": [
+      {
+        "code": "open_finance_bancolombia",
+        "scope": "income_obligations_12m",
+        "kind": "open_finance"
+      },
+      {
+        "code": "datacredito_experian",
+        "scope": "payment_history_score",
+        "kind": "credit_bureau"
+      },
+      {
+        "code": "ruaf",
+        "scope": "affiliation_regime",
+        "kind": "open_data"
+      },
+      {
+        "code": "registraduria",
+        "scope": "identity_validation",
+        "kind": "open_data"
+      }
+    ],
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "consents": [
+    {
+      "consentId": "CNS-2026-00003",
+      "version": 1,
+      "status": "active",
+      "purposeCode": "risk_profiling",
+      "textVersion": 2,
+      "locale": "es-CO",
+      "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
+      "sources": [
+        "open_finance_bancolombia",
+        "datacredito_experian",
+        "ruaf",
+        "registraduria"
+      ],
+      "scopes": [
+        "income_obligations_12m",
+        "payment_history_score",
+        "affiliation_regime",
+        "identity_validation"
+      ],
+      "grantedAt": "2026-10-08T15:00:00Z",
+      "expiresAt": "2027-01-06T15:00:00Z",
+      "revokedAt": null,
+      "quoteRef": "COT-2026-00001",
+      "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "consentId": "CNS-2026-00002",
+      "version": 1,
+      "status": "revoked",
+      "purposeCode": "risk_profiling",
+      "textVersion": 2,
+      "locale": "en-US",
+      "wordingHash": "9f6acbbbe59612ae239bfe49db5945ed9879cc86c21247f6d8907360ffa841e8",
+      "sources": [
+        "open_finance_bancolombia",
+        "datacredito_experian",
+        "ruaf",
+        "registraduria"
+      ],
+      "scopes": [
+        "income_obligations_12m",
+        "payment_history_score",
+        "affiliation_regime",
+        "identity_validation"
+      ],
+      "grantedAt": "2026-09-20T14:00:00Z",
+      "expiresAt": "2026-12-19T14:00:00Z",
+      "revokedAt": "2026-10-01T16:30:00Z",
+      "quoteRef": null,
+      "seal": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "consentId": "CNS-2026-00001",
+      "version": 1,
+      "status": "expired",
+      "purposeCode": "risk_profiling",
+      "textVersion": 2,
+      "locale": "es-CO",
+      "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
+      "sources": [
+        "open_finance_bancolombia",
+        "datacredito_experian",
+        "ruaf",
+        "registraduria"
+      ],
+      "scopes": [
+        "income_obligations_12m",
+        "payment_history_score",
+        "affiliation_regime",
+        "identity_validation"
+      ],
+      "grantedAt": "2026-06-01T14:00:00Z",
+      "expiresAt": "2026-08-30T14:00:00Z",
+      "revokedAt": null,
+      "quoteRef": null,
+      "seal": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "grantRequest": {
+    "textVersion": 2,
+    "locale": "es-CO",
+    "quoteRef": "COT-2026-00001"
+  },
+  "declineRequest": {
+    "textVersion": 2
+  },
+  "errors": [
+    {
+      "error": "terms_outdated",
+      "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+    },
+    {
+      "error": "consent_not_active",
+      "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+    }
+  ],
+  "list": {
+    "items": [
+      {
+        "consentId": "CNS-2026-00003",
+        "version": 1,
+        "status": "active",
+        "purposeCode": "risk_profiling",
+        "textVersion": 2,
+        "locale": "es-CO",
+        "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
+        "sources": [
+          "open_finance_bancolombia",
+          "datacredito_experian",
+          "ruaf",
+          "registraduria"
+        ],
+        "scopes": [
+          "income_obligations_12m",
+          "payment_history_score",
+          "affiliation_regime",
+          "identity_validation"
+        ],
+        "grantedAt": "2026-10-08T15:00:00Z",
+        "expiresAt": "2027-01-06T15:00:00Z",
+        "revokedAt": null,
+        "quoteRef": "COT-2026-00001",
+        "seal": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "consentId": "CNS-2026-00002",
+        "version": 1,
+        "status": "revoked",
+        "purposeCode": "risk_profiling",
+        "textVersion": 2,
+        "locale": "en-US",
+        "wordingHash": "9f6acbbbe59612ae239bfe49db5945ed9879cc86c21247f6d8907360ffa841e8",
+        "sources": [
+          "open_finance_bancolombia",
+          "datacredito_experian",
+          "ruaf",
+          "registraduria"
+        ],
+        "scopes": [
+          "income_obligations_12m",
+          "payment_history_score",
+          "affiliation_regime",
+          "identity_validation"
+        ],
+        "grantedAt": "2026-09-20T14:00:00Z",
+        "expiresAt": "2026-12-19T14:00:00Z",
+        "revokedAt": "2026-10-01T16:30:00Z",
+        "quoteRef": null,
+        "seal": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "consentId": "CNS-2026-00001",
+        "version": 1,
+        "status": "expired",
+        "purposeCode": "risk_profiling",
+        "textVersion": 2,
+        "locale": "es-CO",
+        "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
+        "sources": [
+          "open_finance_bancolombia",
+          "datacredito_experian",
+          "ruaf",
+          "registraduria"
+        ],
+        "scopes": [
+          "income_obligations_12m",
+          "payment_history_score",
+          "affiliation_regime",
+          "identity_validation"
+        ],
+        "grantedAt": "2026-06-01T14:00:00Z",
+        "expiresAt": "2026-08-30T14:00:00Z",
+        "revokedAt": null,
+        "quoteRef": null,
+        "seal": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "nextCursor": null,
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  }
+}

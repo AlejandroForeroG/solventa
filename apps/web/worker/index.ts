@@ -33,7 +33,7 @@ export default {
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
-      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web') {
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || /^\/api\/v1\/consents(\/|$)/.test(path)) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
