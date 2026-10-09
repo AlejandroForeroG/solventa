@@ -10,8 +10,9 @@ Open this folder as a Bruno collection and select `local`, `dev`, `staging` or `
 | `30-negative` | Missing token, invalid token/cookie, mixed credentials and wrong method | Complete verification configuration for the environment |
 | `40-provisioned-negative` | Denied partner 403 | Partner test credential in the specified state |
 | `50-quotes` | Create, replay and conflict for a partner; create as a web user | Deployed quote routes, migrated Acquisition schema and its HMAC secret |
+| `60-mobile` | Public config, session registration/inspection, access and logout | A WorkOS user access token for the selected environment; disable cookies |
 
-Do not run the entire collection as if every scenario shared the same state: a partner credential cannot be authorized and revoked simultaneously. The GET requests are probes without quoting effects. These routes do not establish consent or mobile login.
+Do not run the entire collection as if every scenario shared the same state: a partner credential cannot be authorized and revoked simultaneously. The GET requests are probes without quoting effects. These routes do not establish consent or native UI/deep-link validation.
 
 ## Variables and secrets
 
@@ -21,6 +22,7 @@ Populate Bruno's local secret variables when needed:
 
 - `m2mClientId` and `m2mClientSecret`: credentials for the test M2M application.
 - `webSessionCookie`: sealed value of an active test web session, without the cookie name or attributes.
+- `mobileAccessToken`: current WorkOS USER access token from native PKCE, held as a local secret variable. Never a refresh token, server API key or M2M credential.
 - `deniedPartnerToken`: valid JWT for a revoked/inactive local credential or one without `quotes:create`, for the 403 case.
 - `quoteIdempotencyKey`: a new arbitrary key for one synthetic quote attempt; keep it unchanged for the replay and conflict cases. Store it as a local variable even though it is not a credential.
 
@@ -48,3 +50,7 @@ bru run 00-public --env local --disable-cookies
 Do not pass secrets through `--env-var` in shared or recorded commands. For commands and reports, see the [official options](https://docs.usebruno.com/bru-cli/run/options); authenticated request reports must omit headers and bodies. The included tests check status, error/actor, correlation and cache prevention where applicable. They do not replace Pact contracts, load validation or the quoting flow.
 
 The quote requests perform persistent writes. Never run the quote folder as part of an unattended collection run against an environment with real customer data. A 500 or 503 may follow an uncertain write outcome; repeat with the same key and unchanged body to reconcile it.
+
+## Native connection
+
+Follow the [mobile integration guide](../../../docs/channels/mobile/README.md#connecting-native-login) for Expo PKCE and secure storage. Disable Bruno's cookie jar for all `60-mobile` requests. Read config, then set only the local secret `mobileAccessToken` from a synthetic native test account in the same environment. Run registration twice (200 with the same principal), inspection (200), access (200, user/mobile actor) and logout (200, signed_out). Inspection/access and registration with the same still-valid token must then return 401; adjust the manual expectation for those negative replay calls. A foreign-environment user token must return 401. An unavailable provider/SQL dependency returns 503, including incomplete provider revocation after local logout. The folder mutates session records and revokes the test account's provider session; use it separately from quote flows, never as an unattended full-collection run. Do not export tokens/headers/bodies in reports. Backend requests do not demonstrate a device browser callback or biometric flow.
