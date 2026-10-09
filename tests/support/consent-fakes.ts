@@ -28,9 +28,12 @@ export class MemoryConsents implements ConsentStore {
     return { kind: 'created', consent };
   }
 
-  async list(principal: Principal, limit: number): Promise<Consent[]> {
+  async list(principal: Principal, historyLimit: number, now: Date): Promise<Consent[]> {
     this.check();
-    return this.consents.filter(c => c.clientId === principal.clientId).sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime()).slice(0, limit);
+    const owned = this.consents.filter(c => c.clientId === principal.clientId);
+    const newest = (a: Consent, b: Consent) => b.grantedAt.getTime() - a.grantedAt.getTime() || a.id.localeCompare(b.id);
+    return [...owned.filter(c => statusOf(c, now) === 'active'),
+      ...owned.filter(c => statusOf(c, now) !== 'active').sort(newest).slice(0, historyLimit)].sort(newest);
   }
 
   async revoke(principal: Principal, consentCode: string, now: Date): Promise<RevokeResult> {

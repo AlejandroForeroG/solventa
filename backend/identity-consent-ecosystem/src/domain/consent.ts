@@ -11,7 +11,7 @@ export type TermsSource = { code: SourceCode; scope: ScopeCode; kind: 'open_fina
 // Any change to the purpose, a source, a scope, the validity or the displayed wording needs a new textVersion.
 export const CURRENT_TERMS = {
   purposeCode: PURPOSE_RISK_PROFILING,
-  textVersion: 1,
+  textVersion: 2,
   validityDays: VALIDITY_DAYS,
   sources: [
     { code: 'open_finance_bancolombia', scope: 'income_obligations_12m', kind: 'open_finance' },
@@ -24,8 +24,8 @@ export const CURRENT_TERMS = {
 // Fingerprint of the exact wording the customer reads in each language for the current text version. The web
 // catalogue is compared with it by a test, so a wording change cannot reach a record without a new version.
 export const WORDING_FINGERPRINT: Record<Locale, string> = {
-  'es-CO': '5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047',
-  'en-US': 'd2805eca2ed7561e214c8b8b7df3d37b513d378daf0a0b7f90f8b646c0794351'
+  'es-CO': '9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad',
+  'en-US': '9f6acbbbe59612ae239bfe49db5945ed9879cc86c21247f6d8907360ffa841e8'
 };
 
 export type Consent = {

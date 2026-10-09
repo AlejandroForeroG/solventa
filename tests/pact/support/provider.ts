@@ -50,7 +50,7 @@ function freshConsents() {
   return { consents, grant: (idempotencyKey: string, body: object) => consents.grant({ principal: ANA, idempotencyKey, body, traceId: TRACE }) };
 }
 
-const consentRequestSeed = { textVersion: 1, locale: 'es-CO', quoteRef: 'COT-2026-00001' };
+const consentRequestSeed = { textVersion: 2, locale: 'es-CO', quoteRef: 'COT-2026-00001' };
 
 async function consentWorld(seed?: (world: ReturnType<typeof freshConsents>) => Promise<unknown>): Promise<Partial<World>> {
   const world = freshConsents();

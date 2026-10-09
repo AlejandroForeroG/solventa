@@ -13,7 +13,8 @@ export type RevokeResult = { kind: 'revoked' | 'already_revoked' | 'not_active';
 
 export interface ConsentStore {
   grant(consent: NewConsent): Promise<GrantResult>;
-  list(principal: Principal, limit: number, now: Date): Promise<Consent[]>;
+  // Include every active consent so each authorization remains revocable; cap only inactive history.
+  list(principal: Principal, historyLimit: number, now: Date): Promise<Consent[]>;
   revoke(principal: Principal, consentCode: string, now: Date, traceId: string): Promise<RevokeResult>;
   decline(principal: Principal, traceId: string): Promise<void>;
   forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]>;
