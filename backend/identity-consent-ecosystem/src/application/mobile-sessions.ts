@@ -1,7 +1,8 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export interface MobileSessionStore extends Pick<IdentitySessions, 'find' | 'revoke'> {
+export interface MobileSessionStore extends Pick<IdentitySessions, 'find'> {
   register(identity: VerifiedIdentity): Promise<Principal | null>;
+  revokeOrBlock(identity: VerifiedIdentity): Promise<void>;
 }
 
 export class MobileSessions {
@@ -15,8 +16,6 @@ export class MobileSessions {
     return this.store.find(identity);
   }
   async revoke(identity: VerifiedIdentity): Promise<void> {
-    // A pending bootstrap must also leave a revoked reference, so its token cannot register afterward.
-    await this.store.register(identity);
-    await this.store.revoke(identity);
+    await this.store.revokeOrBlock(identity);
   }
 }

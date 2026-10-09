@@ -19,7 +19,7 @@ const actor = { kind: 'user', channel: 'mobile', principal, operations: ['quotes
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const headers = { Authorization: 'Bearer synthetic.jwt.token', 'X-Trace-Id': crypto.randomUUID() };
 const env = { APP_ENV: 'dev' } as IdentityEnv;
-function setup(options: { verified?: boolean; registered?: boolean; unavailable?: boolean; revokeUnavailable?: boolean } = {}) {
+function setup(options: { verified?: boolean; registered?: boolean; unavailable?: boolean; revokeUnavailable?: boolean; localRevokeUnavailable?: boolean } = {}) {
   const calls: string[] = [];
   let active = options.registered ?? false;
   let revoked = false;
@@ -38,7 +38,7 @@ function setup(options: { verified?: boolean; registered?: boolean; unavailable?
       sessions: new MobileSessions({
         register: async () => { calls.push('register'); if (revoked) return null; active = true; return principal; },
         find: async () => { calls.push('find'); return active ? principal : null; },
-        revoke: async () => { calls.push('local_revoke'); active = false; revoked = true; },
+        revokeOrBlock: async () => { calls.push('local_revoke'); if (options.localRevokeUnavailable) throw new Error('sql_offline'); active = false; revoked = true; },
       }),
     },
   });
@@ -71,7 +71,7 @@ test('native bootstrap, active retry, inspection, permission probe and logout fo
   await contract('/mobile/session', 'GET', await flow.request('/mobile/session'), 'Session', 200);
   await contract('/access/mobile', 'GET', await flow.request('/access/mobile'), 'Access', 200);
   await contract('/mobile/session', 'DELETE', await flow.request('/mobile/session', 'DELETE'), 'Logout', 200);
-  assert.deepEqual(flow.calls.slice(-4), ['verify', 'register', 'local_revoke', 'provider_revoke']);
+  assert.deepEqual(flow.calls.slice(-3), ['verify', 'local_revoke', 'provider_revoke']);
   await contract('/mobile/session', 'GET', await flow.request('/mobile/session'), 'Error', 401);
   await contract('/mobile/session', 'POST', await flow.request('/mobile/session', 'POST'), 'Error', 401);
   await contract('/access/mobile', 'GET', await flow.request('/access/mobile'), 'Error', 401);
@@ -95,13 +95,20 @@ test('unverified user and provider outages return documented denials without reg
 test('provider logout failure returns unavailable after durable local revocation; replay cannot reopen the session', async () => {
   const flow = setup({ registered: true, revokeUnavailable: true });
   await contract('/mobile/session', 'DELETE', await flow.request('/mobile/session', 'DELETE'), 'Error', 503);
-  assert.deepEqual(flow.calls, ['verify', 'register', 'local_revoke', 'provider_revoke']);
+  assert.deepEqual(flow.calls, ['verify', 'local_revoke', 'provider_revoke']);
   await contract('/mobile/session', 'POST', await flow.request('/mobile/session', 'POST'), 'Error', 401);
 });
 test('logout before the first bootstrap leaves a revoked local reference and prevents later registration', async () => {
   const flow = setup();
   await contract('/mobile/session', 'DELETE', await flow.request('/mobile/session', 'DELETE'), 'Logout', 200);
   await contract('/mobile/session', 'POST', await flow.request('/mobile/session', 'POST'), 'Error', 401);
+});
+
+test('a failed local logout never registers a pending session or calls provider revocation', async () => {
+  const flow = setup({ localRevokeUnavailable: true });
+  await contract('/mobile/session', 'DELETE', await flow.request('/mobile/session', 'DELETE'), 'Error', 503);
+  assert.deepEqual(flow.calls, ['verify', 'local_revoke']);
+  await contract('/mobile/session', 'GET', await flow.request('/mobile/session'), 'Error', 401);
 });
 test('unsupported methods and unavailable mobile configuration answer normalized errors', async () => {
   const flow = setup();
