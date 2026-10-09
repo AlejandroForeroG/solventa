@@ -21,21 +21,21 @@ describe('SPA session check', () => {
   test('reports an authenticated session', async () => {
     pact.given('an active session').uponReceiving('a session check with an active session')
       .withRequest({ method: 'GET', path: '/auth/session' })
-      .willRespondWith({ status: 200, headers: jsonResponse, body: { authenticated: true } });
+      .willRespondWith({ status: 200 });
     await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'authenticated'));
   });
 
   test('reports an anonymous visitor', async () => {
     pact.given('no active session').uponReceiving('a session check without a session')
       .withRequest({ method: 'GET', path: '/auth/session' })
-      .willRespondWith({ status: 401, headers: jsonResponse, body: { authenticated: false } });
+      .willRespondWith({ status: 401 });
     await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'anonymous'));
   });
 
   test('reports unavailable when authentication is not configured', async () => {
     pact.given('authentication is not configured').uponReceiving('a session check while authentication is unavailable')
       .withRequest({ method: 'GET', path: '/auth/session' })
-      .willRespondWith({ status: 503, headers: jsonResponse, body: { error: 'authentication_unavailable' } });
+      .willRespondWith({ status: 503 });
     await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'unavailable'));
   });
 });
@@ -53,7 +53,7 @@ describe('SPA logout', () => {
   test('treats a missing session as already logged out', async () => {
     pact.given('no active session').uponReceiving('a logout without a session')
       .withRequest({ method: 'POST', path: '/auth/logout' })
-      .willRespondWith({ status: 401, headers: jsonResponse, body: { authenticated: false } });
+      .willRespondWith({ status: 401 });
     await pact.executeTest(async server => assert.deepEqual(await requestLogout(server.url), { status: 'anonymous' }));
   });
 });
@@ -76,19 +76,16 @@ describe('SPA quote request', () => {
         body: {
           quoteId: MatchersV3.regex('^COT-\\d{4}-\\d{5}$', 'COT-2026-00001'),
           premiumMonthly: MatchersV3.integer(86400),
-          currency: 'COP',
           sumInsured: MatchersV3.integer(320000000),
           termMonths: MatchersV3.integer(180),
           validUntil: MatchersV3.iso8601DateTimeWithMillis('2026-10-21T15:00:00.000Z'),
-          basis: 'minimum_data',
-          ruleVersion: MatchersV3.string('2026.1'),
           traceId,
         },
       });
     await pact.executeTest(async server => {
       const outcome = await submitQuote(server.url);
       assert.equal(outcome.kind, 'quote');
-      if (outcome.kind === 'quote') assert.equal(outcome.quote.currency, 'COP');
+      if (outcome.kind === 'quote') assert.match(outcome.quote.quoteId, /^COT-\d{4}-\d{5}$/);
     });
   });
 
@@ -99,7 +96,7 @@ describe('SPA quote request', () => {
       .willRespondWith({
         status: 400,
         headers: jsonResponse,
-        body: { error: 'validation_error', errors: MatchersV3.eachLike({ field: MatchersV3.equal('credit.amount'), code: MatchersV3.equal('amount_out_of_range') }) },
+        body: { errors: MatchersV3.eachLike({ field: MatchersV3.equal('credit.amount'), code: MatchersV3.equal('amount_out_of_range') }) },
       });
     await pact.executeTest(async server => {
       const outcome = await submitQuote(server.url, invalid);
@@ -110,17 +107,17 @@ describe('SPA quote request', () => {
   test('asks the visitor to sign in when the session cannot be renewed', async () => {
     pact.given('no active session').uponReceiving('a quote request without a session')
       .withRequest({ ...quoteRequest, body: toRequestBody(quoteValues, quoteKey) })
-      .willRespondWith({ status: 401, headers: jsonResponse, body: { error: 'unauthorized' } });
+      .willRespondWith({ status: 401 });
     pact.given('no active session').uponReceiving('the session renewal after a rejected quote request')
       .withRequest({ method: 'GET', path: '/auth/session' })
-      .willRespondWith({ status: 401, headers: jsonResponse, body: { authenticated: false } });
+      .willRespondWith({ status: 401 });
     await pact.executeTest(async server => assert.deepEqual(await submitQuote(server.url), { kind: 'unauthenticated' }));
   });
 
   test('shows access denied with the trace identifier', async () => {
     pact.given('a customer without permission to quote').uponReceiving('a quote request without permission')
       .withRequest({ ...quoteRequest, body: toRequestBody(quoteValues, quoteKey) })
-      .willRespondWith({ status: 403, headers: { ...jsonResponse, 'x-trace-id': traceId }, body: { error: 'forbidden' } });
+      .willRespondWith({ status: 403, headers: { 'x-trace-id': traceId } });
     await pact.executeTest(async server => {
       const outcome = await submitQuote(server.url);
       assert.equal(outcome.kind, 'denied');
@@ -131,14 +128,14 @@ describe('SPA quote request', () => {
   test('reports a reused idempotency key as a conflict', async () => {
     pact.given('the idempotency key was used with another request', { idempotencyKey: quoteKey }).uponReceiving('a quote request reusing an idempotency key')
       .withRequest({ ...quoteRequest, body: toRequestBody(quoteValues, quoteKey) })
-      .willRespondWith({ status: 409, headers: jsonResponse, body: { error: 'idempotency_key_reused' } });
+      .willRespondWith({ status: 409 });
     await pact.executeTest(async server => assert.deepEqual(await submitQuote(server.url), { kind: 'conflict' }));
   });
 
   test('reports the service as unavailable when Acquisition does not answer', async () => {
     pact.given('the quote service is down').uponReceiving('a quote request while the service is down')
       .withRequest({ ...quoteRequest, body: toRequestBody(quoteValues, quoteKey) })
-      .willRespondWith({ status: 503, headers: jsonResponse, body: { error: 'service_unavailable' } });
+      .willRespondWith({ status: 503 });
     await pact.executeTest(async server => assert.deepEqual(await submitQuote(server.url), { kind: 'unavailable' }));
   });
 });

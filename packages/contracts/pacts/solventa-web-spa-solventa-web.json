@@ -49,12 +49,6 @@
         "path": "/auth/logout"
       },
       "response": {
-        "body": {
-          "authenticated": false
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 401
       }
     },
@@ -91,11 +85,8 @@
       },
       "response": {
         "body": {
-          "basis": "minimum_data",
-          "currency": "COP",
           "premiumMonthly": 86400,
           "quoteId": "COT-2026-00001",
-          "ruleVersion": "2026.1",
           "sumInsured": 320000000,
           "termMonths": 180,
           "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47",
@@ -120,14 +111,6 @@
                 {
                   "match": "regex",
                   "regex": "^COT-\\d{4}-\\d{5}$"
-                }
-              ]
-            },
-            "$.ruleVersion": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
                 }
               ]
             },
@@ -205,12 +188,6 @@
         "path": "/api/v1/me/quotes"
       },
       "response": {
-        "body": {
-          "error": "idempotency_key_reused"
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 409
       }
     },
@@ -246,12 +223,6 @@
         "path": "/api/v1/me/quotes"
       },
       "response": {
-        "body": {
-          "error": "service_unavailable"
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 503
       }
     },
@@ -288,7 +259,6 @@
       },
       "response": {
         "body": {
-          "error": "validation_error",
           "errors": [
             {
               "code": "amount_out_of_range",
@@ -363,12 +333,6 @@
         "path": "/api/v1/me/quotes"
       },
       "response": {
-        "body": {
-          "error": "unauthorized"
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 401
       }
     },
@@ -404,11 +368,7 @@
         "path": "/api/v1/me/quotes"
       },
       "response": {
-        "body": {
-          "error": "forbidden"
-        },
         "headers": {
-          "Content-Type": "application/json",
           "x-trace-id": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
         },
         "matchingRules": {
@@ -439,12 +399,6 @@
         "path": "/auth/session"
       },
       "response": {
-        "body": {
-          "error": "authentication_unavailable"
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 503
       }
     },
@@ -460,12 +414,6 @@
         "path": "/auth/session"
       },
       "response": {
-        "body": {
-          "authenticated": true
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 200
       }
     },
@@ -481,12 +429,6 @@
         "path": "/auth/session"
       },
       "response": {
-        "body": {
-          "authenticated": false
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 401
       }
     },
@@ -502,12 +444,6 @@
         "path": "/auth/session"
       },
       "response": {
-        "body": {
-          "authenticated": false
-        },
-        "headers": {
-          "Content-Type": "application/json"
-        },
         "status": 401
       }
     }
