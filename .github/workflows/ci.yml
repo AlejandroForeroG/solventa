@@ -55,6 +55,14 @@ jobs:
       - run: npm run test:schema
       - run: npm run test:authentication:sql
       - run: npm run test:partner-access:sql
+      - run: npm run test:quotes:sql
+      - name: Verify consent persistence when included in the revision
+        run: |
+          if test -f infra/consents-smoke.mts; then
+            npm run test:consents:sql
+          else
+            echo "This revision does not include the consent SQL suite."
+          fi
       - run: npm run infra:local:schema-verify
       - run: npm run test:infra
       - if: always()
