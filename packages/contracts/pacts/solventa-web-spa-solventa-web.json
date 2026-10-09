@@ -291,7 +291,7 @@
           "error": "validation_error",
           "errors": [
             {
-              "code": "out_of_range",
+              "code": "amount_out_of_range",
               "field": "credit.amount"
             }
           ]
@@ -314,7 +314,7 @@
               "combine": "AND",
               "matchers": [
                 {
-                  "match": "type"
+                  "match": "equality"
                 }
               ]
             },
@@ -322,7 +322,7 @@
               "combine": "AND",
               "matchers": [
                 {
-                  "match": "type"
+                  "match": "equality"
                 }
               ]
             }

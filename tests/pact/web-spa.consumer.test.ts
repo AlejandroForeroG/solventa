@@ -99,7 +99,7 @@ describe('SPA quote request', () => {
       .willRespondWith({
         status: 400,
         headers: jsonResponse,
-        body: { error: 'validation_error', errors: MatchersV3.eachLike({ field: MatchersV3.string('credit.amount'), code: MatchersV3.string('out_of_range') }) },
+        body: { error: 'validation_error', errors: MatchersV3.eachLike({ field: MatchersV3.equal('credit.amount'), code: MatchersV3.equal('amount_out_of_range') }) },
       });
     await pact.executeTest(async server => {
       const outcome = await submitQuote(server.url, invalid);

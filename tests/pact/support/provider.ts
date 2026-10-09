@@ -5,6 +5,7 @@ import { createHttp as createAcquisitionHttp } from '../../../backend/acquisitio
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
+import { unexpectedAuthentication } from '../../support/authentication-fakes';
 import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
 import { providerName } from './pact-files';
 import { serve } from './serve';
@@ -24,9 +25,9 @@ const identityEnv = {
 type Binding = { fetch: (request: Request) => Promise<Response> };
 type World = { identity: Binding; acquisition: Binding; sessionCookie?: string };
 
-// The real Identity app answers every state. It only accepts requests addressed to its configured origin,
-// so the test server's address is replaced.
-function realIdentity(env: IdentityEnv, authentication?: AuthenticationCollaborators): Binding {
+// The real Identity app answers every state, with WorkOS and SQL replaced by in-memory collaborators.
+// It only accepts requests addressed to its configured origin, so the test server's address is replaced.
+function realIdentity(env: IdentityEnv, authentication: AuthenticationCollaborators = unexpectedAuthentication): Binding {
   const app = createIdentityHttp({ authorizeApiAccess: async () => { throw new Error('unexpected_business_authorization'); }, authentication });
   return {
     fetch: request => {

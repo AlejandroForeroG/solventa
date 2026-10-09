@@ -5,6 +5,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
+import { unexpectedAuthentication } from './support/authentication-fakes';
 import type { AccessDecision } from '../backend/identity-consent-ecosystem/src/application/api-access';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -28,7 +29,7 @@ const denied = (status: 400 | 401 | 403 | 503, error: string): AccessDecision =>
 
 type Probe = { path: 'partner' | 'web'; method?: string; headers?: Record<string, string>; decision?: AccessDecision };
 async function probe({ path, method = 'GET', headers = {}, decision = denied(401, 'unauthorized') }: Probe) {
-  const app = createHttp({ authorizeApiAccess: async () => decision });
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => decision });
   return app.request(`${origin}/api/v1/access/${path}`, { method, headers }, env);
 }
 

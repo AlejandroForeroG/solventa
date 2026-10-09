@@ -4,7 +4,7 @@ import type { AuthenticationCollaborators } from './authentication-http';
 import { mountApiAccess } from './api-access-http';
 import type { AuthorizeApiAccess } from './api-access-http';
 
-export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication?: AuthenticationCollaborators }) {
+export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators }) {
   const app = new Hono<{ Bindings: IdentityEnv }>();
   app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'alive' }));
   mountAuthentication(app, deps.authentication);

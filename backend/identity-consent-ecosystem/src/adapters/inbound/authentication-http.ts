@@ -1,7 +1,6 @@
 import { getCookie, setCookie } from 'hono/cookie';
 import type { Hono, Context } from 'hono';
 import { Authentication } from '../../application/authentication';
-import { SqlIdentitySessions } from '../outbound/identity-sessions';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
 import type { IdentitySessions } from '../../application/authentication';
@@ -45,13 +44,8 @@ export type AuthenticationCollaborators = {
   provider(config: AuthConfiguration): Pick<WorkosAuthentication, 'begin' | 'exchange' | 'authenticate' | 'revoke' | 'logoutUrl'>;
   sessions(connectionString: string): IdentitySessions;
 };
-const productionCollaborators: AuthenticationCollaborators = {
-  provider: config => new WorkosAuthentication(config),
-  sessions: connectionString => new SqlIdentitySessions(connectionString),
-};
 
-// Collaborators are replaceable so contract tests can run these routes without WorkOS or SQL.
-export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators = productionCollaborators) {
+export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators) {
   app.use('/auth/*', async (c, next) => { c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff'); await next(); });
   app.all('/auth/*', async c => {
     const config = configuration(c.env);
