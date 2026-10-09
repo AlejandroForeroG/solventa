@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.0.0
+  version: 1.1.0
   description: Native WorkOS PKCE configuration, local session registration, inspection and revocation. No biometrics, device attestation or business writes are performed.
 servers:
   - url: /api/v1
