@@ -2,7 +2,7 @@
   "asOf": "2026-10-08T16:00:00Z",
   "terms": {
     "purposeCode": "risk_profiling",
-    "textVersion": 1,
+    "textVersion": 2,
     "validityDays": 90,
     "sources": [
       {
@@ -34,9 +34,9 @@
       "version": 1,
       "status": "active",
       "purposeCode": "risk_profiling",
-      "textVersion": 1,
+      "textVersion": 2,
       "locale": "es-CO",
-      "wordingHash": "5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047",
+      "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -60,9 +60,9 @@
       "version": 1,
       "status": "revoked",
       "purposeCode": "risk_profiling",
-      "textVersion": 1,
+      "textVersion": 2,
       "locale": "en-US",
-      "wordingHash": "d2805eca2ed7561e214c8b8b7df3d37b513d378daf0a0b7f90f8b646c0794351",
+      "wordingHash": "9f6acbbbe59612ae239bfe49db5945ed9879cc86c21247f6d8907360ffa841e8",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -86,9 +86,9 @@
       "version": 1,
       "status": "expired",
       "purposeCode": "risk_profiling",
-      "textVersion": 1,
+      "textVersion": 2,
       "locale": "es-CO",
-      "wordingHash": "5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047",
+      "wordingHash": "9d05083e2bbd75b3ec4efb6c0fc7c3ab9d5042e42ef1374cec39491444a667ad",
       "sources": [
         "open_finance_bancolombia",
         "datacredito_experian",
@@ -109,12 +109,12 @@
     }
   ],
   "grantRequest": {
-    "textVersion": 1,
+    "textVersion": 2,
     "locale": "es-CO",
     "quoteRef": "COT-2026-00001"
   },
   "declineRequest": {
-    "textVersion": 1
+    "textVersion": 2
   },
   "errors": [
     {

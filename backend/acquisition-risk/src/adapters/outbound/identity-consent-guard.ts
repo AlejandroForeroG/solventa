@@ -7,7 +7,7 @@ export interface IdentityConsentRpc {
 }
 
 const PURPOSE = 'risk_profiling';
-const CONSENT_ID = /^CNS-[0-9]{4}-[0-9]{5}$/;
+const CONSENT_ID = /^CNS-[0-9]{4}-[0-9]{5,19}$/;
 const DENIALS: readonly string[] = ['consent_missing', 'consent_revoked', 'consent_expired', 'consent_invalid', 'invalid_request', 'unavailable'];
 const unavailable: ConsentCheck = { allowed: false, reason: 'unavailable' };
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
