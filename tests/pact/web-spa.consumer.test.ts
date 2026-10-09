@@ -248,14 +248,29 @@ describe('SPA consent refusal', () => {
 });
 
 describe('SPA privacy panel', () => {
+  test('follows the cursor to reach authorizations beyond the first bounded page', async () => {
+    pact.given('a customer with 51 active consents').uponReceiving('the first bounded consent page')
+      .withRequest({ method: 'GET', path: '/api/v1/consents' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { items: MatchersV3.eachLike(consentBody(), 50), nextCursor: MatchersV3.equal('CNS-2026-00050') } });
+    pact.given('a customer with 51 active consents').uponReceiving('the next consent page using its cursor')
+      .withRequest({ method: 'GET', path: '/api/v1/consents', query: { after: 'CNS-2026-00050' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { items: [consentBody({ consentId: MatchersV3.equal('CNS-2026-00051') })], nextCursor: null } });
+    await pact.executeTest(async server => {
+      const first = await withServer(server.url, () => listConsents());
+      assert.ok(first.kind === 'ok' && first.value.items.length === 50 && first.value.nextCursor);
+      const next = await withServer(server.url, () => listConsents(undefined, first.value.nextCursor!));
+      assert.ok(next.kind === 'ok' && next.value.items.length === 1 && next.value.nextCursor === null);
+    });
+  });
+
   test('receives the consents of the customer', async () => {
     pact.given('a customer with an active consent').uponReceiving('a request for the consents of the customer')
       .withRequest({ method: 'GET', path: '/api/v1/consents' })
-      .willRespondWith({ status: 200, headers: jsonResponse, body: { items: MatchersV3.eachLike(consentBody()) } });
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { items: MatchersV3.eachLike(consentBody()), nextCursor: null } });
     await pact.executeTest(async server => {
       const outcome = await withServer(server.url, () => listConsents());
       assert.equal(outcome.kind, 'ok');
-      if (outcome.kind === 'ok') assert.equal(outcome.value.length, 1);
+      if (outcome.kind === 'ok') assert.equal(outcome.value.items.length, 1);
     });
   });
 

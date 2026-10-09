@@ -30,12 +30,13 @@ const expired: Consent = { ...active, consentId: 'CNS-2026-00001', status: 'expi
 const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e1b4d4c8aa0d1e2f3a4b5c6d7' };
 
 const ok = <T,>(value: T): Outcome<T> => ({ kind: 'ok', value });
+const page = (items: Consent[], nextCursor: string | null = null) => ok({ items, nextCursor });
 function stubs(over: Partial<Record<keyof ConsentApi, Mock>> = {}): Record<keyof ConsentApi, Mock> {
   return {
     getTerms: vi.fn().mockResolvedValue(ok(terms)),
     grantConsent: vi.fn().mockResolvedValue(ok(active)),
     declineConsent: vi.fn().mockResolvedValue(ok(true)),
-    listConsents: vi.fn().mockResolvedValue(ok([active, revoked, expired])),
+    listConsents: vi.fn().mockResolvedValue(page([active, revoked, expired])),
     revokeConsent: vi.fn().mockResolvedValue(ok({ ...active, status: 'revoked', revokedAt: '2026-10-10T12:00:00Z' })),
     ...over
   };
@@ -306,15 +307,21 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
     expect(live()).toHaveTextContent('CNS-2026-00003');
   });
 
-  it('keeps the oldest active authorization reachable behind 50 newer historical records', async () => {
+  it('reaches an older active authorization across bounded pages and can return to the first page', async () => {
     const history = Array.from({ length: 50 }, (_, i) => ({ ...revoked, consentId: `CNS-2026-${String(i + 10).padStart(5, '0')}` }));
-    const api = stubs({ listConsents: vi.fn().mockResolvedValue(ok([...history, active])) });
+    const cursor = history[49].consentId;
+    const api = stubs({ listConsents: vi.fn().mockResolvedValueOnce(page(history, cursor)).mockResolvedValueOnce(page([active])).mockResolvedValue(page(history, cursor)) });
     const { user } = setup(api);
+    await user.click(await screen.findByRole('button', { name: locale === 'es-CO' ? 'Siguientes' : 'Next' }));
     await user.click(await screen.findByRole('button', { name: t.revoke(active.consentId) }));
-    expect(screen.getAllByRole('listitem')).toHaveLength(51);
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(api.listConsents.mock.calls[1][1]).toBe(cursor);
     await user.click(screen.getByRole('button', { name: t.confirm }));
     await waitFor(() => expect(api.revokeConsent).toHaveBeenCalledWith(active.consentId));
     await waitFor(() => expect(screen.queryByRole('button', { name: t.revoke(active.consentId) })).toBeNull());
+    await user.click(screen.getByRole('button', { name: locale === 'es-CO' ? 'Anteriores' : 'Previous' }));
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(50));
+    expect(api.listConsents.mock.calls[2][1]).toBeUndefined();
   });
 
   it('cancelling leaves the authorization active and untouched', async () => {
@@ -337,12 +344,12 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
 
 describe('privacy dashboard states', () => {
   it('says so when there is nothing to show', async () => {
-    render(wrap('es-CO', <PrivacyPanel api={stubs({ listConsents: vi.fn().mockResolvedValue(ok([])) }) as never} onBack={vi.fn()} />));
+    render(wrap('es-CO', <PrivacyPanel api={stubs({ listConsents: vi.fn().mockResolvedValue(page([])) }) as never} onBack={vi.fn()} />));
     expect(await screen.findByText('Aún no has dado ninguna autorización.')).toBeInTheDocument();
   });
 
   it('offers a retry when the list cannot be loaded', async () => {
-    const api = stubs({ listConsents: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok([active])) });
+    const api = stubs({ listConsents: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(page([active])) });
     const user = userEvent.setup();
     render(wrap('es-CO', <PrivacyPanel api={api as never} onBack={vi.fn()} />));
     expect(await screen.findByText('No pudimos cargar tus autorizaciones.')).toBeInTheDocument();
@@ -362,7 +369,7 @@ describe('privacy dashboard states', () => {
   });
 
   it('reloads the list when the authorization is no longer there to revoke', async () => {
-    const api = stubs({ revokeConsent: vi.fn().mockResolvedValue({ kind: 'conflict' }), listConsents: vi.fn().mockResolvedValueOnce(ok([active])).mockResolvedValue(ok([{ ...active, status: 'expired' }])) });
+    const api = stubs({ revokeConsent: vi.fn().mockResolvedValue({ kind: 'conflict' }), listConsents: vi.fn().mockResolvedValueOnce(page([active])).mockResolvedValue(page([{ ...active, status: 'expired' }])) });
     const user = userEvent.setup();
     render(wrap('es-CO', <PrivacyPanel api={api as never} onBack={vi.fn()} />));
     await user.click(await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' }));
@@ -480,6 +487,20 @@ describe('consent client', () => {
     spy(json({ ...terms, sources: [] })); expect(await getTerms()).toEqual({ kind: 'unavailable' });
     spy(json({ items: [{ ...active, status: 'pending' }] })); expect(await listConsents()).toEqual({ kind: 'unavailable' });
     spy(new Response('not json', { status: 201 })); expect(await grantConsent({ textVersion: 2, locale: 'es-CO' }, 'k')).toEqual({ kind: 'unavailable' });
+  });
+
+  it('requests bounded pages with the cursor and rejects an invalid or non-progressing cursor', async () => {
+    const cursor = 'CNS-2026-00003';
+    const fetchMock = spy(json({ items: [active], nextCursor: cursor }), json({ items: [revoked], nextCursor: null }));
+    expect(await listConsents()).toEqual(page([active], cursor));
+    expect(await listConsents(undefined, cursor)).toEqual(page([revoked]));
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['/api/v1/consents', `/api/v1/consents?after=${cursor}`]);
+    spy(json({ items: [active], nextCursor: cursor }));
+    expect(await listConsents(undefined, cursor)).toEqual({ kind: 'unavailable' });
+    spy(json({ items: [active], nextCursor: 'invalid' }));
+    expect(await listConsents()).toEqual({ kind: 'unavailable' });
+    spy(json({ items: Array(51).fill(active), nextCursor: null }));
+    expect(await listConsents()).toEqual({ kind: 'unavailable' });
   });
 
   it('declining answers 204 and revoking encodes the id in the path', async () => {
