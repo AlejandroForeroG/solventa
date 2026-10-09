@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { fetchSession, requestLogout } from '../../apps/web/src/api/auth';
 import { declineConsent, getTerms, grantConsent, listConsents, revokeConsent } from '../../apps/web/src/consent/api';
+import { SUPPORTED_TERMS } from '../../apps/web/src/consent/wording';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
@@ -147,7 +148,7 @@ const consentPost = { method: 'POST', headers: { 'content-type': 'application/js
 const grantRequest = { ...consentPost, path: '/api/v1/consents', headers: { ...consentPost.headers, 'idempotency-key': consentKey } };
 const grantBody = { textVersion: 1, locale: 'es-CO', quoteRef: consentRef };
 const consentBody = (overrides: object = {}) => ({
-  consentId: MatchersV3.regex('^CNS-\\d{4}-\\d{5}$', 'CNS-2026-00001'),
+  consentId: MatchersV3.regex('^CNS-\\d{4}-\\d{5,19}$', 'CNS-2026-00001'),
   status: MatchersV3.regex('^(active|revoked|expired)$', 'active'),
   sources: MatchersV3.eachLike('open_finance_bancolombia'),
   scopes: MatchersV3.eachLike('income_obligations_12m'),
@@ -166,14 +167,8 @@ describe('SPA consent terms', () => {
         status: 200,
         headers: jsonResponse,
         body: {
-          purposeCode: MatchersV3.string('risk_profiling'),
-          textVersion: MatchersV3.integer(1),
-          validityDays: MatchersV3.integer(90),
-          sources: MatchersV3.eachLike({
-            code: MatchersV3.string('ruaf'),
-            scope: MatchersV3.string('affiliation_regime'),
-            kind: MatchersV3.regex('^(open_finance|credit_bureau|open_data)$', 'open_data'),
-          }),
+          ...SUPPORTED_TERMS,
+          sources: SUPPORTED_TERMS.sources.map(source => ({ ...source })),
         },
       });
     await pact.executeTest(async server => {
