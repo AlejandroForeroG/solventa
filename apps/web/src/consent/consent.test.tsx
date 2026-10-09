@@ -61,7 +61,8 @@ describe.each(['es-CO', 'en-US'] as const)('consent step in %s', locale => {
 
   it('shows the purpose, the sources and the validity before asking for the authorization', async () => {
     const { api } = setup();
-    expect(await screen.findByRole('heading', { level: 1, name: t.title })).toHaveFocus();
+    const title = await screen.findByRole('heading', { level: 1, name: t.title });
+    await waitFor(() => expect(title).toHaveFocus());
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
     const list = screen.getByRole('list');
     expect(within(list).getAllByRole('listitem')).toHaveLength(4);
