@@ -7,7 +7,7 @@ import { SUPPORTED_TEXT_VERSION } from './wording';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 type Load = 'loading' | 'ready' | 'error' | 'mismatch';
-type Problem = 'none' | 'grant' | 'outdated';
+type Problem = 'none' | 'grant' | 'decline' | 'outdated';
 
 export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined, onSessionLost }: {
   quoteRef?: string;
@@ -70,11 +70,17 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
 
   async function decline() {
     if (!terms || busy !== 'idle') return;
-    setBusy('declining');
+    setBusy('declining'); setProblem('none');
     const outcome = await api.declineConsent(SUPPORTED_TEXT_VERSION);
     setBusy('idle');
     if (outcome.kind === 'unauthenticated') { announce(intl.formatMessage({ id: 'live.sessionExpired' })); onSessionLost?.(); return; }
-    // Declining enables nothing, so it never depends on the audit write succeeding.
+    if (outcome.kind === 'outdated') {
+      key.current = newIdempotencyKey(); setChecked(false); setProblem('outdated');
+      announce(intl.formatMessage({ id: 'live.consentOutdated' })); reload(); return;
+    }
+    if (outcome.kind !== 'ok') {
+      setProblem('decline'); announce(intl.formatMessage({ id: 'consent.errorDecline' })); return;
+    }
     announce(intl.formatMessage({ id: 'live.consentDeclined' }));
     onDeclined();
   }
@@ -97,7 +103,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   return <section className="step">
     {problem !== 'none' && <div className="banner banner-error">
       <span aria-hidden="true" className="banner-icon">!</span>
-      <p>{intl.formatMessage({ id: problem === 'outdated' ? 'consent.outdated' : 'consent.errorGrant' })}</p>
+      <p>{intl.formatMessage({ id: problem === 'outdated' ? 'consent.outdated' : problem === 'decline' ? 'consent.errorDecline' : 'consent.errorGrant' })}</p>
     </div>}
     <div className="card consent-card">
       <header className="consent-head">

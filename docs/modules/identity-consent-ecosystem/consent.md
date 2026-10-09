@@ -35,11 +35,11 @@ To change the wording: edit the messages, add the new `textVersion` and fingerpr
 ## Rules
 
 - **Who:** only the authenticated web user, for their own subject. No identifier is taken from the body. Writes need the configured `Origin`, and an `Authorization` header is rejected, as in [API access](api-access.md).
-- **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key.
+- **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key. Five digits are the minimum width, not an annual limit: the counter grows through the exact INT8 range, up to 19 digits. Existing five-digit codes remain valid.
 - **Status:** `active`, `revoked` or `expired` is computed from `revoked_at` and `expires_at` on every read; it is not stored, so it cannot go stale.
 - **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked.
 - **Seal:** a keyed hash of the consent content, including the language and the wording fingerprint, shown in the panel so a later change to the record can be detected.
-- **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows.
+- **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows. The screen advances only after the refusal is recorded; a failed write offers a retry and outdated terms are reloaded, without granting access.
 - **Audit:** grant, decline, revocation and expiry leave an event without personal data and with the correlation ID.
 - **Quote reference:** an optional `quoteRef` is stored as a reference. Identity does not read Acquisition data to validate it.
 
@@ -70,6 +70,8 @@ Acquisition reaches a source or a stored copy of its data only through `ReadSign
 The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it, and the real provider adapter replaces the simulated one used in tests.
 
 ## Operation
+
+`0007_consent_code_capacity.sql` widens the consent-code constraint without changing the already applied `0006_consent_records.sql`. Apply both pending files in order before this revision; dev already containing 0006 applies only 0007. The new constraint preserves old codes and supports six or more counter digits. The client verifies the exact supported purpose, duration and unique source/scope/kind set before offering authorization; unexpected terms are treated as unavailable.
 
 - **Migration:** `0006_consent_records.sql` adds the code counter and the new `consents` columns, among them the language and the wording fingerprint. Apply it before deploying this code, following the [migration guide](../../infrastructure/migrations.md): the read-only plan first, then the apply and `schema-verify --admin`. New columns are nullable so the migration needs no backfill; the service writes all of them and ignores rows without a code. Apply the file as it stands in the merged revision: an applied migration is never edited.
 - **Configuration:** `CONSENT_SEAL_KEY` (at least 32 characters, different per environment) keys the seal; without it a grant answers 503 and a check denies. Locally, add it to `backend/identity-consent-ecosystem/.dev.vars`; the local configuration declares it as required, so `wrangler dev` loads it. In dev, staging and prod the operator loads it as a Worker secret of Identity, outside `IDENTITY_AUTH_JSON`, before the consent PR is merged. It is not declared as required for those environments, so a deployment does not fail without it. Later deployments preserve it. Changing the key invalidates the seal of every existing consent, so rotate it only with a migration plan.
