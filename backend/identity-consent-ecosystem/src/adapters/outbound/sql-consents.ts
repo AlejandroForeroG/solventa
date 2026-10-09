@@ -80,18 +80,33 @@ export class SqlConsents implements ConsentStore {
     }
   }
 
-  private async findByKey(client: Client, c: NewConsent): Promise<GrantResult | null> {
+  async findGrant(principal: Principal, idempotencyKey: string, requestHash: string): Promise<GrantResult | null> {
+    const client = await this.connect();
+    try { return await this.findByKey(client, { clientId: principal.clientId, idempotencyKey, requestHash }); }
+    finally { await client.end().catch(() => {}); }
+  }
+
+  private async findByKey(client: Client, c: Pick<NewConsent, 'clientId' | 'idempotencyKey' | 'requestHash'>): Promise<GrantResult | null> {
     const existing = await client.query<Row>(`SELECT ${plain} FROM identity.consents WHERE client_id = $1 AND idempotency_key = $2`, [c.clientId, c.idempotencyKey]);
     const row = existing.rows[0];
     if (!row) return null;
     return row.request_hash === c.requestHash ? { kind: 'replayed', consent: fromRow(row) } : { kind: 'conflict' };
   }
 
-  async list(principal: Principal, limit: number, now: Date): Promise<Consent[]> {
+  async list(principal: Principal, limit: number, now: Date, after?: string): Promise<Consent[]> {
     const client = await this.connect();
     try {
+      let anchor: { granted_at: Date; id: string } | undefined;
+      if (after !== undefined) {
+        anchor = (await client.query<{ granted_at: Date; id: string }>(
+          'SELECT granted_at, id FROM identity.consents WHERE client_id = $1 AND consent_code = $2', [principal.clientId, after])).rows[0];
+        if (!anchor) return [];
+      }
       const result = await client.query<Row>(
-        `SELECT ${plain} FROM identity.consents WHERE client_id = $1 AND consent_code IS NOT NULL ORDER BY granted_at DESC, id LIMIT $2`, [principal.clientId, limit]);
+        `SELECT ${plain} FROM identity.consents WHERE client_id = $1 AND consent_code IS NOT NULL
+         ${anchor ? 'AND (granted_at < $3 OR (granted_at = $3 AND id > $4))' : ''}
+         ORDER BY granted_at DESC, id LIMIT $2`,
+        anchor ? [principal.clientId, limit, anchor.granted_at, anchor.id] : [principal.clientId, limit]);
       await this.auditExpired(client, principal.subjectToken, result.rows, now);
       return result.rows.map(fromRow);
     } finally {
