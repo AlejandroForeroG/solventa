@@ -356,6 +356,44 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
 });
 
 describe('privacy dashboard states', () => {
+  it('does not start reconciliation or publish a late write result after leaving the panel', async () => {
+    let finish: (value: Outcome<Consent>) => void = () => {};
+    const onConsentsChanged = vi.fn(); const onConsentUncertain = vi.fn();
+    const api = stubs({ revokeConsent: vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
+    const user = userEvent.setup();
+    const view = render(wrap('es-CO', <PrivacyPanel api={api as never} onBack={vi.fn()} onConsentsChanged={onConsentsChanged} onConsentUncertain={onConsentUncertain} />));
+    await user.click(await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, revocar' }));
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeDisabled();
+    expect(onConsentUncertain).toHaveBeenCalledWith(active.consentId);
+    view.unmount();
+    await act(async () => { finish({ kind: 'unavailable' }); });
+    expect(api.listConsents).toHaveBeenCalledOnce();
+    expect(onConsentsChanged).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a pre-attempt active response after both revocation and reconciliation fail', async () => {
+    let finish: (value: Outcome<ConsentPage>) => void = () => {};
+    const onConsentsChanged = vi.fn(); const onConsentUncertain = vi.fn();
+    const api = stubs({
+      listConsents: vi.fn().mockResolvedValue({ kind: 'unavailable' }).mockResolvedValueOnce(page([active])).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })),
+      revokeConsent: vi.fn().mockResolvedValue({ kind: 'unavailable' })
+    });
+    function Switch() { const { setLocale } = useLocale(); return <button type="button" onClick={() => setLocale('en-US')}>to-english</button>; }
+    const user = userEvent.setup();
+    render(wrap('es-CO', <><Switch /><PrivacyPanel api={api as never} onBack={vi.fn()} onConsentsChanged={onConsentsChanged} onConsentUncertain={onConsentUncertain} /></>));
+    await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' });
+    await user.click(screen.getByRole('button', { name: 'to-english' }));
+    await waitFor(() => expect(api.listConsents).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole('button', { name: 'Revoke authorization CNS-2026-00003' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, revoke' }));
+    await screen.findByText('We could not load your authorizations.');
+    expect(onConsentUncertain).toHaveBeenCalledWith(active.consentId);
+    await act(async () => { finish(page([active])); });
+    expect(onConsentsChanged).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('We could not load your authorizations.')).toBeVisible();
+  });
+
   it('does not reactivate a revoked record when an earlier list response arrives afterwards', async () => {
     let finish: (value: Outcome<ConsentPage>) => void = () => {};
     const api = stubs({ listConsents: vi.fn().mockResolvedValueOnce(page([active])).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
