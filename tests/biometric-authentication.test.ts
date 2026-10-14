@@ -28,6 +28,10 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
     devices: new RegisteredDevices({ register: input => apply(input, 'active'), find: input => apply(input, 'active'), revoke: input => apply(input, 'revoked') }),
     mobile: { configuration: config, provider: { authenticate: async () => identity, revoke: async () => { calls.push('providerRevoke'); } },
       sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
+  const legacyConfiguration = ajv.compile(JSON.parse(readFileSync('tests/fixtures/mobile-configuration-v1.1.schema.json', 'utf8')));
+  const configuration = await app.request('https://synthetic.example/api/v1/mobile/config');
+  assert.equal(configuration.status, 200);
+  assert.ok(legacyConfiguration(await configuration.json()), JSON.stringify(legacyConfiguration.errors));
   for (const method of ['POST', 'GET', 'DELETE']) {
     const response = await app.request(`https://synthetic.example/api/v1/mobile/devices/${installationId}`, { method, headers: { Authorization: 'Bearer synthetic.jwt.token' } });
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
