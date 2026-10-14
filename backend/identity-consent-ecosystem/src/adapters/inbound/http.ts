@@ -15,7 +15,7 @@ export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authe
   app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'alive' }));
   mountAuthentication(app, deps.authentication);
   mountApiAccess(app, deps.authorizeApiAccess);
-  mountMobileAuthentication(app, deps.mobile ?? null, deps.authorizeApiAccess, Boolean(deps.devices));
+  mountMobileAuthentication(app, deps.mobile ?? null, deps.authorizeApiAccess);
   mountRegisteredDevices(app, deps.mobile ?? null, deps.devices);
   if (deps.consents) mountConsents(app, { authorizeApiAccess: deps.authorizeApiAccess, consents: deps.consents });
   app.onError((_, c) => c.json({ error: 'service_unavailable' }, 503));
