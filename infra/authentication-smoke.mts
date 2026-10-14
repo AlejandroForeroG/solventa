@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
 import { MobileSessions } from '../backend/identity-consent-ecosystem/src/application/mobile-sessions';
+import { RegisteredDevices } from '../backend/identity-consent-ecosystem/src/application/registered-devices';
+import { SqlRegisteredDevices } from '../backend/identity-consent-ecosystem/src/adapters/outbound/registered-devices';
 
 // Real SQL integration in a generated, disposable local database only (ESM).
 const config=await settings('local');
@@ -75,7 +77,52 @@ try {
   await repo.revoke(identity);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference=$1',[principal.subjectToken])).rows[0].count,2);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.authentication_sessions WHERE provider_session=$1',[mobileIdentity.sessionReference])).rows[0].count,1);
-  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race']}));
+  const devices = new RegisteredDevices(new SqlRegisteredDevices(runtime.toString()));
+  const deviceIdentity = {providerSubject:'device_'+randomUUID(),sessionReference:'device_'+randomUUID(),emailVerified:true};
+  await repo.register(deviceIdentity);
+  const deviceInput = {identity:deviceIdentity,installationId:randomUUID(),correlationId:randomUUID()};
+  const binding = await devices.execute('register',deviceInput);
+  assert.ok(binding);
+  assert.deepEqual(await devices.execute('register',deviceInput),binding);
+  assert.deepEqual(await devices.execute('find',deviceInput),binding);
+  assert.equal(await devices.execute('register',{...deviceInput,installationId:randomUUID()}),null);
+  assert.equal(await devices.execute('find',{...deviceInput,identity:{...deviceIdentity,providerSubject:'foreign'}}),null);
+  const deviceCounts = await db.query(`SELECT
+    (SELECT count(*)::INT4 FROM identity.registered_devices) AS devices,
+    (SELECT count(*)::INT4 FROM identity.outbox_events) AS outbox,
+    (SELECT count(*)::INT4 FROM identity.audit_events) AS audit`);
+  const rollbackIdentity = {...deviceIdentity,sessionReference:'device_rollback_'+randomUUID()};
+  await repo.register(rollbackIdentity);
+  const auditBefore = (await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count;
+  await db.query('REVOKE INSERT ON identity.audit_events FROM solventa_local_identity');
+  try { await assert.rejects(devices.execute('register',{...deviceInput,identity:rollbackIdentity,installationId:randomUUID()}),/permission|privilege/i); }
+  finally { await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity'); }
+  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.registered_devices')).rows[0].count,deviceCounts.rows[0].devices);
+  assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count,auditBefore);
+  await repo.revokeOrBlock(deviceIdentity);
+  assert.equal(await devices.execute('find',deviceInput),null);
+  assert.equal(await devices.execute('register',deviceInput),null);
+  assert.equal((await devices.execute('revoke',deviceInput))?.status,'revoked');
+  const revoked = (await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM identity.registered_devices WHERE id=$1',[binding.id])).rows[0];
+  assert.equal(revoked.revoked,true);
+  const revocationCapture = (await db.query(`SELECT payload->'capture' AS capture FROM identity.outbox_events
+    WHERE aggregate_id=$1 AND event_type='identity.device_revoked'`,[binding.id])).rows[0].capture;
+  assert.equal(revocationCapture.inputs.installationId,deviceInput.installationId);
+  assert.equal(revocationCapture.rule.id,'session-bound-installation');
+  assert.equal(revocationCapture.outcome,'revoke');
+  const deleteIdentity = {...deviceIdentity,sessionReference:'device_delete_'+randomUUID()};
+  await repo.register(deleteIdentity);
+  const deleteInput = {...deviceInput,identity:deleteIdentity,installationId:randomUUID()};
+  assert.ok(await devices.execute('register',deleteInput));
+  assert.equal((await devices.execute('revoke',deleteInput))?.status,'revoked');
+  assert.equal(await repo.find(deleteIdentity),null);
+  assert.equal(await repo.register(deleteIdentity),null);
+  assert.equal((await devices.execute('revoke',deleteInput))?.status,'revoked');
+  const oldIdentity = {...deviceIdentity,sessionReference:'device_old_'+randomUUID()};
+  await repo.register(oldIdentity);
+  await db.query("UPDATE identity.authentication_sessions SET created_at=now()-INTERVAL '11 minutes' WHERE provider_session=$1",[oldIdentity.sessionReference]);
+  assert.equal(await devices.execute('register',{...deviceInput,identity:oldIdentity}),null);
+  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration']}));
 } finally {
   await db?.end();
   if(created)await admin.query(`DROP DATABASE ${name} CASCADE`);

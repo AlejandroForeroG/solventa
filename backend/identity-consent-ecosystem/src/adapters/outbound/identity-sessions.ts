@@ -80,6 +80,23 @@ export class SqlIdentitySessions implements IdentitySessions {
       }
       await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
         VALUES ($1,'session.revoked','authentication_session',$2,'success',$3,now()+INTERVAL '90 days')`, [actor, sessionId, correlation]);
+      const devices = (await db.query<{ id: string; device_reference: string }>(`UPDATE identity.registered_devices SET revoked_at=now()
+        WHERE split_part(device_reference,':',1)='mobile-v1' AND split_part(device_reference,':',2)=$1
+        AND revoked_at IS NULL RETURNING id,device_reference`, [identity.sessionReference])).rows;
+      for (const device of devices) {
+        await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+          VALUES ($1,'device.revoked','registered_device',$2,'success',$3,now()+INTERVAL '90 days')`, [actor, device.id, correlation]);
+        await db.query(`INSERT INTO identity.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+          VALUES ($1,'registered_device',$2,'identity.device_revoked',1,$3,$4)`,
+        [crypto.randomUUID(), device.id, JSON.stringify({ deviceId: device.id, action: 'revoked', sessionBound: true,
+          capture: {
+            schemaVersion: 1, contractVersion: 'v1', correlationId: correlation,
+            inputs: { action: 'revoke', installationId: device.device_reference.split(':')[2], sessionBound: true },
+            sources: [{ source: 'verified-native-session', capturedAt: new Date().toISOString(), quality: 'verified' }],
+            consent: { status: 'not_required' }, rule: { id: 'session-bound-installation', version: '1' }, outcome: 'revoke',
+          },
+        }), correlation]);
+      }
     };
     try { await this.transaction(operation); }
     catch (error) {
