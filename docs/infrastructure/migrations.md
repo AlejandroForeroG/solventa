@@ -4,7 +4,7 @@ Run commands from the repository root. The runner is [infra/database.mjs](../../
 
 ## 1. Preparing the change
 
-Create the base branch from staging and its integration branch following [Gitflow](ci-cd.md). Identify the owner and read its complete migrations, data model and affected consumers.
+Create the candidate branch from staging and, when needed, a separate integration branch following [Gitflow](ci-cd.md). Identify the owner and read its complete migrations, data model and affected consumers.
 
 | Owner | Versioned SQL | Runtime permissions |
 |---|---|---|
@@ -83,7 +83,7 @@ Replace all three `dev` arguments with `staging` or `prod` for the corresponding
 
 After administrative verification, integrate the PR and wait for successful Deploy. CD checks schema, versions, checksums and permissions with runtime roles before publishing; it also checks remote SQL/RPC and isolation. Additional administrative verification confirms empty `public` and guards. Local CI does not establish remote application.
 
-Under current Gitflow, dev may contain migrations from several features. Staging receives only migrations present in the base-branch candidate tested through its `-dev` branch; prod receives the staging release's migrations. Do not copy data or credentials between environments.
+Under current Gitflow, dev may contain migrations from several features. Staging receives only migrations present in the base-branch candidate validated by a successful dev deployment; prod receives the staging release's migrations. Do not copy data or credentials between environments.
 
 ## 5. Failures, reconciliation and rollback
 
