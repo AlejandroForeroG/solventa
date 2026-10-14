@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { I18n, useLocale } from '../i18n/I18n';
@@ -7,7 +7,7 @@ import type { Locale } from '../i18n/messages';
 import { LiveRegion } from '../quote/Live';
 import { QuoteFlow } from '../quote/QuoteFlow';
 import type { Quote } from '../quote/api';
-import { declineConsent, getTerms, grantConsent, listConsents, revokeConsent, type Consent, type ConsentApi, type Outcome, type Terms } from './api';
+import { declineConsent, getTerms, grantConsent, listConsents, reconcileConsent, revokeConsent, type Consent, type ConsentApi, type ConsentPage, type Outcome, type Terms } from './api';
 import { ConsentDeclined, ConsentGranted } from './ConsentOutcome';
 import { ConsentStep } from './ConsentStep';
 import { SUPPORTED_TEXT_VERSION } from './wording';
@@ -356,6 +356,24 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
 });
 
 describe('privacy dashboard states', () => {
+  it('does not reactivate a revoked record when an earlier list response arrives afterwards', async () => {
+    let finish: (value: Outcome<ConsentPage>) => void = () => {};
+    const api = stubs({ listConsents: vi.fn().mockResolvedValueOnce(page([active])).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
+    function Switch() { const { setLocale } = useLocale(); return <button type="button" onClick={() => setLocale('en-US')}>to-english</button>; }
+    const user = userEvent.setup();
+    render(wrap('es-CO', <><Switch /><PrivacyPanel api={api as never} onBack={vi.fn()} /></>));
+    await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' });
+    await user.click(screen.getByRole('button', { name: 'to-english' }));
+    await waitFor(() => expect(api.listConsents).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole('button', { name: 'Revoke authorization CNS-2026-00003' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, revoke' }));
+    expect(await screen.findByText('Revoked')).toBeVisible();
+    await act(async () => { finish(page([active])); });
+    expect(screen.getByText('Revoked')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Revoke authorization CNS-2026-00003' })).toBeNull();
+    expect(screen.queryByText('Active')).toBeNull();
+  });
+
   it('says so when there is nothing to show', async () => {
     render(wrap('es-CO', <PrivacyPanel api={stubs({ listConsents: vi.fn().mockResolvedValue(page([])) }) as never} onBack={vi.fn()} />));
     expect(await screen.findByText('Aún no has dado ninguna autorización.')).toBeInTheDocument();
@@ -402,9 +420,9 @@ describe('privacy dashboard states', () => {
 
 describe('from the quote to the authorization', () => {
   const request = vi.fn().mockResolvedValue({ kind: 'quote', quote });
-  async function toConsent(api: ReturnType<typeof stubs>, onOpenPrivacy = vi.fn()) {
+  async function toConsent(api: ReturnType<typeof stubs>, onOpenPrivacy = vi.fn(), consentUpdates?: Record<string, Consent>) {
     const user = userEvent.setup();
-    render(wrap('es-CO', <QuoteFlow request={request as never} consent={api as never} onOpenPrivacy={onOpenPrivacy} />));
+    render(wrap('es-CO', <QuoteFlow request={request as never} consent={api as never} consentUpdates={consentUpdates} onOpenPrivacy={onOpenPrivacy} />));
     for (const [label, value] of [[/Nombre completo/, 'Cliente Sintetico Uno'], [/Documento/, '1000000001'], [/Fecha de nacimiento/, '1992-03-14'], [/Ciudad/, 'Bogotá D.C.'], [/Monto/, '320000000'], [/Plazo/, '180']] as const) {
       await user.type(screen.getByLabelText(label), value);
     }
@@ -426,6 +444,17 @@ describe('from the quote to the authorization', () => {
     expect(onOpenPrivacy).toHaveBeenCalledOnce();
   });
 
+  it.each(['revoked', 'expired'] as const)('a fresh $status grant replay wins over an older active dashboard observation', async status => {
+    const replay = { ...active, status, revokedAt: status === 'revoked' ? '2026-10-14T15:00:00Z' : null };
+    const api = stubs({ grantConsent: vi.fn().mockResolvedValue(ok(replay)) });
+    const user = await toConsent(api, vi.fn(), { [active.consentId]: active });
+    await user.click(await screen.findByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Autorizar y continuar' }));
+    expect(await screen.findByRole('heading', { name: status === 'revoked' ? 'Revocado' : 'Vencido' })).toBeVisible();
+    expect(screen.queryByText(/Vigente hasta/)).toBeNull();
+    expect(live()).not.toHaveTextContent(/vigente hasta/);
+  });
+
   it('declining shows the safe exit with the estimate and the way back to it', async () => {
     const api = stubs();
     const user = await toConsent(api);
@@ -442,6 +471,14 @@ describe('from the quote to the authorization', () => {
 });
 
 describe('consent client', () => {
+  it('preserves revocation metadata after expiry and never reactivates an expired or revoked grant', () => {
+    const revokedGrant = { ...active, status: 'revoked' as const, revokedAt: '2026-10-14T15:00:00Z' };
+    const expiredGrant = { ...active, status: 'expired' as const };
+    expect(reconcileConsent(revokedGrant, expiredGrant)).toEqual(revokedGrant);
+    expect(reconcileConsent(expiredGrant, revokedGrant)).toEqual(revokedGrant);
+    expect(reconcileConsent(expiredGrant, active)).toEqual(expiredGrant);
+    expect(reconcileConsent(revokedGrant, active)).toEqual(revokedGrant);
+  });
   const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
   const spy = (...responses: (Response | Error)[]) => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');

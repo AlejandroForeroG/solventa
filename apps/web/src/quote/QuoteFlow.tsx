@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { consentApi, type Consent, type ConsentApi } from '../consent/api';
+import { consentApi, reconcileConsent, type Consent, type ConsentApi } from '../consent/api';
 import { ConsentStep } from '../consent/ConsentStep';
 import { ConsentDeclined, ConsentGranted } from '../consent/ConsentOutcome';
 import { useFormatters, useLocale } from '../i18n/I18n';
@@ -31,7 +31,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, cons
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [granted, setGranted] = useState<Consent | null>(null);
-  const currentConsent = granted ? consentUpdates[granted.consentId] ?? granted : null;
+  const currentConsent = granted ? reconcileConsent(consentUpdates[granted.consentId], granted) : null;
   const [deniedTrace, setDeniedTrace] = useState<string | undefined>();
   // A retry of the same data reuses the key, so a repeated click never creates two quotes.
   const key = useRef(newIdempotencyKey());

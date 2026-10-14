@@ -93,6 +93,8 @@ describe('step 2: result', () => {
     expect(screen.getByText('$ 320.000.000 COP')).toBeInTheDocument();
     expect(screen.getByText('COT-2026-08843')).toBeInTheDocument();
     expect(screen.getByText('Estimación con datos mínimos.')).toBeInTheDocument();
+    expect(screen.getByText('Solo se usaron los datos que ingresaste en el formulario. No se consultó ninguna fuente externa.')).toBeVisible();
+    expect(screen.getByText('En el siguiente paso puedes revisar el propósito, las fuentes y la vigencia antes de decidir si autorizas el uso de tus datos.')).toBeVisible();
     expect(screen.getByRole('heading', { level: 1, name: 'Cotización' })).toHaveFocus();
     await waitFor(() => expect(live()).toHaveTextContent('Cotización calculada: prima mensual estimada $ 86.400 COP'));
   });
@@ -104,6 +106,8 @@ describe('step 2: result', () => {
     expect(await screen.findByText('$86,400')).toBeInTheDocument();
     expect(screen.getByText('$320,000,000 COP')).toBeInTheDocument();
     expect(screen.getByText('Valid until Nov 5, 2026')).toBeInTheDocument();
+    expect(screen.getByText('Only the data you entered in the form was used. No external source was queried.')).toBeVisible();
+    expect(screen.getByText('In the next step you can review the purpose, sources and validity before deciding whether to authorize the use of your data.')).toBeVisible();
   });
 
   it('omits the validity instead of showing an invalid date when the response lacks a usable one', async () => {

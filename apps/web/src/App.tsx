@@ -4,7 +4,7 @@ import { fetchSession, requestLogout } from './api/auth';
 import type { SessionStatus } from './api/auth';
 import { useIntl } from 'react-intl';
 import { PrivacyPanel } from './consent/PrivacyPanel';
-import type { Consent } from './consent/api';
+import { reconcileConsent, type Consent } from './consent/api';
 import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
@@ -30,7 +30,7 @@ function Shell() {
   const [view, setView] = useState<'flow' | 'privacy'>('flow');
   const [consentUpdates, setConsentUpdates] = useState<Record<string, Consent>>({});
   const updateConsents = useCallback((items: Consent[]) => {
-    setConsentUpdates(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, item])) }));
+    setConsentUpdates(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, reconcileConsent(current[item.consentId], item)])) }));
   }, []);
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';

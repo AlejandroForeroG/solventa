@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
-import { consentApi, type Consent, type ConsentApi } from './api';
+import { consentApi, reconcileConsent, type Consent, type ConsentApi } from './api';
 
 type Load = 'loading' | 'ready' | 'error';
 
@@ -33,7 +33,8 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
     try {
       const outcome = await api.listConsents(pending.current.signal, after);
       if (outcome.kind === 'ok') {
-        setItems(outcome.value.items); setNextCursor(outcome.value.nextCursor); setLoad('ready');
+        setItems(current => outcome.value.items.map(item => reconcileConsent(current.find(observed => observed.consentId === item.consentId), item)));
+        setNextCursor(outcome.value.nextCursor); setLoad('ready');
         setConfirming(current => current && outcome.value.items.some(item => item.consentId === current && item.status === 'active') ? current : null);
         onConsentsChanged?.(outcome.value.items);
       }
