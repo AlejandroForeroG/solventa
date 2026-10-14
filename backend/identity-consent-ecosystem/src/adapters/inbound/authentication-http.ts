@@ -83,7 +83,10 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
       if (path === '/auth/logout') {
         // Durable local revocation precedes provider logout. A provider outage
         // cannot make the old cookie usable against Solventa again.
-        await application.logout(verified.identity);
+        const suppliedTrace = c.req.header('X-Trace-Id') ?? '';
+        const correlation = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedTrace) ? suppliedTrace : crypto.randomUUID();
+        c.header('X-Trace-Id', correlation);
+        await application.logout(verified.identity, correlation);
         writeCookie(c, config, '');
         await provider.revoke(verified.identity).catch(() => {});
         return c.json({ logoutUrl: provider.logoutUrl(verified.identity) });

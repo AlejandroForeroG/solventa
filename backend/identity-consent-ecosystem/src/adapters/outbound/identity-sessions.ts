@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import type { IdentitySessions, Principal, VerifiedIdentity } from '../../application/authentication';
 
 type StoredClient = { id: string; subject_token: string; status: string };
+type RevocationSession = { id: string; client_id: string; subject_token: string; revoked_at: Date | null };
 
 export class SqlIdentitySessions implements IdentitySessions {
   constructor(private readonly connectionString: string) {}
@@ -54,20 +55,28 @@ export class SqlIdentitySessions implements IdentitySessions {
   }
   async revokeOrBlock(identity: VerifiedIdentity, correlation: string): Promise<void> {
     const operation = async (db: Client) => {
-      const existing = (await db.query(`SELECT s.id, s.revoked_at, c.subject_token, e.provider_subject
+      const existing = (await db.query<RevocationSession & { provider_subject: string }>(`SELECT s.id, s.client_id, s.revoked_at, c.subject_token, e.provider_subject
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
         JOIN identity.external_identities e ON e.client_id=c.id AND e.provider='workos'
-        WHERE s.provider='workos' AND s.provider_session=$1`, [identity.sessionReference])).rows[0];
+        WHERE s.provider='workos' AND s.provider_session=$1 FOR UPDATE OF s`, [identity.sessionReference])).rows[0];
       let sessionId: string;
       let actor: string;
+      let clientId: string;
       if (existing) {
         if (existing.provider_subject !== identity.providerSubject) throw new Error('session_owner_mismatch');
-        if (existing.revoked_at !== null) return;
+        if (existing.revoked_at !== null) {
+          await this.revokeDevices(db, identity, existing.client_id, existing.subject_token, correlation);
+          return;
+        }
         const updated = (await db.query(`UPDATE identity.authentication_sessions SET revoked_at=now()
           WHERE id=$1 AND revoked_at IS NULL RETURNING id`, [existing.id])).rows[0];
-        if (!updated) return;
+        if (!updated) {
+          await this.revokeDevices(db, identity, existing.client_id, existing.subject_token, correlation);
+          return;
+        }
         sessionId = updated.id;
         actor = existing.subject_token;
+        clientId = existing.client_id;
       } else {
         const client = await this.ensureClient(db, identity, correlation);
         // The blocking reference is born revoked; no active session is ever committed by logout.
@@ -76,12 +85,22 @@ export class SqlIdentitySessions implements IdentitySessions {
           [client.id, identity.sessionReference])).rows[0];
         sessionId = blocked.id;
         actor = client.subject_token;
+        clientId = client.id;
       }
       await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
         VALUES ($1,'session.revoked','authentication_session',$2,'success',$3,now()+INTERVAL '90 days')`, [actor, sessionId, correlation]);
+      await this.revokeDevices(db, identity, clientId, actor, correlation);
+    };
+    try { await this.transaction(operation); }
+    catch (error) {
+      if (!(error instanceof Error && error.message === 'session_transaction_retry')) throw error;
+      await this.transaction(operation);
+    }
+  }
+  private async revokeDevices(db: Client, identity: VerifiedIdentity, clientId: string, actor: string, correlation: string): Promise<void> {
       const devices = (await db.query<{ id: string; device_reference: string }>(`UPDATE identity.registered_devices SET revoked_at=now()
         WHERE split_part(device_reference,':',1)='mobile-v1' AND split_part(device_reference,':',2)=$1
-        AND revoked_at IS NULL RETURNING id,device_reference`, [identity.sessionReference])).rows;
+        AND client_id=$2 AND revoked_at IS NULL RETURNING id,device_reference`, [identity.sessionReference, clientId])).rows;
       for (const device of devices) {
         await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
           VALUES ($1,'device.revoked','registered_device',$2,'success',$3,now()+INTERVAL '90 days')`, [actor, device.id, correlation]);
@@ -91,17 +110,11 @@ export class SqlIdentitySessions implements IdentitySessions {
           capture: {
             schemaVersion: 1, contractVersion: 'v1', correlationId: correlation,
             inputs: { action: 'revoke', installationId: device.device_reference.split(':')[2], sessionBound: true },
-            sources: [{ source: 'verified-native-session', capturedAt: new Date().toISOString(), quality: 'verified' }],
+            sources: [{ source: 'verified-session', capturedAt: new Date().toISOString(), quality: 'verified' }],
             consent: { status: 'not_required' }, rule: { id: 'session-bound-installation', version: '1' }, outcome: 'revoke',
           },
         }), correlation]);
       }
-    };
-    try { await this.transaction(operation); }
-    catch (error) {
-      if (!(error instanceof Error && error.message === 'session_transaction_retry')) throw error;
-      await this.transaction(operation);
-    }
   }
   async find(identity: VerifiedIdentity): Promise<Principal | null> {
     return this.transaction(async db => {
@@ -133,14 +146,19 @@ export class SqlIdentitySessions implements IdentitySessions {
       throw error;
     }
   }
-  async revoke(identity: VerifiedIdentity): Promise<void> {
+  async revoke(identity: VerifiedIdentity, correlation = crypto.randomUUID()): Promise<void> {
     await this.transaction(async db => {
-      const row = (await db.query(`UPDATE identity.authentication_sessions s SET revoked_at=now()
-        FROM identity.external_identities e WHERE e.client_id=s.client_id AND e.provider='workos' AND e.provider_subject=$1
-        AND s.provider='workos' AND s.provider_session=$2 AND s.revoked_at IS NULL RETURNING s.id,s.client_id`, [identity.providerSubject, identity.sessionReference])).rows[0];
-      const actor = row ? (await db.query('SELECT subject_token FROM identity.clients WHERE id=$1', [row.client_id])).rows[0].subject_token : null;
-      if (row) await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-        VALUES ($1,'session.revoked','authentication_session',$2,'success',$3,now()+INTERVAL '90 days')`, [actor, row.id, crypto.randomUUID()]);
+      const row = (await db.query<RevocationSession>(`SELECT s.id,s.client_id,s.revoked_at,c.subject_token
+        FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
+        JOIN identity.external_identities e ON e.client_id=s.client_id AND e.provider='workos'
+        WHERE e.provider_subject=$1 AND s.provider='workos' AND s.provider_session=$2 FOR UPDATE OF s`, [identity.providerSubject, identity.sessionReference])).rows[0];
+      if (!row) return;
+      if (row.revoked_at === null) {
+        await db.query('UPDATE identity.authentication_sessions SET revoked_at=now() WHERE id=$1', [row.id]);
+        await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+          VALUES ($1,'session.revoked','authentication_session',$2,'success',$3,now()+INTERVAL '90 days')`, [row.subject_token, row.id, correlation]);
+      }
+      await this.revokeDevices(db, identity, row.client_id, row.subject_token, correlation);
     });
   }
 }

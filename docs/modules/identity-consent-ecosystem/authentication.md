@@ -15,6 +15,8 @@ Registration commits client, identity link, session, audit and creation event in
 
 ## Configuration and running
 
+Logout also revokes native installation bindings owned by that same provider session, including when a web cookie and native bearer refer to one WorkOS session. Session/device changes, audit and device outbox/capture commit together; persistence failure returns 503 before provider logout or cookie clearing. Both local logout paths repair leftover active bindings on already-revoked sessions without duplicating completed effects. `/auth/logout` keeps its body, cookie and Origin contract; its supplied or generated `X-Trace-Id` correlates the session/device records. See [native installation bindings](mobile-authentication.md#installation-bindings).
+
 Each environment needs its own WorkOS application, exact Redirect URI, Initiate login URI and Sign-out URI. `AUTH_ORIGIN` and `AUTH_REDIRECT_URI` are in Wrangler. Secrets: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` and `AUTH_COOKIE_PASSWORD` (64 random hexadecimal characters, held separately per environment). Do not share keys. Production requires enabling its WorkOS environment before configuring credentials.
 
 In Authentication, enable email/password and Magic Auth; keep social providers disabled until an approved integration exists. The operator's Outlook account does not imply enabling Microsoft as a product provider.
