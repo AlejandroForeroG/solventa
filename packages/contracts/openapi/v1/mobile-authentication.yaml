@@ -133,7 +133,7 @@ paths:
     post:
       operationId: registerMobileDevice
       summary: Bind an installation to the verified native session
-      description: Requires an active local session registered within ten minutes. One installation per provider session. Active same-binding retries are idempotent; revoked bindings cannot reactivate. No request body. Biometric confirmation and credential protection are enforced locally, not attested by this route.
+      description: Requires an active local session registered within ten minutes. One installation per provider session. Active same-binding retries are idempotent; revoked bindings cannot reactivate. For a verified active session, policy rejections persist their decision capture, audit and outbox atomically before returning the same opaque 401; unavailable persistence returns 503 instead. No request body. Biometric confirmation and credential protection are enforced locally, not attested by this route.
       tags: [Mobile]
       security: [{ MobileBearer: [] }]
       responses: &deviceResponses
