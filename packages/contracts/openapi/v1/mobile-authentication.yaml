@@ -199,9 +199,6 @@ components:
         redirectUri: { type: string, enum: ['solventa://auth/callback'] }
         authorizationEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authorize'] }
         tokenEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authenticate'] }
-        deviceRegistrationSupported:
-          type: boolean
-          description: Whether this environment has the device lifecycle configured. Absence in older deployments disables activation in the mobile client.
         traceId: { type: string, format: uuid }
     Principal:
       type: object

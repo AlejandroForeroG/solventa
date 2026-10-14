@@ -41,6 +41,8 @@ GET `/mobile/config` reports the backend's public configuration; it does not est
 
 ### Installation bindings
 
+The new device routes leave the closed `/mobile/config` response unchanged from contract 1.1.0. Existing configuration clients receive only the five original fields; they need no new feature flag or schema change. Verify device-route availability from the selected deployment's OpenAPI and successful deployment before running the installation examples.
+
 The native consumer Pact is deferred until the mobile caller and its generation/comparison test are delivered together. Device HTTP behavior is checked against OpenAPI; provider-only replay is not evidence of mobile-client compatibility.
 
 Contract 1.2.0 adds the device route compatibly. The installation ID is a random UUID v4, not an authentication credential. Every call verifies the user token and resolves its provider subject/session on the server. SQL binds `registered_devices.device_reference` to `mobile-v1:<provider-session>:<installation-uuid>`; no schema or runtime-grant change is needed. One installation per provider session prevents retargeting a session after registration. Active same-binding retries return the original ID without duplicate audit/outbox. Revoked bindings cannot reactivate; a new primary login/session is required. A fresh local registration window is not proof of fresh provider password entry or platform attestation.

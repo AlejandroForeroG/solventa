@@ -10,7 +10,7 @@ export type MobileAuthenticationDependencies = {
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, dependencies: MobileAuthenticationDependencies | null, authorize: AuthorizeApiAccess, deviceRegistrationSupported = false) {
+export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, dependencies: MobileAuthenticationDependencies | null, authorize: AuthorizeApiAccess) {
   for (const path of ['/api/v1/mobile/config', '/api/v1/mobile/session', '/api/v1/access/mobile']) {
     app.all(path, async c => {
       const supplied = c.req.header('X-Trace-Id') ?? '';
@@ -33,7 +33,6 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
         redirectUri: dependencies.configuration.redirectUri,
         authorizationEndpoint: 'https://api.workos.com/user_management/authorize',
         tokenEndpoint: 'https://api.workos.com/user_management/authenticate',
-        deviceRegistrationSupported,
         traceId,
       });
       // Native bearer credentials never fall back to a web session cookie.
