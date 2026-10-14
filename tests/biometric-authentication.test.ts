@@ -8,6 +8,7 @@ import { RegisteredDevices } from '../backend/identity-consent-ecosystem/src/app
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { MobileSessions } from '../backend/identity-consent-ecosystem/src/application/mobile-sessions';
 import { unexpectedAuthentication } from './support/authentication-fakes';
+import { InMemoryDeviceStore } from './support/registered-device-store';
 
 const config = { clientId: 'client_synthetic', redirectUri: 'solventa://auth/callback' };
 const installationId = '00000000-0000-4000-8000-000000000003';
@@ -20,12 +21,14 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
   const validate = ajv.getSchema('https://solventa.test/devices#/components/schemas/Device'); assert.ok(validate);
   const identity = { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true };
   const calls: string[] = [];
-  const apply = async (input: { identity: typeof identity; installationId: string }, status: 'active' | 'revoked') => {
-    assert.deepEqual(input.identity, identity); assert.equal(input.installationId, installationId);
-    calls.push(status); return { id: principal.clientId, installationId, status };
-  };
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
   const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
-    devices: new RegisteredDevices({ register: input => apply(input, 'active'), find: input => apply(input, 'active'), revoke: input => apply(input, 'revoked') }),
+    devices: new RegisteredDevices({ execute: async (input, decide) => {
+      assert.deepEqual(input.identity, identity); assert.equal(input.installationId, installationId);
+      const result = await store.execute(input, decide);
+      if (result) calls.push(result.status);
+      return result;
+    } }),
     mobile: { configuration: config, provider: { authenticate: async () => identity, revoke: async () => { calls.push('providerRevoke'); } },
       sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
   const legacyConfiguration = ajv.compile(JSON.parse(readFileSync('tests/fixtures/mobile-configuration-v1.1.schema.json', 'utf8')));
@@ -43,4 +46,25 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
     assert.equal((await app.request(`https://synthetic.example/api/v1/mobile/devices/${id}`, { headers })).status, status);
   }
   assert.deepEqual(calls, []);
+});
+
+test('registration keeps policy denial reasons private and returns unavailable when the required record fails', async () => {
+  const store = new InMemoryDeviceStore({ observedAt: 660_000, session: { createdAt: 0, expiresAt: 1_000_000, revoked: false }, bindings: [] });
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
+    devices: new RegisteredDevices(store), mobile: { configuration: config,
+      provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true }),
+        revoke: async () => { throw new Error('unexpected_provider_revocation'); } },
+      sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
+  const request = () => app.request(`https://synthetic.example/api/v1/mobile/devices/${installationId}`, { method: 'POST', headers: { Authorization: 'Bearer synthetic.jwt.token' } });
+  const denial = await request();
+  assert.equal(denial.status, 401);
+  const body = await denial.json();
+  assert.deepEqual(Object.keys(body).sort(), ['error', 'traceId']);
+  assert.equal(body.error, 'unauthorized');
+  assert.equal(store.plans[0].capture.outcome, 'registration_window_expired');
+  store.failRecord = true;
+  const unavailable = await request();
+  assert.equal(unavailable.status, 503);
+  assert.equal((await unavailable.json()).error, 'access_unavailable');
+  assert.equal(store.snapshot.bindings.length, 0);
 });
