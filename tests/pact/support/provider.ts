@@ -8,8 +8,6 @@ import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { HmacIntegrity } from '../../../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
-import { RegisteredDevices } from '../../../backend/identity-consent-ecosystem/src/application/registered-devices';
-import { MobileSessions } from '../../../backend/identity-consent-ecosystem/src/application/mobile-sessions';
 import { Consents } from '../../../backend/identity-consent-ecosystem/src/application/consents';
 import { unexpectedAuthentication } from '../../support/authentication-fakes';
 import { ANA, MemoryConsents, SEAL_KEY, TRACE, clock } from '../../support/consent-fakes';
@@ -121,18 +119,6 @@ const authorizedCookie = 'sealed-cookie';
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
-  'a native session with its installation binding': () => {
-    const installationId = '00000000-0000-4000-8000-000000000003';
-    const principal = { clientId: '00000000-0000-4000-8000-000000000001', subjectToken: '00000000-0000-4000-8000-000000000002' };
-    const binding = { id: principal.clientId, installationId, status: 'active' as const };
-    const app = createIdentityHttp({ authentication: unexpectedAuthentication,
-      authorizeApiAccess: async () => ({ allowed: false, error: 'unauthorized', status: 401 }),
-      devices: new RegisteredDevices({ register: async () => binding, find: async () => binding, revoke: async () => ({ ...binding, status: 'revoked' }) }),
-      mobile: { configuration: { clientId: 'client_synthetic', redirectUri: 'solventa://auth/callback' },
-        provider: { authenticate: async token => token === 'synthetic.jwt.token' ? identity : null, revoke: async () => {} },
-        sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
-    return { identity: { fetch: request => Promise.resolve(app.request(request, undefined, identityEnv)) } };
-  },
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
