@@ -77,6 +77,7 @@ test('a feature can reach staging after testing in dev without including unrelat
   assert.equal(f.checks.sameTree(f.promotion.sourceSha, f.deployed), false);
   assert.equal(f.checks.sameTree(f.promotion.sourceSha, f.promotion.mergeSha), true);
   verifyPromotion(f.promotion);
+  verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' });
 });
 
 test('a new base revision requires its own successful dev deployment', t => {
@@ -174,6 +175,5 @@ test('a release requires a successful deployment of the exact staging candidate'
 test('missing merge proof and invalid revisions fail closed', t => {
   const f = fixture(t);
   assert.throws(() => verifyPromotion({ ...f.promotion, deploymentTrial: () => undefined }), /no successful dev deployment/);
-  assert.throws(() => verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' }), /base branch/);
   assert.throws(() => verifyPromotion({ ...f.promotion, sourceSha: 'invalid' }), /Invalid promotion revision/);
 });

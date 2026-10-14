@@ -35,7 +35,6 @@ export function verifyPromotion({ base, head, sourceSha, mergeSha, deployedShas,
   }
   if (base !== 'staging') throw Error('Unsupported promotion target');
   validateBranch(head);
-  if (head.endsWith('-dev')) throw Error('Staging requires the base branch.');
   if (!deployedShas.some(sha => matchesDeployment({ base, sourceSha, sameTree, sameCandidate, isAncestor, deploymentTrial }, sha))) {
     throw Error('The base candidate has no successful dev deployment preserving its tested integration tree.');
   }
