@@ -11,12 +11,11 @@ export class SqlRegisteredDevices implements DeviceStore {
       await db.connect();
       await db.query('BEGIN');
       // Lock the session shared with logout before evaluating or persisting any device decision.
-      const session = (await db.query<{ id: string; client_id: string; subject_token: string; created_at: Date; expires_at: Date; revoked_at: Date | null; observed_at: Date }>(`
-        SELECT s.id,s.client_id,c.subject_token,s.created_at,s.expires_at,s.revoked_at,now() AS observed_at
+      const session = (await db.query<{ id: string; client_id: string; subject_token: string; client_status: string; created_at: Date; expires_at: Date; revoked_at: Date | null; observed_at: Date }>(`
+        SELECT s.id,s.client_id,c.subject_token,c.status AS client_status,s.created_at,s.expires_at,s.revoked_at,now() AS observed_at
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
         JOIN identity.external_identities e ON e.client_id=c.id AND e.provider='workos'
-        WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider_subject=$2
-        AND c.status='active' FOR UPDATE OF s`,
+        WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider_subject=$2 FOR UPDATE OF s`,
       [input.identity.sessionReference, input.identity.providerSubject])).rows[0];
       const prefix = `mobile-v1:${input.identity.sessionReference}:`;
       const existing = session ? (await db.query<{ id: string; revoked_at: Date | null; device_reference: string }>(`
@@ -25,7 +24,7 @@ export class SqlRegisteredDevices implements DeviceStore {
         AND split_part(device_reference,':',2)=$2 FOR UPDATE`, [session.client_id, input.identity.sessionReference])).rows : [];
       const observedAt = session ? session.observed_at.getTime() : Date.now();
       const { decision, capture } = decide({ observedAt,
-        session: session ? { createdAt: session.created_at.getTime(), expiresAt: session.expires_at.getTime(), revoked: session.revoked_at !== null } : null,
+        session: session ? { clientActive: session.client_status === 'active', createdAt: session.created_at.getTime(), expiresAt: session.expires_at.getTime(), revoked: session.revoked_at !== null } : null,
         bindings: existing.map(row => ({ id: row.id, installationId: row.device_reference.slice(prefix.length), revoked: row.revoked_at !== null })),
       });
       let result: RegisteredDevice | null = null;
