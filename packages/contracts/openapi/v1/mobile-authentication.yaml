@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.1.0
-  description: Native WorkOS PKCE configuration, local session registration, inspection and revocation. No biometrics, device attestation or business writes are performed.
+  version: 1.2.0
+  description: Native WorkOS PKCE, session lifecycle and session-bound installation registration/revocation. Biometrics protect credentials on the device; the server does not attest biometric execution or store biometric templates.
 servers:
   - url: /api/v1
 tags:
@@ -122,6 +122,45 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /mobile/devices/{installationId}:
+    parameters:
+      - name: installationId
+        in: path
+        required: true
+        description: Random UUID v4 held by this installation. Not a credential or hardware identifier.
+        schema: { type: string, format: uuid, pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' }
+      - $ref: './common.yaml#/components/parameters/TraceId'
+    post:
+      operationId: registerMobileDevice
+      summary: Bind an installation to the verified native session
+      description: Requires an active local session registered within ten minutes. One installation per provider session. Active same-binding retries are idempotent; revoked bindings cannot reactivate. No request body. Biometric confirmation and credential protection are enforced locally, not attested by this route.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: &deviceResponses
+        '200':
+          description: Session-owned installation binding.
+          headers: *headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      operationId: inspectMobileDevice
+      summary: Check the session-owned installation is active
+      description: Requires both the installation binding and its active verified session. Does not register, refresh or extend either. Unknown, foreign and revoked bindings return 401.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: *deviceResponses
+    delete:
+      operationId: revokeMobileDevice
+      summary: Revoke the installation binding and its session
+      description: Revokes device and local session with audit/outbox in one owner transaction, then revokes WorkOS. A provider failure returns 503 without reopening local access. Same-owner retries can finish provider revocation; no request body.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: *deviceResponses
 components:
   securitySchemes:
     MobileBearer:
@@ -137,6 +176,20 @@ components:
       description: Session responses must not be cached.
       schema: { type: string, enum: [no-store] }
   schemas:
+    Device:
+      type: object
+      additionalProperties: false
+      required: [device, traceId]
+      properties:
+        device:
+          type: object
+          additionalProperties: false
+          required: [id, installationId, status]
+          properties:
+            id: { type: string, format: uuid }
+            installationId: { type: string, format: uuid }
+            status: { type: string, enum: [active, revoked] }
+        traceId: { type: string, format: uuid }
     Configuration:
       type: object
       additionalProperties: false
@@ -146,6 +199,9 @@ components:
         redirectUri: { type: string, enum: ['solventa://auth/callback'] }
         authorizationEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authorize'] }
         tokenEndpoint: { type: string, enum: ['https://api.workos.com/user_management/authenticate'] }
+        deviceRegistrationSupported:
+          type: boolean
+          description: Whether this environment has the device lifecycle configured. Absence in older deployments disables activation in the mobile client.
         traceId: { type: string, format: uuid }
     Principal:
       type: object
