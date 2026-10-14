@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
 import { MobileSessions } from '../backend/identity-consent-ecosystem/src/application/mobile-sessions';
+import { Authentication } from '../backend/identity-consent-ecosystem/src/application/authentication';
 import { RegisteredDevices } from '../backend/identity-consent-ecosystem/src/application/registered-devices';
 import { SqlRegisteredDevices } from '../backend/identity-consent-ecosystem/src/adapters/outbound/registered-devices';
 
@@ -158,7 +159,48 @@ try {
   assert.ok(staleDecision[0].capture.inputs.session.createdAt<=Date.parse(staleDecision[0].capture.inputs.evaluatedAt)-600000);
   assert.equal((await db.query(`SELECT count(*)::INT4 AS count FROM identity.audit_events
     WHERE action='device.registration_denied' AND outcome='registration_window_expired' AND correlation_id=$1`,[staleInput.correlationId])).rows[0].count,1);
-  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback']}));
+  const sharedIdentity = {providerSubject:'shared_'+randomUUID(),sessionReference:'shared_'+randomUUID(),emailVerified:true};
+  await repo.register(sharedIdentity);
+  const sharedInput = {identity:sharedIdentity,installationId:randomUUID(),correlationId:randomUUID()};
+  const sharedBinding = await devices.execute('register',sharedInput); assert.ok(sharedBinding);
+  await repo.revoke({...sharedIdentity,providerSubject:'foreign'},randomUUID());
+  assert.ok(await devices.execute('find',sharedInput));
+  const sharedTrace = randomUUID();
+  await new Authentication(repo).logout(sharedIdentity,sharedTrace);
+  assert.equal(await repo.find(sharedIdentity),null);
+  assert.equal(await devices.execute('find',sharedInput),null);
+  assert.equal((await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM identity.registered_devices WHERE id=$1',[sharedBinding.id])).rows[0].revoked,true);
+  const sharedRevocation = (await db.query(`SELECT correlation_id,payload->'capture' AS capture FROM identity.outbox_events
+    WHERE aggregate_id=$1 AND event_type='identity.device_revoked'`,[sharedBinding.id])).rows;
+  assert.equal(sharedRevocation.length,1);
+  assert.equal(sharedRevocation[0].correlation_id,sharedTrace);
+  assert.equal(sharedRevocation[0].capture.correlationId,sharedTrace);
+  await new MobileSessions(repo).revoke(sharedIdentity,randomUUID());
+  assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.revoked'",[sharedBinding.id])).rows[0].count,1);
+  for (const repair of [repo.revoke.bind(repo),repo.revokeOrBlock.bind(repo)]) {
+    const legacyIdentity = {providerSubject:'legacy_'+randomUUID(),sessionReference:'legacy_'+randomUUID(),emailVerified:true};
+    await repo.register(legacyIdentity);
+    const legacyInput = {identity:legacyIdentity,installationId:randomUUID(),correlationId:randomUUID()};
+    const legacyBinding = await devices.execute('register',legacyInput); assert.ok(legacyBinding);
+    await db.query('UPDATE identity.authentication_sessions SET revoked_at=now() WHERE provider_session=$1',[legacyIdentity.sessionReference]);
+    await repair(legacyIdentity,randomUUID());
+    assert.equal((await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM identity.registered_devices WHERE id=$1',[legacyBinding.id])).rows[0].revoked,true);
+  }
+  const rollbackWeb = {providerSubject:'rollback_web_'+randomUUID(),sessionReference:'rollback_web_'+randomUUID(),emailVerified:true};
+  await repo.register(rollbackWeb);
+  const rollbackWebInput = {identity:rollbackWeb,installationId:randomUUID(),correlationId:randomUUID()};
+  assert.ok(await devices.execute('register',rollbackWebInput));
+  const rollbackCounts = (await db.query(`SELECT
+    (SELECT count(*)::INT4 FROM identity.audit_events) AS audit,
+    (SELECT count(*)::INT4 FROM identity.outbox_events) AS outbox`)).rows[0];
+  await db.query('REVOKE INSERT ON identity.outbox_events FROM solventa_local_identity');
+  try { await assert.rejects(new Authentication(repo).logout(rollbackWeb,randomUUID()),/permission|privilege/i); }
+  finally { await db.query('GRANT INSERT ON identity.outbox_events TO solventa_local_identity'); }
+  assert.ok(await repo.find(rollbackWeb));
+  assert.ok(await devices.execute('find',rollbackWebInput));
+  assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.audit_events')).rows[0].count,rollbackCounts.audit);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.outbox_events')).rows[0].count,rollbackCounts.outbox);
+  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback']}));
 } finally {
   await db?.end();
   if(created)await admin.query(`DROP DATABASE ${name} CASCADE`);
