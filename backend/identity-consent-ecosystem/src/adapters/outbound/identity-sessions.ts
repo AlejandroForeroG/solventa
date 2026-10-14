@@ -52,9 +52,8 @@ export class SqlIdentitySessions implements IdentitySessions {
       return { clientId: row.id, subjectToken: row.subject_token };
     });
   }
-  async revokeOrBlock(identity: VerifiedIdentity): Promise<void> {
+  async revokeOrBlock(identity: VerifiedIdentity, correlation: string): Promise<void> {
     const operation = async (db: Client) => {
-      const correlation = crypto.randomUUID();
       const existing = (await db.query(`SELECT s.id, s.revoked_at, c.subject_token, e.provider_subject
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
         JOIN identity.external_identities e ON e.client_id=c.id AND e.provider='workos'

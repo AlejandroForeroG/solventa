@@ -54,9 +54,9 @@ try {
   await db.query("UPDATE identity.authentication_sessions SET created_at=now()-INTERVAL '2 seconds',expires_at=now()-INTERVAL '1 second' WHERE provider_session=$1",[mobileIdentity.sessionReference]);
   assert.equal(await repo.register(mobileIdentity),null);
   const pending={providerSubject:'pending_'+randomUUID(),sessionReference:'pending_'+randomUUID(),emailVerified:true};
-  await new MobileSessions(repo).revoke(pending);
+  await new MobileSessions(repo).revoke(pending,randomUUID());
   assert.equal(await repo.register(pending),null);
-  await repo.revokeOrBlock(pending);
+  await repo.revokeOrBlock(pending,randomUUID());
   assert.equal((await db.query(`SELECT count(*)::INT4 FROM identity.audit_events a
     JOIN identity.authentication_sessions s ON s.id=a.resource_id WHERE s.provider_session=$1`,[pending.sessionReference])).rows[0].count,1);
   assert.equal((await db.query('SELECT revoked_at IS NOT NULL AS blocked FROM identity.authentication_sessions WHERE provider_session=$1',[pending.sessionReference])).rows[0].blocked,true);
@@ -65,15 +65,15 @@ try {
   for(const table of tables)counts.push((await db.query(`SELECT count(*)::INT4 FROM identity.${table}`)).rows[0].count);
   const failedLogout={providerSubject:'failed_logout_'+randomUUID(),sessionReference:'failed_logout_'+randomUUID(),emailVerified:true};
   await db.query('REVOKE INSERT ON identity.audit_events FROM solventa_local_identity');
-  try {await assert.rejects(repo.revokeOrBlock(failedLogout),/permission|privilege/i);}
+  try {await assert.rejects(repo.revokeOrBlock(failedLogout,randomUUID()),/permission|privilege/i);}
   finally {await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity');}
   for(const [index,table] of tables.entries())assert.equal((await db.query(`SELECT count(*)::INT4 FROM identity.${table}`)).rows[0].count,counts[index]);
   assert.equal(await repo.find(failedLogout),null);
   const racingLogout={providerSubject:'racing_logout_'+randomUUID(),sessionReference:'racing_logout_'+randomUUID(),emailVerified:true};
-  await Promise.all([repo.register(racingLogout),repo.revokeOrBlock(racingLogout)]);
+  await Promise.all([repo.register(racingLogout),repo.revokeOrBlock(racingLogout,randomUUID())]);
   assert.equal(await repo.find(racingLogout),null);
   assert.equal(await repo.register(racingLogout),null);
-  await assert.rejects(repo.revokeOrBlock({...mobileIdentity,providerSubject:'wrong_logout_owner'}),/session_owner_mismatch/);
+  await assert.rejects(repo.revokeOrBlock({...mobileIdentity,providerSubject:'wrong_logout_owner'},randomUUID()),/session_owner_mismatch/);
   await repo.revoke(identity);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference=$1',[principal.subjectToken])).rows[0].count,2);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.authentication_sessions WHERE provider_session=$1',[mobileIdentity.sessionReference])).rows[0].count,1);
@@ -99,14 +99,25 @@ try {
   finally { await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity'); }
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.registered_devices')).rows[0].count,deviceCounts.rows[0].devices);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events')).rows[0].count,auditBefore);
-  await repo.revokeOrBlock(deviceIdentity);
+  const logoutCorrelation = randomUUID();
+  await new MobileSessions(repo).revoke(deviceIdentity,logoutCorrelation);
+  const logoutAudit = (await db.query(`SELECT a.correlation_id FROM identity.audit_events a
+    JOIN identity.authentication_sessions s ON s.id=a.resource_id
+    WHERE s.provider_session=$1 AND a.action='session.revoked'`,[deviceIdentity.sessionReference])).rows;
+  assert.deepEqual(logoutAudit,[{correlation_id:logoutCorrelation}]);
+  const deviceAudit = (await db.query(`SELECT correlation_id FROM identity.audit_events
+    WHERE resource_id=$1 AND action='device.revoked'`,[binding.id])).rows;
+  assert.deepEqual(deviceAudit,[{correlation_id:logoutCorrelation}]);
   assert.equal(await devices.execute('find',deviceInput),null);
   assert.equal(await devices.execute('register',deviceInput),null);
   assert.equal((await devices.execute('revoke',deviceInput))?.status,'revoked');
   const revoked = (await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM identity.registered_devices WHERE id=$1',[binding.id])).rows[0];
   assert.equal(revoked.revoked,true);
-  const revocationCapture = (await db.query(`SELECT payload->'capture' AS capture FROM identity.outbox_events
-    WHERE aggregate_id=$1 AND event_type='identity.device_revoked'`,[binding.id])).rows[0].capture;
+  const revocationEvent = (await db.query(`SELECT correlation_id,payload->'capture' AS capture FROM identity.outbox_events
+    WHERE aggregate_id=$1 AND event_type='identity.device_revoked'`,[binding.id])).rows[0];
+  assert.equal(revocationEvent.correlation_id,logoutCorrelation);
+  const revocationCapture = revocationEvent.capture;
+  assert.equal(revocationCapture.correlationId,logoutCorrelation);
   assert.equal(revocationCapture.inputs.installationId,deviceInput.installationId);
   assert.equal(revocationCapture.rule.id,'session-bound-installation');
   assert.equal(revocationCapture.outcome,'revoke');
