@@ -12,7 +12,7 @@ import type { Locale } from '../i18n/messages';
 
 type ConsentStubs = { getTerms: unknown; grantConsent: unknown; declineConsent: unknown };
 
-const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e1b4d4c8aa0d1e2f3a4b5c6d7' };
+const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e-1b4d-4c8a-a0d1-e2f3a4b5c6d7' };
 const valid: QuoteValues = { fullName: 'Cliente Sintetico Uno', documentNumber: '1000000001', birthDate: '1992-03-14', city: 'Bogotá D.C.', amount: '320000000', termMonths: '180' };
 
 function setup(request: (...args: never[]) => Promise<QuoteOutcome>, locale: Locale = 'es-CO', consent?: ConsentStubs) {
@@ -93,6 +93,8 @@ describe('step 2: result', () => {
     expect(screen.getByText('$ 320.000.000 COP')).toBeInTheDocument();
     expect(screen.getByText('COT-2026-08843')).toBeInTheDocument();
     expect(screen.getByText('Estimación con datos mínimos.')).toBeInTheDocument();
+    expect(screen.getByText('Solo se usaron los datos que ingresaste en el formulario. No se consultó ninguna fuente externa.')).toBeVisible();
+    expect(screen.getByText('En el siguiente paso puedes revisar el propósito, las fuentes y la vigencia antes de decidir si autorizas el uso de tus datos.')).toBeVisible();
     expect(screen.getByRole('heading', { level: 1, name: 'Cotización' })).toHaveFocus();
     await waitFor(() => expect(live()).toHaveTextContent('Cotización calculada: prima mensual estimada $ 86.400 COP'));
   });
@@ -104,6 +106,8 @@ describe('step 2: result', () => {
     expect(await screen.findByText('$86,400')).toBeInTheDocument();
     expect(screen.getByText('$320,000,000 COP')).toBeInTheDocument();
     expect(screen.getByText('Valid until Nov 5, 2026')).toBeInTheDocument();
+    expect(screen.getByText('Only the data you entered in the form was used. No external source was queried.')).toBeVisible();
+    expect(screen.getByText('In the next step you can review the purpose, sources and validity before deciding whether to authorize the use of your data.')).toBeVisible();
   });
 
   it('omits the validity instead of showing an invalid date when the response lacks a usable one', async () => {
@@ -258,6 +262,36 @@ describe('stepper', () => {
 
 describe('request to the API', () => {
   const respond = (status: number, body: unknown = {}) => vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(body), { status }));
+
+  it.each([null, {}, [], { ...quote, quoteId: 'unknown' }, { ...quote, premiumMonthly: -1 }, { ...quote, premiumMonthly: '86400' }, { ...quote, sumInsured: 0 }, { ...quote, currency: 'USD' }, { ...quote, termMonths: 241 }, { ...quote, validUntil: 'not-a-date' }, { ...quote, validUntil: '2026-02-30T10:00:00Z' }, { ...quote, basis: 'personalized' }, { ...quote, ruleVersion: '' }, { ...quote, traceId: 'unknown' }])('refuses a malformed successful response: %j', async body => {
+    const spy = respond(201, body);
+    expect(await requestQuote(valid, 'key-1', 'es-CO')).toEqual({ kind: 'unavailable' });
+    spy.mockRestore();
+  });
+
+  it.each([null, {}, { errors: [null] }, { errors: [{ field: 'credit.amount', code: 'amount_out_of_range', params: { min: '1' } }] }])('refuses malformed field errors: %j', async body => {
+    const spy = respond(400, body);
+    expect(await requestQuote(valid, 'key-1', 'es-CO')).toEqual({ kind: 'unavailable' });
+    spy.mockRestore();
+  });
+
+  it('recovers from an invalid success body without losing form data or changing the retry key', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('null', { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(quote), { status: 200 }));
+    const { user } = setup(requestQuote);
+    await fill(user, valid, es);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    expect(await screen.findByText(/no está disponible en este momento/)).toBeVisible();
+    expect(screen.getByLabelText(/Nombre completo/)).toHaveValue(valid.fullName);
+    expect(document.body.textContent).not.toMatch(/NaN|undefined/);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    expect(await screen.findByText('COT-2026-08843')).toBeVisible();
+    const [first, retry] = spy.mock.calls.map(([, init]) => init);
+    expect(new Headers(retry?.headers).get('idempotency-key')).toBe(new Headers(first?.headers).get('idempotency-key'));
+    expect(retry?.body).toBe(first?.body);
+    spy.mockRestore();
+  });
 
   it('sends the contract request without any partner key and with the idempotency key and language', async () => {
     const spy = respond(201, quote);

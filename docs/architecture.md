@@ -18,4 +18,6 @@ When implementing a capability:
 
 Identity implements web authentication use cases through session and persistence ports, with WorkOS and SQL adapters; see [authentication](modules/identity-consent-ecosystem/authentication.md). Client registration commits the identity link, session, audit and creation event in one transaction; local revocation commits state and audit together.
 
-Acquisition and Policy cores still have no business use cases. The current foundation does not establish public business contracts, event publication/consumption, effective consent or complete financial flows.
+Acquisition implements the minimum-data quote through its own domain, application ports and adapters; quote, decision capture, audit and outbox are committed together. Identity also implements consent registration, listing, revocation and fresh verification, alongside native session registration and revocation. See the [Acquisition guide](modules/acquisition-risk/README.md), [consent guide](modules/identity-consent-ecosystem/consent.md) and [native session contract](modules/identity-consent-ecosystem/mobile-authentication.md).
+
+The signal-reading use case checks consent before reaching its provider or stored copy, but no public profiling route or real signal provider is wired yet. Policy still has no business use cases. Stored outbox records do not establish event publication/consumption, complete financial flows or native biometric functionality.
