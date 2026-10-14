@@ -14,9 +14,10 @@ import { Stepper } from './Stepper';
 type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
 
-export function QuoteFlow({ request = defaultRequest, consent = consentApi, onOpenPrivacy, onSessionLost }: {
+export function QuoteFlow({ request = defaultRequest, consent = consentApi, consentUpdates = {}, onOpenPrivacy, onSessionLost }: {
   request?: typeof defaultRequest;
   consent?: Pick<ConsentApi, 'getTerms' | 'grantConsent' | 'declineConsent'>;
+  consentUpdates?: Readonly<Record<string, Consent>>;
   onOpenPrivacy?: () => void;
   onSessionLost?: () => void;
 }) {
@@ -30,6 +31,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, onOp
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [granted, setGranted] = useState<Consent | null>(null);
+  const currentConsent = granted ? consentUpdates[granted.consentId] ?? granted : null;
   const [deniedTrace, setDeniedTrace] = useState<string | undefined>();
   // A retry of the same data reuses the key, so a repeated click never creates two quotes.
   const key = useRef(newIdempotencyKey());
@@ -75,7 +77,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, onOp
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
-    {phase === 'granted' && granted && <ConsentGranted consent={granted} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
+    {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;

@@ -6,10 +6,11 @@ import { consentApi, type Consent, type ConsentApi } from './api';
 
 type Load = 'loading' | 'ready' | 'error';
 
-export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
+export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsentsChanged }: {
   api?: Pick<ConsentApi, 'listConsents' | 'revokeConsent'>;
   onBack: () => void;
   onSessionLost?: () => void;
+  onConsentsChanged?: (items: Consent[]) => void;
 }) {
   const intl = useIntl();
   const { shortDate } = useFormatters();
@@ -31,11 +32,15 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
     pending.current = new AbortController();
     try {
       const outcome = await api.listConsents(pending.current.signal, after);
-      if (outcome.kind === 'ok') { setItems(outcome.value.items); setNextCursor(outcome.value.nextCursor); setLoad('ready'); }
+      if (outcome.kind === 'ok') {
+        setItems(outcome.value.items); setNextCursor(outcome.value.nextCursor); setLoad('ready');
+        setConfirming(current => current && outcome.value.items.some(item => item.consentId === current && item.status === 'active') ? current : null);
+        onConsentsChanged?.(outcome.value.items);
+      }
       else if (outcome.kind === 'unauthenticated') onSessionLost?.();
       else { setLoad('error'); announce(intl.formatMessage({ id: 'live.privacyError' })); }
     } catch { /* aborted: the user left the screen */ }
-  }, [api, announce, intl, onSessionLost, after]);
+  }, [api, announce, intl, onSessionLost, onConsentsChanged, after]);
 
   const reload = useCallback(() => { setLoad('loading'); void fetchItems(); }, [fetchItems]);
   useEffect(() => { void fetchItems(); return () => pending.current?.abort(); }, [fetchItems]);
@@ -50,9 +55,9 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
   async function revoke(id: string) {
     setBusy(true); setFailed(null);
     const outcome = await api.revokeConsent(id);
-    setBusy(false);
     if (outcome.kind === 'ok') {
       setItems(current => current.map(item => item.consentId === id ? outcome.value : item));
+      onConsentsChanged?.([outcome.value]);
       setConfirming(null);
       announce(intl.formatMessage({ id: 'live.revoked' }, { id }));
     } else if (outcome.kind === 'unauthenticated') {
@@ -61,7 +66,10 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
       setConfirming(null); reload();
     } else {
       setFailed(id); announce(intl.formatMessage({ id: 'live.revokeError' }, { id }));
+      // The write may have committed before its response was lost.
+      await fetchItems();
     }
+    setBusy(false);
   }
 
   return <section className="step privacy">

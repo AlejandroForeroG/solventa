@@ -159,6 +159,19 @@ describe.each(['es-CO', 'en-US'] as const)('consent step in %s', locale => {
     await user.click(screen.getByRole('button', { name: locale === 'es-CO' ? 'Ver panel de privacidad' : 'View privacy dashboard' }));
     expect(onPanel).toHaveBeenCalledOnce();
   });
+
+  it.each([revoked, expired])('shows a replayed $status authorization without announcing active consent', async consent => {
+    const api = stubs({ grantConsent: vi.fn().mockResolvedValue(ok(consent)) });
+    const { user, onGranted } = setup(api);
+    await user.click(await screen.findByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: t.authorize }));
+    await waitFor(() => expect(onGranted).toHaveBeenCalledWith(consent));
+    expect(live()).toHaveTextContent(consent.status === 'revoked' ? t.revokedPill : t.expiredPill);
+    expect(live()).not.toHaveTextContent(/vigente hasta|valid until/i);
+    const confirmation = render(wrap(locale, <ConsentGranted consent={consent} onBack={vi.fn()} />));
+    expect(within(confirmation.container).getByRole('heading', { name: consent.status === 'revoked' ? t.revokedPill : t.expiredPill })).toBeVisible();
+    expect(within(confirmation.container).queryByText(/vigente hasta|valid until/i)).toBeNull();
+  });
 });
 
 describe('consent step failures', () => {
@@ -357,15 +370,17 @@ describe('privacy dashboard states', () => {
     expect(await screen.findByText('CNS-2026-00003')).toBeInTheDocument();
   });
 
-  it('keeps the authorization active and says so when the revocation fails', async () => {
+  it('rechecks an uncertain revocation without claiming that the authorization necessarily remains active', async () => {
     const api = stubs({ revokeConsent: vi.fn().mockResolvedValue({ kind: 'unavailable' }) });
     const user = userEvent.setup();
     render(wrap('es-CO', <PrivacyPanel api={api as never} onBack={vi.fn()} />));
     await user.click(await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' }));
     await user.click(screen.getByRole('button', { name: 'Sí, revocar' }));
-    expect(await screen.findByText(/Sigue vigente/)).toBeInTheDocument();
+    expect(await screen.findByText(/No pudimos confirmar la revocación/, { selector: 'p.field-error' })).toBeInTheDocument();
     expect(screen.getByText('Activo')).toBeInTheDocument();
-    await waitFor(() => expect(live()).toHaveTextContent('No se pudo revocar'));
+    expect(screen.queryByText(/Sigue vigente/)).toBeNull();
+    expect(api.listConsents).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(live()).toHaveTextContent('No pudimos confirmar la revocación'));
   });
 
   it('reloads the list when the authorization is no longer there to revoke', async () => {

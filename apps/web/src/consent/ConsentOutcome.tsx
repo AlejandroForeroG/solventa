@@ -11,12 +11,14 @@ export function ConsentGranted({ consent, onPanel, onBack }: { consent: Consent;
   return <section className="step card">
     <div className="result-head">
       <div>
-        <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'granted.title' })}</h1>
+        <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: consent.status === 'active' ? 'granted.title' : `status.${consent.status}` })}</h1>
         <p className="mono">{intl.formatMessage({ id: 'granted.id' })} {consent.consentId}</p>
       </div>
-      <span className="pill pill-ok">{intl.formatMessage({ id: 'granted.validUntil' }, { date: dayMonthYear(new Date(consent.expiresAt)) })}</span>
+      <span className={`pill pill-status-${consent.status}`}>{consent.status === 'active'
+        ? intl.formatMessage({ id: 'granted.validUntil' }, { date: dayMonthYear(new Date(consent.expiresAt)) })
+        : intl.formatMessage({ id: `status.${consent.status}` })}</span>
     </div>
-    <p>{intl.formatMessage({ id: 'granted.detail' })}</p>
+    <p>{intl.formatMessage({ id: consent.status === 'active' ? 'granted.detail' : 'granted.inactive' })}</p>
     <div className="actions">
       {onPanel && <button type="button" className="btn btn-primary" onClick={onPanel}>{intl.formatMessage({ id: 'granted.panel' })}</button>}
       <button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'granted.back' })}</button>
