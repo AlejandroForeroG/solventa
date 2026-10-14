@@ -81,8 +81,8 @@ function text(source: Record<string, unknown>, key: string, path: string, max: n
   return value as string;
 }
 
-function strictKeys(source: Record<string, unknown>, allowed: string[], prefix: string, errors: FieldError[]) {
-  for (const key of Object.keys(source)) if (!allowed.includes(key)) errors.push({ field: prefix + key, code: 'invalid_format' });
+function strictKeys(source: Record<string, unknown>, allowed: string[], field: string, errors: FieldError[]) {
+  if (Object.keys(source).some(key => !allowed.includes(key))) errors.push({ field, code: 'invalid_format' });
 }
 
 export function validateQuoteRequest(input: unknown, asOf: string): Validation {
@@ -96,7 +96,7 @@ export function validateQuoteRequest(input: unknown, asOf: string): Validation {
   if (customer === undefined) errors.push({ field: 'customer', code: 'required' });
   else if (!isObject(customer)) errors.push({ field: 'customer', code: 'invalid_type' });
   else {
-    strictKeys(customer, ['fullName', 'documentType', 'documentNumber', 'birthDate', 'city'], 'customer.', errors);
+    strictKeys(customer, ['fullName', 'documentType', 'documentNumber', 'birthDate', 'city'], 'customer', errors);
     text(customer, 'fullName', 'customer.fullName', 120, errors);
     text(customer, 'city', 'customer.city', 80, errors);
     if (customer.documentType === undefined) errors.push({ field: 'customer.documentType', code: 'required' });
@@ -117,7 +117,7 @@ export function validateQuoteRequest(input: unknown, asOf: string): Validation {
   if (credit === undefined) errors.push({ field: 'credit', code: 'required' });
   else if (!isObject(credit)) errors.push({ field: 'credit', code: 'invalid_type' });
   else {
-    strictKeys(credit, ['partnerCreditId', 'amount', 'termMonths'], 'credit.', errors);
+    strictKeys(credit, ['partnerCreditId', 'amount', 'termMonths'], 'credit', errors);
     text(credit, 'partnerCreditId', 'credit.partnerCreditId', 64, errors);
     const { amount, termMonths } = credit;
     if (amount === undefined) errors.push({ field: 'credit.amount', code: 'required' });

@@ -53,7 +53,9 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
     const outcome = await api.grantConsent({ textVersion: SUPPORTED_TEXT_VERSION, locale, ...(quoteRef ? { quoteRef } : {}) }, key.current);
     setBusy('idle');
     if (outcome.kind === 'ok') {
-      announce(intl.formatMessage({ id: 'live.consentGranted' }, { date: dayMonthYear(new Date(outcome.value.expiresAt)) }));
+      announce(outcome.value.status === 'active'
+        ? intl.formatMessage({ id: 'live.consentGranted' }, { date: dayMonthYear(new Date(outcome.value.expiresAt)) })
+        : intl.formatMessage({ id: 'live.consentInactive' }, { status: intl.formatMessage({ id: `status.${outcome.value.status}` }) }));
       onGranted(outcome.value);
     } else if (outcome.kind === 'unauthenticated') {
       announce(intl.formatMessage({ id: 'live.sessionExpired' })); onSessionLost?.();

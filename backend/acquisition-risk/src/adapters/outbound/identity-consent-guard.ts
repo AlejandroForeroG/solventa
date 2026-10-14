@@ -12,12 +12,13 @@ const DENIALS: readonly string[] = ['consent_missing', 'consent_revoked', 'conse
 const unavailable: ConsentCheck = { allowed: false, reason: 'unavailable' };
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-function checkFrom(reply: unknown): ConsentCheck {
+function checkFrom(reply: unknown, now: Date): ConsentCheck {
   if (!isRecord(reply)) return unavailable;
   if (reply.allowed === true) {
     const consent = reply.consent;
     if (isRecord(consent) && typeof consent.consentId === 'string' && CONSENT_ID.test(consent.consentId)
-      && typeof consent.textVersion === 'number' && Number.isInteger(consent.textVersion) && typeof consent.expiresAt === 'string' && !Number.isNaN(Date.parse(consent.expiresAt))) {
+      && typeof consent.textVersion === 'number' && Number.isInteger(consent.textVersion) && consent.textVersion >= 1
+      && typeof consent.expiresAt === 'string' && Date.parse(consent.expiresAt) > now.getTime()) {
       return { allowed: true, consentId: consent.consentId, textVersion: consent.textVersion, expiresAt: consent.expiresAt };
     }
     return unavailable;
@@ -28,7 +29,7 @@ function checkFrom(reply: unknown): ConsentCheck {
 }
 
 export class IdentityConsentGuard implements ConsentGuard {
-  constructor(private readonly identity: IdentityConsentRpc, private readonly deadlineMs = 2000) {}
+  constructor(private readonly identity: IdentityConsentRpc, private readonly deadlineMs = 2000, private readonly now = () => new Date()) {}
 
   async verify(subjectToken: string, scope: SignalScope): Promise<ConsentCheck> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -37,7 +38,7 @@ export class IdentityConsentGuard implements ConsentGuard {
         this.identity.verifyConsentV1({ subjectToken, purposeCode: PURPOSE, scope }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('consent_deadline')), this.deadlineMs); })
       ]);
-      return checkFrom(reply);
+      return checkFrom(reply, this.now());
     } catch {
       return unavailable;
     } finally {

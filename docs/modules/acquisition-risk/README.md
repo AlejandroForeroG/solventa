@@ -24,7 +24,7 @@ Both entries run the same use case. Identity decides who the actor is through `a
 | Adapters | `quotes-http.ts` (HTTP), `identity-api-access.ts` (Identity RPC), `sql-quote-store.ts` (SQL), `hmac-protector.ts` |
 | Composition | `src/index.ts`, which injects the use case into `createHttp({ quotes })` |
 
-Each request runs in this order: credential, access check, `Idempotency-Key`, validation, calculation, write. Without a credential the answer is 401 and Identity is not called. Identity's answers keep their difference: 401 `unauthorized`, 403 `forbidden`, 503 `access_unavailable`; an RPC failure, a reply that does not validate or a call past the 2 s deadline blocks the quote as 503. A 400 names the field and the code, never the submitted value. Responses carry `X-Trace-Id` (UUID); the server generates one when the header is missing or invalid.
+Each request runs in this order: credential, access check, `Idempotency-Key`, validation, calculation, write. Without a credential the answer is 401 and Identity is not called. Identity's answers keep their difference: 401 `unauthorized`, 403 `forbidden`, 503 `access_unavailable`; an RPC failure, a reply that does not validate or a call past the 2 s deadline blocks the quote as 503. A 400 names a known field or container and the code, never the submitted value or an unknown property name. Unknown properties use `customer`, `credit` or an empty field for the request root. Responses carry `X-Trace-Id` (UUID); the server generates one when the header is missing or invalid.
 
 A gateway failure returns 503 `service_unavailable` and preserves a valid caller-supplied trace ID. The gateway may lose a response after Acquisition commits the quote, so a 503 does not prove that no quote was stored. An internal quote failure returns 500 `internal_error`. After either error, retry only with the same `Idempotency-Key` and unchanged request body to recover a confirmed result without creating another quote.
 
@@ -55,7 +55,7 @@ npm run test:quotes:sql   # real local SQL for both actors; requires npm run inf
 
 The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in session cookie or a partner token.
 
-**Limits.** Identity accepts a real M2M partner token in dev and staging, but the quote journey with that token and the web journey after a real login have not been demonstrated yet. Each quote adds one Identity call to the critical path, so the earlier load measurements, taken before that call existed, must be repeated. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
+**Limits.** Authenticated browser and M2M quote journeys require separate environment verification; local stand-ins, contracts and builds do not establish real provider access. For M2M, verify valid creation/replay, changed-payload conflicts and denied revoked or out-of-scope credentials, checking that rejected requests create no quote, audit or outbox record. Use dedicated synthetic credentials and revoke them after verification; never alter another operator's integration credential. Each quote adds one Identity call to the critical path, so performance must be measured through the complete authenticated path. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
 
 ## Documents
 
