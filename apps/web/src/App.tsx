@@ -29,9 +29,12 @@ function Shell() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'flow' | 'privacy'>('flow');
   const [consentUpdates, setConsentUpdates] = useState<Record<string, Consent>>({});
+  const [uncertainConsents, setUncertainConsents] = useState<Record<string, boolean>>({});
   const updateConsents = useCallback((items: Consent[]) => {
     setConsentUpdates(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, reconcileConsent(current[item.consentId], item)])) }));
+    setUncertainConsents(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, false])) }));
   }, []);
+  const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   async function load() {
@@ -66,8 +69,8 @@ function Shell() {
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
         </div>
-        <div hidden={view === 'privacy'}><QuoteFlow consentUpdates={consentUpdates} onOpenPrivacy={() => setView('privacy')} onSessionLost={sessionLost} /></div>
-        {view === 'privacy' && <PrivacyPanel onConsentsChanged={updateConsents} onBack={() => setView('flow')} onSessionLost={sessionLost} />}
+        <div hidden={view === 'privacy'}><QuoteFlow consentUpdates={consentUpdates} uncertainConsents={uncertainConsents} onOpenPrivacy={() => setView('privacy')} onSessionLost={sessionLost} /></div>
+        {view === 'privacy' && <PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => setView('flow')} onSessionLost={sessionLost} />}
       </main>
       : <main className="access-panel" aria-busy={session === 'loading'}>
         <h1>{t('session.title')}</h1>

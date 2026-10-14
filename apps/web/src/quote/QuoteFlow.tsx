@@ -14,10 +14,11 @@ import { Stepper } from './Stepper';
 type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
 
-export function QuoteFlow({ request = defaultRequest, consent = consentApi, consentUpdates = {}, onOpenPrivacy, onSessionLost }: {
+export function QuoteFlow({ request = defaultRequest, consent = consentApi, consentUpdates = {}, uncertainConsents = {}, onOpenPrivacy, onSessionLost }: {
   request?: typeof defaultRequest;
   consent?: Pick<ConsentApi, 'getTerms' | 'grantConsent' | 'declineConsent'>;
   consentUpdates?: Readonly<Record<string, Consent>>;
+  uncertainConsents?: Readonly<Record<string, boolean>>;
   onOpenPrivacy?: () => void;
   onSessionLost?: () => void;
 }) {
@@ -77,7 +78,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, cons
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
-    {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
+    {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;
