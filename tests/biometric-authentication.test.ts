@@ -21,7 +21,7 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
   const validate = ajv.getSchema('https://solventa.test/devices#/components/schemas/Device'); assert.ok(validate);
   const identity = { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true };
   const calls: string[] = [];
-  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { clientActive: true, createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
   const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
     devices: new RegisteredDevices({ execute: async (input, decide) => {
       assert.deepEqual(input.identity, identity); assert.equal(input.installationId, installationId);
@@ -49,7 +49,7 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
 });
 
 test('registration keeps policy denial reasons private and returns unavailable when the required record fails', async () => {
-  const store = new InMemoryDeviceStore({ observedAt: 660_000, session: { createdAt: 0, expiresAt: 1_000_000, revoked: false }, bindings: [] });
+  const store = new InMemoryDeviceStore({ observedAt: 660_000, session: { clientActive: true, createdAt: 0, expiresAt: 1_000_000, revoked: false }, bindings: [] });
   const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
     devices: new RegisteredDevices(store), mobile: { configuration: config,
       provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true }),
@@ -71,7 +71,7 @@ test('registration keeps policy denial reasons private and returns unavailable w
 
 test('device HTTP accepts UUID case variants and returns canonical installation and request traces', async () => {
   const upper = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
-  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { clientActive: true, createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
   const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
     devices: new RegisteredDevices(store), mobile: { configuration: config,
       provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true }), revoke: async () => {} },
@@ -89,4 +89,25 @@ test('device HTTP accepts UUID case variants and returns canonical installation 
   }
   assert.equal(store.snapshot.bindings.length, 1);
   assert.ok(store.plans.every(plan => plan.decision.effect !== 'deny'));
+});
+
+
+test('device DELETE retries provider revocation after the owner is suspended', async () => {
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { clientActive: true, createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
+  let providerCalls = 0;
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
+    devices: new RegisteredDevices(store), mobile: { configuration: config,
+      provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true }),
+        revoke: async () => { if (++providerCalls === 1) throw new Error('provider_unavailable'); } },
+      sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
+  const request = (method: string) => app.request(`https://synthetic.example/api/v1/mobile/devices/${installationId}`, { method, headers: { Authorization: 'Bearer synthetic.jwt.token' } });
+  assert.equal((await request('POST')).status, 200);
+  assert.equal((await request('DELETE')).status, 503);
+  assert.ok(store.snapshot.session); store.snapshot.session.clientActive = false;
+  assert.equal((await request('GET')).status, 401);
+  assert.equal((await request('POST')).status, 401);
+  const retry = await request('DELETE');
+  assert.equal(retry.status, 200); assert.equal((await retry.json()).device.status, 'revoked');
+  assert.equal(providerCalls, 2);
+  assert.equal(store.plans.filter(plan => plan.decision.effect === 'revoke').length, 1);
 });
