@@ -175,7 +175,7 @@ try {
   assert.equal(sharedRevocation.length,1);
   assert.equal(sharedRevocation[0].correlation_id,sharedTrace);
   assert.equal(sharedRevocation[0].capture.correlationId,sharedTrace);
-  assert.equal(sharedRevocation[0].capture.rule.version,'3');
+  assert.deepEqual(sharedRevocation[0].capture.rule,{id:'session-device-logout',version:'1'});
   await new MobileSessions(repo).revoke(sharedIdentity,randomUUID());
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.revoked'",[sharedBinding.id])).rows[0].count,1);
   for (const repair of [repo.revoke.bind(repo),repo.revokeOrBlock.bind(repo)]) {
@@ -233,7 +233,7 @@ try {
     const upperTrace = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
     await logout(legacyLogoutIdentity,upperTrace);
     const logoutCapture = (await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_revoked'",[legacyLogoutId])).rows[0].capture;
-    assert.equal(logoutCapture.rule.version,'3');
+    assert.deepEqual(logoutCapture.rule,{id:'session-device-logout',version:'1'});
     assert.equal(logoutCapture.inputs.installationId,upperInstallation.toLowerCase());
     assert.equal(logoutCapture.correlationId,upperTrace.toLowerCase());
     assert.equal((await db.query('SELECT device_reference FROM identity.registered_devices WHERE id=$1',[legacyLogoutId])).rows[0].device_reference,legacyReference);

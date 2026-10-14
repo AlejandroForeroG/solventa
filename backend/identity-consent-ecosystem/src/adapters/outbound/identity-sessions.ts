@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import type { IdentitySessions, Principal, VerifiedIdentity } from '../../application/authentication';
-import { canonicalInstallationId, devicePolicy } from '../../domain/registered-device';
+import { canonicalInstallationId, deviceLogoutPolicy } from '../../domain/registered-device';
 
 type StoredClient = { id: string; subject_token: string; status: string };
 type RevocationSession = { id: string; client_id: string; subject_token: string; revoked_at: Date | null };
@@ -113,7 +113,7 @@ export class SqlIdentitySessions implements IdentitySessions {
             schemaVersion: 1, contractVersion: 'v1', correlationId: correlation,
             inputs: { action: 'revoke', installationId: canonicalInstallationId(device.device_reference.split(':')[2]), sessionBound: true },
             sources: [{ source: 'verified-session', capturedAt: new Date().toISOString(), quality: 'verified' }],
-            consent: { status: 'not_required' }, rule: { ...devicePolicy }, outcome: 'revoke',
+            consent: { status: 'not_required' }, rule: { ...deviceLogoutPolicy }, outcome: 'revoke',
           },
         }), correlation]);
       }

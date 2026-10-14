@@ -14,6 +14,7 @@ export type DeviceDecision =
 
 export const deviceRegistrationWindowMs = 10 * 60 * 1000;
 export const devicePolicy = { id: 'session-bound-installation', version: '3' } as const;
+export const deviceLogoutPolicy = { id: 'session-device-logout', version: '1' } as const;
 export function canonicalInstallationId(value: string): string { return value.toLowerCase(); }
 
 export function decideDeviceOperation(action: DeviceAction, installationId: string, snapshot: DeviceSnapshot): DeviceDecision {
