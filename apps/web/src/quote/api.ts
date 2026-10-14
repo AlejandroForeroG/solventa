@@ -34,6 +34,26 @@ export type QuoteOutcome =
 
 export const newIdempotencyKey = () => crypto.randomUUID();
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ERROR_CODES = ['required', 'invalid_type', 'invalid_format', 'age_out_of_range', 'amount_out_of_range', 'term_out_of_range', 'unsupported_product'];
+
+function isQuote(value: unknown): value is Quote {
+  return isRecord(value) && typeof value.quoteId === 'string' && /^COT-[0-9]{4}-[0-9]{5}$/.test(value.quoteId)
+    && typeof value.premiumMonthly === 'number' && Number.isSafeInteger(value.premiumMonthly) && value.premiumMonthly >= 0
+    && value.currency === 'COP' && typeof value.sumInsured === 'number' && Number.isSafeInteger(value.sumInsured) && value.sumInsured >= 1
+    && typeof value.termMonths === 'number' && Number.isInteger(value.termMonths) && value.termMonths >= 12 && value.termMonths <= 240
+    && typeof value.validUntil === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.validUntil) && Number.isFinite(Date.parse(value.validUntil))
+    && new Date(value.validUntil.slice(0, 10)).toISOString().slice(0, 10) === value.validUntil.slice(0, 10)
+    && value.basis === 'minimum_data' && typeof value.ruleVersion === 'string' && value.ruleVersion.length > 0
+    && typeof value.traceId === 'string' && UUID.test(value.traceId);
+}
+
+function isFieldError(value: unknown): value is ServerFieldError {
+  return isRecord(value) && typeof value.field === 'string' && typeof value.code === 'string' && ERROR_CODES.includes(value.code)
+    && (value.params === undefined || (isRecord(value.params) && Object.values(value.params).every(param => typeof param === 'number' && Number.isFinite(param))));
+}
+
 export function toRequestBody(values: QuoteValues, idempotencyKey: string) {
   return {
     product: 'vida_hipotecario',
@@ -57,10 +77,14 @@ export async function requestQuote(values: QuoteValues, idempotencyKey: string, 
     return { kind: 'unavailable' };
   }
   try {
-    if (response.status === 201 || response.status === 200) return { kind: 'quote', quote: await response.json() };
+    if (response.status === 201 || response.status === 200) {
+      const quote: unknown = await response.json();
+      return isQuote(quote) ? { kind: 'quote', quote } : { kind: 'unavailable' };
+    }
     if (response.status === 400) {
-      const body = await response.json();
-      return Array.isArray(body.errors) && body.errors.length ? { kind: 'validation', errors: body.errors } : { kind: 'unavailable' };
+      const body: unknown = await response.json();
+      return isRecord(body) && Array.isArray(body.errors) && body.errors.length > 0 && body.errors.every(isFieldError)
+        ? { kind: 'validation', errors: body.errors } : { kind: 'unavailable' };
     }
     if (response.status === 401) return { kind: 'unauthenticated' };
     if (response.status === 403) return { kind: 'denied', traceId: response.headers.get('x-trace-id') ?? undefined };
