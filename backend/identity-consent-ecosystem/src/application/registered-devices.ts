@@ -35,7 +35,7 @@ export class RegisteredDevices {
         schemaVersion: 1, contractVersion: 'v1', correlationId: operation.correlationId,
         inputs: { action, installationId: operation.installationId, sessionBound: true, evaluatedAt,
           registrationWindowMs: deviceRegistrationWindowMs, session: snapshot.session ? { ...snapshot.session } : null,
-          bindings: snapshot.bindings.map(binding => ({ ...binding })) },
+          bindings: snapshot.bindings.map(binding => ({ ...binding, installationId: canonicalInstallationId(binding.installationId) })) },
         sources: [{ source: 'identity-session-device-snapshot', capturedAt: evaluatedAt, quality: 'verified' }],
         consent: { status: 'not_required' }, rule: { ...devicePolicy },
         outcome: decision.effect === 'deny' ? decision.reason : action,

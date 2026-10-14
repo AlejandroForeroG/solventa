@@ -139,6 +139,8 @@ test('legacy uppercase binding references remain readable, replay-safe and revoc
   const app = new RegisteredDevices(store);
   const supplied = { ...input, installationId: upper.toLowerCase() };
   assert.deepEqual(await app.execute('register', supplied), { id, installationId: upper.toLowerCase(), status: 'active' });
+  assert.equal(store.plans[0].capture.inputs.bindings[0].installationId, upper.toLowerCase());
+  assert.equal(store.snapshot.bindings[0].installationId, upper);
   assert.equal((await app.execute('find', { ...supplied, installationId: upper }))?.installationId, upper.toLowerCase());
   assert.equal((await app.execute('revoke', supplied))?.status, 'revoked');
   assert.equal(store.snapshot.bindings.length, 1);
