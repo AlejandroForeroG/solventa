@@ -60,7 +60,7 @@ The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it d
 
 ### Guard in Acquisition
 
-Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
+Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. A grant must carry a positive integer text version and an expiry strictly after Acquisition's clock when the reply is received; a consent that expired in transit reaches neither a provider nor a stored copy. This local check adds no remote call. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
 
 | Consent check | Provider | Stored copy | Result |
 |---|---|---|---|

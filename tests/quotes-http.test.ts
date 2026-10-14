@@ -102,6 +102,26 @@ for (const [name, call] of [['partner', partner], ['web user', web]] as const) {
     assert.deepEqual((await missingKey.json()).errors, [{ field: 'Idempotency-Key', code: 'required' }]);
   });
 
+  test(`${name}: unknown field names are rejected without reflecting their contents`, async () => {
+    const { http, store } = app();
+    const privateKey = 'synthetic.person@example.invalid';
+    const cases: [string, unknown][] = [
+      ['', { ...base, [privateKey]: 'discard' }],
+      ['customer', { ...base, customer: { ...base.customer, [privateKey]: 'discard' } }],
+      ['credit', { ...base, credit: { ...base.credit, [privateKey]: 'discard' } }]
+    ];
+    for (const [field, body] of cases) {
+      const response = await call(http, { body });
+      assert.equal(response.status, 400);
+      const text = await response.text();
+      assert.ok(!text.includes(privateKey));
+      const result = JSON.parse(text);
+      assert.ok(schema('ValidationError')(result));
+      assert.deepEqual(result.errors, [{ field, code: 'invalid_format' }]);
+    }
+    assert.equal(store.saved.length, 0);
+  });
+
   test(`${name}: an oversized body is refused without being read in full`, async () => {
     const { http, store } = app();
     const unbounded = () => {

@@ -21,6 +21,13 @@ export type Consent = {
 };
 export type ConsentPage = { items: Consent[]; nextCursor: string | null };
 
+const STATUS_ORDER: Record<ConsentStatus, number> = { active: 0, expired: 1, revoked: 2 };
+
+// A grant cannot be reactivated. Revocation remains terminal even after its expiry date.
+export function reconcileConsent(current: Consent | undefined, incoming: Consent): Consent {
+  return current && STATUS_ORDER[current.status] > STATUS_ORDER[incoming.status] ? current : incoming;
+}
+
 export type Outcome<T> =
   | { kind: 'ok'; value: T }
   | { kind: 'unauthenticated' }
