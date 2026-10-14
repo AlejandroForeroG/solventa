@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Quotes
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Quote with minimum data. The same input and rule version always give the same premium;
     no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
@@ -255,7 +255,10 @@ components:
       properties:
         field:
           type: string
-          description: Field path, for example customer.birthDate.
+          description: >
+            Known field path, for example customer.birthDate. Unknown property names are never
+            echoed; their error identifies the customer or credit container, or an empty string
+            for the request root.
         code:
           type: string
           enum:

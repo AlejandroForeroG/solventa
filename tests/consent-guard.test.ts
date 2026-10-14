@@ -36,7 +36,7 @@ function rig(identity?: IdentityConsentRpc) {
   const rpc: IdentityConsentRpc = identity ?? { verifyConsentV1: async request => { rpcCalls.push(request); return consents.verify(request as ConsentCheck); } };
   const provider = new CountingProvider();
   const snapshots = new CountingSnapshots();
-  const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50), provider, snapshots });
+  const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50, time.now), provider, snapshots });
   const ask = (subjectToken = ANA.subjectToken, scope: SignalScope = 'income_obligations_12m') => read.execute({ subjectToken, scope, traceId: TRACE });
   const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 2, locale: 'es-CO' }, traceId: TRACE });
   return { store, time, consents, provider, snapshots, rpcCalls, ask, grant };
@@ -61,6 +61,38 @@ test('without a consent neither the provider nor a stored copy is reached', asyn
   const r = rig();
   assert.deepEqual(await r.ask(), { status: 'denied', reason: 'consent_missing' });
   untouched(r);
+});
+
+test('an allowed RPC reply must still be unexpired when Acquisition receives it', async () => {
+  const expiresAt = '2026-10-08T15:00:00Z';
+  for (const receivedAt of ['2026-10-08T14:59:59.999Z', expiresAt, '2026-10-08T15:00:00.001Z']) {
+    let current = new Date('2026-10-08T14:59:59Z');
+    let checks = 0;
+    const r = rig();
+    const guard = new IdentityConsentGuard({ verifyConsentV1: async () => {
+      checks++;
+      current = new Date(receivedAt);
+      return { allowed: true, consent: { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt } };
+    } }, 50, () => current);
+    const read = new ReadSignal({ guard, provider: r.provider, snapshots: r.snapshots });
+    const result = await read.execute({ subjectToken: ANA.subjectToken, scope: 'income_obligations_12m', traceId: TRACE });
+    assert.equal(checks, 1, 'checking response freshness adds no remote call');
+    if (Date.parse(receivedAt) < Date.parse(expiresAt)) {
+      assert.equal(result.status, 'available');
+      assert.equal(r.provider.calls, 1);
+    } else {
+      assert.deepEqual(result, { status: 'denied', reason: 'unavailable' });
+      untouched(r);
+    }
+  }
+});
+
+test('a granted RPC reply with an invalid text version never reaches a source or copy', async () => {
+  for (const textVersion of [0, -1, 1.5]) {
+    const r = rig({ verifyConsentV1: async () => ({ allowed: true, consent: { consentId: 'CNS-2026-00001', textVersion, expiresAt: '2027-01-06T15:00:00Z' } }) });
+    assert.deepEqual(await r.ask(), { status: 'denied', reason: 'unavailable' });
+    untouched(r);
+  }
 });
 
 test('declining the authorization leaves the source untouched', async () => {

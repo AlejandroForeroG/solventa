@@ -1,19 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
-import { consentApi, type Consent, type ConsentApi } from './api';
+import { consentApi, reconcileConsent, type Consent, type ConsentApi } from './api';
 
 type Load = 'loading' | 'ready' | 'error';
 
-export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
+export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsentsChanged, onConsentUncertain }: {
   api?: Pick<ConsentApi, 'listConsents' | 'revokeConsent'>;
   onBack: () => void;
   onSessionLost?: () => void;
+  onConsentsChanged?: (items: Consent[]) => void;
+  onConsentUncertain?: (id: string) => void;
 }) {
   const intl = useIntl();
   const { shortDate } = useFormatters();
   const announce = useAnnounce();
+  const announcement = useRef({ intl, announce });
+  useLayoutEffect(() => { announcement.current = { intl, announce }; }, [intl, announce]);
+  const announceCurrent = useCallback((id: string, values?: Record<string, string>) => {
+    const current = announcement.current;
+    current.announce(current.intl.formatMessage({ id }, values));
+  }, []);
   const [load, setLoad] = useState<Load>('loading');
   const [items, setItems] = useState<Consent[]>([]);
   const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([undefined]);
@@ -24,21 +32,36 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const pending = useRef<AbortController | null>(null);
+  const operationPending = useRef(false);
+  const mutationEpoch = useRef(0);
+  const mounted = useRef(true);
   const after = pageCursors[pageCursors.length - 1];
 
   const fetchItems = useCallback(async () => {
     pending.current?.abort();
-    pending.current = new AbortController();
+    const controller = new AbortController();
+    const epoch = mutationEpoch.current;
+    pending.current = controller;
     try {
-      const outcome = await api.listConsents(pending.current.signal, after);
-      if (outcome.kind === 'ok') { setItems(outcome.value.items); setNextCursor(outcome.value.nextCursor); setLoad('ready'); }
+      const outcome = await api.listConsents(controller.signal, after);
+      if (controller.signal.aborted || epoch !== mutationEpoch.current) return;
+      if (outcome.kind === 'ok') {
+        setItems(current => outcome.value.items.map(item => reconcileConsent(current.find(observed => observed.consentId === item.consentId), item)));
+        setNextCursor(outcome.value.nextCursor); setLoad('ready');
+        setConfirming(current => current && outcome.value.items.some(item => item.consentId === current && item.status === 'active') ? current : null);
+        onConsentsChanged?.(outcome.value.items);
+      }
       else if (outcome.kind === 'unauthenticated') onSessionLost?.();
-      else { setLoad('error'); announce(intl.formatMessage({ id: 'live.privacyError' })); }
+      else { setLoad('error'); announceCurrent('live.privacyError'); }
     } catch { /* aborted: the user left the screen */ }
-  }, [api, announce, intl, onSessionLost, after]);
+  }, [api, announceCurrent, onSessionLost, onConsentsChanged, after]);
 
   const reload = useCallback(() => { setLoad('loading'); void fetchItems(); }, [fetchItems]);
-  useEffect(() => { void fetchItems(); return () => pending.current?.abort(); }, [fetchItems]);
+  useEffect(() => { if (!operationPending.current) void fetchItems(); }, [fetchItems, intl]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; pending.current?.abort(); };
+  }, []);
   useEffect(() => { heading.current?.focus(); announce(intl.formatMessage({ id: 'live.privacy' })); }, [announce, intl]);
   useEffect(() => { if (load === 'ready') heading.current?.focus(); }, [load]);
   useEffect(() => { if (confirming) confirmButton.current?.focus(); }, [confirming]);
@@ -48,19 +71,31 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
   }
 
   async function revoke(id: string) {
+    operationPending.current = true;
+    mutationEpoch.current++;
+    onConsentUncertain?.(id);
     setBusy(true); setFailed(null);
-    const outcome = await api.revokeConsent(id);
-    setBusy(false);
-    if (outcome.kind === 'ok') {
-      setItems(current => current.map(item => item.consentId === id ? outcome.value : item));
-      setConfirming(null);
-      announce(intl.formatMessage({ id: 'live.revoked' }, { id }));
-    } else if (outcome.kind === 'unauthenticated') {
-      onSessionLost?.();
-    } else if (outcome.kind === 'notFound' || outcome.kind === 'conflict') {
-      setConfirming(null); reload();
-    } else {
-      setFailed(id); announce(intl.formatMessage({ id: 'live.revokeError' }, { id }));
+    try {
+      const outcome = await api.revokeConsent(id);
+      if (!mounted.current) return;
+      // Reads started before the write finished cannot confirm its outcome.
+      mutationEpoch.current++;
+      if (outcome.kind === 'ok') {
+        setItems(current => current.map(item => item.consentId === id ? outcome.value : item));
+        onConsentsChanged?.([outcome.value]);
+        setConfirming(null);
+        announceCurrent('live.revoked', { id });
+      } else if (outcome.kind === 'unauthenticated') {
+        onSessionLost?.();
+      } else {
+        if (outcome.kind === 'notFound' || outcome.kind === 'conflict') setConfirming(null);
+        else { setFailed(id); announceCurrent('live.revokeError', { id }); }
+        // The write may have committed before its response was lost.
+        await fetchItems();
+      }
+    } finally {
+      operationPending.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -70,7 +105,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
     {load === 'loading' && <p aria-busy="true">{intl.formatMessage({ id: 'privacy.loading' })}</p>}
     {load === 'error' && <div>
       <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{intl.formatMessage({ id: 'privacy.error' })}</p></div>
-      <button type="button" className="btn btn-secondary" onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
+      <button type="button" className="btn btn-secondary" disabled={busy} onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
     </div>}
     {load === 'ready' && items.length === 0 && <p className="note">{intl.formatMessage({ id: 'privacy.empty' })}</p>}
     {load === 'ready' && items.length > 0 && <ul className="consents">
@@ -93,7 +128,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
             <p className="mono seal-line">{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
           </div>
           {item.status === 'active' && confirming !== item.consentId &&
-            <button type="button" className="btn btn-danger" aria-label={intl.formatMessage({ id: 'privacy.revokeLabel' }, { id: item.consentId })} onClick={() => { setConfirming(item.consentId); setFailed(null); }}>
+            <button type="button" className="btn btn-danger" disabled={busy} aria-label={intl.formatMessage({ id: 'privacy.revokeLabel' }, { id: item.consentId })} onClick={() => { setConfirming(item.consentId); setFailed(null); }}>
               {intl.formatMessage({ id: 'privacy.revoke' })}
             </button>}
           {confirming === item.consentId && <div className="confirm" role="group" aria-label={intl.formatMessage({ id: 'privacy.confirmTitle' }, { id: item.consentId })}>
@@ -113,6 +148,6 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost }: {
       {nextCursor && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage([...pageCursors, nextCursor])}>{intl.formatMessage({ id: 'privacy.next' })}</button>}
     </div>}
     <p className="note privacy-foot">{intl.formatMessage({ id: 'privacy.foot' })}</p>
-    <div className="actions"><button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'privacy.back' })}</button></div>
+    <div className="actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={onBack}>{intl.formatMessage({ id: 'privacy.back' })}</button></div>
   </section>;
 }

@@ -78,16 +78,23 @@ describe('SPA quote request', () => {
         body: {
           quoteId: MatchersV3.regex('^COT-\\d{4}-\\d{5}$', 'COT-2026-00001'),
           premiumMonthly: MatchersV3.integer(86400),
+          currency: MatchersV3.equal('COP'),
           sumInsured: MatchersV3.integer(320000000),
           termMonths: MatchersV3.integer(180),
           validUntil: MatchersV3.iso8601DateTimeWithMillis('2026-10-21T15:00:00.000Z'),
+          basis: MatchersV3.equal('minimum_data'),
+          ruleVersion: MatchersV3.regex('^.+$', 'provisional-1'),
           traceId,
         },
       });
     await pact.executeTest(async server => {
       const outcome = await submitQuote(server.url);
       assert.equal(outcome.kind, 'quote');
-      if (outcome.kind === 'quote') assert.match(outcome.quote.quoteId, /^COT-\d{4}-\d{5}$/);
+      if (outcome.kind === 'quote') assert.deepEqual(outcome.quote, {
+        quoteId: 'COT-2026-00001', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000,
+        termMonths: 180, validUntil: '2026-10-21T15:00:00.000Z', basis: 'minimum_data',
+        ruleVersion: 'provisional-1', traceId: '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47'
+      });
     });
   });
 
