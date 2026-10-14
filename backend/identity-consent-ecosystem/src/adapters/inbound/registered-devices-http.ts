@@ -6,7 +6,7 @@ export function mountRegisteredDevices(app: Hono<{ Bindings: IdentityEnv }>, mob
   app.all('/api/v1/mobile/devices/:installationId', async c => {
     const supplied = c.req.header('X-Trace-Id') ?? '';
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const traceId = uuid.test(supplied) ? supplied : crypto.randomUUID();
+    const traceId = uuid.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
     c.header('X-Trace-Id', traceId);
     c.header('Cache-Control', 'no-store');
     c.header('X-Content-Type-Options', 'nosniff');

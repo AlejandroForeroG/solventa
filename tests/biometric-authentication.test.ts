@@ -68,3 +68,25 @@ test('registration keeps policy denial reasons private and returns unavailable w
   assert.equal((await unavailable.json()).error, 'access_unavailable');
   assert.equal(store.snapshot.bindings.length, 0);
 });
+
+test('device HTTP accepts UUID case variants and returns canonical installation and request traces', async () => {
+  const upper = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { createdAt: 0, expiresAt: 120_000, revoked: false }, bindings: [] });
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
+    devices: new RegisteredDevices(store), mobile: { configuration: config,
+      provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true }), revoke: async () => {} },
+      sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
+  let id: string | undefined;
+  for (const [method, installation] of [['POST', upper], ['POST', upper.toLowerCase()], ['GET', upper], ['DELETE', upper.toLowerCase()]]) {
+    const response = await app.request(`https://synthetic.example/api/v1/mobile/devices/${installation}`, { method, headers: { Authorization: 'Bearer synthetic.jwt.token', 'X-Trace-Id': upper } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    id ??= body.device.id;
+    assert.equal(body.device.id, id);
+    assert.equal(body.device.installationId, upper.toLowerCase());
+    assert.equal(body.traceId, upper.toLowerCase());
+    assert.equal(response.headers.get('x-trace-id'), body.traceId);
+  }
+  assert.equal(store.snapshot.bindings.length, 1);
+  assert.ok(store.plans.every(plan => plan.decision.effect !== 'deny'));
+});

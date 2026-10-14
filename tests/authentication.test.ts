@@ -53,7 +53,7 @@ test('authorization uses SDK PKCE and token cookies fail validation', async () =
 
 test('web logout forwards its request correlation and stops provider logout after a local failure', async () => {
   const identity = { providerSubject: 'user_shared', sessionReference: 'session_shared', emailVerified: true };
-  for (const [trace, failLocal] of [['00000000-0000-4000-8000-000000000007', false], ['invalid', false], ['00000000-0000-4000-8000-000000000007', true]] as const) {
+  for (const [trace, failLocal] of [['00000000-0000-4000-8000-000000000007', false], ['ABCDEF12-3456-4789-8ABC-DEF012345678', false], ['invalid', false], ['00000000-0000-4000-8000-000000000007', true]] as const) {
     const calls: string[] = [];
     let localTrace: string | undefined;
     const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
@@ -66,7 +66,7 @@ test('web logout forwards its request correlation and stops provider logout afte
     assert.equal(response.status, failLocal ? 503 : 200);
     assert.equal(localTrace, response.headers.get('x-trace-id'));
     assert.match(localTrace ?? '', /^[0-9a-f-]{36}$/i);
-    if (trace !== 'invalid') assert.equal(localTrace, trace);
+    if (trace !== 'invalid') assert.equal(localTrace, trace.toLowerCase());
     assert.deepEqual(calls, failLocal ? ['local'] : ['local', 'provider']);
     assert.deepEqual(await response.json(), failLocal ? { error: 'authentication_unavailable' } : { logoutUrl: 'https://synthetic.example/logout' });
     if (failLocal) assert.equal(response.headers.get('set-cookie'), null);
