@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import type { IdentitySessions, Principal, VerifiedIdentity } from '../../application/authentication';
+import { canonicalInstallationId, devicePolicy } from '../../domain/registered-device';
 
 type StoredClient = { id: string; subject_token: string; status: string };
 type RevocationSession = { id: string; client_id: string; subject_token: string; revoked_at: Date | null };
@@ -54,6 +55,7 @@ export class SqlIdentitySessions implements IdentitySessions {
     });
   }
   async revokeOrBlock(identity: VerifiedIdentity, correlation: string): Promise<void> {
+    correlation = correlation.toLowerCase();
     const operation = async (db: Client) => {
       const existing = (await db.query<RevocationSession & { provider_subject: string }>(`SELECT s.id, s.client_id, s.revoked_at, c.subject_token, e.provider_subject
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
@@ -109,9 +111,9 @@ export class SqlIdentitySessions implements IdentitySessions {
         [crypto.randomUUID(), device.id, JSON.stringify({ deviceId: device.id, action: 'revoked', sessionBound: true,
           capture: {
             schemaVersion: 1, contractVersion: 'v1', correlationId: correlation,
-            inputs: { action: 'revoke', installationId: device.device_reference.split(':')[2], sessionBound: true },
+            inputs: { action: 'revoke', installationId: canonicalInstallationId(device.device_reference.split(':')[2]), sessionBound: true },
             sources: [{ source: 'verified-session', capturedAt: new Date().toISOString(), quality: 'verified' }],
-            consent: { status: 'not_required' }, rule: { id: 'session-bound-installation', version: '1' }, outcome: 'revoke',
+            consent: { status: 'not_required' }, rule: { ...devicePolicy }, outcome: 'revoke',
           },
         }), correlation]);
       }
@@ -147,6 +149,7 @@ export class SqlIdentitySessions implements IdentitySessions {
     }
   }
   async revoke(identity: VerifiedIdentity, correlation = crypto.randomUUID()): Promise<void> {
+    correlation = correlation.toLowerCase();
     await this.transaction(async db => {
       const row = (await db.query<RevocationSession>(`SELECT s.id,s.client_id,s.revoked_at,c.subject_token
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id

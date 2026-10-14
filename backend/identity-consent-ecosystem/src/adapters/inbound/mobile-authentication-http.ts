@@ -14,7 +14,7 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
   for (const path of ['/api/v1/mobile/config', '/api/v1/mobile/session', '/api/v1/access/mobile']) {
     app.all(path, async c => {
       const supplied = c.req.header('X-Trace-Id') ?? '';
-      const traceId = uuid.test(supplied) ? supplied : crypto.randomUUID();
+      const traceId = uuid.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       c.header('X-Trace-Id', traceId);
       c.header('Cache-Control', 'no-store');
       c.header('X-Content-Type-Options', 'nosniff');
