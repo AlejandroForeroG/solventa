@@ -55,7 +55,7 @@ npm run test:quotes:sql   # real local SQL for both actors; requires npm run inf
 
 The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in session cookie or a partner token.
 
-**Limits.** Identity accepts a real M2M partner token in dev and staging, but the quote journey with that token and the web journey after a real login have not been demonstrated yet. Each quote adds one Identity call to the critical path, so the earlier load measurements, taken before that call existed, must be repeated. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
+**Limits.** Authenticated browser and M2M quote journeys require separate environment verification; local stand-ins, contracts and builds do not establish real provider access. For M2M, verify valid creation/replay, changed-payload conflicts and denied revoked or out-of-scope credentials, checking that rejected requests create no quote, audit or outbox record. Use dedicated synthetic credentials and revoke them after verification; never alter another operator's integration credential. Each quote adds one Identity call to the critical path, so performance must be measured through the complete authenticated path. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
 
 ## Documents
 
