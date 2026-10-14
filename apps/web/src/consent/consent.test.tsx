@@ -356,6 +356,41 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
 });
 
 describe('privacy dashboard states', () => {
+  it.each(['success', 'unavailable'])('announces a pending revocation in the current language after %s', async outcome => {
+    let finishWrite: (value: Outcome<Consent>) => void = () => {};
+    let finishRead: (value: Outcome<ConsentPage>) => void = () => {};
+    const api = {
+      revokeConsent: vi.fn<ConsentApi['revokeConsent']>().mockImplementationOnce(() => new Promise(resolve => { finishWrite = resolve; })),
+      listConsents: vi.fn<ConsentApi['listConsents']>().mockResolvedValueOnce(page([active])).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }))
+    };
+    function Switch() {
+      const { locale, setLocale } = useLocale();
+      return <button type="button" onClick={() => setLocale(locale === 'es-CO' ? 'en-US' : 'es-CO')}>switch-language</button>;
+    }
+    const user = userEvent.setup();
+    render(wrap('es-CO', <><Switch /><PrivacyPanel api={api} onBack={vi.fn()} /></>));
+    await user.click(await screen.findByRole('button', { name: 'Revocar la autorización CNS-2026-00003' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, revocar' }));
+    await user.click(screen.getByRole('button', { name: 'switch-language' }));
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    expect(api.listConsents).toHaveBeenCalledOnce();
+    await act(async () => { finishWrite(outcome === 'success' ? ok({ ...active, status: 'revoked', revokedAt: '2026-10-14T15:00:00Z' }) : { kind: 'unavailable' }); });
+    if (outcome === 'success') {
+      expect(live()).toHaveTextContent('Authorization CNS-2026-00003 revoked. No more data will be queried with it.');
+      expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
+      expect(api.listConsents).toHaveBeenCalledOnce();
+    } else {
+      expect(live()).toHaveTextContent('We could not confirm the revocation of authorization CNS-2026-00003.');
+      expect(api.listConsents).toHaveBeenCalledTimes(2);
+      await user.click(screen.getByRole('button', { name: 'switch-language' }));
+      expect(screen.getByRole('button', { name: 'Volver' })).toBeDisabled();
+      expect(api.listConsents).toHaveBeenCalledTimes(2);
+      await act(async () => { finishRead({ kind: 'unavailable' }); });
+      expect(live()).toHaveTextContent('No se pudieron cargar tus autorizaciones.');
+      expect(screen.getByRole('button', { name: 'Volver' })).toBeEnabled();
+    }
+  });
+
   it('does not start reconciliation or publish a late write result after leaving the panel', async () => {
     let finish: (value: Outcome<Consent>) => void = () => {};
     const onConsentsChanged = vi.fn(); const onConsentUncertain = vi.fn();
