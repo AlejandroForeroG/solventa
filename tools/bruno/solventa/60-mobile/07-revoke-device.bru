@@ -17,7 +17,7 @@ tests {
     expect(res.getHeader("cache-control")).to.equal("no-store");
     const body = res.getBody();
     expect(body.traceId).to.equal(res.getHeader("x-trace-id"));
-    expect(body.device.installationId).to.equal(bru.getEnvVar("mobileInstallationId"));
+    expect(body.device.installationId).to.equal(bru.getEnvVar("mobileInstallationId").toLowerCase());
     expect(body.device.status).to.equal("revoked");
   });
 }

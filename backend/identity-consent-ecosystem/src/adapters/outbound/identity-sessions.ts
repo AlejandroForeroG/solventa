@@ -54,6 +54,7 @@ export class SqlIdentitySessions implements IdentitySessions {
     });
   }
   async revokeOrBlock(identity: VerifiedIdentity, correlation: string): Promise<void> {
+    correlation = correlation.toLowerCase();
     const operation = async (db: Client) => {
       const existing = (await db.query<RevocationSession & { provider_subject: string }>(`SELECT s.id, s.client_id, s.revoked_at, c.subject_token, e.provider_subject
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
@@ -147,6 +148,7 @@ export class SqlIdentitySessions implements IdentitySessions {
     }
   }
   async revoke(identity: VerifiedIdentity, correlation = crypto.randomUUID()): Promise<void> {
+    correlation = correlation.toLowerCase();
     await this.transaction(async db => {
       const row = (await db.query<RevocationSession>(`SELECT s.id,s.client_id,s.revoked_at,c.subject_token
         FROM identity.authentication_sessions s JOIN identity.clients c ON c.id=s.client_id
