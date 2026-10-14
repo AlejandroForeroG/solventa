@@ -175,6 +175,7 @@ try {
   assert.equal(sharedRevocation.length,1);
   assert.equal(sharedRevocation[0].correlation_id,sharedTrace);
   assert.equal(sharedRevocation[0].capture.correlationId,sharedTrace);
+  assert.equal(sharedRevocation[0].capture.rule.version,'2');
   await new MobileSessions(repo).revoke(sharedIdentity,randomUUID());
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.revoked'",[sharedBinding.id])).rows[0].count,1);
   for (const repair of [repo.revoke.bind(repo),repo.revokeOrBlock.bind(repo)]) {
@@ -200,7 +201,44 @@ try {
   assert.ok(await devices.execute('find',rollbackWebInput));
   assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.audit_events')).rows[0].count,rollbackCounts.audit);
   assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.outbox_events')).rows[0].count,rollbackCounts.outbox);
-  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback']}));
+  const caseIdentity = {providerSubject:'case_'+randomUUID(),sessionReference:'case_'+randomUUID(),emailVerified:true};
+  const casePrincipal = await repo.register(caseIdentity); assert.ok(casePrincipal);
+  const upperInstallation = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const caseInput = {identity:caseIdentity,installationId:upperInstallation,correlationId:randomUUID()};
+  const caseBinding = await devices.execute('register',caseInput); assert.ok(caseBinding);
+  assert.equal(caseBinding.installationId,upperInstallation.toLowerCase());
+  assert.deepEqual(await devices.execute('register',{...caseInput,installationId:upperInstallation.toLowerCase()}),caseBinding);
+  assert.deepEqual(await devices.execute('find',caseInput),caseBinding);
+  const caseReference = (await db.query('SELECT device_reference FROM identity.registered_devices WHERE id=$1',[caseBinding.id])).rows[0].device_reference;
+  assert.equal(caseReference,`mobile-v1:${caseIdentity.sessionReference}:${upperInstallation.toLowerCase()}`);
+  assert.equal((await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].capture.rule.version,'2');
+  assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.registered'",[caseBinding.id])).rows[0].count,1);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].count,1);
+  assert.equal((await devices.execute('revoke',{...caseInput,installationId:upperInstallation.toLowerCase()}))?.status,'revoked');
+  const legacyCaseIdentity = {...caseIdentity,sessionReference:'legacy_case_'+randomUUID()};
+  await repo.register(legacyCaseIdentity);
+  const legacyCaseId = randomUUID();
+  await db.query('INSERT INTO identity.registered_devices (id,client_id,device_reference) VALUES ($1,$2,$3)',[legacyCaseId,casePrincipal.clientId,`mobile-v1:${legacyCaseIdentity.sessionReference}:${upperInstallation}`]);
+  const legacyCaseInput = {identity:legacyCaseIdentity,installationId:upperInstallation.toLowerCase(),correlationId:randomUUID()};
+  assert.deepEqual(await devices.execute('register',legacyCaseInput),{id:legacyCaseId,installationId:upperInstallation.toLowerCase(),status:'active'});
+  assert.equal((await devices.execute('find',legacyCaseInput))?.id,legacyCaseId);
+  assert.equal((await devices.execute('revoke',{...legacyCaseInput,installationId:upperInstallation}))?.id,legacyCaseId);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE correlation_id=$1 AND event_type='identity.device_registration_denied'",[legacyCaseInput.correlationId])).rows[0].count,0);
+  for (const logout of [repo.revoke.bind(repo),repo.revokeOrBlock.bind(repo)]) {
+    const legacyLogoutIdentity = {...caseIdentity,sessionReference:'legacy_logout_'+randomUUID()};
+    await repo.register(legacyLogoutIdentity);
+    const legacyLogoutId = randomUUID();
+    const legacyReference = `mobile-v1:${legacyLogoutIdentity.sessionReference}:${upperInstallation}`;
+    await db.query('INSERT INTO identity.registered_devices (id,client_id,device_reference) VALUES ($1,$2,$3)',[legacyLogoutId,casePrincipal.clientId,legacyReference]);
+    const upperTrace = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+    await logout(legacyLogoutIdentity,upperTrace);
+    const logoutCapture = (await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_revoked'",[legacyLogoutId])).rows[0].capture;
+    assert.equal(logoutCapture.rule.version,'2');
+    assert.equal(logoutCapture.inputs.installationId,upperInstallation.toLowerCase());
+    assert.equal(logoutCapture.correlationId,upperTrace.toLowerCase());
+    assert.equal((await db.query('SELECT device_reference FROM identity.registered_devices WHERE id=$1',[legacyLogoutId])).rows[0].device_reference,legacyReference);
+  }
+  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback','device_uuid_case','device_legacy_uuid_case','device_legacy_logout_uuid_case']}));
 } finally {
   await db?.end();
   if(created)await admin.query(`DROP DATABASE ${name} CASCADE`);

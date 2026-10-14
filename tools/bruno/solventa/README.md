@@ -53,6 +53,8 @@ The quote requests perform persistent writes. Never run the quote folder as part
 
 ## Native connection
 
+Installation UUIDs are case-insensitive. The device responses use canonical lowercase; the included assertions normalize the selected environment value accordingly. A case-only retry must return the same device ID, including for bindings stored by an older deployment with uppercase UUID text.
+
 Follow the [mobile integration guide](../../../docs/channels/mobile/README.md#connecting-native-login) for Expo PKCE and secure storage and the [device contract](../../../packages/contracts/openapi/v1/mobile-authentication.yaml). Disable Bruno's cookie jar for all `60-mobile` requests. Read config, then set the local secret `mobileAccessToken` from a synthetic native test account in the same environment. These requests mutate session/device records and revoke that account's provider session; use them separately from quote flows, never as an unattended full-collection run. Do not export tokens/headers/bodies in reports. Backend requests do not demonstrate a device browser callback or biometric flow.
 
 1. Run `01-config` (200). It retains the original closed configuration response; it does not advertise device capability. Before device checks, verify that the selected environment's deployed OpenAPI includes the device routes (contract 1.2.0) and its deployment succeeded. Older deployments without these routes cannot exercise this flow.

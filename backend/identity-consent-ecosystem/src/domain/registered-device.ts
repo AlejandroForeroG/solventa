@@ -13,13 +13,16 @@ export type DeviceDecision =
   | { effect: 'deny'; reason: 'session_unavailable' | 'binding_unavailable' | 'binding_revoked' | 'installation_replacement' | 'registration_window_expired'; record: boolean };
 
 export const deviceRegistrationWindowMs = 10 * 60 * 1000;
+export const devicePolicy = { id: 'session-bound-installation', version: '2' } as const;
+export function canonicalInstallationId(value: string): string { return value.toLowerCase(); }
 
 export function decideDeviceOperation(action: DeviceAction, installationId: string, snapshot: DeviceSnapshot): DeviceDecision {
+  installationId = canonicalInstallationId(installationId);
   const session = snapshot.session;
   if (!session || (action !== 'revoke' && (session.revoked || session.expiresAt <= snapshot.observedAt))) {
     return { effect: 'deny', reason: 'session_unavailable', record: false };
   }
-  const binding = snapshot.bindings.find(value => value.installationId === installationId);
+  const binding = snapshot.bindings.find(value => canonicalInstallationId(value.installationId) === installationId);
   if (action === 'register') {
     if (binding?.revoked) return { effect: 'deny', reason: 'binding_revoked', record: true };
     if (!binding) {
