@@ -96,6 +96,7 @@ test('invalid IDs and unverified or incomplete identities never reach the device
   const app = new RegisteredDevices(store);
   for (const supplied of [
     { ...input, installationId: 'invalid' },
+    { ...input, installationId: input.installationId + '\n' },
     { ...input, identity: { ...input.identity, emailVerified: false } },
     { ...input, identity: { ...input.identity, providerSubject: '' } },
     { ...input, identity: { ...input.identity, sessionReference: '' } },

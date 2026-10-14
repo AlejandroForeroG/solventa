@@ -42,7 +42,7 @@ test('device routes follow OpenAPI, reject cookies/invalid IDs and scope every c
   }
   assert.deepEqual(calls, ['active', 'active', 'revoked', 'providerRevoke']);
   calls.length = 0;
-  for (const [id, headers, status] of [[installationId, {}, 401], ['invalid', {}, 400], [installationId, { Cookie: 'synthetic' }, 400]] as const) {
+  for (const [id, headers, status] of [[installationId, {}, 401], ['invalid', {}, 400], [installationId + '%0A', {}, 400], [installationId, { Cookie: 'synthetic' }, 400]] as const) {
     assert.equal((await app.request(`https://synthetic.example/api/v1/mobile/devices/${id}`, { headers })).status, status);
   }
   assert.deepEqual(calls, []);

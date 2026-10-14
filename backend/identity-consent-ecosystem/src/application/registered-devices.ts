@@ -26,7 +26,7 @@ export class RegisteredDevices {
   constructor(private readonly store: DeviceStore) {}
   async execute(action: DeviceAction, input: DeviceOperation) {
     if (!input.identity.emailVerified || !input.identity.providerSubject || !input.identity.sessionReference
-      || !uuid.test(input.installationId)) return null;
+      || input.installationId.length !== 36 || !uuid.test(input.installationId)) return null;
     const operation = { ...input, installationId: canonicalInstallationId(input.installationId), correlationId: input.correlationId.toLowerCase() };
     return this.store.execute(operation, snapshot => {
       const decision = decideDeviceOperation(action, operation.installationId, snapshot);
