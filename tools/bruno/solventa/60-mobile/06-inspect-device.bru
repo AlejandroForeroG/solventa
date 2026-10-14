@@ -1,0 +1,23 @@
+meta {
+  name: Inspect native installation
+  type: http
+  seq: 6
+}
+get {
+  url: {{baseUrl}}/api/v1/mobile/devices/{{mobileInstallationId}}
+  body: none
+  auth: none
+}
+headers {
+  Authorization: Bearer {{mobileAccessToken}}
+}
+tests {
+  test("Active session-owned installation", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getHeader("cache-control")).to.equal("no-store");
+    const body = res.getBody();
+    expect(body.traceId).to.equal(res.getHeader("x-trace-id"));
+    expect(body.device.installationId).to.equal(bru.getEnvVar("mobileInstallationId"));
+    expect(body.device.status).to.equal("active");
+  });
+}

@@ -53,7 +53,7 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
         if (!identity) return fail('unauthorized', 401);
         if (c.req.method === 'DELETE') {
           // Local revocation is durable even if provider revocation needs a retry.
-          await dependencies.sessions.revoke(identity);
+          await dependencies.sessions.revoke(identity, traceId);
           await dependencies.provider.revoke(identity);
           return c.json({ status: 'signed_out', traceId });
         }

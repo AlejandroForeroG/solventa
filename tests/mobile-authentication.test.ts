@@ -77,12 +77,13 @@ test('mobile session registration requires a verified identity and permission lo
 
 test('native logout delegates one atomic blocking operation without active registration', async () => {
   const calls: string[] = [];
+  const correlationId = crypto.randomUUID();
   const sessions = new MobileSessions({
     register: async () => { throw new Error('logout_must_not_register'); },
     find: async () => null,
-    revokeOrBlock: async verified => { assert.deepEqual(verified, identity); calls.push('block'); },
+    revokeOrBlock: async (verified, correlation) => { assert.deepEqual(verified, identity); assert.equal(correlation, correlationId); calls.push('block'); },
   });
-  await sessions.revoke(identity);
+  await sessions.revoke(identity, correlationId);
   assert.deepEqual(calls, ['block']);
 });
 test('unregistered or revoked local mobile sessions cannot authorize; database outages fail closed', async () => {
