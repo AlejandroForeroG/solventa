@@ -30,7 +30,7 @@ test('deployment pagination terminates without a match and rejects invalid respo
   }
 });
 
-function fixture(t) {
+function fixture(t, includeUnrelatedDevelopment = true) {
   const directory = mkdtempSync(join(tmpdir(), 'solventa-promotion-'));
   t.after(() => {
     assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
@@ -52,7 +52,7 @@ function fixture(t) {
   const start = commit('baseline', 'stable');
   git('branch', 'prod', start);
   git('switch', '-c', 'dev');
-  commit('other-feature', 'Only dev should contain this feature');
+  if (includeUnrelatedDevelopment) commit('other-feature', 'Only dev should contain this feature');
   git('switch', '-c', 'feat/quote', 'staging');
   const sourceSha = commit('quote', 'first version');
   git('switch', '-c', 'feat/quote-dev');
@@ -67,7 +67,7 @@ function fixture(t) {
     return git('rev-parse', 'HEAD');
   };
   const mergeSha = candidate();
-  const checks = gitChecks(directory, start);
+  const checks = gitChecks(directory, start, 'dev');
   const promotion = { base: 'staging', head: 'feat/quote', sourceSha, mergeSha, trialSha, deployedShas: [deployed], ...checks };
   return { git, commit, candidate, checks, promotion, deployed };
 }
@@ -77,6 +77,35 @@ test('a feature can reach staging after testing in dev without including unrelat
   assert.equal(f.checks.sameTree(f.promotion.sourceSha, f.deployed), false);
   assert.equal(f.checks.sameTree(f.promotion.sourceSha, f.promotion.mergeSha), true);
   verifyPromotion(f.promotion);
+  verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' });
+});
+
+test('a deployed integration branch cannot promote unrelated dev history under any name', t => {
+  const f = fixture(t);
+  f.git('switch', '-c', 'candidate-integration', 'staging');
+  f.git('merge', '--no-ff', '-m', 'test(ci): attempt integration promotion', f.promotion.trialSha);
+  const mergeSha = f.git('rev-parse', 'HEAD');
+  for (const head of ['feat/quote-validation', 'feat/quote-dev']) {
+    assert.throws(() => verifyPromotion({ ...f.promotion, head, sourceSha: f.promotion.trialSha, mergeSha }), /unreleased dev history/);
+  }
+});
+
+test('a candidate merged directly into dev can promote without a separate integration branch', t => {
+  const f = fixture(t, false);
+  assert.equal(f.promotion.sourceSha, f.promotion.trialSha);
+  verifyPromotion(f.promotion);
+});
+
+test('released dev ancestry with the staging tree does not reject a direct candidate', t => {
+  const f = fixture(t);
+  f.git('switch', '-c', 'released-dev', 'staging');
+  f.git('commit', '--allow-empty', '-m', 'test(ci): retain released merge history');
+  const released = f.git('rev-parse', 'HEAD');
+  f.git('switch', 'dev');
+  f.git('merge', '--no-ff', '-m', 'test(ci): synchronize released history', 'released-dev');
+  f.git('switch', 'feat/quote');
+  f.git('merge', '--no-ff', '-m', 'test(ci): retain released ancestry', released);
+  assert.equal(f.checks.isolatedCandidate(f.git('rev-parse', 'HEAD')), true);
 });
 
 test('a new base revision requires its own successful dev deployment', t => {
@@ -174,6 +203,5 @@ test('a release requires a successful deployment of the exact staging candidate'
 test('missing merge proof and invalid revisions fail closed', t => {
   const f = fixture(t);
   assert.throws(() => verifyPromotion({ ...f.promotion, deploymentTrial: () => undefined }), /no successful dev deployment/);
-  assert.throws(() => verifyPromotion({ ...f.promotion, head: 'feat/quote-dev' }), /base branch/);
   assert.throws(() => verifyPromotion({ ...f.promotion, sourceSha: 'invalid' }), /Invalid promotion revision/);
 });

@@ -26,4 +26,4 @@ Link available Codex review and explain how findings were resolved. Confirm pass
 
 ## Candidate
 
-For staging: link the base branch, its `-dev` branch and the successful dev deployment containing that revision. For prod: link the successful deployment of the staging candidate. Declare migrations or configuration required before integration.
+For staging: link the candidate branch, any separate integration branch and the successful dev deployment containing that tested revision. Branch names do not require an environment suffix. For prod: link the successful deployment of the staging candidate. Declare migrations or configuration required before integration.
