@@ -1,5 +1,5 @@
 import type { VerifiedIdentity } from './authentication';
-import { decideDeviceOperation, deviceRegistrationWindowMs } from '../domain/registered-device';
+import { canonicalInstallationId, decideDeviceOperation, deviceRegistrationWindowMs } from '../domain/registered-device';
 import type { DeviceAction, DeviceDecision, DeviceSnapshot, RegisteredDevice } from '../domain/registered-device';
 
 export type { RegisteredDevice } from '../domain/registered-device';
@@ -26,13 +26,14 @@ export class RegisteredDevices {
   constructor(private readonly store: DeviceStore) {}
   async execute(action: DeviceAction, input: DeviceOperation) {
     if (!input.identity.emailVerified || !input.identity.providerSubject || !input.identity.sessionReference
-      || !uuid.test(input.installationId)) return null;
-    return this.store.execute(input, snapshot => {
-      const decision = decideDeviceOperation(action, input.installationId, snapshot);
+      || input.installationId.length !== 36 || !uuid.test(input.installationId)) return null;
+    const operation = { ...input, installationId: canonicalInstallationId(input.installationId), correlationId: input.correlationId.toLowerCase() };
+    return this.store.execute(operation, snapshot => {
+      const decision = decideDeviceOperation(action, operation.installationId, snapshot);
       const evaluatedAt = new Date(snapshot.observedAt).toISOString();
       return { decision, capture: {
-        schemaVersion: 1, contractVersion: 'v1', correlationId: input.correlationId,
-        inputs: { action, installationId: input.installationId, sessionBound: true, evaluatedAt,
+        schemaVersion: 1, contractVersion: 'v1', correlationId: operation.correlationId,
+        inputs: { action, installationId: operation.installationId, sessionBound: true, evaluatedAt,
           registrationWindowMs: deviceRegistrationWindowMs, session: snapshot.session ? { ...snapshot.session } : null,
           bindings: snapshot.bindings.map(binding => ({ ...binding })) },
         sources: [{ source: 'identity-session-device-snapshot', capturedAt: evaluatedAt, quality: 'verified' }],

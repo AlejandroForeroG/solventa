@@ -96,6 +96,7 @@ test('invalid IDs and unverified or incomplete identities never reach the device
   const app = new RegisteredDevices(store);
   for (const supplied of [
     { ...input, installationId: 'invalid' },
+    { ...input, installationId: input.installationId + '\n' },
     { ...input, identity: { ...input.identity, emailVerified: false } },
     { ...input, identity: { ...input.identity, providerSubject: '' } },
     { ...input, identity: { ...input.identity, sessionReference: '' } },
@@ -111,4 +112,35 @@ test('a required denial record failure propagates and preserves the existing bin
   await assert.rejects(app.execute('register', { ...input, installationId: otherInstallation }), /record_unavailable/);
   assert.equal(store.snapshot.bindings.length, 1);
   assert.equal(store.plans.length, 1);
+});
+
+test('UUID case variants register and replay one canonical binding without a replacement decision', async () => {
+  const upper = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const store = new InMemoryDeviceStore(snapshot());
+  const app = new RegisteredDevices(store);
+  const supplied = { ...input, installationId: upper, correlationId: upper };
+  const original = await app.execute('register', supplied);
+  assert.equal(original?.installationId, upper.toLowerCase());
+  assert.deepEqual(await app.execute('register', { ...supplied, installationId: upper.toLowerCase() }), original);
+  assert.equal(store.snapshot.bindings.length, 1);
+  assert.equal(store.snapshot.bindings[0].installationId, upper.toLowerCase());
+  assert.equal(store.plans.at(-1)?.decision.effect, 'none');
+  assert.equal(store.plans[0].capture.correlationId, upper.toLowerCase());
+  assert.ok(validateCapture(store.plans[0].capture), JSON.stringify(validateCapture.errors));
+});
+
+test('legacy uppercase binding references remain readable, replay-safe and revocable through lowercase UUIDs', async () => {
+  const upper = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const state = snapshot();
+  const id = '00000000-0000-4000-8000-000000000008';
+  state.bindings.push({ id, installationId: upper, revoked: false });
+  const store = new InMemoryDeviceStore(state);
+  const app = new RegisteredDevices(store);
+  const supplied = { ...input, installationId: upper.toLowerCase() };
+  assert.deepEqual(await app.execute('register', supplied), { id, installationId: upper.toLowerCase(), status: 'active' });
+  assert.equal((await app.execute('find', { ...supplied, installationId: upper }))?.installationId, upper.toLowerCase());
+  assert.equal((await app.execute('revoke', supplied))?.status, 'revoked');
+  assert.equal(store.snapshot.bindings.length, 1);
+  assert.equal(store.snapshot.bindings[0].revoked, true);
+  assert.ok(store.plans.every(plan => plan.decision.effect !== 'deny'));
 });

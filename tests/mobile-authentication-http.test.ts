@@ -96,6 +96,14 @@ test('logout persists the response correlation when the request trace is missing
     assert.notEqual(body.traceId, trace);
   }
 });
+test('native logout canonicalizes a supplied UUID trace before forwarding it to persistence', async () => {
+  const flow = setup({ registered: true });
+  const trace = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const response = await flow.request('/mobile/session', 'DELETE', { ...headers, 'X-Trace-Id': trace });
+  const body = await contract('/mobile/session', 'DELETE', response, 'Logout', 200);
+  assert.equal(body.traceId, trace.toLowerCase());
+  assert.deepEqual(flow.correlations, [trace.toLowerCase()]);
+});
 test('unverified user and provider outages return documented denials without registration', async () => {
   for (const [options, status] of [[{ verified: false }, 401], [{ unavailable: true }, 503]] as const) {
     const flow = setup(options);
