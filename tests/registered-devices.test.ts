@@ -11,7 +11,7 @@ const installationId = '00000000-0000-4000-8000-000000000003';
 const otherInstallation = '00000000-0000-4000-8000-000000000005';
 const input = { identity: { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true },
   installationId, correlationId: '00000000-0000-4000-8000-000000000006' };
-const snapshot = (): DeviceSnapshot => ({ observedAt: now, session: { createdAt: now - 60_000, expiresAt: now + 60_000, revoked: false }, bindings: [] });
+const snapshot = (): DeviceSnapshot => ({ observedAt: now, session: { clientActive: true, createdAt: now - 60_000, expiresAt: now + 60_000, revoked: false }, bindings: [] });
 const validateCapture = new Ajv().compile(JSON.parse(readFileSync('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
 
 for (const age of [599_999, 600_000, 600_001]) {
@@ -67,7 +67,7 @@ test('a revoked binding cannot reactivate even when its owned session is fresh a
 });
 
 test('missing, expired and revoked sessions fail closed without claiming a registration decision', async () => {
-  for (const session of [null, { createdAt: now - 60_000, expiresAt: now, revoked: false }, { createdAt: now - 60_000, expiresAt: now + 60_000, revoked: true }]) {
+  for (const session of [null, { clientActive: true, createdAt: now - 60_000, expiresAt: now, revoked: false }, { clientActive: true, createdAt: now - 60_000, expiresAt: now + 60_000, revoked: true }]) {
     const store = new InMemoryDeviceStore({ ...snapshot(), session });
     assert.equal(await new RegisteredDevices(store).execute('register', input), null);
     assert.deepEqual(store.plans[0].decision, { effect: 'deny', reason: 'session_unavailable', record: false });
@@ -126,7 +126,7 @@ test('UUID case variants register and replay one canonical binding without a rep
   assert.equal(store.snapshot.bindings[0].installationId, upper.toLowerCase());
   assert.equal(store.plans.at(-1)?.decision.effect, 'none');
   assert.equal(store.plans[0].capture.correlationId, upper.toLowerCase());
-  assert.equal(store.plans[0].capture.rule.version, '2');
+  assert.equal(store.plans[0].capture.rule.version, '3');
   assert.ok(validateCapture(store.plans[0].capture), JSON.stringify(validateCapture.errors));
 });
 
@@ -146,4 +146,19 @@ test('legacy uppercase binding references remain readable, replay-safe and revoc
   assert.equal(store.snapshot.bindings.length, 1);
   assert.equal(store.snapshot.bindings[0].revoked, true);
   assert.ok(store.plans.every(plan => plan.decision.effect !== 'deny'));
+});
+
+
+test('suspended owners cannot register or read but can revoke and replay cleanup', async () => {
+  const store = new InMemoryDeviceStore(snapshot());
+  const app = new RegisteredDevices(store);
+  const binding = await app.execute('register', input); assert.ok(binding);
+  assert.ok(store.snapshot.session); store.snapshot.session.clientActive = false;
+  for (const action of ['register', 'find'] as const) assert.equal(await app.execute(action, input), null);
+  assert.equal((await app.execute('revoke', input))?.id, binding.id);
+  assert.equal((await app.execute('revoke', input))?.status, 'revoked');
+  assert.equal(store.plans.at(-1)?.capture.inputs.session?.clientActive, false);
+  assert.equal(store.plans.at(-1)?.capture.rule.version, '3');
+  store.snapshot.session = null;
+  assert.equal(await app.execute('revoke', input), null);
 });

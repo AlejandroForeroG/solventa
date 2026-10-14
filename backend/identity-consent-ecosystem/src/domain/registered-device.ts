@@ -3,7 +3,7 @@ export type RegisteredDevice = { id: string; installationId: string; status: 'ac
 export type DeviceBinding = { id: string; installationId: string; revoked: boolean };
 export type DeviceSnapshot = {
   observedAt: number;
-  session: { createdAt: number; expiresAt: number; revoked: boolean } | null;
+  session: { clientActive: boolean; createdAt: number; expiresAt: number; revoked: boolean } | null;
   bindings: DeviceBinding[];
 };
 export type DeviceDecision =
@@ -13,13 +13,13 @@ export type DeviceDecision =
   | { effect: 'deny'; reason: 'session_unavailable' | 'binding_unavailable' | 'binding_revoked' | 'installation_replacement' | 'registration_window_expired'; record: boolean };
 
 export const deviceRegistrationWindowMs = 10 * 60 * 1000;
-export const devicePolicy = { id: 'session-bound-installation', version: '2' } as const;
+export const devicePolicy = { id: 'session-bound-installation', version: '3' } as const;
 export function canonicalInstallationId(value: string): string { return value.toLowerCase(); }
 
 export function decideDeviceOperation(action: DeviceAction, installationId: string, snapshot: DeviceSnapshot): DeviceDecision {
   installationId = canonicalInstallationId(installationId);
   const session = snapshot.session;
-  if (!session || (action !== 'revoke' && (session.revoked || session.expiresAt <= snapshot.observedAt))) {
+  if (!session || (action !== 'revoke' && (!session.clientActive || session.revoked || session.expiresAt <= snapshot.observedAt))) {
     return { effect: 'deny', reason: 'session_unavailable', record: false };
   }
   const binding = snapshot.bindings.find(value => canonicalInstallationId(value.installationId) === installationId);
