@@ -1,8 +1,8 @@
 # Gitflow and promotion through PRs
 
-Every base branch starts at `origin/staging`: `feat/<description>`, `fix/<description>`, `refactor/<description>` or `test/<description>`, lowercase with hyphens and English names. Create its partner with the same name plus `-dev`, for example `feat/quotes-dev`. Every branch allows at most 72 characters; reserve four for the suffix (base at most 68). Commits/PR titles: `feat|fix|refactor|test(module): description`, maximum 150 characters on the first line, in English. `npm ci` activates native hooks; CI revalidates PR source, target and title.
+Every base branch starts at `origin/staging`: `feat/<description>`, `fix/<description>`, `refactor/<description>` or `test/<description>`, lowercase with hyphens and English names. A work branch may open its PR directly to dev; no `-dev` suffix is required. When dev contains unrelated changes, preserve the candidate in a separate base branch and use another valid work branch for integration. The integration name is unrestricted within the normal branch format; `feat/quotes-validation` is one example. Every branch allows at most 72 characters. Commits/PR titles: `feat|fix|refactor|test(module): description`, maximum 150 characters on the first line after trimming surrounding whitespace, in English. Surrounding spaces do not reject an otherwise valid title; type, scope and description are still required. `npm ci` activates native hooks; CI revalidates PR source, target and title.
 
-The [complete Lucidchart diagram](https://lucid.app/lucidchart/1d00d2c4-f0fe-40a9-934b-d1cc4a2ea8e0/edit) shows the staging origin, base branch, integration partner, fixes returning to the base, dev and prod releases.
+The [complete Lucidchart diagram](https://lucid.app/lucidchart/1d00d2c4-f0fe-40a9-934b-d1cc4a2ea8e0/edit) illustrates the staging origin, base branch, optional integration branch, fixes returning to the base, dev and prod releases. Its `-dev` labels are naming examples, not a suffix requirement.
 
 ## 1. Creating and developing the base branch
 
@@ -15,54 +15,57 @@ Implement/test the feature, update existing module documentation and commit cohe
 
 ## 2. Validating through a dev integration branch
 
-Once changes are on the base:
+If dev has no unrelated changes and its merge preserves the candidate tree, open the candidate branch directly to dev. Otherwise, create a separate integration branch so that dev-only work cannot enter staging:
 
 ```sh
-git switch -c feat/quotes-dev feat/quotes
+git switch -c feat/quotes-validation feat/quotes
 git merge --no-ff -m "refactor(ci): integrate dev to test quotes" origin/dev
 git push -u origin feat/quotes
-git push -u origin feat/quotes-dev
+git push -u origin feat/quotes-validation
 ```
 
-Resolve integration conflicts in `feat/quotes-dev`. Open **`feat/quotes-dev` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
+Resolve integration conflicts in `feat/quotes-validation`. Open **`feat/quotes-validation` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
 
-If functionality is corrected on `-dev`, cherry-pick relevant commits back to the base; never copy merges or unrelated dev work:
+If functionality is corrected on the separate integration branch, cherry-pick relevant commits back to the base; never copy merges or unrelated dev work:
 
 ```sh
 git switch feat/quotes
 git cherry-pick <fix-sha>
 git push
-git switch feat/quotes-dev
+git switch feat/quotes-validation
 git merge --no-ff -m "fix(ci): synchronize the base branch correction" feat/quotes
 git push
 ```
 
-An integration-only resolution may remain on `-dev`; every fix needed by the feature must reach the base. Always synchronize the base back into `-dev`: cherry-pick creates another SHA and CI checks ancestry as well as content. Open another `-dev` → dev PR and wait for successful CI/Deploy for that revision. Never merge dev into the base.
+An integration-only resolution may remain on the separate integration branch; every fix needed by the feature must reach the base. Synchronize the base back into that integration branch: cherry-pick creates another SHA and CI checks ancestry as well as content. Open another integration-branch → dev PR and wait for successful CI/Deploy for that revision. Never merge dev into the base.
 
 ## 3. Promoting the ready base to staging
 
-Open **`feat/quotes` → `staging`** once behavior is validated. Link base-branch guides and the successful dev Deploy containing the tested `feat/quotes-dev` revision. Dev may contain other features: staging receives only this base.
+Open **`feat/quotes` → `staging`** once behavior is validated. Link candidate-branch guides and the successful dev Deploy containing the tested revision, whether it came from the candidate directly or a separate integration branch. Dev may contain other features: staging receives only this base.
 
 The gate verifies:
 
+- The candidate does not inherit unreleased dev history. CI examines dev's first-parent history outside the staging baseline and rejects a candidate containing any such revision whose tree differs from that baseline. Released ancestry with an identical staging tree is allowed. This rejects normal-merge integration history containing unrelated dev work, regardless of its name.
 - The exact base SHA is an ancestor of the immutable integration SHA recorded as the second parent of a successful normal dev deployment merge. A direct commit, squash or octopus merge is not valid integration proof.
 - Files changed by the candidate relative to the PR base SHA have identical content in the tested integration revision, including additions, deletions and renames. Other dev-only files can differ. An integration resolution that changes candidate files must be returned to the base and tested again.
 - The successful deployment preserves the integration revision's entire tree. A reverted/overwritten deployment cannot establish that validation.
 - The candidate staging merge tree matches the base tree.
 
-Proof is tied to immutable candidate, integration and deployment SHAs, not the current sibling branch tip. Later pushes or deletion of `-dev` cannot change what was deployed; a new base SHA invalidates the old proof and triggers PR checks again. Keep the paired branches for development and promotion even though Git history preserves completed deployment proof. The gate reports its selected deployment and tested integration SHAs.
+Proof is tied to immutable candidate, integration and deployment SHAs, not the current sibling branch tip. Later pushes or deletion of an integration branch cannot change what was deployed; a new base SHA invalidates the old proof and triggers PR checks again. Keep the candidate and any separate integration branch until promotion completes even though Git history preserves completed deployment proof. The gate reports its selected deployment and tested integration SHAs.
+
+These checks validate Git history and tested content, not the intended scope of arbitrary copied code. Squashing, cherry-picking or manually copying unrelated dev work can discard the ancestry used by the isolation check; the earlier suffix-based policy also did not detect that case. Do not squash dev into a candidate or copy unrelated dev content into it. Review candidate changes against the approved increment as well as checking CI. Normal merges preserve evidence but do not replace scope review.
 
 Deployment lookup processes pages of at most 100 runs, retains only successful SHAs and stops when it finds a valid candidate; it does not download all history into memory. Without a valid deployment, promotion remains blocked.
 
-If staging advances, update the base from `origin/staging` through a normal merge, resolve candidate compatibility there and synchronize into `-dev`. Repeat tests and dev PR/Deploy before promotion; do not approve an untested combined result. The gate alone does not establish business acceptance tests.
+If staging advances, update the base from `origin/staging` through a normal merge, resolve candidate compatibility there and synchronize any separate integration branch. Repeat tests and dev PR/Deploy before promotion; do not approve an untested combined result. The gate alone does not establish business acceptance tests.
 
-Keep both remote branches until promotion is complete. Use **normal merges** in these PRs, including `-dev` → dev: squash/rebase removes ancestry needed to establish deployment. Do not automatically delete `-dev` after its first PR. Do not use Update branch if it would bring dev into the base.
+Keep the candidate and any separate integration branch until promotion is complete. Use **normal merges** in these PRs, including work branch → dev: squash/rebase removes ancestry needed to establish deployment. Do not automatically delete a candidate or integration branch after its first dev PR. Do not use Update branch if it would bring dev into the base.
 
 ## 4. Publishing a staging release to prod
 
 Staging Deploy reruns CI, publishes staging and validates infrastructure. Test the candidate and open **`staging` → `prod`** for each release. Link the successful Deploy of the exact staging SHA, release guides and checks. CI requires that deployment and a merge preserving the source tree. Use a normal merge and wait for successful prod Deploy.
 
-If prod merge history needs to return to staging, use a maintenance base originating from staging and its `-dev` partner, following the same flow. Never push directly or copy all dev changes. `main` is a historical reference without deployment.
+If prod merge history needs to return to staging, use a maintenance base originating from staging and, when needed, a separate integration branch, following the same flow. Never push directly or copy all dev changes. `main` is a historical reference without deployment.
 
 ## Protections and PR documentation
 
