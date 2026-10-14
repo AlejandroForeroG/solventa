@@ -45,13 +45,15 @@ Open **`feat/quotes` → `staging`** once behavior is validated. Link candidate-
 
 The gate verifies:
 
-- The candidate does not inherit unreleased dev history. CI examines dev's first-parent history outside the staging baseline and rejects a candidate containing any such revision whose tree differs from that baseline. Released ancestry with an identical staging tree is allowed. This prevents a tested integration branch from promoting unrelated dev work, regardless of its name.
+- The candidate does not inherit unreleased dev history. CI examines dev's first-parent history outside the staging baseline and rejects a candidate containing any such revision whose tree differs from that baseline. Released ancestry with an identical staging tree is allowed. This rejects normal-merge integration history containing unrelated dev work, regardless of its name.
 - The exact base SHA is an ancestor of the immutable integration SHA recorded as the second parent of a successful normal dev deployment merge. A direct commit, squash or octopus merge is not valid integration proof.
 - Files changed by the candidate relative to the PR base SHA have identical content in the tested integration revision, including additions, deletions and renames. Other dev-only files can differ. An integration resolution that changes candidate files must be returned to the base and tested again.
 - The successful deployment preserves the integration revision's entire tree. A reverted/overwritten deployment cannot establish that validation.
 - The candidate staging merge tree matches the base tree.
 
 Proof is tied to immutable candidate, integration and deployment SHAs, not the current sibling branch tip. Later pushes or deletion of an integration branch cannot change what was deployed; a new base SHA invalidates the old proof and triggers PR checks again. Keep the candidate and any separate integration branch until promotion completes even though Git history preserves completed deployment proof. The gate reports its selected deployment and tested integration SHAs.
+
+These checks validate Git history and tested content, not the intended scope of arbitrary copied code. Squashing, cherry-picking or manually copying unrelated dev work can discard the ancestry used by the isolation check; the earlier suffix-based policy also did not detect that case. Do not squash dev into a candidate or copy unrelated dev content into it. Review candidate changes against the approved increment as well as checking CI. Normal merges preserve evidence but do not replace scope review.
 
 Deployment lookup processes pages of at most 100 runs, retains only successful SHAs and stops when it finds a valid candidate; it does not download all history into memory. Without a valid deployment, promotion remains blocked.
 
