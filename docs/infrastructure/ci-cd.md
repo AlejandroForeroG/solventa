@@ -45,6 +45,7 @@ Open **`feat/quotes` → `staging`** once behavior is validated. Link candidate-
 
 The gate verifies:
 
+- The candidate does not inherit unreleased dev history. CI examines dev's first-parent history outside the staging baseline and rejects a candidate containing any such revision whose tree differs from that baseline. Released ancestry with an identical staging tree is allowed. This prevents a tested integration branch from promoting unrelated dev work, regardless of its name.
 - The exact base SHA is an ancestor of the immutable integration SHA recorded as the second parent of a successful normal dev deployment merge. A direct commit, squash or octopus merge is not valid integration proof.
 - Files changed by the candidate relative to the PR base SHA have identical content in the tested integration revision, including additions, deletions and renames. Other dev-only files can differ. An integration resolution that changes candidate files must be returned to the base and tested again.
 - The successful deployment preserves the integration revision's entire tree. A reverted/overwritten deployment cannot establish that validation.
