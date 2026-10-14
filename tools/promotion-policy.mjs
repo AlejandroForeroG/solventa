@@ -25,7 +25,7 @@ export function findDeployedSha(fetchPage, accepts) {
   }
 }
 
-export function verifyPromotion({ base, head, sourceSha, mergeSha, deployedShas, sameTree, sameCandidate, isAncestor, deploymentTrial }) {
+export function verifyPromotion({ base, head, sourceSha, mergeSha, deployedShas, sameTree, sameCandidate, isAncestor, deploymentTrial, isolatedCandidate }) {
   if (!shaPattern.test(sourceSha) || !shaPattern.test(mergeSha)) throw Error('Invalid promotion revision');
   if (!sameTree(sourceSha, mergeSha)) throw Error('The merge changes the candidate: update the base from staging and validate it again in dev.');
   if (base === 'prod') {
@@ -35,12 +35,13 @@ export function verifyPromotion({ base, head, sourceSha, mergeSha, deployedShas,
   }
   if (base !== 'staging') throw Error('Unsupported promotion target');
   validateBranch(head);
+  if (!isolatedCandidate(sourceSha)) throw Error('The candidate contains unreleased dev history: promote the isolated candidate instead of its integration branch.');
   if (!deployedShas.some(sha => matchesDeployment({ base, sourceSha, sameTree, sameCandidate, isAncestor, deploymentTrial }, sha))) {
     throw Error('The base candidate has no successful dev deployment preserving its tested integration tree.');
   }
 }
 
-export function gitChecks(cwd = process.cwd(), baselineSha) {
+export function gitChecks(cwd = process.cwd(), baselineSha, developmentRef = 'origin/dev') {
   const changedPaths = (a, b) => execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', a, b, '--'], { cwd, encoding: 'utf8', windowsHide: true }).split('\0').filter(Boolean);
   const succeeds = args => {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
@@ -48,7 +49,7 @@ export function gitChecks(cwd = process.cwd(), baselineSha) {
     if (result.status === 1) return false;
     throw Error('Cannot check the candidate Git history.');
   };
-  return {
+  const checks = {
     sameTree: (a, b) => succeeds(['diff', '--quiet', a, b, '--']),
     isAncestor: (a, b) => succeeds(['merge-base', '--is-ancestor', a, b]),
     sameCandidate: (source, trial) => {
@@ -56,11 +57,17 @@ export function gitChecks(cwd = process.cwd(), baselineSha) {
       const changed = new Set(changedPaths(baselineSha, source));
       return !changedPaths(source, trial).some(path => changed.has(path));
     },
+    isolatedCandidate: source => {
+      if (!shaPattern.test(baselineSha ?? '')) throw Error('Invalid candidate baseline');
+      const developmentHistory = execFileSync('git', ['rev-list', '--first-parent', developmentRef, '--not', baselineSha], { cwd, encoding: 'utf8', windowsHide: true }).trim().split(/\s+/).filter(Boolean);
+      return !developmentHistory.some(revision => checks.isAncestor(revision, source) && !checks.sameTree(revision, baselineSha));
+    },
     deploymentTrial: sha => {
       const parents = execFileSync('git', ['show', '-s', '--format=%P', sha], { cwd, encoding: 'utf8', windowsHide: true }).trim().split(' ');
       return parents.length === 2 && parents.every(parent => shaPattern.test(parent)) ? parents[1] : undefined;
     },
   };
+  return checks;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
