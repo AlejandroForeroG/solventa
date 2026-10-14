@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
@@ -16,6 +16,12 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
   const intl = useIntl();
   const { shortDate } = useFormatters();
   const announce = useAnnounce();
+  const announcement = useRef({ intl, announce });
+  useLayoutEffect(() => { announcement.current = { intl, announce }; }, [intl, announce]);
+  const announceCurrent = useCallback((id: string, values?: Record<string, string>) => {
+    const current = announcement.current;
+    current.announce(current.intl.formatMessage({ id }, values));
+  }, []);
   const [load, setLoad] = useState<Load>('loading');
   const [items, setItems] = useState<Consent[]>([]);
   const [pageCursors, setPageCursors] = useState<(string | undefined)[]>([undefined]);
@@ -46,12 +52,12 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
         onConsentsChanged?.(outcome.value.items);
       }
       else if (outcome.kind === 'unauthenticated') onSessionLost?.();
-      else { setLoad('error'); announce(intl.formatMessage({ id: 'live.privacyError' })); }
+      else { setLoad('error'); announceCurrent('live.privacyError'); }
     } catch { /* aborted: the user left the screen */ }
-  }, [api, announce, intl, onSessionLost, onConsentsChanged, after]);
+  }, [api, announceCurrent, onSessionLost, onConsentsChanged, after]);
 
   const reload = useCallback(() => { setLoad('loading'); void fetchItems(); }, [fetchItems]);
-  useEffect(() => { if (!operationPending.current) void fetchItems(); }, [fetchItems]);
+  useEffect(() => { if (!operationPending.current) void fetchItems(); }, [fetchItems, intl]);
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; pending.current?.abort(); };
@@ -78,12 +84,12 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
         setItems(current => current.map(item => item.consentId === id ? outcome.value : item));
         onConsentsChanged?.([outcome.value]);
         setConfirming(null);
-        announce(intl.formatMessage({ id: 'live.revoked' }, { id }));
+        announceCurrent('live.revoked', { id });
       } else if (outcome.kind === 'unauthenticated') {
         onSessionLost?.();
       } else {
         if (outcome.kind === 'notFound' || outcome.kind === 'conflict') setConfirming(null);
-        else { setFailed(id); announce(intl.formatMessage({ id: 'live.revokeError' }, { id })); }
+        else { setFailed(id); announceCurrent('live.revokeError', { id }); }
         // The write may have committed before its response was lost.
         await fetchItems();
       }
