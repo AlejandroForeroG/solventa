@@ -1,5 +1,5 @@
 import type { VerifiedIdentity } from './authentication';
-import { canonicalInstallationId, decideDeviceOperation, deviceRegistrationWindowMs } from '../domain/registered-device';
+import { canonicalInstallationId, decideDeviceOperation, devicePolicy, deviceRegistrationWindowMs } from '../domain/registered-device';
 import type { DeviceAction, DeviceDecision, DeviceSnapshot, RegisteredDevice } from '../domain/registered-device';
 
 export type { RegisteredDevice } from '../domain/registered-device';
@@ -37,7 +37,7 @@ export class RegisteredDevices {
           registrationWindowMs: deviceRegistrationWindowMs, session: snapshot.session ? { ...snapshot.session } : null,
           bindings: snapshot.bindings.map(binding => ({ ...binding })) },
         sources: [{ source: 'identity-session-device-snapshot', capturedAt: evaluatedAt, quality: 'verified' }],
-        consent: { status: 'not_required' }, rule: { id: 'session-bound-installation', version: '1' },
+        consent: { status: 'not_required' }, rule: { ...devicePolicy },
         outcome: decision.effect === 'deny' ? decision.reason : action,
       } };
     });

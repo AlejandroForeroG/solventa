@@ -175,6 +175,7 @@ try {
   assert.equal(sharedRevocation.length,1);
   assert.equal(sharedRevocation[0].correlation_id,sharedTrace);
   assert.equal(sharedRevocation[0].capture.correlationId,sharedTrace);
+  assert.equal(sharedRevocation[0].capture.rule.version,'2');
   await new MobileSessions(repo).revoke(sharedIdentity,randomUUID());
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.revoked'",[sharedBinding.id])).rows[0].count,1);
   for (const repair of [repo.revoke.bind(repo),repo.revokeOrBlock.bind(repo)]) {
@@ -210,6 +211,7 @@ try {
   assert.deepEqual(await devices.execute('find',caseInput),caseBinding);
   const caseReference = (await db.query('SELECT device_reference FROM identity.registered_devices WHERE id=$1',[caseBinding.id])).rows[0].device_reference;
   assert.equal(caseReference,`mobile-v1:${caseIdentity.sessionReference}:${upperInstallation.toLowerCase()}`);
+  assert.equal((await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].capture.rule.version,'2');
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.registered'",[caseBinding.id])).rows[0].count,1);
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].count,1);
   assert.equal((await devices.execute('revoke',{...caseInput,installationId:upperInstallation.toLowerCase()}))?.status,'revoked');

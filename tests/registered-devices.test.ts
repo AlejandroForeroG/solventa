@@ -126,6 +126,7 @@ test('UUID case variants register and replay one canonical binding without a rep
   assert.equal(store.snapshot.bindings[0].installationId, upper.toLowerCase());
   assert.equal(store.plans.at(-1)?.decision.effect, 'none');
   assert.equal(store.plans[0].capture.correlationId, upper.toLowerCase());
+  assert.equal(store.plans[0].capture.rule.version, '2');
   assert.ok(validateCapture(store.plans[0].capture), JSON.stringify(validateCapture.errors));
 });
 
