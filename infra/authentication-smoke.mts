@@ -136,7 +136,7 @@ try {
   const revocationCapture = revocationEvent.capture;
   assert.equal(revocationCapture.correlationId,logoutCorrelation);
   assert.equal(revocationCapture.inputs.installationId,deviceInput.installationId);
-  assert.equal(revocationCapture.rule.id,'session-bound-installation');
+  assert.deepEqual(revocationCapture.rule,{id:'session-device-logout',version:'1'});
   assert.equal(revocationCapture.outcome,'revoke');
   const deleteIdentity = {...deviceIdentity,sessionReference:'device_delete_'+randomUUID()};
   await repo.register(deleteIdentity);
