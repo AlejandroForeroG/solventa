@@ -32,13 +32,21 @@ function fixture() {
   let exchangeRejected = false;
   let inspectDelay = async () => {};
   let accessDenied = false;
+  let setupFailure: 'configuration' | 'pkce' | 'storage' | undefined;
+  let browserOpens = 0;
   const calls: string[] = [];
   const custody = {
     read: async (key: string, protectedValue = false) => {
       if (protectedValue) { prompts++; currentTime += promptDelay; promptDelay = 0; if (!biometricSuccess) throw new Error('synthetic_cancel'); }
       return values.get(key) ?? null;
     },
-    write: async (key: string, value: string) => { values.set(key, value); },
+    write: async (key: string, value: string) => {
+      if (setupFailure === 'storage' && key === 'solventa.authentication.v1') {
+        setupFailure = undefined;
+        throw new Error('synthetic_storage_failure');
+      }
+      values.set(key, value);
+    },
     remove: async (key: string) => {
       if (failPlainRemoval && key === 'solventa.authentication.v1') { failPlainRemoval = false; throw new Error('synthetic_storage_failure'); }
       values.delete(key);
@@ -49,8 +57,14 @@ function fixture() {
   const make = () => {
     const credentials = createCredentials(custody);
     const auth = new Authentication({ baseUrl, ...{ store: credentials.store, biometrics: credentials.vault },
-      browser: { assertAvailable: () => {}, open: async () => browserCancelled ? null : `solventa://auth/callback?state=${'s'.repeat(43)}&code=synthetic-code` }, now: () => currentTime, parseCallback,
-      identity: { authorize: async () => ({ url: 'https://synthetic.example', state: 's'.repeat(43), codeVerifier: 'v'.repeat(43) }),
+      browser: { assertAvailable: () => {}, open: async () => {
+        browserOpens++;
+        return browserCancelled ? null : `solventa://auth/callback?state=${'s'.repeat(43)}&code=synthetic-code`;
+      } }, now: () => currentTime, parseCallback,
+      identity: { authorize: async () => {
+        if (setupFailure === 'pkce') { setupFailure = undefined; throw new AuthFailure('unavailable'); }
+        return { url: 'https://synthetic.example', state: 's'.repeat(43), codeVerifier: 'v'.repeat(43) };
+      },
         exchange: async () => {
           if (exchangeRejected) throw new AuthFailure('unauthorized');
           const tokens = exchanges++ === 0 ? active.session!.tokens : { accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: currentTime + 300_000 };
@@ -58,7 +72,10 @@ function fixture() {
         },
         refresh: async () => ({ accessToken: 'rotated-access', refreshToken: 'rotated-refresh', expiresAt: currentTime + 300_000 }) },
       api: {
-        configuration: async () => config,
+        configuration: async () => {
+          if (setupFailure === 'configuration') { setupFailure = undefined; throw new AuthFailure('unavailable'); }
+          return config;
+        },
         register: async () => { revoked = false; return currentPrincipal; },
         inspect: async () => { calls.push('inspect'); await inspectDelay(); if (!online) throw new AuthFailure('unavailable'); if (revoked) throw new AuthFailure('unauthorized'); return currentPrincipal; },
         access: async () => { calls.push('access'); if (accessDenied) throw new AuthFailure('forbidden'); return currentPrincipal; },
@@ -81,6 +98,8 @@ function fixture() {
     changeAccount: () => { currentPrincipal = { clientId: installationId, subjectToken: installationId }; },
     failRemoval: () => { failPlainRemoval = true; },
     rejectExchange: () => { exchangeRejected = true; },
+    failSetup: (step: NonNullable<typeof setupFailure>) => { setupFailure = step; },
+    browserOpens: () => browserOpens,
     advance: (ms: number) => { currentTime += ms; },
     forbidAccess: () => { accessDenied = true; },
     pauseInspection: () => {
@@ -363,6 +382,30 @@ test('cancelling the alternative browser restores locked biometric entry across 
   assert.deepEqual(f.calls, []);
   f.resumeBrowser(); await restarted.auth.signIn();
   assert.equal(restarted.auth.getSnapshot().biometricEnabled, true);
+});
+
+test('alternative login setup failures restore biometric entry without opening the browser or granting access', async () => {
+  for (const step of ['configuration', 'pkce', 'storage'] as const) {
+    const f = fixture(); const flow = f.make();
+    await f.login(flow.auth, flow.store); await flow.auth.enableBiometrics();
+    flow.auth.lock(); flow.auth.resume(); f.calls.length = 0;
+    const prompts = f.prompts(); const opened = f.browserOpens();
+    f.failSetup(step); await flow.auth.signIn();
+    assert.equal(flow.auth.getSnapshot().status, 'locked', step);
+    assert.equal(flow.auth.getSnapshot().failure, 'unavailable', step);
+    assert.equal((await flow.vault.info())?.suspended, false, step);
+    assert.equal(f.values.has('solventa.authentication.v1'), false, step);
+    assert.equal(f.browserOpens(), opened, step);
+    assert.equal(f.prompts(), prompts, step);
+    assert.deepEqual(f.calls, [], step);
+    await flow.auth.unlock();
+    assert.equal(flow.auth.getSnapshot().status, 'authenticated', step);
+    assert.deepEqual(f.calls, ['inspect', 'access', 'inspectDevice'], step);
+    assert.equal(f.prompts(), prompts + 1, step);
+    await flow.auth.signIn();
+    assert.equal(f.browserOpens(), opened + 1, step);
+    assert.equal(flow.auth.getSnapshot().status, 'authenticated', step);
+  }
 });
 
 test('another WorkOS account never inherits the previous biometric preference or binding', async () => {
