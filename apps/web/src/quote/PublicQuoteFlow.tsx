@@ -4,6 +4,7 @@ import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from './Live';
 import { estimateFields, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
 import { clearEstimateDraft, saveEstimateDraft } from './estimate-draft';
+import { Stepper } from './Stepper';
 
 export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValues: EstimateValues | null; onValuesChange?: (values: EstimateValues) => void }) {
   const intl = useIntl();
@@ -50,6 +51,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
   }
 
   return <section className="step" aria-busy={busy}>
+    <Stepper current={phase === 'form' ? 1 : 2} available={phase === 'form' ? 1 : 2} />
     <h1 ref={heading} tabIndex={-1}>{t(phase === 'form' ? 'estimate.title' : phase === 'result' ? 'estimate.result' : 'estimate.loginTitle')}</h1>
     {phase === 'form' ? <>
       <p className="lede">{t('estimate.intro')}</p>
