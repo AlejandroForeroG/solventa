@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -13,7 +13,8 @@ import { requestEstimate } from './estimate-api';
 const values = { ageYears: '34', amount: '320000000', termMonths: '180' };
 const result = { premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
+afterEach(() => { vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
 
 async function fill(user: ReturnType<typeof userEvent.setup>) {
   for (const [label, value] of [[/Edad/, values.ageYears], [/Monto/, values.amount], [/Plazo/, values.termMonths]] as const) await user.type(screen.getByLabelText(label), value);
@@ -146,6 +147,7 @@ describe('public estimate and sign-in handoff', () => {
     expect(Object.keys(JSON.parse(window.sessionStorage.getItem('solventa.estimate-draft')!)).sort()).toEqual(['ageYears', 'amount', 'savedAt', 'termMonths', 'version']);
     first.unmount();
     authenticated = true;
+    window.history.replaceState(null, '', '/');
     render(<App />);
     await screen.findByLabelText(/Nombre completo/);
     expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
