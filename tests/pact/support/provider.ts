@@ -3,6 +3,7 @@ import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
 import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
+import { EstimateQuote } from '../../../backend/acquisition-risk/src/application/estimate-quote';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
@@ -93,7 +94,7 @@ const activeSessionProvider: AuthenticationCollaborators = {
 // Identity's decision is simulated by the cookie value; its verification is covered by the access suites.
 function realAcquisition(store = new MemoryStore()): Binding {
   const quotes = new CreateQuote({ access: new InMemoryAccess(), store, clock: { now: () => new Date('2026-10-06T15:00:00Z') }, protector });
-  const app = createAcquisitionHttp({ quotes });
+  const app = createAcquisitionHttp({ quotes, estimates: new EstimateQuote() });
   return { fetch: request => Promise.resolve(app.request(request, undefined, { APP_ENV: 'dev' } as AcquisitionEnv)) };
 }
 
@@ -129,6 +130,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
     acquisition: await acquisitionWithQuote(parameters?.idempotencyKey ?? '', authorizedCookie),
   }),
   'the quote service is down': () => ({ sessionCookie: authorizedCookie, acquisition: unavailableService }),
+  'the calculator is down': () => ({ acquisition: unavailableService }),
   'a customer ready to authorize consent': () => consentWorld(),
   'a customer with an active consent': () => consentWorld(world => world.grant('seed-key', consentRequestSeed)),
   'a customer with 51 active consents': () => consentWorld(async world => {

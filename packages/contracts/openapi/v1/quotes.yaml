@@ -1,11 +1,12 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Quotes
-  version: 1.1.1
+  version: 1.2.1
   description: >
     Quote with minimum data. The same input and rule version always give the same premium;
     no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
-    Authentication and the quotes:create permission are verified by Identity; see identity-access.yaml.
+    Saved quotes require authentication and the quotes:create permission verified by Identity; see identity-access.yaml.
+    The anonymous calculator returns only an indicative estimate, without persistence or external data.
     When Identity returns a 401 or 403 authorization denial, its minimal security audit and outbox
     have committed together without credentials or request data. Failure to persist that decision
     returns 503 access_unavailable and blocks the quote. Missing, malformed or oversized HTTP
@@ -19,6 +20,56 @@ tags:
   - name: Quotes
     description: Quote creation for partners and for authenticated web users.
 paths:
+  /quote-estimates:
+    post:
+      operationId: estimateQuote
+      summary: Calculate an anonymous preliminary estimate
+      tags: [Quotes]
+      description: >
+        Accepts only age, loan amount and term as integers, in a JSON body of at most 1024 bytes.
+        Uses the same provisional rating rule as saved quotes, without Identity, SQL or external sources.
+        No quote, decision, consent, audit or outbox is created. No quote identifier or validity is issued.
+        The result is indicative and cannot be used to contract. After sign-in, the saved-quote endpoint
+        independently validates identity and date of birth and recalculates the price.
+      security: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EstimateRequest' }
+            example: { ageYears: 34, amount: 320000000, termMonths: 180 }
+      responses:
+        '200':
+          description: Indicative calculation only. Cache-Control is no-store.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Estimate' }
+              example:
+                premiumMonthly: 86400
+                currency: COP
+                sumInsured: 320000000
+                termMonths: 180
+                basis: minimum_data
+                ruleVersion: provisional-1
+                traceId: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
+        '400':
+          description: Invalid JSON, media type, oversized body or unsupported fields. No values or unknown property names are echoed.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstimateValidationError' }
+        '503':
+          description: The calculator service is unavailable. No write occurs; retry the calculation without an idempotency key.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
   /quotes:
     post:
       operationId: createPartnerQuote
@@ -195,6 +246,37 @@ components:
           schema:
             $ref: '#/components/schemas/InternalError'
   schemas:
+    EstimateRequest:
+      type: object
+      additionalProperties: false
+      required: [ageYears, amount, termMonths]
+      properties:
+        ageYears: { type: integer, minimum: 18, maximum: 70 }
+        amount: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        termMonths: { type: integer, minimum: 12, maximum: 240 }
+    Estimate:
+      type: object
+      additionalProperties: false
+      required: [premiumMonthly, currency, sumInsured, termMonths, basis, ruleVersion, traceId]
+      properties:
+        premiumMonthly: { type: integer, minimum: 0 }
+        currency: { type: string, enum: [COP] }
+        sumInsured: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        termMonths: { type: integer, minimum: 12, maximum: 240 }
+        basis: { type: string, enum: [minimum_data] }
+        ruleVersion: { type: string, minLength: 1 }
+        traceId: { type: string, format: uuid }
+    EstimateValidationError:
+      type: object
+      additionalProperties: false
+      required: [error, errors, traceId]
+      properties:
+        error: { type: string, enum: [validation_error] }
+        errors:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/FieldError' }
+        traceId: { type: string, format: uuid }
     QuoteRequest:
       type: object
       additionalProperties: false
