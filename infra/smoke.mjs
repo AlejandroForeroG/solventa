@@ -7,7 +7,7 @@ const token = await localToken();
 const configs = ['apps/web/wrangler.jsonc', ...owners.map(o => `backend/${o.name}/wrangler.local.json`)];
 const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js','dev','--local','--port','8790',...configs.flatMap(c => ['-c',c])], { windowsHide: true, stdio: ['ignore','pipe','pipe'] });
 function diagnostics(chunk) {
-  for (const line of chunk.toString().split('\n')) if (line.includes('database_probe_failed') || line.includes('probe_result')) console.log(line);
+  for (const line of chunk.toString().split('\n')) if (line.includes('database_probe_failed') || line.includes('probe_result') || line.includes('security_denial_persistence_failed')) console.log(line);
 }
 child.stdout.on('data', diagnostics); child.stderr.on('data', diagnostics);
 let exited = false;

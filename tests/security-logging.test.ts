@@ -7,9 +7,31 @@ import { databaseProbe as policyProbe } from '../backend/policy-claims-payments/
 import { safeCode as acquisitionCode } from '../backend/acquisition-risk/src/adapters/safe-code';
 import { safeCode as identityCode } from '../backend/identity-consent-ecosystem/src/adapters/safe-code';
 import { safeCode as policyCode } from '../backend/policy-claims-payments/src/adapters/safe-code';
+import { SqlSecurityDecisions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-security-decisions';
+import { securityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 
 const privateCode = 'SyntheticPerson123';
 const privateDetail = 'synthetic-person@example.test private provider detail';
+
+test('security persistence failures expose only the phase and an allowlisted technical code', async t => {
+  const decision = securityDecision({ category: 'api_access', channel: 'partner', operation: 'quotes:create', cause: 'unauthorized' },
+    '50000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000002');
+  for (const phase of ['connect', 'write'] as const) for (const code of ['08P01', '42501', privateCode]) {
+    const logs: string[] = [];
+    let closed = false;
+    const failure = Object.assign(new Error(privateDetail), { code, detail: privateDetail });
+    t.mock.method(Client.prototype, 'connect', async () => { if (phase === 'connect') throw failure; });
+    t.mock.method(Client.prototype, 'query', async () => { throw failure; });
+    t.mock.method(Client.prototype, 'end', async () => { closed = true; });
+    t.mock.method(console, 'error', (...args: unknown[]) => { logs.push(args.join(' ')); });
+    try {
+      await assert.rejects(new SqlSecurityDecisions('postgresql://synthetic.invalid/unused').append(decision), error => error === failure);
+      assert.deepEqual(logs.map(line => JSON.parse(line)), [{ event: 'security_denial_persistence_failed', phase,
+        code: code === privateCode ? 'unexpected_error' : code }]);
+      assert.ok(closed);
+    } finally { t.mock.restoreAll(); }
+  }
+});
 
 function hostileMetadata() {
   const getter = Object.defineProperty({}, 'code', { get() { throw new Error(privateDetail); } });
