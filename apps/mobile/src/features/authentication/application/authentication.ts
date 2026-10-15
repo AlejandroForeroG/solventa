@@ -154,14 +154,19 @@ export class Authentication {
       if (this.record?.session) return;
       this.logoutRequested = false;
       this.publish({ status: 'loading' });
-      const configuration = await this.deps.api.configuration();
-      const { url, state, codeVerifier } = await this.deps.identity.authorize(configuration);
-      await this.save({ version: 1, session: null, transaction: {
-        configuration, baseUrl: this.deps.baseUrl, state, codeVerifier,
-        expiresAt: this.deps.now() + 10 * 60_000,
-      } });
-      authorization = { url, redirectUri: configuration.redirectUri };
-      this.publish({ status: 'authorizing' });
+      try {
+        const configuration = await this.deps.api.configuration();
+        const { url, state, codeVerifier } = await this.deps.identity.authorize(configuration);
+        await this.save({ version: 1, session: null, transaction: {
+          configuration, baseUrl: this.deps.baseUrl, state, codeVerifier,
+          expiresAt: this.deps.now() + 10 * 60_000,
+        } });
+        authorization = { url, redirectUri: configuration.redirectUri };
+        this.publish({ status: 'authorizing' });
+      } catch (error) {
+        const failure = error instanceof AuthFailure ? error : new AuthFailure('unavailable');
+        await this.finishPrimaryAttempt(failure.kind, failure.traceId);
+      }
     }, async () => {
       this.deps.browser.assertAvailable();
       if (this.logoutRequested || this.record?.session?.phase === 'logout') return;
@@ -234,13 +239,13 @@ export class Authentication {
     await this.finishPrimaryAttempt('cancelled');
   });
 
-  private async finishPrimaryAttempt(failure: FailureKind) {
+  private async finishPrimaryAttempt(failure: FailureKind, traceId?: string) {
     await this.save(emptyRecord());
     const resumed = await this.deps.biometrics?.resume();
     this.primaryAuthenticated = false;
     this.device = undefined;
     if (resumed) this.record = undefined;
-    this.publish({ status: resumed ? 'locked' : 'signedOut', ...(failure === 'cancelled' ? {} : { failure }) });
+    this.publish({ status: resumed ? 'locked' : 'signedOut', ...(failure === 'cancelled' ? {} : { failure, traceId }) });
   }
 
   retry = () => this.restore();
