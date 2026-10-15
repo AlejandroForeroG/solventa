@@ -2,7 +2,7 @@
 
 Code: `apps/web`. Run commands from the repository root.
 
-React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes entry, session checking, logout, the minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
+React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes an anonymous calculator, session checking, logout, the authenticated minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
 
 Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Service Binding and does not receive tokens. See [authentication](../../modules/identity-consent-ecosystem/authentication.md) to start the complete local flow at `http://localhost:8787`.
 
@@ -15,6 +15,18 @@ The same Worker serves the public, read-only OpenAPI viewer at `/api/docs/` and 
 Logo and favicon come from `packages/assets`; preserve the green identity and loading, error and session states when extending the UI.
 
 ## Quote journey
+
+### Anonymous estimate and sign-in
+
+An anonymous visitor starts with `PublicQuoteFlow`: age in completed years, loan amount in integer COP and term in months. It calls `POST /api/v1/quote-estimates` with `credentials: omit`, without checking access, reading SQL or querying any source. The backend reuses the saved-quote rating rule. This is an indicative calculator, not a stored business quote: it issues neither a quote identifier nor validity and cannot unlock an offer or contracting. The browser validates the response and its amount/term against the submitted inputs before showing it. Invalid inputs focus the first field; failures preserve the inputs and offer another calculation. The calculator remains available if session checking returns unavailable.
+
+Continuing shows instructions for existing accounts and registration through the existing hosted WorkOS login. It explicitly distinguishes sign-in from data authorization, explains that sources, purpose and validity will be shown before consent, and states the refusal/revocation options. It never authorizes on the customer's behalf or queries consent terms anonymously. Back navigation retains the estimate.
+
+The continuation link uses the existing `/auth/login` and `/auth/callback` without changing OAuth or adding return URLs. Immediately before following it, the browser saves only age, amount, term, a schema version and creation time in same-tab `sessionStorage`, for at most 30 minutes. No name, document, birth date, city, provider credential, quote identifier or trusted premium is saved. Invalid/expired drafts are discarded. If storage is blocked, the screen explains the loss and offers an explicit link to sign in without keeping inputs. A failed/cancelled login can return to the calculator with the inputs intact.
+
+After authentication, the draft is consumed and removed from storage. Amount and term prefill the protected form; a notice shows the age used for the estimate and asks for date of birth and the remaining customer fields. The authenticated quote endpoint revalidates and recalculates independently before showing its saved result and consent. A changed age can change the price; a browser draft never grants ownership, consent or a price. Logout clears any remaining draft. Visitors already signed in can use the protected quote form directly.
+
+### Authenticated quote
 
 `src/quote/` holds the form, the result and the access-denied screen; `src/i18n/` holds the es-CO and en-US catalogues (react-intl) and the switcher, which changes language without reloading. Amounts are always shown in COP. A single `aria-live` region announces state changes, and focus moves to the first invalid field or to the step heading.
 

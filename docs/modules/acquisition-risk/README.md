@@ -4,7 +4,15 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The minimum-data quote (`POST /api/v1/quotes`) is implemented; profiling, Open Finance, fallback, offers and asynchronous refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented; profiling, Open Finance, fallback, offers and asynchronous refresh require implementation.
+
+## Anonymous indicative calculator
+
+`POST /api/v1/quote-estimates` is public, documented in Quotes OpenAPI 1.2.0 with `security: []`. It accepts exactly `{ ageYears, amount, termMonths }`: safe integers, ages 18–70, positive integer COP amount and terms 12–240 months. The JSON body is limited to 1024 bytes, including chunked requests; unsupported properties, types, ranges, invalid JSON and non-JSON media types return 400 without echoing values or unknown keys. Successful calculations return 200 with premium, currency, amount, term, basis, rule version and a correlation UUID. Responses use `Cache-Control: no-store`. The web version gate precedes forwarding and preserves its headers, including on a normalized binding failure (503).
+
+`EstimateQuote` validates through its own domain input and calls the same `monthlyPremium` and `RULE_VERSION` as `CreateQuote`; the browser does not reproduce the rate table. The calculator has no Identity, SQL, HMAC, source or messaging dependency. It produces no saved quote, identifier, validity, business decision capture, audit or outbox: this is a nonbinding arithmetic preview, not underwriting, an offer or a contractual decision. Actual quote creation remains authenticated, independently validated/recalculated and transactionally captured. It does not accept an estimate identifier, saved browser price or client-supplied actor. No migrations, grants, secrets or provider configuration are added.
+
+The [web journey](../../channels/web/README.md#anonymous-estimate-and-sign-in) explains the account handoff and temporary input retention. Existing partner/web quote access, actor-scoped idempotency, ownership and consent protections remain unchanged. `tests/quote-estimates.test.ts` checks rating boundaries, bounded/redacted input, actual public gateway routing and no access/store calls; the SPA consumer pact covers success, validation and outage. These checks do not establish load limits or production abuse resistance.
 
 ## Minimum-data quote
 

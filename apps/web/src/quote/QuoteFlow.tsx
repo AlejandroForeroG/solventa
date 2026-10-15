@@ -10,11 +10,13 @@ import { useAnnounce } from './Live';
 import { QuoteForm } from './QuoteForm';
 import { Denied, Loading, QuoteResult } from './QuoteResult';
 import { Stepper } from './Stepper';
+import type { EstimateValues } from './estimate-api';
 
 type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
 
-export function QuoteFlow({ request = defaultRequest, consent = consentApi, consentUpdates = {}, uncertainConsents = {}, onOpenPrivacy, onSessionLost }: {
+export function QuoteFlow({ request = defaultRequest, consent = consentApi, initialEstimate, consentUpdates = {}, uncertainConsents = {}, onOpenPrivacy, onSessionLost }: {
+  initialEstimate?: EstimateValues | null;
   request?: typeof defaultRequest;
   consent?: Pick<ConsentApi, 'getTerms' | 'grantConsent' | 'declineConsent'>;
   consentUpdates?: Readonly<Record<string, Consent>>;
@@ -27,7 +29,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, cons
   const { cop } = useFormatters();
   const announce = useAnnounce();
   const [phase, setPhase] = useState<Phase>('form');
-  const [values, setValues] = useState<QuoteValues>(empty);
+  const [values, setValues] = useState<QuoteValues>(() => initialEstimate ? { ...empty, amount: initialEstimate.amount, termMonths: initialEstimate.termMonths } : empty);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -74,6 +76,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, cons
 
   return <>
     <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : 3} available={3} />
+    {phase === 'form' && initialEstimate && <p className="banner banner-info">{intl.formatMessage({ id: 'estimate.resumed' }, { age: initialEstimate.ageYears })}</p>}
     {(phase === 'form') && <QuoteForm values={values} problems={problems} banner={banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
