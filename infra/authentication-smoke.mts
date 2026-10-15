@@ -300,7 +300,16 @@ try {
   const secureConsents = new Consents({store:new SqlConsents(runtime.toString()),platform:{now:()=>new Date(),newId:randomUUID},
     integrity:new HmacIntegrity('synthetic-security-consent-key-0123456789'),security});
   await secureConsents.grant({principal:consentPrincipal,idempotencyKey:randomUUID(),body:{textVersion:2,locale:'es-CO'},traceId:randomUUID()});
-  await db.query("UPDATE identity.consents SET seal='tampered' WHERE client_id=$1",[consentPrincipal.clientId]);
+  const originalSeals = (await db.query('SELECT seal FROM identity.consents WHERE client_id=$1',[consentPrincipal.clientId])).rows;
+  assert.equal(originalSeals.length,1);
+  assert.match(originalSeals[0].seal,/^[0-9a-f]{64}$/);
+  assert.equal((await secureConsents.verify({subjectToken:consentPrincipal.subjectToken,purposeCode:'risk_profiling',scope:'payment_history_score',traceId:randomUUID()})).allowed,true);
+  const alteredSeals = (await db.query(`UPDATE identity.consents
+    SET seal=CASE WHEN seal=repeat('0',64) THEN repeat('1',64) ELSE repeat('0',64) END
+    WHERE client_id=$1 RETURNING seal`,[consentPrincipal.clientId])).rows;
+  assert.equal(alteredSeals.length,1);
+  assert.match(alteredSeals[0].seal,/^[0-9a-f]{64}$/);
+  assert.notEqual(alteredSeals[0].seal,originalSeals[0].seal);
   const tamperTrace = randomUUID();
   assert.deepEqual(await secureConsents.verify({subjectToken:consentPrincipal.subjectToken,purposeCode:'risk_profiling',scope:'payment_history_score',traceId:tamperTrace}),
     {allowed:false,reason:'consent_invalid'});
