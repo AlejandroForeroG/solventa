@@ -9,7 +9,7 @@ import { Stepper } from './Stepper';
 export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValues: EstimateValues | null; onValuesChange?: (values: EstimateValues) => void }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
-  const { cop } = useFormatters();
+  const { cop, copAmount } = useFormatters();
   const announcementLocale = useRef({ intl, cop });
   useEffect(() => { announcementLocale.current = { intl, cop }; }, [intl, cop]);
   const announce = useAnnounce();
@@ -72,7 +72,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
         <div className="form-footer"><p className="note">{t('estimate.noSources')}</p><button className="btn btn-primary" disabled={busy}>{t(busy ? 'live.calculating' : 'estimate.calculate')}</button></div>
       </form>
     </> : <div className="card">
-      {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{cop(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
+      {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{copAmount(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
         <dl className="facts"><div><dt>{t('estimate.amount')}</dt><dd>{cop(estimate.sumInsured)}</dd></div><div><dt>{t('estimate.termMonths')}</dt><dd>{estimate.termMonths}</dd></div></dl></>}
       <p className="banner banner-info">{t('estimate.disclaimer')}</p>
       {phase === 'result' ? <div className="actions">

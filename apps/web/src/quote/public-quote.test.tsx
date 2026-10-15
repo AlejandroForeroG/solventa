@@ -103,6 +103,7 @@ describe('public estimate and sign-in handoff', () => {
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
     expect(await screen.findByRole('heading', { name: 'Tu estimación preliminar' })).toHaveFocus();
+    expect(container.querySelector('.premium-value')?.textContent?.match(/COP/g)).toHaveLength(1);
     expect(within(progress).getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 2: Resultado');
     expect(screen.getByText(/No es una oferta ni permite contratar/)).toBeVisible();
     const call = fetchMock.mock.calls.find(([path]) => String(path) === '/api/v1/quote-estimates');
@@ -190,6 +191,7 @@ describe('public estimate and sign-in handoff', () => {
     await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));
     await user.click(screen.getByRole('button', { name: 'Calculate estimate' }));
     await user.click(await screen.findByRole('button', { name: 'Continue with this estimate' }));
+    expect(screen.getByText('COP / month').parentElement?.textContent?.match(/COP/g)).toHaveLength(1);
     expect(screen.getByText(/Signing in does not authorize/)).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
   });
