@@ -132,5 +132,6 @@ test('injected provider failures remain unavailable and invalid credentials rema
   deps.partner = { authenticate: async () => null };
   assert.equal((await app.request(origin + '/api/v1/access/partner', request, env)).status, 401);
   deps.web = null;
-  assert.equal((await app.request(origin + '/api/v1/access/web', {}, env)).status, 503);
+  assert.equal((await app.request(origin + '/api/v1/access/web', {}, env)).status, 401);
+  assert.equal((await app.request(origin + '/api/v1/access/web', { headers: { Cookie: '__Host-solventa-session=sealed' } }, env)).status, 503);
 });

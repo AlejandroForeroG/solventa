@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
 import type { SecurityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 import { authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
+import type { ApiAccessDependencies } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
 import { MobileSessions } from '../backend/identity-consent-ecosystem/src/application/mobile-sessions';
@@ -17,13 +18,14 @@ import { MemoryStore, protector } from './support/quote-fakes';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin + '/auth/callback', WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' } } as IdentityEnv;
-function fixture() {
+function fixture(webConfigured = true) {
   const events: SecurityDecision[] = [];
   let fail = false;
   const security = new SecurityDecisions({ append: async event => { if (fail) throw Error('synthetic-private-storage'); events.push(event); } }, () => crypto.randomUUID());
   const sessions = { find: async () => null, open: async () => assert.fail('unexpected registration'), revoke: async () => assert.fail('unexpected logout') };
   const provider = { authenticate: async () => null, begin: async () => assert.fail('unexpected login'), exchange: async () => assert.fail('unexpected exchange'), revoke: async () => {}, logoutUrl: () => '' };
-  const deps = { application: new ApiAccess({ find: async () => null }, sessions), security, partner: { authenticate: async () => null }, web: { authenticate: async () => null, allowedOrigins: [origin] } };
+  const deps: ApiAccessDependencies = { application: new ApiAccess({ find: async () => null }, sessions), security, partner: { authenticate: async () => null },
+    web: webConfigured ? { authenticate: async () => null, allowedOrigins: [origin] } : null };
   const app = createHttp({
     security, authorizeApiAccess: input => authorizeApiAccess(deps, input),
     authentication: { provider: () => provider, sessions: () => sessions },
@@ -33,6 +35,26 @@ function fixture() {
   });
   return { app, events, fail: () => { fail = true; } };
 }
+
+test('an absent web cookie is recorded without a provider while supplied cookies require configuration', async () => {
+  const state = fixture(false);
+  const headers = { 'X-Trace-Id': TRACE };
+  const missing = await state.app.request(origin + '/api/v1/access/web', { headers }, env);
+  assert.equal(missing.status, 401);
+  assert.deepEqual(await missing.json(), { error: 'unauthorized', traceId: TRACE });
+  assert.equal(state.events.length, 1);
+  assert.equal(state.events[0].correlationId, TRACE);
+  assert.equal(state.events[0].cause, 'unauthorized');
+  const supplied = await state.app.request(origin + '/api/v1/access/web', { headers: { ...headers, Cookie: '__Host-solventa-session=synthetic-private-cookie' } }, env);
+  assert.equal(supplied.status, 503);
+  assert.deepEqual(await supplied.json(), { error: 'access_unavailable', traceId: TRACE });
+  assert.equal(state.events.length, 1, 'configuration unavailability is not a security-denial event');
+  state.fail();
+  const unavailable = await state.app.request(origin + '/api/v1/access/web', { headers }, env);
+  assert.equal(unavailable.status, 503);
+  assert.deepEqual(await unavailable.json(), { error: 'access_unavailable', traceId: TRACE });
+  assert.equal(state.events.length, 1, 'a failed append cannot claim another committed denial');
+});
 
 test('protected HTTP denials persist exactly once with the response correlation and no request data', async () => {
   const state = fixture();

@@ -114,6 +114,8 @@ The partner actor has no `principal`, and the user actor has no partner or crede
 
 Access errors include only the canonical code and correlation UUID, without provider data. If identity or permission cannot be verified, a protected operation must not proceed.
 
+An absent credential is rejected with 401 before provider configuration is required, including an absent web cookie. The rejection still requires its security audit/outbox and becomes 503 if that write fails. A supplied web cookie requires the configured provider; missing configuration returns 503 without claiming a credential denial. When provider configuration is available, web writes with a supplied cookie still require an allowed Origin.
+
 For a valid access-check input, a final 401 or 403 is recorded as a minimal Identity security decision with atomic audit/outbox before the denial returns. If that required record cannot be committed, the result is `503 access_unavailable`; no protected operation proceeds. Invalid input, unsupported HTTP methods and technical 503 results do not create these denial events. See [security recording and delivery boundaries](../../security.md#durable-rejection-records).
 
 ## Contract between backends

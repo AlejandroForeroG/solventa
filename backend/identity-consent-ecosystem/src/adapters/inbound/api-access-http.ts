@@ -60,9 +60,9 @@ async function decideApiAccess(deps: ApiAccessDependencies, input: ApiAccessRequ
       const identity = await deps.partner.authenticate(input.token);
       return identity ? await application.partner(identity, input.operation) : unauthorized;
     }
+    if (!input.cookie) return unauthorized;
     if (!deps.web) return { allowed: false, error: 'access_unavailable', status: 503 };
     if (!['GET', 'HEAD'].includes(input.method) && !deps.web.allowedOrigins.includes(input.origin)) return { allowed: false, error: 'forbidden', status: 403 };
-    if (!input.cookie) return unauthorized;
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
     const verified = await deps.web.authenticate(input.cookie, false);
     return verified ? await application.webUser(verified.identity, input.operation) : unauthorized;
