@@ -53,7 +53,7 @@ function credentialFrom(c: Context, channel: 'partner' | 'web'): AccessCredentia
     return token ? { kind: 'partner', token } : null;
   }
   const cookie = getCookie(c, sessionCookie(c.env.APP_ENV));
-  return cookie ? { kind: 'web', cookie, origin: c.req.header('origin') ?? '', method: c.req.method } : null;
+  return cookie ? { kind: 'web', cookie, origin: c.req.header('origin') ?? '', requestOrigin: new URL(c.req.url).origin, method: c.req.method } : null;
 }
 
 export function quotesHandler(quotes: CreateQuote, channel: 'partner' | 'web') {

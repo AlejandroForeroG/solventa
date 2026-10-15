@@ -68,6 +68,28 @@ test('business access never refreshes or registers a web session', async () => {
   assert.deepEqual(result, { allowed: false, error: 'unauthorized', status: 401 });
 });
 
+test('web mutations bind Origin to the actual allowed request host, with a narrow legacy RPC fallback', async () => {
+  const canonical = 'https://dev.solventa.site';
+  const deps = dependencies();
+  let verifications = 0;
+  deps.web = { allowedOrigins: [canonical, origin], defaultOrigin: canonical, authenticate: async () => { verifications++; return null; } };
+  for (const target of [canonical, origin]) {
+    const matching = { kind: 'web', cookie: 'synthetic', origin: target, requestOrigin: target, method: 'POST', operation: 'quotes:create' };
+    assert.equal((await authorizeApiAccess(deps, matching)).status, 401);
+    for (const supplied of ['', 'https://staging.solventa.site', 'https://attacker.invalid', target === canonical ? origin : canonical]) {
+      const before = verifications;
+      assert.equal((await authorizeApiAccess(deps, { ...matching, origin: supplied })).status, 403);
+      assert.equal(verifications, before, 'CSRF must fail before credential verification');
+    }
+  }
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', operation: 'quotes:create' })).status, 403);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, method: 'POST', operation: 'quotes:create' })).status, 401);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, requestOrigin: 'https://staging.solventa.site', method: 'GET', operation: 'quotes:create' })).status, 403);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, requestOrigin: null, method: 'POST', operation: 'quotes:create' })).status, 400);
+  deps.web = { allowedOrigins: ['http://localhost:8787', 'http://localhost:5173'], defaultOrigin: 'http://localhost:8787', authenticate: async () => null };
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: 'http://localhost:5173', requestOrigin: 'http://localhost:8787', method: 'POST', operation: 'quotes:create' })).status, 401);
+});
+
 test('gateway forwards only the published probes and handles a failed identity binding', async () => {
   const mockEnv = { IDENTITY: { fetch: async (request: Request) => Response.json({ forwarded: new URL(request.url).pathname }) } } as WebEnv;
   for (const kind of ['partner', 'web']) {
@@ -110,7 +132,7 @@ test('web authorization uses only the verified session principal and never a par
 test('web probe returns the user actor without partner identifiers', async () => {
   const actor = { kind: 'user' as const, channel: 'web' as const, principal: { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() }, operations: ['quotes:create' as const] };
   const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async input => {
-    assert.deepEqual(input, { kind: 'web', cookie: 'sealed', origin: '', method: 'GET', operation: 'quotes:create' });
+    assert.deepEqual(input, { kind: 'web', cookie: 'sealed', origin: '', requestOrigin: origin, method: 'GET', operation: 'quotes:create' });
     return { allowed: true, actor };
   } });
   const response = await app.request(origin + '/api/v1/access/web', { headers: { Cookie: '__Host-solventa-session=sealed', 'X-Client-Id': 'forged' } }, env);

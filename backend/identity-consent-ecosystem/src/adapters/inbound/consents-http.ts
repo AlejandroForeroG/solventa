@@ -55,7 +55,7 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
       try {
         if (c.req.header('Authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
         const decision = await deps.authorizeApiAccess({
-          kind: 'web', operation, method: c.req.method, origin: c.req.header('Origin') ?? '',
+          kind: 'web', operation, requestOrigin: new URL(c.req.url).origin, method: c.req.method, origin: c.req.header('Origin') ?? '',
           cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? ''
         });
         if (!decision.allowed) return reply({ error: decision.error }, decision.status);

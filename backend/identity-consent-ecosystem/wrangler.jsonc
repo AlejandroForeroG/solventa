@@ -42,8 +42,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "dev",
-        "AUTH_ORIGIN": "https://solventa-web-dev.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-dev.ja-forerog1.workers.dev/auth/callback",
+        "AUTH_ORIGIN": "https://dev.solventa.site",
+        "AUTH_REDIRECT_URI": "https://dev.solventa.site/auth/callback",
         "WORKOS_CONNECT_ISSUER": "https://thorough-solar-66-solventa-dev.authkit.app",
         "WORKOS_CONNECT_AUDIENCE": "client_01M47F52THNNZZZ4WSGACX8KA4"
       },
@@ -67,8 +67,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "staging",
-        "AUTH_ORIGIN": "https://solventa-web-staging.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-staging.ja-forerog1.workers.dev/auth/callback",
+        "AUTH_ORIGIN": "https://staging.solventa.site",
+        "AUTH_REDIRECT_URI": "https://staging.solventa.site/auth/callback",
         "WORKOS_CONNECT_ISSUER": "https://essential-nightingale-37-staging.authkit.app",
         "WORKOS_CONNECT_AUDIENCE": "client_01M47F209CBGBJGD73ZM39ADW6"
       },
@@ -92,8 +92,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "prod",
-        "AUTH_ORIGIN": "https://solventa-web-prod.ja-forerog1.workers.dev",
-        "AUTH_REDIRECT_URI": "https://solventa-web-prod.ja-forerog1.workers.dev/auth/callback",
+        "AUTH_ORIGIN": "https://solventa.site",
+        "AUTH_REDIRECT_URI": "https://solventa.site/auth/callback",
         "WORKOS_CONNECT_ISSUER": "https://engaging-regalia-61.authkit.app",
         "WORKOS_CONNECT_AUDIENCE": "client_01M47F21P884580Q2GGF81NRV5"
       },

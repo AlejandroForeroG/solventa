@@ -35,7 +35,7 @@ function app() {
 type Http = ReturnType<typeof createHttp>;
 type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; stream?: ReadableStream<Uint8Array>; env?: string };
 const send = (http: Http, path: string, headers: Record<string, string>, init: Init) =>
-  http.request(path, {
+  http.request('https://web.example' + path, {
     method: 'POST',
     headers: { 'idempotency-key': 'key-1', 'content-type': 'application/json', ...headers, ...init.headers },
     body: init.stream ?? init.raw ?? JSON.stringify(init.body ?? base),
@@ -164,7 +164,7 @@ test('partner: the Bearer token is what Identity receives, and a malformed heade
 test('web user: the sealed cookie value, the Origin and the real method are what Identity receives', async () => {
   const { http, access } = app();
   await web(http);
-  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', method: 'POST' });
+  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', requestOrigin: 'https://web.example', method: 'POST' });
 });
 
 test('web user: the cookie name follows Identity (no prefix locally, __Host- elsewhere)', async () => {

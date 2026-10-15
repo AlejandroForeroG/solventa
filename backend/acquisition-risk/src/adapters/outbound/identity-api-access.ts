@@ -37,7 +37,7 @@ export class IdentityApiAccess implements ApiAccess {
   async authorize(credential: AccessCredential): Promise<AccessDecision> {
     const request = credential.kind === 'partner'
       ? { kind: 'partner', token: credential.token, operation: 'quotes:create' }
-      : { kind: 'web', cookie: credential.cookie, origin: credential.origin, method: credential.method, operation: 'quotes:create' };
+      : { kind: 'web', cookie: credential.cookie, origin: credential.origin, ...(credential.requestOrigin === undefined ? {} : { requestOrigin: credential.requestOrigin }), method: credential.method, operation: 'quotes:create' };
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const reply = await Promise.race([

@@ -1,6 +1,6 @@
 export type AccessCredential =
   | { kind: 'partner'; token: string }
-  | { kind: 'web'; cookie: string; origin: string; method: string };
+  | { kind: 'web'; cookie: string; origin: string; requestOrigin?: string; method: string };
 
 export type QuoteActor =
   | { kind: 'partner'; partnerId: string }

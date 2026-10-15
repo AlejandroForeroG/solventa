@@ -15,7 +15,7 @@ import { SqlIdentitySessions } from './adapters/outbound/identity-sessions';
 import { SqlPartnerAccess } from './adapters/outbound/partner-access';
 import { WorkosAuthentication } from './adapters/outbound/workos-authentication';
 import { WorkosPartnerAuthentication } from './adapters/outbound/workos-partner-authentication';
-import { configuration } from './adapters/inbound/authentication-http';
+import { authenticationOrigins, configuration } from './adapters/inbound/authentication-http';
 import { WorkosMobileAuthentication } from './adapters/outbound/workos-mobile-authentication';
 import { MobileSessions } from './application/mobile-sessions';
 import { RegisteredDevices } from './application/registered-devices';
@@ -36,7 +36,8 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
       } : null,
       web: config ? {
         authenticate: (cookie, refresh) => new WorkosAuthentication(config).authenticate(cookie, refresh),
-        allowedOrigins: config.local ? [config.origin, 'http://localhost:5173'] : [config.origin],
+        allowedOrigins: config.local ? [config.origin, 'http://localhost:5173'] : authenticationOrigins(env.APP_ENV),
+        defaultOrigin: config.origin,
       } : null,
     }, input);
   } catch {

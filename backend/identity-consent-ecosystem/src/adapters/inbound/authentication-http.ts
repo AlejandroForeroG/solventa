@@ -28,12 +28,20 @@ export async function unsealAttempt(value: string, password: string, origin: str
     return attempt;
   } catch { return null; }
 }
-export function configuration(env: IdentityEnv): AuthConfiguration | null {
+export function authenticationOrigins(environment: string): readonly string[] {
+  if (environment === 'local') return ['http://localhost:8787'];
+  const host = environment === 'dev' ? 'dev.solventa.site' : environment === 'staging' ? 'staging.solventa.site' : environment === 'prod' ? 'solventa.site' : null;
+  return host ? [`https://${host}`, `https://solventa-web-${environment}.ja-forerog1.workers.dev`] : [];
+}
+
+export function configuration(env: IdentityEnv, requestOrigin?: string): AuthConfiguration | null {
   if (!env.WORKOS_API_KEY || !env.WORKOS_CLIENT_ID || !env.AUTH_COOKIE_PASSWORD || env.AUTH_COOKIE_PASSWORD.length < 32) return null;
-  const origin = env.AUTH_ORIGIN;
-  const expected = env.APP_ENV === 'local' ? 'http://localhost:8787' : `https://solventa-web-${env.APP_ENV}.ja-forerog1.workers.dev`;
-  if (origin !== expected || env.AUTH_REDIRECT_URI !== origin + '/auth/callback') return null;
-  return { apiKey: env.WORKOS_API_KEY, clientId: env.WORKOS_CLIENT_ID, cookiePassword: env.AUTH_COOKIE_PASSWORD, origin, redirectUri: env.AUTH_REDIRECT_URI, local: env.APP_ENV === 'local' };
+  const origins = authenticationOrigins(env.APP_ENV);
+  if (!origins.includes(env.AUTH_ORIGIN) || env.AUTH_REDIRECT_URI !== env.AUTH_ORIGIN + '/auth/callback') return null;
+  const origin = requestOrigin ?? env.AUTH_ORIGIN;
+  if (!origins.includes(origin)) return null;
+  // Each alias finishes the transaction on the host that owns its OAuth cookie.
+  return { apiKey: env.WORKOS_API_KEY, clientId: env.WORKOS_CLIENT_ID, cookiePassword: env.AUTH_COOKIE_PASSWORD, origin, redirectUri: origin + '/auth/callback', local: env.APP_ENV === 'local' };
 }
 function cookieName(config: AuthConfiguration, attempt = false) { return (config.local ? '' : '__Host-') + (attempt ? 'solventa-oauth' : 'solventa-session'); }
 function writeCookie(c: Context<AuthEnv>, config: AuthConfiguration, value: string, attempt = false) {
@@ -48,10 +56,10 @@ export type AuthenticationCollaborators = {
 export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators) {
   app.use('/auth/*', async (c, next) => { c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff'); await next(); });
   app.all('/auth/*', async c => {
-    const config = configuration(c.env);
-    if (!config) return c.json({ error: 'authentication_unavailable' }, 503);
+    if (!configuration(c.env)) return c.json({ error: 'authentication_unavailable' }, 503);
     const url = new URL(c.req.url);
-    if (url.origin !== config.origin) return c.json({ error: 'invalid_origin' }, 400);
+    const config = configuration(c.env, url.origin);
+    if (!config) return c.json({ error: 'invalid_origin' }, 400);
     const path = url.pathname;
     if (!['/auth/login','/auth/callback','/auth/session','/auth/logout'].includes(path)) return c.json({ error: 'not_found' }, 404);
     if (c.req.method !== (path === '/auth/logout' ? 'POST' : 'GET')) return c.json({ error: 'method_not_allowed' }, 405);

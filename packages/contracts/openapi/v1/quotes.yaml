@@ -42,8 +42,9 @@ paths:
       tags: [Quotes]
       description: >
         The actor is the user of the sealed session cookie; the quote belongs to that user's own
-        subject and no user identifier is taken from the body. A write must carry the configured
-        Origin. Requests with an Authorization header are rejected with 400. If the session expired,
+        subject and no user identifier is taken from the body. A write must carry the same Origin
+        as its actual allowed request host, including during canonical/legacy domain transition.
+        Requests with an Authorization header are rejected with 400. If the session expired,
         renew it through /auth/session and retry once.
       security:
         - WebSession: []
