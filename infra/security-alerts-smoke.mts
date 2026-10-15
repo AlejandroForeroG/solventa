@@ -117,18 +117,14 @@ try {
   const seeded = [await seed(), await seed()];
   const firstOwner = randomUUID();
   const secondOwner = randomUUID();
-  const beforeConcurrent = await snapshot();
-  const callsBeforeConcurrent = deliveryCalls;
-  const concurrent = await Promise.all([claim(firstOwner), claim(secondOwner)]);
+  const concurrent = await observeProgress(
+    () => Promise.all([claim(firstOwner), claim(secondOwner)]),
+    batches => batches.reduce((count, batch) => count + batch.events.length, 0),
+    [{ events: [], deadLettered: 0 }, { events: [], deadLettered: 0 }]);
   assert.ok(concurrent.every(batch => batch.deadLettered === 0));
   const claims = concurrent.flatMap((batch, index) => batch.events.map(event => ({ event, owner: [firstOwner, secondOwner][index] })));
-  assert.ok(claims.length <= 2);
+  assert.ok(claims.length >= 1 && claims.length <= 2, 'a concurrent claim must acquire an event before sequential recovery');
   assert.equal(new Set(claims.map(({ event }) => event.eventId)).size, claims.length);
-  if (claims.length === 0) {
-    const after = await verifyNoProgress(beforeConcurrent, callsBeforeConcurrent, concurrent,
-      [{ events: [], deadLettered: 0 }, { events: [], deadLettered: 0 }]);
-    console.log(JSON.stringify({ event: 'security_alert_smoke_no_progress', before: beforeConcurrent, result: concurrent, after }));
-  }
   // A claim is bounded by its limit; it does not promise an immediately full batch.
   const recoveryOwner = randomUUID();
   const remaining = await claimEvents(2 - claims.length, recoveryOwner);
