@@ -22,6 +22,27 @@ describe('product landing and quote entry', () => {
     expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
   });
 
+  it('exposes session failures and retries without treating an unknown session as anonymous', async () => {
+    let resolveSession!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(sessionResponse(503))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveSession = resolve; }));
+    const user = userEvent.setup();
+    render(<App />);
+    const retry = await screen.findByRole('button', { name: 'Reintentar' });
+    expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+    expect(screen.queryByRole('link', { name: 'Iniciar sesión' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Comenzar cotización' })).toBeVisible();
+    await user.click(retry);
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Iniciar sesión' })).toBeNull();
+    resolveSession(sessionResponse(200));
+    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Conoce el seguro de vida de tu crédito.' })).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
+  });
+
   it('keeps the language switch and native navigation usable from the keyboard', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(sessionResponse(401));
     const user = userEvent.setup();

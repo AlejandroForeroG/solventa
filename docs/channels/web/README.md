@@ -26,6 +26,8 @@ The landing creates no quote, reads no consent terms and submits no customer inf
 
 A valid same-tab estimate draft also opens the journey at `/`, allowing the existing OAuth callback to resume the quote directly instead of showing the landing. The draft is still consumed only by the existing authenticated handoff. Root visits without a draft show the landing for signed-in visitors too; the primary link opens their protected quote form.
 
+If session checking fails on the landing, a visible error offers a retry while the quote entry remains usable. The header shows sign-in only after confirming an anonymous session; loading or an unavailable session is not treated as anonymous. A successful retry restores the appropriate header action without leaving the landing.
+
 ## Quote journey
 
 ### Anonymous estimate and sign-in

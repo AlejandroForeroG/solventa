@@ -71,13 +71,13 @@ function Shell() {
       <a href="/" aria-label={t('landing.home')}><img src={brandAssets.logo.green} alt="Solventa" width={174} /></a>
       <div className="header-tools">
         <LocaleSwitch />
-        {session !== 'authenticated' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
+        {session === 'anonymous' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
           if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
         }}>{t('session.title')}</a>}
         {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
       </div>
     </header>
-    {isLanding ? <Landing /> : session === 'authenticated'
+    {isLanding ? <Landing sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
