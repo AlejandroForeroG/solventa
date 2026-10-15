@@ -2,11 +2,15 @@
 
 Code: `apps/web`. Run commands from the repository root.
 
-React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes entry, session checking, logout, the minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
+React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes an anonymous calculator, session checking, logout, the authenticated minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
 
 Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Service Binding and does not receive tokens. See [authentication](../../modules/identity-consent-ecosystem/authentication.md) to start the complete local flow at `http://localhost:8787`.
 
 The Worker applies API versioning to `/api/v<N>/...`: it adds deprecation headers and returns 410 when a version reaches its retirement date. See [contracts](../../shared/contracts/README.md).
+
+If an Identity or Acquisition binding fails, the gateway's 503 response normalizes a supplied valid RFC UUID trace to lowercase, or generates a new UUID for an invalid/missing value. The response body and `X-Trace-Id` header match; exception details are omitted.
+
+Every static asset also runs through the gateway (`assets.run_worker_first:true`). The gateway adds CSP, frame denial, nosniff and no-referrer headers after routing, preserving bodies, status, redirects, cookies and trace/version headers. HSTS is applied only to HTTPS responses. Application CSP permits only same-origin scripts/styles/fonts/connections; it needs no inline scripts or styles. The API reference keeps its separate restrictive policy, including its required inline viewer styles. See [browser security and font integrity](../../security.md#error-logging-and-browser-headers).
 
 The SPA reaches `/auth/*` through `src/api/auth.ts`. Its calls are protected by a Pact contract with the web Worker; changing them requires updating the pact ([consumer contracts](../../shared/contracts/README.md#consumer-contracts-pact)).
 
@@ -16,13 +20,33 @@ Logo and favicon come from `packages/assets`; preserve the green identity and lo
 
 ## Quote journey
 
+### Anonymous estimate and sign-in
+
+The public calculator retains the approved seven-step indicator and its order: Quote, Result, Consent, Offer, Policy, Payment and Signature. Input and loading stay on step 1; the preliminary result and its sign-in guidance stay on step 2. Consent and later steps remain unavailable anonymously. After sign-in, confirming the customer details returns to the existing protected quote form at step 1; its saved result and explicit consent keep steps 2 and 3. The indicator never treats sign-in as consent or unlocks unimplemented steps.
+
+Completion and error announcements use the currently selected interface language even when it changes during a pending calculation. Choosing to sign in without retaining inputs clears any older draft as well.
+
+The header sign-in shortcut also retains complete calculator inputs; if storage is blocked it offers the same explicit choice to proceed without them.
+
+The public calculator stays usable during session checking. Each edit also updates the shell's in-memory inputs, so a slow session check (including a retry after an outage) can switch to the authenticated form without discarding the amount and term entered while it was pending. This does not persist identity fields or a price.
+
+An anonymous visitor starts with `PublicQuoteFlow`: age in completed years, loan amount in integer COP and term in months. It calls `POST /api/v1/quote-estimates` with `credentials: omit`, without checking access, reading SQL or querying any source. The backend reuses the saved-quote rating rule. This is an indicative calculator, not a stored business quote: it issues neither a quote identifier nor validity and cannot unlock an offer or contracting. The browser validates the response and its amount/term against the submitted inputs before showing it. Invalid inputs focus the first field; failures preserve the inputs and offer another calculation. The calculator remains available if session checking returns unavailable.
+
+Continuing shows instructions for existing accounts and registration through the existing hosted WorkOS login. It explicitly distinguishes sign-in from data authorization, explains that sources, purpose and validity will be shown before consent, and states the refusal/revocation options. It never authorizes on the customer's behalf or queries consent terms anonymously. Back navigation retains the estimate.
+
+The continuation link uses the existing `/auth/login` and `/auth/callback` without changing OAuth or adding return URLs. Immediately before following it, the browser saves only age, amount, term, a schema version and creation time in same-tab `sessionStorage`, for at most 30 minutes. No name, document, birth date, city, provider credential, quote identifier or trusted premium is saved. Invalid/expired drafts are discarded. If storage is blocked, the screen explains the loss and offers an explicit link to sign in without keeping inputs. A failed/cancelled login can return to the calculator with the inputs intact.
+
+After authentication, the draft is consumed and removed from storage. Amount and term prefill the protected form; a notice shows the age used for the estimate and asks for date of birth and the remaining customer fields. The authenticated quote endpoint revalidates and recalculates independently before showing its saved result and consent. A changed age can change the price; a browser draft never grants ownership, consent or a price. Logout clears any remaining draft. Visitors already signed in can use the protected quote form directly.
+
+### Authenticated quote
+
 `src/quote/` holds the form, the result and the access-denied screen; `src/i18n/` holds the es-CO and en-US catalogues (react-intl) and the switcher, which changes language without reloading. Amounts are always shown in COP. A single `aria-live` region announces state changes, and focus moves to the first invalid field or to the step heading.
 
 The browser calls `POST /api/v1/me/quotes` with the sealed session cookie of the same origin; it holds no key or token. If the answer is 401 the client renews the session through `/auth/session` and retries the same request once, with the same idempotency key. A session that cannot be renewed sends the user back to sign in; 403 shows the access-denied screen and 503 a service-unavailable message. See [API access](../../modules/identity-consent-ecosystem/api-access.md).
 
 The client validates successful responses before displaying a quote: its identifier, integer COP amounts, term, timestamp, minimum-data basis, rule version and trace identifier must match the supported contract. Malformed results and field errors produce the unavailable state without losing the form or changing the retry key. The result shows "valid until" the response's `validUntil`, formatted in the `America/Bogota` time zone; the client never assumes a fixed validity period. The result continues to data authorization. The stepper is an ordered list that marks the current step with `aria-current="step"`; it contains no controls and adds no tab stops.
 
-Styles follow the approved Design System values in `src/index.css`: IBM Plex Sans for text, Space Grotesk for headings and IBM Plex Mono for labels, identifiers and amounts, loaded from Google Fonts through `index.html` with system fallbacks. Every link, button and field shows the same keyboard focus ring (3 px, brand green, 2 px offset). Hover colours apply only to the element's own variant, and long trace identifiers wrap on narrow screens.
+Styles follow the approved Design System values in `src/index.css`: IBM Plex Sans for text, Space Grotesk for headings and IBM Plex Mono for labels, identifiers and amounts, with the original system fallbacks. `main.tsx` imports `@solventa/assets/fonts/web.css`; Vite emits the exact unmodified official font files as same-origin assets. All original declared weights and Unicode subsets are retained with `font-display: swap` and complete licenses; no font CDN or operating-system installation is required. See [font provenance and update rules](../../../packages/assets/fonts/web/README.md). Every link, button and field shows the same keyboard focus ring (3 px, brand green, 2 px offset). Hover colours apply only to the element's own variant, and long trace identifiers wrap on narrow screens.
 
 ## Consent and privacy dashboard
 

@@ -5,4 +5,4 @@ import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 expect.extend(axeMatchers);
-afterEach(() => { cleanup(); window.localStorage.clear(); });
+afterEach(() => { cleanup(); window.localStorage.clear(); window.sessionStorage.clear(); });

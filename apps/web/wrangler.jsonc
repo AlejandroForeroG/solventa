@@ -13,12 +13,7 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/health",
-      "/internal/*",
-      "/api/*",
-      "/auth/*"
-    ]
+    "run_worker_first": true
   },
   "observability": {
     "enabled": true,
@@ -76,7 +71,14 @@
         "required": [
           "DEV_INFRA_TOKEN"
         ]
-      }
+      },
+      "routes": [
+        {
+          "pattern": "dev.solventa.site",
+          "custom_domain": true,
+          "zone_id": "a750d13e4cc496c6f26671cf1e8ad099"
+        }
+      ]
     },
     "staging": {
       "name": "solventa-web-staging",
@@ -103,7 +105,14 @@
         "required": [
           "DEV_INFRA_TOKEN"
         ]
-      }
+      },
+      "routes": [
+        {
+          "pattern": "staging.solventa.site",
+          "custom_domain": true,
+          "zone_id": "a750d13e4cc496c6f26671cf1e8ad099"
+        }
+      ]
     },
     "prod": {
       "name": "solventa-web-prod",
@@ -130,7 +139,14 @@
         "required": [
           "DEV_INFRA_TOKEN"
         ]
-      }
+      },
+      "routes": [
+        {
+          "pattern": "solventa.site",
+          "custom_domain": true,
+          "zone_id": "a750d13e4cc496c6f26671cf1e8ad099"
+        }
+      ]
     }
   },
   "secrets": {

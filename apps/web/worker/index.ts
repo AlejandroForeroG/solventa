@@ -2,14 +2,15 @@ import { timingSafeEqual } from 'node:crypto';
 import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
+import { withSecurityHeaders } from './security-headers';
 
-const quotesPath = /^\/api\/v1\/(me\/)?quotes(\/|$)/;
+const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
   const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied)
-    ? supplied
+    ? supplied.toLowerCase()
     : crypto.randomUUID();
   return Response.json({ error, traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } });
 }
@@ -23,8 +24,7 @@ async function forwardToAcquisition(request: Request, env: WebEnv, headers: Reco
   finally { clearTimeout(timeout); }
 }
 
-export default {
-  async fetch(request: Request, env: WebEnv): Promise<Response> {
+async function route(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
@@ -37,11 +37,8 @@ export default {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
-        catch {
-          const requestedTrace = request.headers.get('X-Trace-Id') ?? '';
-          const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
-          return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
-        } finally { clearTimeout(timeout); }
+        catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
+        finally { clearTimeout(timeout); }
       }
       const response = isQuotesPath(path) ? await forwardToAcquisition(request, env, headers) : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
@@ -61,5 +58,10 @@ export default {
       } catch { return Response.json({ ready: false }, { status: 503, headers }); }
     }
     return env.ASSETS.fetch(request);
+}
+
+export default {
+  async fetch(request: Request, env: WebEnv): Promise<Response> {
+    return withSecurityHeaders(request, await route(request, env));
   },
 } satisfies ExportedHandler<WebEnv>;

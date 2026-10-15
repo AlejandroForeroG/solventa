@@ -8,11 +8,13 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+
 | Environment | API reference |
 |---|---|
-| Dev | [OpenAPI viewer](https://solventa-web-dev.ja-forerog1.workers.dev/api/docs/) |
-| Staging | [OpenAPI viewer](https://solventa-web-staging.ja-forerog1.workers.dev/api/docs/) |
-| Prod | [OpenAPI viewer](https://solventa-web-prod.ja-forerog1.workers.dev/api/docs/) |
+| Dev | [OpenAPI viewer](https://dev.solventa.site/api/docs/) |
+| Staging | [OpenAPI viewer](https://staging.solventa.site/api/docs/) |
+| Prod | [OpenAPI viewer](https://solventa.site/api/docs/) |
 | Local | [OpenAPI viewer](http://localhost:8787/api/docs/) after building web and starting the local Workers |
 
 Select a domain/version to inspect its operations, parameters, request/response schemas, examples and security requirements. The responsive reference includes sidebar navigation, search and request/response examples alongside operations. The `spec` query parameter preserves the selected domain/version when reloading or sharing operation links, for example `/api/docs/?spec=v1/quotes`. **OpenAPI JSON** opens the selected bundled specification; `/api/docs/catalog.json` lists available specifications. The viewer identifies its current environment. Relative `servers` URLs refer to that same environment.
@@ -96,6 +98,8 @@ npm run test:pact        # Consumer pacts, provider verification and the break-d
 All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
 
 ## Consumer contracts (Pact)
+
+Quotes revision 1.2.0 adds the public `POST /api/v1/quote-estimates` calculator without changing either saved-quote entry. Its SPA client is `apps/web/src/quote/estimate-api.ts`; the consumer pact and real Acquisition provider cover an anonymous calculation, invalid age and service outage. `EstimateRequest`, `Estimate` and `EstimateValidationError` describe the bounded integer-only request and nonpersistent response. The example embedded in `quotes.yaml` is checked against the schema and actual rating result by `tests/quote-estimates.test.ts`. See the [owning module](../../modules/acquisition-risk/README.md#anonymous-indicative-calculator) for the absence of a stored quote or business decision.
 
 Pact records what a consumer actually uses from a provider and checks that the provider still satisfies it. OpenAPI describes what a provider offers; a pact describes what a consumer depends on, so a change that breaks a consumer fails CI before it is promoted. Pacts live in the repository; there is no Pact Broker, so `can-i-deploy` is not available and `npm run check` is the control.
 

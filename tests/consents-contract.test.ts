@@ -69,8 +69,8 @@ test('the examples satisfy the contract', () => {
   }
 });
 
-test('contract revision 1.1.0 documents compatible bounded pagination', () => {
-  assert.equal(consents.info.version, '1.1.0');
+test('contract revision 1.1.1 preserves compatible bounded pagination', () => {
+  assert.equal(consents.info.version, '1.1.1');
   assert.ok(consents.paths['/consents'].get.parameters.some((p: { name?: string }) => p.name === 'after'));
   assert.equal(schema('ConsentList')({ items: [], traceId: examples.terms.traceId }), true, 'the original response is still valid');
   assert.equal(schema('ConsentList')({ items: [], nextCursor: 'bad', traceId: examples.terms.traceId }), false);
