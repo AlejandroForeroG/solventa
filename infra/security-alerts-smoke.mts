@@ -60,18 +60,32 @@ try {
   });
 
   // Concurrent independent connections must never acquire the same unexpired lease.
-  await seed(); await seed();
+  const seeded = [await seed(), await seed()];
   const firstOwner = randomUUID();
   const secondOwner = randomUUID();
   const concurrent = await Promise.all([claim(firstOwner), claim(secondOwner)]);
-  const claims = concurrent.flatMap(batch => batch.events);
+  const claims = concurrent.flatMap((batch, index) => batch.events.map(event => ({ event, owner: [firstOwner, secondOwner][index] })));
+  assert.ok(claims.length >= 1 && claims.length <= 2);
+  assert.equal(new Set(claims.map(({ event }) => event.eventId)).size, claims.length);
+  // SKIP LOCKED may defer an available row under contention; only exclusivity, not
+  // a full batch from each competing statement, is required for safe delivery.
+  const recoveryOwner = randomUUID();
+  const remaining = await claim(recoveryOwner, 2);
+  claims.push(...remaining.events.map(event => ({ event, owner: recoveryOwner })));
   assert.equal(claims.length, 2);
-  assert.equal(new Set(claims.map(event => event.eventId)).size, 2);
+  assert.equal(new Set(claims.map(({ event }) => event.eventId)).size, 2);
+  assert.deepEqual(claims.map(({ event }) => event.eventId).sort(), seeded.sort());
+  for (const { event, owner } of claims) {
+    const stored = await row(event.eventId);
+    assert.equal(stored.status, 'publishing');
+    assert.equal(stored.lease_owner, owner);
+    assert.equal(Number(stored.attempts), 1);
+    assert.ok(stored.lease_until.getTime() > Date.now());
+  }
   assert.equal((await claim()).events.length, 0);
-  const first = concurrent[0].events[0];
-  assert.ok(first);
-  assert.equal(await outbox.published(first.eventId, secondOwner), false);
-  assert.equal(await outbox.published(first.eventId, firstOwner), true);
+  const first = claims[0].event;
+  assert.equal(await outbox.published(first.eventId, randomUUID()), false);
+  assert.equal(await outbox.published(first.eventId, claims[0].owner), true);
   assert.equal((await row(first.eventId)).status, 'published');
   assert.ok((await row(first.eventId)).published_at);
   await empty();

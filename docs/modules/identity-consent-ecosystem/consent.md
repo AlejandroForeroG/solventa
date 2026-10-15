@@ -64,6 +64,8 @@ The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it d
 
 Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. A grant must carry a positive integer text version and an expiry strictly after Acquisition's clock when the reply is received; a consent that expired in transit reaches neither a provider nor a stored copy. This local check adds no remote call. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
 
+`ReadSignal` forwards its initiating `traceId` through the guard and RPC into Identity's required security rejection record. The optional RPC field remains compatible with older callers. The outbound adapter accepts RFC-variant UUID versions 1 through 8, normalizes them to lowercase and omits invalid or missing values; Identity then supplies its safe fallback. Failure to append a required rejection record returns `unavailable` and reaches neither a provider nor a stored copy.
+
 | Consent check | Provider | Stored copy | Result |
 |---|---|---|---|
 | Denied or unavailable | Not called | Not read | `denied` with the reason |
