@@ -8,6 +8,8 @@ import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import type { Signal, SignalScope } from '../backend/acquisition-risk/src/domain/signal';
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { Consents } from '../backend/identity-consent-ecosystem/src/application/consents';
+import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
+import type { SecurityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 import type { ConsentCheck } from '../backend/identity-consent-ecosystem/src/application/consents';
 import { ANA, LUIS, MemoryConsents, SEAL_KEY, TRACE, clock } from './support/consent-fakes';
 
@@ -31,7 +33,13 @@ class CountingSnapshots implements SignalSnapshots {
 function rig(identity?: IdentityConsentRpc) {
   const store = new MemoryConsents();
   const time = clock();
-  const consents = new Consents({ store, platform: time, integrity: new HmacIntegrity(SEAL_KEY) });
+  const securityEvents: SecurityDecision[] = [];
+  let securityFailing = false;
+  const security = new SecurityDecisions({ append: async decision => {
+    if (securityFailing) throw new Error('synthetic_security_store_down');
+    securityEvents.push(decision);
+  } }, () => crypto.randomUUID());
+  const consents = new Consents({ store, platform: time, integrity: new HmacIntegrity(SEAL_KEY), security });
   const rpcCalls: unknown[] = [];
   const rpc: IdentityConsentRpc = identity ?? { verifyConsentV1: async request => { rpcCalls.push(request); return consents.verify(request as ConsentCheck); } };
   const provider = new CountingProvider();
@@ -39,7 +47,8 @@ function rig(identity?: IdentityConsentRpc) {
   const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50, time.now), provider, snapshots });
   const ask = (subjectToken = ANA.subjectToken, scope: SignalScope = 'income_obligations_12m') => read.execute({ subjectToken, scope, traceId: TRACE });
   const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 2, locale: 'es-CO' }, traceId: TRACE });
-  return { store, time, consents, provider, snapshots, rpcCalls, ask, grant };
+  return { store, time, consents, provider, snapshots, rpcCalls, ask, grant, securityEvents,
+    failSecurity: () => { securityFailing = true; } };
 }
 const untouched = (r: ReturnType<typeof rig>) => assert.deepEqual({ provider: r.provider.calls, copies: r.snapshots.reads }, { provider: 0, copies: 0 });
 
@@ -151,7 +160,48 @@ test('the check is repeated on every call and never reused', async () => {
   await r.grant();
   await r.ask(); await r.ask(); await r.ask();
   assert.equal(r.rpcCalls.length, 3);
-  assert.deepEqual(r.rpcCalls[0], { subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m' });
+  assert.deepEqual(r.rpcCalls[0], { subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m', traceId: TRACE });
+});
+
+test('signal denials preserve the initiating trace through the binding and Identity security record', async () => {
+  for (const cause of ['consent_missing', 'consent_revoked', 'consent_invalid'] as const) {
+    const r = rig();
+    if (cause !== 'consent_missing') {
+      const granted = await r.grant();
+      assert.ok(granted.status === 'created');
+      if (cause === 'consent_revoked') {
+        await r.consents.revoke({ principal: ANA, consentCode: granted.consent.consentId, traceId: TRACE });
+      } else {
+        const consent = r.store.consents[0];
+        consent.seal = consent.seal === '0'.repeat(64) ? '1'.repeat(64) : '0'.repeat(64);
+      }
+    }
+    assert.deepEqual(await r.ask(), { status: 'denied', reason: cause });
+    assert.equal(r.securityEvents.length, 1);
+    assert.equal(r.securityEvents[0].correlationId, TRACE);
+    assert.equal(r.securityEvents[0].cause, cause);
+    assert.equal(JSON.stringify(r.securityEvents).includes(ANA.subjectToken), false);
+    assert.deepEqual(r.rpcCalls, [{ subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m', traceId: TRACE }]);
+    untouched(r);
+  }
+  const unavailable = rig();
+  unavailable.failSecurity();
+  assert.deepEqual(await unavailable.ask(), { status: 'denied', reason: 'unavailable' });
+  assert.equal(unavailable.securityEvents.length, 0);
+  untouched(unavailable);
+});
+
+test('consent binding forwards canonical trace UUIDs and omits invalid or absent traces', async () => {
+  const requests: unknown[] = [];
+  const guard = new IdentityConsentGuard({ verifyConsentV1: async request => {
+    requests.push(request);
+    return { allowed: false, reason: 'consent_missing' };
+  } });
+  for (const traceId of [TRACE.toUpperCase(), undefined, 'synthetic-private-value', TRACE.replace('-4c8e-', '-0c8e-'), TRACE.replace('-9a52-', '-7a52-')]) {
+    await guard.verify(ANA.subjectToken, 'income_obligations_12m', traceId);
+  }
+  const input = { subjectToken: ANA.subjectToken, purposeCode: 'risk_profiling', scope: 'income_obligations_12m' };
+  assert.deepEqual(requests, [{ ...input, traceId: TRACE }, input, input, input, input]);
 });
 
 test('if Identity cannot answer, is slow or answers something unexpected, access is denied', async () => {

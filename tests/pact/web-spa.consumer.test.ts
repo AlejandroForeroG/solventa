@@ -6,6 +6,7 @@ import { declineConsent, getTerms, grantConsent, listConsents, revokeConsent } f
 import { SUPPORTED_TERMS } from '../../apps/web/src/consent/wording';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
+import { requestEstimate } from '../../apps/web/src/quote/estimate-api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
 
 const consumerName = 'solventa-web-spa';
@@ -67,6 +68,36 @@ async function withServer<T>(serverUrl: string, run: () => Promise<T>): Promise<
   try { return await run(); } finally { globalThis.fetch = realFetch; }
 }
 const submitQuote = (serverUrl: string, values = quoteValues) => withServer(serverUrl, () => requestQuote(values, quoteKey, 'es-CO'));
+
+describe('SPA anonymous estimate', () => {
+  const values = { ageYears: '34', amount: '320000000', termMonths: '180' };
+  const request = { method: 'POST', path: '/api/v1/quote-estimates', headers: { 'content-type': 'application/json' } };
+  test('calculates without a session or idempotency key', async () => {
+    pact.given('no active session').uponReceiving('an anonymous indicative calculation')
+      .withRequest({ ...request, body: { ageYears: 34, amount: 320000000, termMonths: 180 } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: {
+        premiumMonthly: MatchersV3.integer(86400), currency: MatchersV3.equal('COP'), sumInsured: MatchersV3.equal(320000000),
+        termMonths: MatchersV3.equal(180), basis: MatchersV3.equal('minimum_data'), ruleVersion: MatchersV3.regex('^.+$', 'provisional-1'), traceId
+      } });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => requestEstimate(values));
+      assert.equal(outcome.kind, 'estimate');
+      if (outcome.kind === 'estimate') assert.equal(outcome.estimate.premiumMonthly, 86400);
+    });
+  });
+  test('receives invalid calculator fields', async () => {
+    pact.given('no active session').uponReceiving('an anonymous calculation with an unsupported age')
+      .withRequest({ ...request, body: { ageYears: 17, amount: 320000000, termMonths: 180 } })
+      .willRespondWith({ status: 400, headers: jsonResponse, body: { errors: [{ field: 'ageYears', code: 'age_out_of_range' }] } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => requestEstimate({ ...values, ageYears: '17' })), { kind: 'invalid', fields: ['ageYears'] }));
+  });
+  test('reports a calculator outage', async () => {
+    pact.given('the calculator is down').uponReceiving('an anonymous calculation while Acquisition is unavailable')
+      .withRequest({ ...request, body: { ageYears: 34, amount: 320000000, termMonths: 180 } })
+      .willRespondWith({ status: 503, headers: jsonResponse, body: { error: 'service_unavailable', traceId } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => requestEstimate(values)), { kind: 'unavailable' }));
+  });
+});
 
 describe('SPA quote request', () => {
   test('receives the created quote', async () => {

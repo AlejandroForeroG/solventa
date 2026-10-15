@@ -7,11 +7,13 @@ Identity verifies authentication and the `quotes:create` permission for partners
 | Environment | Base URL |
 |---|---|
 | local | `http://localhost:8787` |
-| dev | `https://solventa-web-dev.ja-forerog1.workers.dev` |
-| staging | `https://solventa-web-staging.ja-forerog1.workers.dev` |
-| prod | `https://solventa-web-prod.ja-forerog1.workers.dev` |
+| dev | `https://dev.solventa.site` |
+| staging | `https://staging.solventa.site` |
+| prod | `https://solventa.site` |
 
 Each environment has its own configuration, credentials and records. Public requests enter through the web Worker; backends are private. Having the route in code does not provision an M2M application or its permissions in WorkOS.
+
+The table lists canonical URLs; deployment and DNS/certificate readiness require separate verification. The exact previous workers.dev alias for the same environment remains available during the [domain transition](authentication.md#custom-domain-transition).
 
 ## Choosing an identity
 
@@ -68,7 +70,7 @@ The web user identity comes only from the cryptographically verified sealed Work
 
 The web user operation policy in `backend/identity-consent-ecosystem/src/application/api-access.ts` allows `quotes:create` and, for the user's own consent only, `consents:read` and `consents:write` (see [Consent](consent.md)). A partner credential is never allowed the consent operations. It is not a role system: it grants no access to other users' resources, and permission to manage consent is not consent to query a source. Each future operation must add its own explicit rule, resource authorization and consent checks in the owning use case. The web route rejects an Authorization header with 400 to prevent mixing credential types.
 
-The access check does not refresh the cookie and never registers a session: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require the configured Origin and otherwise return 403; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
+The access check does not refresh the cookie and never registers a session: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require Origin to match the actual allowed request origin and otherwise return 403; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
 
 ## Responses
 
@@ -114,19 +116,25 @@ The partner actor has no `principal`, and the user actor has no partner or crede
 
 Access errors include only the canonical code and correlation UUID, without provider data. If identity or permission cannot be verified, a protected operation must not proceed.
 
+An absent credential is rejected with 401 before provider configuration is required, including an absent web cookie. The rejection still requires its security audit/outbox and becomes 503 if that write fails. A supplied web cookie requires the configured provider; missing configuration returns 503 without claiming a credential denial. When provider configuration is available, web writes with a supplied cookie still require an allowed Origin.
+
+For a valid access-check input, a final 401 or 403 is recorded as a minimal Identity security decision with atomic audit/outbox before the denial returns. If that required record cannot be committed, the result is `503 access_unavailable`; no protected operation proceeds. Invalid input, unsupported HTTP methods and technical 503 results do not create these denial events. See [security recording and delivery boundaries](../../security.md#durable-rejection-records).
+
 ## Contract between backends
 
 Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a public HTTP route. Acquisition can use its existing Identity binding before invoking the quoting use case. The consumer adapter builds one of these inputs from the actual request:
 
 ```ts
-{ kind: 'partner', token, operation: 'quotes:create' }
-{ kind: 'web', cookie, origin, method, operation: 'quotes:create' }
-{ kind: 'mobile', token, operation: 'quotes:create' }
+{ kind: 'partner', token, operation: 'quotes:create', traceId }
+{ kind: 'web', cookie, origin, requestOrigin, method, operation: 'quotes:create', traceId }
+{ kind: 'mobile', token, operation: 'quotes:create', traceId }
 ```
 
 Identity's own [consent](consent.md) routes call the same function with `consents:read` or `consents:write`, for web users only: a partner credential is always forbidden those operations.
 
-`cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `method` is the actual method. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
+`cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `requestOrigin` is parsed from the actual HTTP request URL by the trusted owner adapter, never from a custom header or body. `method` is the actual method. Identity validates the request origin against its exact environment allowlist; mutations require the two origins to match, including between sibling aliases. Local 8787 also accepts the existing Vite Origin 5173. Older private RPC callers omitting the optional `requestOrigin` retain only the exact workers.dev Origin of their environment for writes, even after `AUTH_ORIGIN` becomes canonical. This preserves the previous Acquisition version during Identity-first publication or a later Acquisition deployment failure; it does not grant old callers the new alias. New HTTP adapters always send the metadata. Local callers retain localhost behavior.
+
+Optional `traceId` carries the initiating canonical UUID into the rejection record; a missing/invalid value receives a server-generated correlation. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
 
 A positive response applies to that check and must not be stored as permanent permission. Each use verifies the signature and current local state; the RPC does not renew cookies. Do not duplicate calls to Identity without reviewing the flow's limit of one internal remote dependency. Consent authorization for signals remains an additional pending capability.
 
@@ -163,7 +171,7 @@ Registration creates or reuses an active partner and records the credential with
 
 Identity owns `partners` and `partner_credentials`; each call checks their validity. Web users have no rows in these tables. The M2M reference is built as `JSON.stringify([issuer, organizationId, applicationId])` using verified claims. SQL stores identifiers and scopes, without JWTs, client secrets or cookies. Local revocation blocks subsequent use even while the JWT remains signed and unexpired. JWT verification does not establish immediate revocation in WorkOS: there is no per-request introspection.
 
-These probes do not perform quoting, consent, quotas, biometrics or implement a permission catalog for all future resources. The native authorization probe and session lifecycle are described in [native authentication](mobile-authentication.md); native business HTTP routes and UI remain separate work. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
+These probes do not perform quoting, consent, quotas, biometrics or implement a permission catalog for all future resources. The native authorization probe and session lifecycle are described in [native authentication](mobile-authentication.md); native business HTTP routes and UI remain separate work. Local registration/revocation and covered access denials have transactional auditing. Security outbox publication uses an optional, default-disabled email configuration; stored events or provider acceptance do not prove receiver delivery or a measured notification deadline. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
 
 ## Verification
 

@@ -70,9 +70,11 @@ Use the public gateway for the selected environment:
 
 | Environment | `EXPO_PUBLIC_API_BASE_URL` | Public WorkOS client ID |
 |---|---|---|
-| dev | `https://solventa-web-dev.ja-forerog1.workers.dev` | `client_01M47F52THNNZZZ4WSGACX8KA4` |
-| staging | `https://solventa-web-staging.ja-forerog1.workers.dev` | `client_01M47F209CBGBJGD73ZM39ADW6` |
-| prod | `https://solventa-web-prod.ja-forerog1.workers.dev` | `client_01M47F21P884580Q2GGF81NRV5` |
+| dev | `https://dev.solventa.site` | `client_01M47F52THNNZZZ4WSGACX8KA4` |
+| staging | `https://staging.solventa.site` | `client_01M47F209CBGBJGD73ZM39ADW6` |
+| prod | `https://solventa.site` | `client_01M47F21P884580Q2GGF81NRV5` |
+
+The table lists canonical Custom Domains. Previous exact workers.dev aliases remain available during the [domain transition](../../infrastructure/README.md#public-domains). A bundled API base change requires an app configuration/build; it does not transfer an in-flight OAuth attempt. The native callback scheme, WorkOS endpoints and client IDs remain unchanged. Verify TLS and the selected environment before use.
 
 Read `GET <base>/api/v1/mobile/config` before login; its `clientId` is the selected environment's public client ID and its `redirectUri` is `solventa://auth/callback`. Never mix the client/token with another base. An `EXPO_PUBLIC_*` value is bundled into the application, so only public configuration belongs there. Consent sealing keys and the WorkOS API key are server credentials and are not needed by this flow.
 
