@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -14,7 +14,8 @@ function serve(session: number) {
   });
 }
 
-afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); });
+beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
+afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
 
 describe('privacy dashboard in the application', () => {
   it.each([

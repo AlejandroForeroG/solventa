@@ -9,6 +9,7 @@ import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
 import { QuoteFlow } from './quote/QuoteFlow';
+import { Landing } from './landing/Landing';
 
 type Session = 'loading' | SessionStatus;
 
@@ -37,6 +38,7 @@ function Shell() {
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
+  const isLanding = window.location.pathname !== '/cotizar' && !failed;
   async function load() {
     setSession('loading');
     setSession(await fetchSession());
@@ -58,13 +60,14 @@ function Shell() {
   const t = (id: string) => intl.formatMessage({ id });
   return <div className="app-shell">
     <header className="channel-header">
-      <img src={brandAssets.logo.green} alt="Solventa" width={174} />
+      <a href="/" aria-label={t('landing.home')}><img src={brandAssets.logo.green} alt="Solventa" width={174} /></a>
       <div className="header-tools">
         <LocaleSwitch />
+        {isLanding && session !== 'authenticated' && <a className="btn btn-secondary btn-small" href="/auth/login">{t('session.title')}</a>}
         {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
       </div>
     </header>
-    {session === 'authenticated'
+    {isLanding ? <Landing /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>

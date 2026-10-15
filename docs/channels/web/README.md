@@ -14,6 +14,12 @@ The same Worker serves the public, read-only OpenAPI viewer at `/api/docs/` and 
 
 Logo and favicon come from `packages/assets`; preserve the green identity and loading, error and session states when extending the UI.
 
+## Product landing and quote entry
+
+The public home page introduces Solventa's mortgage life calculator, lists the inputs needed and explains account and consent boundaries in es-CO and en-US. The primary link opens `/cotizar`, which renders the existing quote journey and its seven-step indicator. The shared logo returns to `/`. Native links support direct entry, reload and browser back navigation through the existing SPA asset fallback; no client router or new server route is required.
+
+The landing creates no quote, reads no consent terms and submits no customer information. Session checking and the existing header sign-in/sign-out remain available. `/cotizar` retains the existing access, session recovery, quote and privacy states; an `auth=failed` return also opens that journey so its error remains visible. No OAuth callback, API contract, consent rule or contracting step changes in this increment.
+
 ## Quote journey
 
 `src/quote/` holds the form, the result and the access-denied screen; `src/i18n/` holds the es-CO and en-US catalogues (react-intl) and the switcher, which changes language without reloading. Amounts are always shown in COP. A single `aria-live` region announces state changes, and focus moves to the first invalid field or to the step heading.
