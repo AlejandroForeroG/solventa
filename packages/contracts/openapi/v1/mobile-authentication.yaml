@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.2.1
+  version: 1.3.1
   description: >
     Native WorkOS PKCE, session lifecycle and session-bound installation registration/revocation.
     Biometrics protect credentials on the device; the server does not attest biometric execution
@@ -140,7 +140,7 @@ paths:
     post:
       operationId: registerMobileDevice
       summary: Bind an installation to the verified native session
-      description: Requires an active local session registered within ten minutes. One installation per provider session. Active same-binding retries are idempotent; revoked bindings cannot reactivate. For a verified active session, policy rejections persist their decision capture, audit and outbox atomically before returning the same opaque 401; unavailable persistence returns 503 instead. No request body. Biometric confirmation and credential protection are enforced locally, not attested by this route.
+      description: Requires an active local session. First registration requires local session creation or signed WorkOS auth_time within ten minutes. Replacing a lost installation additionally requires auth_time strictly newer than every prior binding registration; token issuance or refresh is not sufficient. The owner transaction revokes prior active bindings and registers the new UUID, leaving one active binding per provider session with audit/outbox/capture. Active same-binding retries are idempotent; revoked UUIDs cannot reactivate. An old replaced binding cannot revoke its replacement through DELETE. Policy rejections persist their decision capture, audit and outbox atomically before returning opaque 401; unavailable persistence returns 503 instead. No request body or additional scope. Biometric confirmation and credential protection are enforced locally, not attested by this route.
       tags: [Mobile]
       security: [{ MobileBearer: [] }]
       responses: &deviceResponses

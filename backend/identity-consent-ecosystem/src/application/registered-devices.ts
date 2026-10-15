@@ -10,6 +10,7 @@ export type DeviceCapture = {
   inputs: {
     action: DeviceAction; installationId: string; sessionBound: boolean;
     evaluatedAt: string; registrationWindowMs: number;
+    authenticatedAt?: number;
     session: DeviceSnapshot['session']; bindings: DeviceSnapshot['bindings'];
   };
   sources: { source: string; capturedAt: string; quality: string }[];
@@ -34,6 +35,7 @@ export class RegisteredDevices {
     const operation = { ...input, installationId: canonicalInstallationId(input.installationId), correlationId: input.correlationId.toLowerCase() };
     let policyDenialRecorded = false;
     const result = await this.store.execute(operation, snapshot => {
+      snapshot = { ...snapshot, authenticatedAt: operation.identity.authenticatedAt };
       const decision = decideDeviceOperation(action, operation.installationId, snapshot);
       policyDenialRecorded = decision.effect === 'deny' && decision.record && snapshot.session !== null;
       const evaluatedAt = new Date(snapshot.observedAt).toISOString();
@@ -41,10 +43,11 @@ export class RegisteredDevices {
         schemaVersion: 1, contractVersion: 'v1', correlationId: operation.correlationId,
         inputs: { action, installationId: operation.installationId, sessionBound: true, evaluatedAt,
           registrationWindowMs: deviceRegistrationWindowMs, session: snapshot.session ? { ...snapshot.session } : null,
+          ...(snapshot.authenticatedAt !== undefined ? { authenticatedAt: snapshot.authenticatedAt } : {}),
           bindings: snapshot.bindings.map(binding => ({ ...binding, installationId: canonicalInstallationId(binding.installationId) })) },
         sources: [{ source: 'identity-session-device-snapshot', capturedAt: evaluatedAt, quality: 'verified' }],
         consent: { status: 'not_required' }, rule: { ...devicePolicy },
-        outcome: decision.effect === 'deny' ? decision.reason : action,
+        outcome: decision.effect === 'deny' ? decision.reason : decision.effect === 'replace' ? 'replace' : action,
       } };
     });
     if (!result && !policyDenialRecorded) {
