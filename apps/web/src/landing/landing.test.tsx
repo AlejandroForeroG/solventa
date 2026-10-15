@@ -31,11 +31,11 @@ describe('product landing and quote entry', () => {
     render(<App />);
     const retry = await screen.findByRole('button', { name: 'Reintentar' });
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
-    expect(screen.queryByRole('link', { name: 'Iniciar sesión' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Comenzar cotización' })).toBeVisible();
     await user.click(retry);
     expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Iniciar sesión' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
     expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
     expect(screen.getByRole('heading', { level: 1, name: 'Conoce el seguro de vida de tu crédito.' })).toBeVisible();
