@@ -9,6 +9,7 @@ import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
 import { QuoteFlow } from './quote/QuoteFlow';
+import { Landing } from './landing/Landing';
 import { PublicQuoteFlow } from './quote/PublicQuoteFlow';
 import { clearEstimateDraft, readEstimateDraft, saveEstimateDraft } from './quote/estimate-draft';
 import { invalidEstimateFields } from './quote/estimate-api';
@@ -42,6 +43,7 @@ function Shell() {
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
+  const isLanding = window.location.pathname !== '/cotizar' && !failed && !estimateDraft;
   async function load() {
     setSession('loading');
     setSession(await fetchSession());
@@ -66,16 +68,16 @@ function Shell() {
   const t = (id: string) => intl.formatMessage({ id });
   return <div className="app-shell">
     <header className="channel-header">
-      <img src={brandAssets.logo.green} alt="Solventa" width={174} />
+      <a href="/" aria-label={t('landing.home')}><img src={brandAssets.logo.green} alt="Solventa" width={174} /></a>
       <div className="header-tools">
         <LocaleSwitch />
-        {session !== 'authenticated' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
+        {session === 'anonymous' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
           if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
         }}>{t('session.title')}</a>}
         {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
       </div>
     </header>
-    {session === 'authenticated'
+    {isLanding ? <Landing sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
@@ -86,7 +88,7 @@ function Shell() {
       : <main className="content">
         {failed && <p className="banner banner-error" role="alert">{t('session.failed')}</p>}
         {loginStorageFailed && <div className="banner banner-error" role="alert"><p>{t('estimate.storageFailed')}</p><a href="/auth/login" onClick={clearEstimateDraft}>{t('estimate.signInWithoutDraft')}</a></div>}
-        {session === 'unavailable' && <><p>{t('session.unavailable')}</p><button onClick={() => void load()}>{t('session.retry')}</button></>}
+        {session === 'unavailable' && <div className="banner banner-error"><p>{t('session.unavailable')}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => void load()}>{t('session.retry')}</button></div>}
         <PublicQuoteFlow initialValues={estimateDraft} onValuesChange={setEstimateDraft} />
       </main>}
   </div>;
