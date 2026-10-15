@@ -36,12 +36,34 @@ describe('public estimate and sign-in handoff', () => {
     const user = userEvent.setup();
     render(<App />);
     await fill(user);
+    saveEstimateDraft({ ...values, amount: '100000000' });
     await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
     await user.click(await screen.findByRole('button', { name: 'Continuar con esta estimación' }));
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError'); });
     await user.click(screen.getByRole('link', { name: 'Iniciar sesión o crear cuenta' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('El navegador no permitió conservar los datos.');
-    expect(screen.getByRole('link', { name: 'Iniciar sesión sin conservar los datos' })).toHaveAttribute('href', '/auth/login');
+    const fallback = screen.getByRole('link', { name: 'Iniciar sesión sin conservar los datos' });
+    expect(fallback).toHaveAttribute('href', '/auth/login');
+    fallback.addEventListener('click', event => event.preventDefault());
+    await user.click(fallback);
+    expect(readEstimateDraft()).toBeNull();
+  });
+
+  it.each(['ready', 'invalid', 'unavailable'])('announces a pending estimate in the current language (%s)', async outcome => {
+    let finish: ((response: Response) => void) | undefined;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async path => String(path) === '/auth/session'
+      ? json({}, 401) : new Promise<Response>(resolve => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<App />);
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
+    await waitFor(() => expect(finish).toBeDefined());
+    await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));
+    await act(async () => { finish?.(outcome === 'ready' ? json(result) : outcome === 'invalid' ? json({ errors: [{ field: 'ageYears', code: 'age_out_of_range' }] }, 400) : json({}, 503)); });
+    const text = outcome === 'ready' ? 'Quote calculated: estimated monthly premium' : outcome === 'invalid' ? 'Check the estimate fields.' : 'The quote could not be calculated: service unavailable.';
+    await waitFor(() => expect(screen.getByTestId('live-region')).toHaveTextContent(text));
+    if (outcome === 'ready') expect(screen.getByTestId('live-region')).toHaveTextContent('86,400');
+    expect(fetchMock.mock.calls.filter(([path]) => String(path) === '/api/v1/quote-estimates')).toHaveLength(1);
   });
 
   it.each([false, true])('keeps inputs when a slow authenticated session check resolves (retry: %s)', async retry => {

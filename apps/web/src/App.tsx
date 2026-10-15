@@ -85,7 +85,7 @@ function Shell() {
       </main>
       : <main className="content">
         {failed && <p className="banner banner-error" role="alert">{t('session.failed')}</p>}
-        {loginStorageFailed && <div className="banner banner-error" role="alert"><p>{t('estimate.storageFailed')}</p><a href="/auth/login">{t('estimate.signInWithoutDraft')}</a></div>}
+        {loginStorageFailed && <div className="banner banner-error" role="alert"><p>{t('estimate.storageFailed')}</p><a href="/auth/login" onClick={clearEstimateDraft}>{t('estimate.signInWithoutDraft')}</a></div>}
         {session === 'unavailable' && <><p>{t('session.unavailable')}</p><button onClick={() => void load()}>{t('session.retry')}</button></>}
         <PublicQuoteFlow initialValues={estimateDraft} onValuesChange={setEstimateDraft} />
       </main>}

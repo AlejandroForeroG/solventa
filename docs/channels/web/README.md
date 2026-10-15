@@ -18,6 +18,8 @@ Logo and favicon come from `packages/assets`; preserve the green identity and lo
 
 ### Anonymous estimate and sign-in
 
+Completion and error announcements use the currently selected interface language even when it changes during a pending calculation. Choosing to sign in without retaining inputs clears any older draft as well.
+
 The header sign-in shortcut also retains complete calculator inputs; if storage is blocked it offers the same explicit choice to proceed without them.
 
 The public calculator stays usable during session checking. Each edit also updates the shell's in-memory inputs, so a slow session check (including a retry after an outage) can switch to the authenticated form without discarding the amount and term entered while it was pending. This does not persist identity fields or a price.
