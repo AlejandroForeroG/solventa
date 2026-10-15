@@ -3,7 +3,7 @@ import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
 
-const quotesPath = /^\/api\/v1\/(me\/)?quotes(\/|$)/;
+const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
