@@ -59,7 +59,12 @@ try {
   const publish = (deliver: Parameters<typeof publishSecurityAlerts>[0]['delivery']['deliver']) => publishSecurityAlerts({
     outbox, delivery: { deliver: async alert => { deliveryCalls++; return deliver(alert); } }, now: () => Date.now(), newId: randomUUID,
   });
-  const snapshot = async () => (await inspection.query(`SELECT event_id,event_type,status,attempts,lease_owner,lease_until,published_at,available_at,
+  type FixtureSnapshotRow = {
+    event_id: string; event_type: string; status: string; attempts: string;
+    lease_owner: string | null; lease_until: Date | null; published_at: Date | null;
+    available_at: Date; eligible: boolean;
+  };
+  const snapshot = async (): Promise<FixtureSnapshotRow[]> => (await inspection.query(`SELECT event_id,event_type,status,attempts,lease_owner,lease_until,published_at,available_at,
     (event_type IN ('identity.security_denied','identity.device_registration_denied') AND
       ((status='pending' AND available_at<=now()) OR (status='publishing' AND lease_until<=now()))) AS eligible
     FROM identity.outbox_events ORDER BY event_id`)).rows;
