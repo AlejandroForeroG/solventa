@@ -77,6 +77,10 @@ test('public routing calculates with no credential, Identity call or stored quot
   assert.equal(access.calls.length, 0);
   assert.equal(store.saved.length, 0);
   assert.deepEqual(spec.paths['/quote-estimates'].post.security, []);
+  const unavailable = spec.paths['/quote-estimates'].post.responses['503'];
+  assert.equal(unavailable.$ref, undefined, 'calculator recovery is separate from uncertain quote writes');
+  assert.match(unavailable.description, /No write occurs/);
+  assert.match(unavailable.description, /without an idempotency key/);
   assert.equal(spec.info.version, '1.2.0');
 });
 
