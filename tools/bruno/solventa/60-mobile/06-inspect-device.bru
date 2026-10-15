@@ -1,10 +1,10 @@
 meta {
-  name: Sign out native session
+  name: Inspect native installation
   type: http
-  seq: 5
+  seq: 6
 }
-delete {
-  url: {{baseUrl}}/api/v1/mobile/session
+get {
+  url: {{baseUrl}}/api/v1/mobile/devices/{{mobileInstallationId}}
   body: none
   auth: none
 }
@@ -12,11 +12,12 @@ headers {
   Authorization: Bearer {{mobileAccessToken}}
 }
 tests {
-  test("Native connection contract", function () {
+  test("Active session-owned installation", function () {
     expect(res.getStatus()).to.equal(200);
     expect(res.getHeader("cache-control")).to.equal("no-store");
     const body = res.getBody();
     expect(body.traceId).to.equal(res.getHeader("x-trace-id"));
-    expect(body).to.have.property("status");
+    expect(body.device.installationId).to.equal(bru.getEnvVar("mobileInstallationId").toLowerCase());
+    expect(body.device.status).to.equal("active");
   });
 }
