@@ -22,6 +22,8 @@ Logo and favicon come from `packages/assets`; preserve the green identity and lo
 
 ### Anonymous estimate and sign-in
 
+The public calculator retains the approved seven-step indicator and its order: Quote, Result, Consent, Offer, Policy, Payment and Signature. Input and loading stay on step 1; the preliminary result and its sign-in guidance stay on step 2. Consent and later steps remain unavailable anonymously. After sign-in, confirming the customer details returns to the existing protected quote form at step 1; its saved result and explicit consent keep steps 2 and 3. The indicator never treats sign-in as consent or unlocks unimplemented steps.
+
 Completion and error announcements use the currently selected interface language even when it changes during a pending calculation. Choosing to sign in without retaining inputs clears any older draft as well.
 
 The header sign-in shortcut also retains complete calculator inputs; if storage is blocked it offers the same explicit choice to proceed without them.
