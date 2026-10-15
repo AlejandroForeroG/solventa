@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import type { SecurityDecisionStore } from '../../application/security-decisions';
 import { securityDecision } from '../../domain/security-decision';
 import type { SecurityDecision } from '../../domain/security-decision';
+import { safeCode } from '../safe-code';
 
 export class SqlSecurityDecisions implements SecurityDecisionStore {
   constructor(private readonly connectionString: string) {}
@@ -10,8 +11,10 @@ export class SqlSecurityDecisions implements SecurityDecisionStore {
     const decision = securityDecision(input, input.decisionId, input.correlationId);
     const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 1000, query_timeout: 1000, statement_timeout: 1000 });
     db.on('error', () => {});
+    let phase: 'connect' | 'write' = 'connect';
     try {
       await db.connect();
+      phase = 'write';
       // The implicit SQL transaction commits both records or neither. An uncertain
       // commit is never retried here: a denied request must not publish false success.
       await db.query(`WITH audit AS (
@@ -24,6 +27,9 @@ export class SqlSecurityDecisions implements SecurityDecisionStore {
         (event_id, aggregate_type, aggregate_id, event_type, event_version, payload, correlation_id)
       SELECT $1, 'security_decision', $1, 'identity.security_denied', 1, $4, $3 FROM audit`,
       [decision.decisionId, decision.cause, decision.correlationId, JSON.stringify(decision)]);
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'security_denial_persistence_failed', phase, code: safeCode(error) }));
+      throw error;
     } finally {
       await db.end().catch(() => {});
     }
