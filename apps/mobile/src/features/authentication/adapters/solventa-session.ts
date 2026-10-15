@@ -3,8 +3,11 @@ import type { SessionApi } from '../application/ports';
 import { configuration, object, principal, trace } from './validation';
 
 const environments = {
+  'https://dev.solventa.site': 'client_01M47F52THNNZZZ4WSGACX8KA4',
   'https://solventa-web-dev.ja-forerog1.workers.dev': 'client_01M47F52THNNZZZ4WSGACX8KA4',
+  'https://staging.solventa.site': 'client_01M47F209CBGBJGD73ZM39ADW6',
   'https://solventa-web-staging.ja-forerog1.workers.dev': 'client_01M47F209CBGBJGD73ZM39ADW6',
+  'https://solventa.site': 'client_01M47F21P884580Q2GGF81NRV5',
   'https://solventa-web-prod.ja-forerog1.workers.dev': 'client_01M47F21P884580Q2GGF81NRV5',
 };
 

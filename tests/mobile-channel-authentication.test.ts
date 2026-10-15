@@ -365,6 +365,21 @@ test('configuration and server responses cannot redirect token exchange to anoth
   await assert.rejects(api.inspect(tokens.accessToken));
 });
 
+test('canonical and legacy API origins remain pinned to the client for their environment', async () => {
+  const origins = [
+    ['https://dev.solventa.site', 'client_01M47F52THNNZZZ4WSGACX8KA4'],
+    ['https://solventa-web-dev.ja-forerog1.workers.dev', 'client_01M47F52THNNZZZ4WSGACX8KA4'],
+    ['https://staging.solventa.site', 'client_01M47F209CBGBJGD73ZM39ADW6'],
+    ['https://solventa-web-staging.ja-forerog1.workers.dev', 'client_01M47F209CBGBJGD73ZM39ADW6'],
+    ['https://solventa.site', 'client_01M47F21P884580Q2GGF81NRV5'],
+    ['https://solventa-web-prod.ja-forerog1.workers.dev', 'client_01M47F21P884580Q2GGF81NRV5'],
+  ] as const;
+  for (const [origin, clientId] of origins) {
+    const api = createSessionApi(origin, async () => Response.json({ ...config, clientId, traceId }));
+    assert.equal((await api.configuration()).clientId, clientId);
+  }
+});
+
 test('the installed WorkOS SDK generates unique state and S256 challenges without a server key', async context => {
   context.mock.method(globalThis, 'fetch', async () => { throw new Error('PKCE must not call the network'); });
   const identity = createWorkosIdentity();
