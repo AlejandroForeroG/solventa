@@ -90,7 +90,12 @@ test('malformed and oversized public bodies are rejected with redacted contractu
     assert.ok(schema('EstimateValidationError')(JSON.parse(text)));
     assert.equal(response.headers.get('cache-control'), 'no-store');
   }
-  assert.equal((await app.request(request(JSON.stringify(input), { 'content-type': 'text/plain' }))).status, 400);
+  for (const contentType of ['text/plain', 'application/jsonp', 'application/json, text/plain', 'application/json+custom', 'invalid', '']) {
+    assert.equal((await app.request(request(JSON.stringify(input), { 'content-type': contentType }))).status, 400, contentType);
+  }
+  for (const contentType of ['application/json', 'APPLICATION/JSON', 'application/json; charset=utf-8', 'application/json; charset="utf-8"']) {
+    assert.equal((await app.request(request(JSON.stringify(input), { 'content-type': contentType }))).status, 200, contentType);
+  }
   let pulls = 0;
   let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulls++; controller.enqueue(new Uint8Array(512)); }, cancel() { cancelled = true; } });
