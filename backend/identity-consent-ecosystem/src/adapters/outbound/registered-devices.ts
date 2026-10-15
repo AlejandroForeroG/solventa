@@ -18,18 +18,24 @@ export class SqlRegisteredDevices implements DeviceStore {
         WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider_subject=$2 FOR UPDATE OF s`,
       [input.identity.sessionReference, input.identity.providerSubject])).rows[0];
       const prefix = `mobile-v1:${input.identity.sessionReference}:`;
-      const existing = session ? (await db.query<{ id: string; revoked_at: Date | null; device_reference: string }>(`
-        SELECT id,revoked_at,device_reference FROM identity.registered_devices
+      const existing = session ? (await db.query<{ id: string; registered_at: Date; revoked_at: Date | null; device_reference: string }>(`
+        SELECT id,registered_at,revoked_at,device_reference FROM identity.registered_devices
         WHERE client_id=$1 AND split_part(device_reference,':',1)='mobile-v1'
         AND split_part(device_reference,':',2)=$2 FOR UPDATE`, [session.client_id, input.identity.sessionReference])).rows : [];
       const observedAt = session ? session.observed_at.getTime() : Date.now();
       const { decision, capture } = decide({ observedAt,
         session: session ? { clientActive: session.client_status === 'active', createdAt: session.created_at.getTime(), expiresAt: session.expires_at.getTime(), revoked: session.revoked_at !== null } : null,
-        bindings: existing.map(row => ({ id: row.id, installationId: row.device_reference.slice(prefix.length), revoked: row.revoked_at !== null })),
+        bindings: existing.map(row => ({ id: row.id, installationId: row.device_reference.slice(prefix.length), revoked: row.revoked_at !== null, registeredAt: row.registered_at.getTime() })),
       });
       let result: RegisteredDevice | null = null;
       if (session) {
-        if (decision.effect === 'register') {
+        if (decision.effect === 'register' || decision.effect === 'replace') {
+          if (decision.effect === 'replace') {
+            for (const binding of decision.previous) {
+              await db.query('UPDATE identity.registered_devices SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL', [binding.id]);
+              await this.audit(db, input, session.subject_token, binding.id, 'replaced', capture);
+            }
+          }
           const id = crypto.randomUUID();
           await db.query('INSERT INTO identity.registered_devices (id,client_id,device_reference) VALUES ($1,$2,$3)', [id, session.client_id, prefix + input.installationId]);
           await this.audit(db, input, session.subject_token, id, 'registered', capture);
@@ -54,7 +60,7 @@ export class SqlRegisteredDevices implements DeviceStore {
     } finally { await db.end().catch(() => {}); }
   }
 
-  private async audit(db: Client, input: DeviceOperation, actor: string, id: string, action: 'registered' | 'revoked' | 'registration_denied', capture: DeviceCapture) {
+  private async audit(db: Client, input: DeviceOperation, actor: string, id: string, action: 'registered' | 'revoked' | 'replaced' | 'registration_denied', capture: DeviceCapture) {
     const denied = action === 'registration_denied';
     const resource = denied ? 'device_registration' : 'registered_device';
     await db.query(`INSERT INTO identity.audit_events

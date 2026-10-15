@@ -79,6 +79,35 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference=$1',[principal.subjectToken])).rows[0].count,2);
   assert.equal((await db.query('SELECT count(*)::INT4 FROM identity.authentication_sessions WHERE provider_session=$1',[mobileIdentity.sessionReference])).rows[0].count,1);
   const devices = new RegisteredDevices(new SqlRegisteredDevices(runtime.toString()));
+  // Reinstallation replacement, rollback and racing requests use the real owner transaction.
+  const reinstallIdentity = {providerSubject:'reinstall_'+randomUUID(),sessionReference:'reinstall_'+randomUUID(),emailVerified:true};
+  const reinstallPrincipal = await repo.register(reinstallIdentity); assert.ok(reinstallPrincipal);
+  const reinstallInput = {identity:reinstallIdentity,installationId:randomUUID(),correlationId:randomUUID()};
+  const previousInstallation = await devices.execute('register',reinstallInput); assert.ok(previousInstallation);
+  await db.query("UPDATE identity.registered_devices SET registered_at=now()-INTERVAL '2 seconds' WHERE id=$1",[previousInstallation.id]);
+  const authenticatedAt = (await db.query('SELECT floor(extract(epoch FROM now()))::FLOAT8 * 1000 AS time')).rows[0].time;
+  const reinstallReplacement = {...reinstallInput,installationId:randomUUID(),correlationId:randomUUID(),identity:{...reinstallIdentity,authenticatedAt}};
+  await db.query('REVOKE INSERT ON identity.audit_events FROM solventa_local_identity');
+  try { await assert.rejects(devices.execute('register',reinstallReplacement),/permission|privilege/i); }
+  finally { await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity'); }
+  assert.deepEqual(await devices.execute('find',reinstallInput),previousInstallation);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE correlation_id=$1',[reinstallReplacement.correlationId])).rows[0].count,0);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE correlation_id=$1',[reinstallReplacement.correlationId])).rows[0].count,0);
+  const replacedInstallation = await devices.execute('register',reinstallReplacement); assert.ok(replacedInstallation);
+  assert.deepEqual(await devices.execute('register',reinstallReplacement),replacedInstallation);
+  assert.equal(await devices.execute('find',reinstallInput),null);
+  assert.equal(await devices.execute('revoke',reinstallInput),null);
+  assert.ok(await repo.find(reinstallIdentity));
+  assert.equal(await devices.execute('register',{...reinstallReplacement,installationId:randomUUID(),correlationId:randomUUID()}),null);
+  const replacementEffects = (await db.query(`SELECT action FROM identity.audit_events WHERE correlation_id=$1 ORDER BY action`,[reinstallReplacement.correlationId])).rows;
+  assert.deepEqual(replacementEffects.map(row=>row.action),['device.registered','device.replaced']);
+  assert.equal((await db.query(`SELECT count(*)::INT4 AS count FROM identity.registered_devices WHERE client_id=$1 AND revoked_at IS NULL`,[reinstallPrincipal.clientId])).rows[0].count,1);
+  await db.query("UPDATE identity.registered_devices SET registered_at=now()-INTERVAL '2 seconds' WHERE id=$1",[replacedInstallation.id]);
+  const raceAuthenticatedAt = (await db.query('SELECT floor(extract(epoch FROM now()))::FLOAT8 * 1000 AS time')).rows[0].time;
+  const replacements = [randomUUID(),randomUUID()].map(installationId=>({...reinstallReplacement,installationId,correlationId:randomUUID(),identity:{...reinstallIdentity,authenticatedAt:raceAuthenticatedAt}}));
+  const raced = await Promise.allSettled(replacements.map(input=>devices.execute('register',input)));
+  assert.equal(raced.filter(result=>result.status==='fulfilled'&&result.value!==null).length,1);
+  assert.equal((await db.query(`SELECT count(*)::INT4 AS count FROM identity.registered_devices WHERE client_id=$1 AND revoked_at IS NULL`,[reinstallPrincipal.clientId])).rows[0].count,1);
   const deviceIdentity = {providerSubject:'device_'+randomUUID(),sessionReference:'device_'+randomUUID(),emailVerified:true};
   await repo.register(deviceIdentity);
   const deviceInput = {identity:deviceIdentity,installationId:randomUUID(),correlationId:randomUUID()};
@@ -211,7 +240,7 @@ try {
   assert.deepEqual(await devices.execute('find',caseInput),caseBinding);
   const caseReference = (await db.query('SELECT device_reference FROM identity.registered_devices WHERE id=$1',[caseBinding.id])).rows[0].device_reference;
   assert.equal(caseReference,`mobile-v1:${caseIdentity.sessionReference}:${upperInstallation.toLowerCase()}`);
-  assert.equal((await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].capture.rule.version,'3');
+  assert.equal((await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].capture.rule.version,'4');
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.registered'",[caseBinding.id])).rows[0].count,1);
   assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_registered'",[caseBinding.id])).rows[0].count,1);
   assert.equal((await devices.execute('revoke',{...caseInput,installationId:upperInstallation.toLowerCase()}))?.status,'revoked');
@@ -253,7 +282,7 @@ try {
     assert.equal((await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM identity.authentication_sessions WHERE provider_session=$1',[suspendedIdentity.sessionReference])).rows[0].revoked,true);
     assert.equal((await db.query("SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE resource_id=$1 AND action='device.revoked'",[suspendedBinding.id])).rows[0].count,1);
     const captures = (await db.query("SELECT payload->'capture' AS capture FROM identity.outbox_events WHERE aggregate_id=$1 AND event_type='identity.device_revoked'",[suspendedBinding.id])).rows;
-    assert.equal(captures.length,1); assert.equal(captures[0].capture.rule.version,'3');
+    assert.equal(captures.length,1); assert.equal(captures[0].capture.rule.version,'4');
     assert.equal(captures[0].capture.inputs.session.clientActive,!suspendBeforeDelete);
   }
   console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback','device_uuid_case','device_legacy_uuid_case','device_legacy_logout_uuid_case','device_suspended_owner_cleanup']}));
