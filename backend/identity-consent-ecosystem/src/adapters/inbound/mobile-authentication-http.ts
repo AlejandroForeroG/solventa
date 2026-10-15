@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { VerifiedIdentity } from '../../application/authentication';
 import type { MobileSessions } from '../../application/mobile-sessions';
 import type { AuthorizeApiAccess } from './api-access-http';
+import type { SecurityDecisions } from '../../application/security-decisions';
 
 export type MobileAuthenticationDependencies = {
   configuration: { clientId: string; redirectUri: string };
@@ -10,7 +11,7 @@ export type MobileAuthenticationDependencies = {
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, dependencies: MobileAuthenticationDependencies | null, authorize: AuthorizeApiAccess) {
+export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, dependencies: MobileAuthenticationDependencies | null, authorize: AuthorizeApiAccess, security?: Pick<SecurityDecisions, 'deny'>) {
   for (const path of ['/api/v1/mobile/config', '/api/v1/mobile/session', '/api/v1/access/mobile']) {
     app.all(path, async c => {
       const supplied = c.req.header('X-Trace-Id') ?? '';
@@ -18,8 +19,12 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
       c.header('X-Trace-Id', traceId);
       c.header('Cache-Control', 'no-store');
       c.header('X-Content-Type-Options', 'nosniff');
-      const fail = (error: string, status: 400 | 401 | 405 | 503) => {
-        if (status === 401) c.header('WWW-Authenticate', 'Bearer realm="solventa"');
+      const fail = async (error: string, status: 400 | 401 | 405 | 503) => {
+        if (status === 401) {
+          try { await security?.deny({ category: 'api_access', channel: 'mobile', operation: path.endsWith('/mobile') ? 'quotes:create' : 'mobile:session', cause: 'unauthorized' }, traceId); }
+          catch { return c.json({ error: 'access_unavailable', traceId }, 503); }
+          c.header('WWW-Authenticate', 'Bearer realm="solventa"');
+        }
         return c.json({ error, traceId }, status);
       };
       const methods = path.endsWith('/session') ? ['GET', 'POST', 'DELETE'] : ['GET'];
@@ -41,7 +46,7 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
       if (!token || token.length > 8192) return fail('unauthorized', 401);
       try {
         if (path.endsWith('/mobile')) {
-          const decision = await authorize({ kind: 'mobile', token, operation: 'quotes:create' });
+          const decision = await authorize({ kind: 'mobile', token, operation: 'quotes:create', traceId });
           if (!decision.allowed) {
             if (decision.status === 401) c.header('WWW-Authenticate', 'Bearer realm="solventa"');
             return c.json({ error: decision.error, traceId }, decision.status);

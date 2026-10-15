@@ -8,6 +8,10 @@ Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Servi
 
 The Worker applies API versioning to `/api/v<N>/...`: it adds deprecation headers and returns 410 when a version reaches its retirement date. See [contracts](../../shared/contracts/README.md).
 
+If an Identity or Acquisition binding fails, the gateway's 503 response normalizes a supplied valid RFC UUID trace to lowercase, or generates a new UUID for an invalid/missing value. The response body and `X-Trace-Id` header match; exception details are omitted.
+
+Every static asset also runs through the gateway (`assets.run_worker_first:true`). The gateway adds CSP, frame denial, nosniff and no-referrer headers after routing, preserving bodies, status, redirects, cookies and trace/version headers. HSTS is applied only to HTTPS responses. Application CSP permits only same-origin scripts/styles/fonts/connections; it needs no inline scripts or styles. The API reference keeps its separate restrictive policy, including its required inline viewer styles. See [browser security and font integrity](../../security.md#error-logging-and-browser-headers).
+
 The SPA reaches `/auth/*` through `src/api/auth.ts`. Its calls are protected by a Pact contract with the web Worker; changing them requires updating the pact ([consumer contracts](../../shared/contracts/README.md#consumer-contracts-pact)).
 
 The same Worker serves the public, read-only OpenAPI viewer at `/api/docs/` and bundled specifications beneath that path, independently of the React application and business service bindings. Web builds generate its assets from the current domain contracts. See [published API reference and maintenance](../../shared/contracts/README.md#published-api-reference) for environment URLs, local setup and the requirement to update API documentation with every endpoint change.
@@ -50,7 +54,7 @@ The browser calls `POST /api/v1/me/quotes` with the sealed session cookie of the
 
 The client validates successful responses before displaying a quote: its identifier, integer COP amounts, term, timestamp, minimum-data basis, rule version and trace identifier must match the supported contract. Malformed results and field errors produce the unavailable state without losing the form or changing the retry key. The result shows "valid until" the response's `validUntil`, formatted in the `America/Bogota` time zone; the client never assumes a fixed validity period. The result continues to data authorization. The stepper is an ordered list that marks the current step with `aria-current="step"`; it contains no controls and adds no tab stops.
 
-Styles follow the approved Design System values in `src/index.css`: IBM Plex Sans for text, Space Grotesk for headings and IBM Plex Mono for labels, identifiers and amounts, loaded from Google Fonts through `index.html` with system fallbacks. Every link, button and field shows the same keyboard focus ring (3 px, brand green, 2 px offset). Hover colours apply only to the element's own variant, and long trace identifiers wrap on narrow screens.
+Styles follow the approved Design System values in `src/index.css`: IBM Plex Sans for text, Space Grotesk for headings and IBM Plex Mono for labels, identifiers and amounts, with the original system fallbacks. `main.tsx` imports `@solventa/assets/fonts/web.css`; Vite emits the exact unmodified official font files as same-origin assets. All original declared weights and Unicode subsets are retained with `font-display: swap` and complete licenses; no font CDN or operating-system installation is required. See [font provenance and update rules](../../../packages/assets/fonts/web/README.md). Every link, button and field shows the same keyboard focus ring (3 px, brand green, 2 px offset). Hover colours apply only to the element's own variant, and long trace identifiers wrap on narrow screens.
 
 ## Consent and privacy dashboard
 

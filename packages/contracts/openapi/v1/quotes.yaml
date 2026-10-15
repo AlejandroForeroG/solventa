@@ -1,12 +1,19 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Quotes
-  version: 1.2.0
+  version: 1.2.1
   description: >
     Quote with minimum data. The same input and rule version always give the same premium;
     no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
-    Saved quotes require authentication and the quotes:create permission verified by Identity.
+    Saved quotes require authentication and the quotes:create permission verified by Identity; see identity-access.yaml.
     The anonymous calculator returns only an indicative estimate, without persistence or external data.
+    When Identity returns a 401 or 403 authorization denial, its minimal security audit and outbox
+    have committed together without credentials or request data. Failure to persist that decision
+    returns 503 access_unavailable and blocks the quote. Missing, malformed or oversized HTTP
+    credentials retain their channel and reach Identity as empty credential values for a recorded
+    denial; oversized Origin values are treated as an unconfigured origin. An invalid internal RPC
+    reply is unavailable rather than an unaudited authentication denial. No quote denial response
+    confirms email delivery or a notification deadline.
 servers:
   - url: /api/v1
 tags:
@@ -93,8 +100,9 @@ paths:
       tags: [Quotes]
       description: >
         The actor is the user of the sealed session cookie; the quote belongs to that user's own
-        subject and no user identifier is taken from the body. A write must carry the configured
-        Origin. Requests with an Authorization header are rejected with 400. If the session expired,
+        subject and no user identifier is taken from the body. A write must carry the same Origin
+        as its actual allowed request host, including during canonical/legacy domain transition.
+        Requests with an Authorization header are rejected with 400. If the session expired,
         renew it through /auth/session and retry once.
       security:
         - WebSession: []
@@ -146,7 +154,7 @@ components:
       schema: { type: string, enum: [es-CO, en-US], default: es-CO }
   headers:
     TraceId:
-      description: Correlation id of the request.
+      description: Request correlation UUID with version 1 through 8 and RFC variant, normalized to lowercase. Missing or invalid values are replaced before calling Identity; the response and security denial share this correlation.
       schema: { type: string, format: uuid }
     WwwAuthenticate:
       description: Challenge for a missing or invalid partner token.
@@ -223,7 +231,7 @@ components:
             message: The idempotency key was already used with a different request.
             traceId: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
     Unavailable:
-      description: Access could not be verified, or a service is unavailable. A gateway failure can leave the write outcome unknown; retry with the same Idempotency-Key and unchanged body.
+      description: Access could not be verified, a service is unavailable, or Identity could not commit its required security-denial audit/outbox. The response confirms no successful quote or durable denial record. A gateway failure can leave the write outcome unknown; retry with the same Idempotency-Key and unchanged body.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:

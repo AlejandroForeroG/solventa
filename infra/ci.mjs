@@ -32,13 +32,23 @@ try {
     assert.match(auth.secrets.WORKOS_API_KEY, environment === 'prod' ? /^sk_(?:live_)?[a-zA-Z0-9]+$/ : /^sk_(?:test_)?[a-zA-Z0-9]+$/);
     assert.match(auth.secrets.AUTH_COOKIE_PASSWORD, /^[a-f0-9]{64}$/);
     assert.deepEqual(Object.keys(auth.secrets).sort(), ['AUTH_COOKIE_PASSWORD','WORKOS_API_KEY','WORKOS_CLIENT_ID']);
+    const emailValue = process.env.SECURITY_ALERT_EMAIL_CONFIG || '';
+    if (emailValue) {
+      assert.ok(emailValue.length <= 1024);
+      const email = JSON.parse(emailValue);
+      assert.ok(email && typeof email === 'object' && !Array.isArray(email));
+      assert.deepEqual(Object.keys(email).sort(), ['environment', 'from', 'to']);
+      assert.equal(email.environment, environment);
+      const address = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$/;
+      for (const value of [email.from, email.to]) assert.ok(typeof value === 'string' && value.length <= 254 && address.test(value));
+    }
     await mkdir('infra/.local', { recursive: true, mode: 0o700 });
     await writeFile(caPath, ca, { mode: 0o600 });
     // Deliberately no username, password or client key in this origin descriptor.
     await writeFile(`.env.infra.${environment}`, `DATABASE_URL=postgresql://${host}:${port || '26257'}/defaultdb\nDATABASE_CA_FILE=${caPath}\n`, { mode: 0o600 });
     await writeFile(`infra/.local/runtime.${environment}.json`, JSON.stringify(state), { mode: 0o600 });
     await writeFile(`infra/.local/web.${environment}.secrets.json`, JSON.stringify({ DEV_INFRA_TOKEN: token }), { mode: 0o600 });
-    await writeFile(`infra/.local/identity.${environment}.secrets.json`, JSON.stringify(auth.secrets), { mode: 0o600 });
+    await writeFile(`infra/.local/identity.${environment}.secrets.json`, JSON.stringify({ ...auth.secrets, SECURITY_ALERT_EMAIL_CONFIG: emailValue }), { mode: 0o600 });
     console.log(JSON.stringify({ environment, credentials: 'restored' }));
   } else if (action === 'cleanup') {
     for (const path of paths) await rm(path, { force: true });
