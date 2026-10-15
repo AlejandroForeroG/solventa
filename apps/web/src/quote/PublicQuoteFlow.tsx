@@ -9,6 +9,8 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const { cop } = useFormatters();
+  const announcementLocale = useRef({ intl, cop });
+  useEffect(() => { announcementLocale.current = { intl, cop }; }, [intl, cop]);
   const announce = useAnnounce();
   const [values, setValues] = useState<EstimateValues>(initialValues ?? { ageYears: '', amount: '', termMonths: '' });
   const [estimate, setEstimate] = useState<Estimate | null>(null);
@@ -35,9 +37,10 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
     try {
       const outcome = await requestEstimate(values, controller.signal);
       if (controller.signal.aborted) return;
-      if (outcome.kind === 'estimate') { setEstimate(outcome.estimate); setPhase('result'); announce(intl.formatMessage({ id: 'live.quoteReady' }, { premium: cop(outcome.estimate.premiumMonthly) })); }
-      else if (outcome.kind === 'invalid') { setInvalid(outcome.fields); document.getElementById(`estimate-${outcome.fields[0]}`)?.focus(); announce(t('estimate.invalid')); }
-      else { setUnavailable(true); announce(t('live.unavailable')); }
+      const current = announcementLocale.current;
+      if (outcome.kind === 'estimate') { setEstimate(outcome.estimate); setPhase('result'); announce(current.intl.formatMessage({ id: 'live.quoteReady' }, { premium: current.cop(outcome.estimate.premiumMonthly) })); }
+      else if (outcome.kind === 'invalid') { setInvalid(outcome.fields); document.getElementById(`estimate-${outcome.fields[0]}`)?.focus(); announce(current.intl.formatMessage({ id: 'estimate.invalid' })); }
+      else { setUnavailable(true); announce(current.intl.formatMessage({ id: 'live.unavailable' })); }
     } catch { /* Aborted when leaving the public flow. */ }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
@@ -81,7 +84,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
         <div className="actions">
           <a className="btn btn-primary" href="/auth/login" onClick={beginLogin}>{t('estimate.signIn')}</a>
           <button type="button" className="btn btn-secondary" onClick={() => setPhase('result')}>{t('estimate.back')}</button>
-          {storageFailed && <a className="btn btn-secondary" href="/auth/login">{t('estimate.signInWithoutDraft')}</a>}
+          {storageFailed && <a className="btn btn-secondary" href="/auth/login" onClick={clearEstimateDraft}>{t('estimate.signInWithoutDraft')}</a>}
         </div>
       </>}
     </div>}
