@@ -18,6 +18,10 @@ Logo and favicon come from `packages/assets`; preserve the green identity and lo
 
 ### Anonymous estimate and sign-in
 
+The header sign-in shortcut also retains complete calculator inputs; if storage is blocked it offers the same explicit choice to proceed without them.
+
+The public calculator stays usable during session checking. Each edit also updates the shell's in-memory inputs, so a slow session check (including a retry after an outage) can switch to the authenticated form without discarding the amount and term entered while it was pending. This does not persist identity fields or a price.
+
 An anonymous visitor starts with `PublicQuoteFlow`: age in completed years, loan amount in integer COP and term in months. It calls `POST /api/v1/quote-estimates` with `credentials: omit`, without checking access, reading SQL or querying any source. The backend reuses the saved-quote rating rule. This is an indicative calculator, not a stored business quote: it issues neither a quote identifier nor validity and cannot unlock an offer or contracting. The browser validates the response and its amount/term against the submitted inputs before showing it. Invalid inputs focus the first field; failures preserve the inputs and offer another calculation. The calculator remains available if session checking returns unavailable.
 
 Continuing shows instructions for existing accounts and registration through the existing hosted WorkOS login. It explicitly distinguishes sign-in from data authorization, explains that sources, purpose and validity will be shown before consent, and states the refusal/revocation options. It never authorizes on the customer's behalf or queries consent terms anonymously. Back navigation retains the estimate.

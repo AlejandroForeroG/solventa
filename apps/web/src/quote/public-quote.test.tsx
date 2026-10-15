@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from '../App';
@@ -20,6 +20,52 @@ async function fill(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('public estimate and sign-in handoff', () => {
+  it('also preserves complete inputs through the header sign-in link', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({}, 401));
+    const user = userEvent.setup();
+    render(<App />);
+    await fill(user);
+    const link = screen.getByRole('link', { name: 'Ingresa a Solventa' });
+    link.addEventListener('click', event => event.preventDefault());
+    await user.click(link);
+    expect(readEstimateDraft()).toEqual(values);
+  });
+
+  it('explains blocked storage before allowing a handoff without retained inputs', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async path => String(path) === '/auth/session' ? json({}, 401) : json(result));
+    const user = userEvent.setup();
+    render(<App />);
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar con esta estimación' }));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError'); });
+    await user.click(screen.getByRole('link', { name: 'Iniciar sesión o crear cuenta' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('El navegador no permitió conservar los datos.');
+    expect(screen.getByRole('link', { name: 'Iniciar sesión sin conservar los datos' })).toHaveAttribute('href', '/auth/login');
+  });
+
+  it.each([false, true])('keeps inputs when a slow authenticated session check resolves (retry: %s)', async retry => {
+    let finish: ((response: Response) => void) | undefined;
+    let calls = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      calls++;
+      if (retry && calls === 1) return json({}, 503);
+      return new Promise<Response>(resolve => { finish = resolve; });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    if (retry) {
+      await screen.findByText('No pudimos comprobar tu sesión.');
+      await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+    }
+    await fill(user);
+    await act(async () => { finish?.(json({}, 200)); });
+    await screen.findByLabelText(/Nombre completo/);
+    expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
+    expect(screen.getByLabelText(/Plazo/)).toHaveValue('180');
+    expect(screen.getByText(/Retomamos tu estimación para 34 años/)).toBeVisible();
+  });
+
   it('offers an accessible calculator before login and explains sign-in separately from consent', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async path => String(path) === '/auth/session' ? json({}, 401) : json(result));
     const user = userEvent.setup();

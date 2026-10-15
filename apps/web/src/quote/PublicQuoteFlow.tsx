@@ -5,7 +5,7 @@ import { useAnnounce } from './Live';
 import { estimateFields, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
 import { clearEstimateDraft, saveEstimateDraft } from './estimate-draft';
 
-export function PublicQuoteFlow({ initialValues }: { initialValues: EstimateValues | null }) {
+export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValues: EstimateValues | null; onValuesChange?: (values: EstimateValues) => void }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const { cop } = useFormatters();
@@ -55,7 +55,12 @@ export function PublicQuoteFlow({ initialValues }: { initialValues: EstimateValu
         <div className="grid grid-3">{estimateFields.map(key => <div className="field" key={key}>
           <label htmlFor={`estimate-${key}`}>{t(`estimate.${key}`)} <span aria-hidden="true">*</span></label>
           <input id={`estimate-${key}`} name={key} type="text" inputMode="numeric" className="mono-input" autoComplete="off" required disabled={busy} maxLength={key === 'ageYears' ? 2 : key === 'termMonths' ? 3 : 16}
-            value={values[key]} onChange={event => { clearEstimateDraft(); setValues(current => ({ ...current, [key]: event.target.value })); }}
+            value={values[key]} onChange={event => {
+              clearEstimateDraft();
+              const next = { ...values, [key]: event.target.value };
+              setValues(next);
+              onValuesChange?.(next);
+            }}
             aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : undefined} />
           {invalid.includes(key) && <p className="field-error" id={`estimate-${key}-error`}>{t(`estimate.error.${key}`)}</p>}
         </div>)}</div>

@@ -56,7 +56,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EstimateValidationError' }
-        '503': { $ref: '#/components/responses/Unavailable' }
+        '503':
+          description: The calculator service is unavailable. No write occurs; retry the calculation without an idempotency key.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
   /quotes:
     post:
       operationId: createPartnerQuote

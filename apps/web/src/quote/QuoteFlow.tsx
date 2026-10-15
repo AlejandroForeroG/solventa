@@ -10,7 +10,7 @@ import { useAnnounce } from './Live';
 import { QuoteForm } from './QuoteForm';
 import { Denied, Loading, QuoteResult } from './QuoteResult';
 import { Stepper } from './Stepper';
-import type { EstimateValues } from './estimate-api';
+import { invalidEstimateFields, type EstimateValues } from './estimate-api';
 
 type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
@@ -76,7 +76,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, init
 
   return <>
     <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : 3} available={3} />
-    {phase === 'form' && initialEstimate && <p className="banner banner-info">{intl.formatMessage({ id: 'estimate.resumed' }, { age: initialEstimate.ageYears })}</p>}
+    {phase === 'form' && initialEstimate && !invalidEstimateFields(initialEstimate).length && <p className="banner banner-info">{intl.formatMessage({ id: 'estimate.resumed' }, { age: initialEstimate.ageYears })}</p>}
     {(phase === 'form') && <QuoteForm values={values} problems={problems} banner={banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
