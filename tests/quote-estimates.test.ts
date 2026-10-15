@@ -117,7 +117,7 @@ test('public estimates do not unlock saved quotes or create Identity credentials
   }
   assert.deepEqual(access.calls, [
     { kind: 'partner', token: '' },
-    { kind: 'web', cookie: '', origin: '', method: 'POST' },
+    { kind: 'web', cookie: '', origin: '', requestOrigin: 'https://web.example', method: 'POST' },
   ], 'protected quote attempts still reach Identity for a recorded credential denial');
   assert.equal(store.saved.length, 0);
 });
