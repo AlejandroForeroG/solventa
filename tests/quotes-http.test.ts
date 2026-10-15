@@ -7,6 +7,7 @@ import { parse } from 'yaml';
 import { createHttp } from '../backend/acquisition-risk/src/adapters/inbound/http';
 import { HmacProtector } from '../backend/acquisition-risk/src/adapters/outbound/hmac-protector';
 import { CreateQuote } from '../backend/acquisition-risk/src/application/create-quote';
+import { EstimateQuote } from '../backend/acquisition-risk/src/application/estimate-quote';
 import { InMemoryAccess, MemoryStore, protector } from './support/quote-fakes';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -30,7 +31,7 @@ function app() {
   const store = new MemoryStore();
   const access = new InMemoryAccess();
   const useCase = new CreateQuote({ access, store, clock: { now: () => now }, protector });
-  return { store, access, http: createHttp({ quotes: useCase }) };
+  return { store, access, http: createHttp({ quotes: useCase, estimates: new EstimateQuote() }) };
 }
 type Http = ReturnType<typeof createHttp>;
 type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; stream?: ReadableStream<Uint8Array>; env?: string };
@@ -226,7 +227,7 @@ test('an unexpected failure returns a generic 500 and logs without personal data
   console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
   try {
     const failing = { execute: async () => { throw new Error('boom 1020884771 Laura Catalina'); } } as unknown as CreateQuote;
-    const res = await partner(createHttp({ quotes: failing }));
+    const res = await partner(createHttp({ quotes: failing, estimates: new EstimateQuote() }));
     assert.equal(res.status, 500);
     assert.deepEqual(Object.keys(await res.json()).sort(), ['error', 'message', 'traceId']);
   } finally { console.error = original; }
@@ -238,7 +239,7 @@ test('an unexpected failure returns a generic 500 and logs without personal data
 test('a missing HMAC secret is a generic 500 and writes nothing, not a silent fallback', async () => {
   const store = new MemoryStore();
   const useCase = new CreateQuote({ access: new InMemoryAccess(), store, clock: { now: () => now }, protector: new HmacProtector('') });
-  const res = await partner(createHttp({ quotes: useCase }));
+  const res = await partner(createHttp({ quotes: useCase, estimates: new EstimateQuote() }));
   assert.equal(res.status, 500);
   assert.equal(store.saved.length, 0);
 });
