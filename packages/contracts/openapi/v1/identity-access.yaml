@@ -8,7 +8,8 @@ info:
     commits a minimal security audit and outbox record together. The record contains canonical
     denial fields and UUIDs, without credentials or request data. If this required persistence
     fails, the response is 503 access_unavailable. A denial response confirms neither email
-    delivery nor a notification deadline.
+    delivery nor a notification deadline. An absent credential is rejected with a recorded 401
+    even when provider configuration is absent; a supplied credential requires configured verification.
 servers:
   - url: /api/v1
 tags:
