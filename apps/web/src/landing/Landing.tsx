@@ -1,10 +1,14 @@
 import { useIntl } from 'react-intl';
 import './landing.css';
 
-export function Landing() {
+export function Landing({ sessionUnavailable, onRetry }: { sessionUnavailable: boolean; onRetry: () => void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `landing.${key}` });
   return <main className="landing">
+    {sessionUnavailable && <div className="banner banner-error" role="alert">
+      <p>{intl.formatMessage({ id: 'session.unavailable' })}</p>
+      <button type="button" className="btn btn-secondary btn-small" onClick={onRetry}>{intl.formatMessage({ id: 'session.retry' })}</button>
+    </div>}
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-intro">
         <p className="section-label">{t('product')}</p>
