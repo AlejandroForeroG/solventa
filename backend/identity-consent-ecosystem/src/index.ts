@@ -37,7 +37,8 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
       web: config ? {
         authenticate: (cookie, refresh) => new WorkosAuthentication(config).authenticate(cookie, refresh),
         allowedOrigins: config.local ? [config.origin, 'http://localhost:5173'] : authenticationOrigins(env.APP_ENV),
-        defaultOrigin: config.origin,
+        // Older Acquisition versions do not send requestOrigin during an Identity-first rollout.
+        defaultOrigin: authenticationOrigins(env.APP_ENV).at(-1),
       } : null,
     }, input);
   } catch {

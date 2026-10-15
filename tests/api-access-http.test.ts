@@ -72,7 +72,7 @@ test('web mutations bind Origin to the actual allowed request host, with a narro
   const canonical = 'https://dev.solventa.site';
   const deps = dependencies();
   let verifications = 0;
-  deps.web = { allowedOrigins: [canonical, origin], defaultOrigin: canonical, authenticate: async () => { verifications++; return null; } };
+  deps.web = { allowedOrigins: [canonical, origin], defaultOrigin: origin, authenticate: async () => { verifications++; return null; } };
   for (const target of [canonical, origin]) {
     const matching = { kind: 'web', cookie: 'synthetic', origin: target, requestOrigin: target, method: 'POST', operation: 'quotes:create' };
     assert.equal((await authorizeApiAccess(deps, matching)).status, 401);
@@ -82,8 +82,8 @@ test('web mutations bind Origin to the actual allowed request host, with a narro
       assert.equal(verifications, before, 'CSRF must fail before credential verification');
     }
   }
-  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', operation: 'quotes:create' })).status, 403);
-  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, method: 'POST', operation: 'quotes:create' })).status, 401);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'POST', operation: 'quotes:create' })).status, 401);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, method: 'POST', operation: 'quotes:create' })).status, 403);
   assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, requestOrigin: 'https://staging.solventa.site', method: 'GET', operation: 'quotes:create' })).status, 403);
   assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin: canonical, requestOrigin: null, method: 'POST', operation: 'quotes:create' })).status, 400);
   deps.web = { allowedOrigins: ['http://localhost:8787', 'http://localhost:5173'], defaultOrigin: 'http://localhost:8787', authenticate: async () => null };
