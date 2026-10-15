@@ -110,10 +110,14 @@ test('malformed and oversized public bodies are rejected with redacted contractu
 test('public estimates do not unlock saved quotes or create Identity credentials', async () => {
   const { app, access, store } = setup();
   await app.request(request(JSON.stringify(input)));
+  assert.equal(access.calls.length, 0, 'the public estimate does not call Identity');
   for (const path of ['/api/v1/quotes', '/api/v1/me/quotes']) {
     const response = await app.request(`https://web.example${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }, { APP_ENV: 'dev' } as never);
     assert.equal(response.status, 401);
   }
-  assert.equal(access.calls.length, 0);
+  assert.deepEqual(access.calls, [
+    { kind: 'partner', token: '' },
+    { kind: 'web', cookie: '', origin: '', method: 'POST' },
+  ], 'protected quote attempts still reach Identity for a recorded credential denial');
   assert.equal(store.saved.length, 0);
 });
