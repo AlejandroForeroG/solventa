@@ -4,11 +4,12 @@ import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from './Live';
 import { estimateFields, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
 import { clearEstimateDraft, saveEstimateDraft } from './estimate-draft';
+import { Stepper } from './Stepper';
 
 export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValues: EstimateValues | null; onValuesChange?: (values: EstimateValues) => void }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
-  const { cop } = useFormatters();
+  const { cop, copAmount } = useFormatters();
   const announcementLocale = useRef({ intl, cop });
   useEffect(() => { announcementLocale.current = { intl, cop }; }, [intl, cop]);
   const announce = useAnnounce();
@@ -50,6 +51,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
   }
 
   return <section className="step" aria-busy={busy}>
+    <Stepper current={phase === 'form' ? 1 : 2} available={phase === 'form' ? 1 : 2} />
     <h1 ref={heading} tabIndex={-1}>{t(phase === 'form' ? 'estimate.title' : phase === 'result' ? 'estimate.result' : 'estimate.loginTitle')}</h1>
     {phase === 'form' ? <>
       <p className="lede">{t('estimate.intro')}</p>
@@ -70,7 +72,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
         <div className="form-footer"><p className="note">{t('estimate.noSources')}</p><button className="btn btn-primary" disabled={busy}>{t(busy ? 'live.calculating' : 'estimate.calculate')}</button></div>
       </form>
     </> : <div className="card">
-      {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{cop(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
+      {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{copAmount(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
         <dl className="facts"><div><dt>{t('estimate.amount')}</dt><dd>{cop(estimate.sumInsured)}</dd></div><div><dt>{t('estimate.termMonths')}</dt><dd>{estimate.termMonths}</dd></div></dl></>}
       <p className="banner banner-info">{t('estimate.disclaimer')}</p>
       {phase === 'result' ? <div className="actions">
