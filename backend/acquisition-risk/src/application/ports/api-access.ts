@@ -14,5 +14,5 @@ export type AccessDecision =
 
 // Identity owns authentication and permissions. A failure to verify must block the quote.
 export interface ApiAccess {
-  authorize(credential: AccessCredential): Promise<AccessDecision>;
+  authorize(credential: AccessCredential, traceId?: string): Promise<AccessDecision>;
 }

@@ -3,9 +3,11 @@ import { getCookie } from 'hono/cookie';
 import { isApiOperation } from '../../application/api-access';
 import type { AccessDecision, ApiOperation, ApiAccess, PartnerIdentity } from '../../application/api-access';
 import type { VerifiedIdentity } from '../../application/authentication';
+import type { SecurityDecisions } from '../../application/security-decisions';
 
 export type ApiAccessDependencies = {
   application: Pick<ApiAccess, 'partner' | 'webUser'>;
+  security?: Pick<SecurityDecisions, 'deny'>;
   mobile?: { authenticate(token: string): Promise<VerifiedIdentity | null>; authorize(identity: VerifiedIdentity, operation: string): Promise<AccessDecision> } | null;
   partner: { authenticate(token: string): Promise<PartnerIdentity | null> } | null;
   web: {
@@ -16,10 +18,10 @@ export type ApiAccessDependencies = {
 };
 export type AuthorizeApiAccess = (input: unknown) => Promise<AccessDecision>;
 
-export type ApiAccessRequest =
+export type ApiAccessRequest = (
   | { kind: 'partner'; token: string; operation: ApiOperation }
   | { kind: 'mobile'; token: string; operation: ApiOperation }
-  | { kind: 'web'; cookie: string; origin: string; requestOrigin?: string; method: string; operation: ApiOperation };
+  | { kind: 'web'; cookie: string; origin: string; requestOrigin?: string; method: string; operation: ApiOperation }) & { traceId?: string };
 
 function isAccessRequest(value: unknown): value is ApiAccessRequest {
   if (!value || typeof value !== 'object') return false;
@@ -34,6 +36,17 @@ function isAccessRequest(value: unknown): value is ApiAccessRequest {
 // Shared by HTTP probes and the private RPC. Actor identity comes only from verified credentials, never from caller IDs.
 export async function authorizeApiAccess(deps: ApiAccessDependencies, input: unknown): Promise<AccessDecision> {
   if (!isAccessRequest(input)) return { allowed: false, error: 'invalid_request', status: 400 };
+  const decision = await decideApiAccess(deps, input);
+  if (!decision.allowed && (decision.status === 401 || decision.status === 403)) {
+    try {
+      await deps.security?.deny({ category: 'api_access', channel: input.kind, operation: input.operation,
+        cause: decision.status === 401 ? 'unauthorized' : 'forbidden' }, input.traceId);
+    } catch { return { allowed: false, error: 'access_unavailable', status: 503 }; }
+  }
+  return decision;
+}
+
+async function decideApiAccess(deps: ApiAccessDependencies, input: ApiAccessRequest): Promise<AccessDecision> {
   const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
   try {
     const { application } = deps;
@@ -49,12 +62,12 @@ export async function authorizeApiAccess(deps: ApiAccessDependencies, input: unk
       const identity = await deps.partner.authenticate(input.token);
       return identity ? await application.partner(identity, input.operation) : unauthorized;
     }
+    if (!input.cookie) return unauthorized;
     if (!deps.web) return { allowed: false, error: 'access_unavailable', status: 503 };
     const target = input.requestOrigin ?? deps.web.defaultOrigin ?? deps.web.allowedOrigins[0];
     if (!target || !deps.web.allowedOrigins.includes(target)) return { allowed: false, error: 'forbidden', status: 403 };
     const localDevelopment = target === 'http://localhost:8787' && input.origin === 'http://localhost:5173' && deps.web.allowedOrigins.includes(input.origin);
     if (!['GET', 'HEAD'].includes(input.method) && input.origin !== target && !localDevelopment) return { allowed: false, error: 'forbidden', status: 403 };
-    if (!input.cookie) return unauthorized;
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
     const verified = await deps.web.authenticate(input.cookie, false);
     return verified ? await application.webUser(verified.identity, input.operation) : unauthorized;
@@ -68,7 +81,7 @@ export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize: 
   for (const kind of ['partner', 'web'] as const) {
     app.all(`/api/v1/access/${kind}`, async c => {
       const requestedTrace = c.req.header('X-Trace-Id') ?? '';
-      const traceId = uuid.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
+      const traceId = uuid.test(requestedTrace) ? requestedTrace.toLowerCase() : crypto.randomUUID();
       c.header('X-Trace-Id', traceId);
       c.header('Cache-Control', 'no-store');
       c.header('X-Content-Type-Options', 'nosniff');
@@ -80,8 +93,8 @@ export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize: 
       if (kind === 'web' && authHeader !== undefined) return c.json({ error: 'invalid_request', traceId }, 400);
       const token = authHeader?.match(/^Bearer ([A-Za-z0-9_.-]+)$/i)?.[1] ?? '';
       const request: ApiAccessRequest = kind === 'partner'
-        ? { kind, token, operation: 'quotes:create' }
-        : { kind, requestOrigin: new URL(c.req.url).origin, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create' };
+        ? { kind, token, operation: 'quotes:create', traceId }
+        : { kind, requestOrigin: new URL(c.req.url).origin, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create', traceId };
       const decision = await authorize(request);
       if (!decision.allowed) {
         if (decision.status === 401 && kind === 'partner') c.header('WWW-Authenticate', 'Bearer realm="solventa"');

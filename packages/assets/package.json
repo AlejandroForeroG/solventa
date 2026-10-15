@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./web": "./src/web.ts",
     "./mobile": "./src/mobile.ts",
+    "./fonts/web.css": "./fonts/web/fonts.css",
     "./brand/*": "./brand/*"
   },
   "scripts": {

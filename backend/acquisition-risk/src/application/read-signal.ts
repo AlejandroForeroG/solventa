@@ -14,7 +14,7 @@ export class ReadSignal {
 
   async execute(input: { subjectToken: string; scope: SignalScope; traceId: string }): Promise<SignalResult> {
     const { guard, provider, snapshots } = this.deps;
-    const consent = await guard.verify(input.subjectToken, input.scope);
+    const consent = await guard.verify(input.subjectToken, input.scope, input.traceId);
     if (!consent.allowed) return { status: 'denied', reason: consent.reason };
     try {
       return { status: 'available', signal: await provider.read(input.subjectToken, input.scope, input.traceId), consentId: consent.consentId };

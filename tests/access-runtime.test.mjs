@@ -79,7 +79,7 @@ test('workerd gateway bounds stalled Identity service calls', { timeout: 30000 }
 
 test('workerd Identity-first rollout preserves legacy RPC writes before Acquisition sends requestOrigin', { timeout: 30000 }, async t => {
   // The real composition root, HTTP adapters and access policy run in workerd.
-  // Provider authentication and the Identity session store are fakes; the SQL driver rejects any accidental query.
+  // Provider authentication, session lookup and denial persistence are fakes; the SQL driver rejects any accidental query.
   const stubs = {
     'workos-authentication': `export class WorkosAuthentication {
       async authenticate(cookie) { return cookie === 'synthetic-session' ? { identity: { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true } } : null; }
@@ -87,12 +87,13 @@ test('workerd Identity-first rollout preserves legacy RPC writes before Acquisit
     'identity-sessions': `export class SqlIdentitySessions {
       async find() { return { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: '40000000-0000-4000-8000-000000000001' }; }
     }`,
+    'sql-security-decisions': `export class SqlSecurityDecisions { async append() {} }`,
     pg: `export class Pool { query() { throw new Error('unexpected_sql_query'); } connect() { throw new Error('unexpected_sql_connection'); } } export class Client extends Pool {}`,
   };
   const bundle = await build({
     entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['cloudflare:workers', 'node:*'],
     plugins: [{ name: 'synthetic-provider-and-sessions', setup(builder) {
-      builder.onResolve({ filter: /\/(workos-authentication|identity-sessions)$/ }, args => ({ path: args.path.split('/').at(-1), namespace: 'synthetic' }));
+      builder.onResolve({ filter: /\/(workos-authentication|identity-sessions|sql-security-decisions)$/ }, args => ({ path: args.path.split('/').at(-1), namespace: 'synthetic' }));
       builder.onResolve({ filter: /^pg$/ }, () => ({ path: 'pg', namespace: 'synthetic' }));
       builder.onLoad({ filter: /.*/, namespace: 'synthetic' }, args => ({ contents: stubs[args.path], loader: 'js' }));
     } }],

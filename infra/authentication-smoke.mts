@@ -7,6 +7,13 @@ import { MobileSessions } from '../backend/identity-consent-ecosystem/src/applic
 import { Authentication } from '../backend/identity-consent-ecosystem/src/application/authentication';
 import { RegisteredDevices } from '../backend/identity-consent-ecosystem/src/application/registered-devices';
 import { SqlRegisteredDevices } from '../backend/identity-consent-ecosystem/src/adapters/outbound/registered-devices';
+import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
+import { SqlSecurityDecisions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-security-decisions';
+import { authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
+import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
+import { Consents } from '../backend/identity-consent-ecosystem/src/application/consents';
+import { SqlConsents } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-consents';
+import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 
 // Real SQL integration in a generated, disposable local database only (ESM).
 const config=await settings('local');
@@ -256,7 +263,61 @@ try {
     assert.equal(captures.length,1); assert.equal(captures[0].capture.rule.version,'3');
     assert.equal(captures[0].capture.inputs.session.clientActive,!suspendBeforeDelete);
   }
-  console.log(JSON.stringify({authenticationSQL:'passed',checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback','device_uuid_case','device_legacy_uuid_case','device_legacy_logout_uuid_case','device_suspended_owner_cleanup']}));
+  const security = new SecurityDecisions(new SqlSecurityDecisions(runtime.toString()), randomUUID);
+  const securityTrace = randomUUID();
+  const securityStart = performance.now();
+  const securityAccess = { security, application: new ApiAccess({find:async()=>null},repo), partner:null, web:null };
+  assert.deepEqual(await authorizeApiAccess(securityAccess,{kind:'partner',token:'',operation:'quotes:create',traceId:securityTrace}),
+    {allowed:false,error:'unauthorized',status:401});
+  const securityLatencyMs = performance.now()-securityStart;
+  const securityRows = (await db.query(`SELECT a.resource_id,a.outcome,a.actor_reference,a.correlation_id,
+    o.event_id,o.aggregate_id,o.event_type,o.event_version,o.payload FROM identity.audit_events a
+    JOIN identity.outbox_events o ON o.event_id=a.resource_id
+    WHERE a.action='security.denied' AND a.correlation_id=$1`,[securityTrace])).rows;
+  assert.equal(securityRows.length,1);
+  const securityRow = securityRows[0];
+  assert.equal(securityRow.actor_reference,'unattributed');
+  assert.equal(securityRow.outcome,'unauthorized');
+  assert.equal(securityRow.event_type,'identity.security_denied');
+  assert.equal(Number(securityRow.event_version),1);
+  assert.equal(securityRow.resource_id,securityRow.event_id);
+  assert.equal(securityRow.aggregate_id,securityRow.event_id);
+  assert.deepEqual(securityRow.payload,{schemaVersion:1,decisionId:securityRow.event_id,correlationId:securityTrace,
+    category:'api_access',channel:'partner',operation:'quotes:create',cause:'unauthorized'});
+  assert.ok(securityLatencyMs<=5000,`security denial persistence took ${securityLatencyMs}ms`);
+  for (const table of ['audit_events','outbox_events']) {
+    const rollbackTrace = randomUUID();
+    await db.query(`REVOKE INSERT ON identity.${table} FROM solventa_local_identity`);
+    try {
+      assert.deepEqual(await authorizeApiAccess(securityAccess,{kind:'partner',token:'',operation:'quotes:create',traceId:rollbackTrace}),
+        {allowed:false,error:'access_unavailable',status:503});
+    } finally { await db.query(`GRANT INSERT ON identity.${table} TO solventa_local_identity`); }
+    assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.audit_events WHERE correlation_id=$1',[rollbackTrace])).rows[0].count,0);
+    assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM identity.outbox_events WHERE correlation_id=$1',[rollbackTrace])).rows[0].count,0);
+  }
+  const consentIdentity = {providerSubject:'security_consent_'+randomUUID(),sessionReference:'security_consent_'+randomUUID(),emailVerified:true};
+  const consentPrincipal = await repo.register(consentIdentity); assert.ok(consentPrincipal);
+  const secureConsents = new Consents({store:new SqlConsents(runtime.toString()),platform:{now:()=>new Date(),newId:randomUUID},
+    integrity:new HmacIntegrity('synthetic-security-consent-key-0123456789'),security});
+  await secureConsents.grant({principal:consentPrincipal,idempotencyKey:randomUUID(),body:{textVersion:2,locale:'es-CO'},traceId:randomUUID()});
+  const originalSeals = (await db.query('SELECT seal FROM identity.consents WHERE client_id=$1',[consentPrincipal.clientId])).rows;
+  assert.equal(originalSeals.length,1);
+  assert.match(originalSeals[0].seal,/^[0-9a-f]{64}$/);
+  assert.equal((await secureConsents.verify({subjectToken:consentPrincipal.subjectToken,purposeCode:'risk_profiling',scope:'payment_history_score',traceId:randomUUID()})).allowed,true);
+  const alteredSeals = (await db.query(`UPDATE identity.consents
+    SET seal=CASE WHEN seal=repeat('0',64) THEN repeat('1',64) ELSE repeat('0',64) END
+    WHERE client_id=$1 RETURNING seal`,[consentPrincipal.clientId])).rows;
+  assert.equal(alteredSeals.length,1);
+  assert.match(alteredSeals[0].seal,/^[0-9a-f]{64}$/);
+  assert.notEqual(alteredSeals[0].seal,originalSeals[0].seal);
+  const tamperTrace = randomUUID();
+  assert.deepEqual(await secureConsents.verify({subjectToken:consentPrincipal.subjectToken,purposeCode:'risk_profiling',scope:'payment_history_score',traceId:tamperTrace}),
+    {allowed:false,reason:'consent_invalid'});
+  const tamperEvents = (await db.query("SELECT payload FROM identity.outbox_events WHERE event_type='identity.security_denied' AND correlation_id=$1",[tamperTrace])).rows;
+  assert.equal(tamperEvents.length,1);
+  assert.equal(tamperEvents[0].payload.cause,'consent_invalid');
+  assert.equal(JSON.stringify(tamperEvents).includes(consentPrincipal.subjectToken),false);
+  console.log(JSON.stringify({authenticationSQL:'passed',securityDenialPersistenceMs:Math.round(securityLatencyMs*10)/10,checks:['verified_mapping','audit_outbox','no_duplicate','suspended_denied','ownership','revocation','mobile_retry','mobile_concurrency','expired_session_not_reopened','pending_logout_atomic','failed_logout_rollback','bootstrap_logout_race','device_binding','device_replay','device_ownership','device_audit_rollback','logout_device_revocation','device_delete_blocks_session','fresh_registration','device_denial_capture','device_denial_rollback','web_device_revocation','legacy_device_repair','web_logout_rollback','device_uuid_case','device_legacy_uuid_case','device_legacy_logout_uuid_case','device_suspended_owner_cleanup','security_denial_atomic','security_denial_no_pii','security_denial_audit_rollback','security_denial_outbox_rollback','security_consent_tamper']}));
 } finally {
   await db?.end();
   if(created)await admin.query(`DROP DATABASE ${name} CASCADE`);
