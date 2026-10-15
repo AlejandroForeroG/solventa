@@ -111,3 +111,25 @@ test('device DELETE retries provider revocation after the owner is suspended', a
   assert.equal(providerCalls, 2);
   assert.equal(store.plans.filter(plan => plan.decision.effect === 'revoke').length, 1);
 });
+
+test('fresh primary authentication replaces a session installation over HTTP and stale DELETE cannot revoke it', async () => {
+  const store = new InMemoryDeviceStore({ observedAt: 60_000, session: { clientActive: true, createdAt: 0, expiresAt: 1_000_000, revoked: false }, bindings: [] });
+  let authenticatedAt: number | undefined;
+  let providerRevocations = 0;
+  const app = createHttp({ authentication: unexpectedAuthentication, authorizeApiAccess: async () => ({ allowed: false, status: 401, error: 'unauthorized' }),
+    devices: new RegisteredDevices(store), mobile: { configuration: config,
+      provider: { authenticate: async () => ({ providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true, authenticatedAt }),
+        revoke: async () => { providerRevocations++; } },
+      sessions: new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} }) } });
+  const request = (id: string, method: string) => app.request(`https://synthetic.example/api/v1/mobile/devices/${id}`, { method, headers: { Authorization: 'Bearer synthetic.jwt.token' } });
+  assert.equal((await request(installationId, 'POST')).status, 200);
+  store.snapshot.observedAt = 720_000;
+  authenticatedAt = 719_000;
+  const replacement = '00000000-0000-4000-8000-000000000009';
+  assert.equal((await request(replacement, 'POST')).status, 200);
+  assert.equal((await request(replacement, 'POST')).status, 200);
+  for (const method of ['GET', 'POST', 'DELETE']) assert.equal((await request(installationId, method)).status, 401);
+  assert.equal(providerRevocations, 0);
+  assert.equal((await request(replacement, 'GET')).status, 200);
+  assert.equal(store.snapshot.bindings.filter(value => !value.revoked).length, 1);
+});

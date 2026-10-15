@@ -7,8 +7,13 @@
     "icon": "./assets/app-icon.png",
     "scheme": "solventa",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#0B6B5F",
+    "backgroundColor": "#F2F0EA",
+    "ios": {
+      "bundleIdentifier": "com.anonymous.solventa",
+      "infoPlist": { "CFBundleDevelopmentRegion": "es" }
+    },
     "android": {
+      "package": "com.anonymous.solventa",
       "adaptiveIcon": {
         "backgroundColor": "#0B6B5F",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -18,7 +23,27 @@
       "output": "static",
       "favicon": "./assets/app-icon.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales de acceso."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales de acceso."
+        }
+      ],
+      "expo-web-browser",
+      ["expo-localization", { "supportedLocales": ["es", "en"] }]
+    ],
+    "locales": {
+      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales de acceso." } },
+      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials." } }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

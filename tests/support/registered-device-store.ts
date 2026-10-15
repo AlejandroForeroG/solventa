@@ -10,13 +10,17 @@ export class InMemoryDeviceStore implements DeviceStore {
     this.calls++;
     const plan = decide(structuredClone(this.snapshot));
     const decision = plan.decision;
-    if (this.failRecord && (decision.effect === 'register' || decision.effect === 'revoke' || (decision.effect === 'deny' && decision.record))) {
+    if (this.failRecord && (decision.effect === 'register' || decision.effect === 'replace' || decision.effect === 'revoke' || (decision.effect === 'deny' && decision.record))) {
       throw new Error('record_unavailable');
     }
     this.plans.push(plan);
     if (decision.effect === 'deny') return null;
-    if (decision.effect === 'register') {
-      const binding = { id: '00000000-0000-4000-8000-000000000004', installationId: input.installationId, revoked: false };
+    if (decision.effect === 'register' || decision.effect === 'replace') {
+      if (decision.effect === 'replace') for (const previous of decision.previous) {
+        const binding = this.snapshot.bindings.find(value => value.id === previous.id);
+        if (binding) binding.revoked = true;
+      }
+      const binding = { id: crypto.randomUUID(), installationId: input.installationId, revoked: false, registeredAt: this.snapshot.observedAt };
       this.snapshot.bindings.push(binding);
       return { id: binding.id, installationId: binding.installationId, status: 'active' };
     }

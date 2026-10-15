@@ -126,7 +126,7 @@ test('UUID case variants register and replay one canonical binding without a rep
   assert.equal(store.snapshot.bindings[0].installationId, upper.toLowerCase());
   assert.equal(store.plans.at(-1)?.decision.effect, 'none');
   assert.equal(store.plans[0].capture.correlationId, upper.toLowerCase());
-  assert.equal(store.plans[0].capture.rule.version, '3');
+  assert.equal(store.plans[0].capture.rule.version, '4');
   assert.ok(validateCapture(store.plans[0].capture), JSON.stringify(validateCapture.errors));
 });
 
@@ -158,7 +158,63 @@ test('suspended owners cannot register or read but can revoke and replay cleanup
   assert.equal((await app.execute('revoke', input))?.id, binding.id);
   assert.equal((await app.execute('revoke', input))?.status, 'revoked');
   assert.equal(store.plans.at(-1)?.capture.inputs.session?.clientActive, false);
-  assert.equal(store.plans.at(-1)?.capture.rule.version, '3');
+  assert.equal(store.plans.at(-1)?.capture.rule.version, '4');
   store.snapshot.session = null;
   assert.equal(await app.execute('revoke', input), null);
+});
+
+test('fresh verified primary authentication replaces a lost installation once and preserves historical references', async () => {
+  const store = new InMemoryDeviceStore(snapshot());
+  const app = new RegisteredDevices(store);
+  const original = await app.execute('register', input); assert.ok(original);
+  store.snapshot.observedAt += 660_000;
+  assert.ok(store.snapshot.session); store.snapshot.session.expiresAt = store.snapshot.observedAt + 60_000;
+  const replacement = { ...input, installationId: otherInstallation,
+    identity: { ...input.identity, authenticatedAt: store.snapshot.observedAt - 1_000 } };
+  const active = await app.execute('register', replacement); assert.ok(active);
+  assert.notEqual(active.id, original.id);
+  assert.equal(store.snapshot.bindings.filter(value => !value.revoked).length, 1);
+  assert.equal(store.snapshot.bindings[0].revoked, true);
+  assert.equal(store.plans.at(-1)?.capture.outcome, 'replace');
+  assert.ok(validateCapture(store.plans.at(-1)?.capture), JSON.stringify(validateCapture.errors));
+  assert.deepEqual(await app.execute('register', replacement), active);
+  assert.equal(store.plans.at(-1)?.decision.effect, 'none');
+  assert.equal(await app.execute('find', input), null);
+  assert.equal(await app.execute('register', input), null);
+  assert.equal(await app.execute('revoke', input), null);
+  assert.equal(store.snapshot.session.revoked, false);
+  assert.equal(await app.execute('register', { ...replacement, installationId: '00000000-0000-4000-8000-000000000009' }), null);
+  assert.equal((await app.execute('find', replacement))?.id, active.id);
+});
+
+test('replacement rejects missing, stale, future or already-consumed authentication without changing the binding', async () => {
+  for (const authenticatedAt of [undefined, now - 600_000, now + 1, now, Number.NaN]) {
+    const store = new InMemoryDeviceStore(snapshot());
+    const app = new RegisteredDevices(store);
+    const original = await app.execute('register', input);
+    assert.equal(await app.execute('register', { ...input, installationId: otherInstallation,
+      identity: { ...input.identity, authenticatedAt } }), null);
+    assert.deepEqual(await app.execute('find', input), original);
+    assert.equal(store.snapshot.bindings.length, 1);
+  }
+});
+
+test('a failed replacement record preserves the prior active installation', async () => {
+  const store = new InMemoryDeviceStore(snapshot());
+  const app = new RegisteredDevices(store);
+  const original = await app.execute('register', input);
+  store.snapshot.observedAt += 2_000;
+  store.failRecord = true;
+  await assert.rejects(app.execute('register', { ...input, installationId: otherInstallation,
+    identity: { ...input.identity, authenticatedAt: now + 1_000 } }), /record_unavailable/);
+  assert.deepEqual(await app.execute('find', input), original);
+  assert.equal(store.snapshot.bindings.length, 1);
+});
+
+test('recent primary authentication permits first activation on an older still-active provider session', async () => {
+  const state = snapshot(); assert.ok(state.session); state.session.createdAt = now - 660_000;
+  const store = new InMemoryDeviceStore(state);
+  assert.ok(await new RegisteredDevices(store).execute('register', {
+    ...input, identity: { ...input.identity, authenticatedAt: now - 1_000 },
+  }));
 });

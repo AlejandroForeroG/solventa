@@ -29,6 +29,13 @@ function adapter(getUser = async () => user) {
 test('native user verification derives identity from a signed environment-bound token and a verified provider account', async () => {
   assert.deepEqual(await adapter().authenticate(await token()), identity);
 });
+test('only a valid signed auth_time supplies primary authentication freshness, never token issuance', async () => {
+  assert.deepEqual(await adapter().authenticate(await token({ auth_time: now - 100 })), { ...identity, authenticatedAt: (now - 100) * 1000 });
+  assert.deepEqual(await adapter().authenticate(await token()), identity);
+  for (const auth_time of [null, '123', -1, now + 1, now - 0.5]) {
+    assert.equal(await adapter().authenticate(await token({ auth_time })), null);
+  }
+});
 const invalidClaims = [
   { iss: 'https://foreign.authkit.app' }, { client_id: 'client_foreign' }, { aud: 'client_foreign' },
   { sub: 'connect_app_synthetic', sid: undefined }, { sub: 'client_partner' }, { sid: 'foreign' },
