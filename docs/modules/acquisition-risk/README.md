@@ -8,6 +8,8 @@ Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health`
 
 ## Anonymous indicative calculator
 
+The HTTP adapter parses the media type with `node:util`'s `MIMEType` and requires the exact `application/json` essence, allowing normal parameters such as `charset=utf-8`. Prefix look-alikes and combined media types are rejected with 400.
+
 `POST /api/v1/quote-estimates` is public, documented in Quotes OpenAPI 1.2.0 with `security: []`. It accepts exactly `{ ageYears, amount, termMonths }`: safe integers, ages 18–70, positive integer COP amount and terms 12–240 months. The JSON body is limited to 1024 bytes, including chunked requests; unsupported properties, types, ranges, invalid JSON and non-JSON media types return 400 without echoing values or unknown keys. Successful calculations return 200 with premium, currency, amount, term, basis, rule version and a correlation UUID. Responses use `Cache-Control: no-store`. The web version gate precedes forwarding and preserves its headers, including on a normalized binding failure (503).
 
 `EstimateQuote` validates through its own domain input and calls the same `monthlyPremium` and `RULE_VERSION` as `CreateQuote`; the browser does not reproduce the rate table. The calculator has no Identity, SQL, HMAC, source or messaging dependency. It produces no saved quote, identifier, validity, business decision capture, audit or outbox: this is a nonbinding arithmetic preview, not underwriting, an offer or a contractual decision. Actual quote creation remains authenticated, independently validated/recalculated and transactionally captured. It does not accept an estimate identifier, saved browser price or client-supplied actor. No migrations, grants, secrets or provider configuration are added.

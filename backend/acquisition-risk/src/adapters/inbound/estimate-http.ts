@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { MIMEType } from 'node:util';
 import type { EstimateQuote } from '../../application/estimate-quote';
 
 const MAX_BODY = 1024;
@@ -8,7 +9,9 @@ export function estimateHandler(estimates: EstimateQuote) {
     const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
     const headers = { 'cache-control': 'no-store', 'x-trace-id': traceId };
     const invalid = () => c.json({ error: 'validation_error', errors: [{ field: '', code: 'invalid_format' }], traceId }, 400, headers);
-    if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json')) return invalid();
+    try {
+      if (new MIMEType(c.req.header('content-type') ?? '').essence !== 'application/json') return invalid();
+    } catch { return invalid(); }
     if (Number(c.req.header('content-length')) > MAX_BODY) return invalid();
     const reader = c.req.raw.body?.getReader();
     if (!reader) return invalid();
