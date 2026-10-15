@@ -13,6 +13,7 @@ export type ApiAccessDependencies = {
   web: {
     authenticate(cookie: string, refresh: boolean): Promise<{ identity: VerifiedIdentity } | null>;
     allowedOrigins: readonly string[];
+    defaultOrigin?: string;
   } | null;
 };
 export type AuthorizeApiAccess = (input: unknown) => Promise<AccessDecision>;
@@ -20,7 +21,7 @@ export type AuthorizeApiAccess = (input: unknown) => Promise<AccessDecision>;
 export type ApiAccessRequest = (
   | { kind: 'partner'; token: string; operation: ApiOperation }
   | { kind: 'mobile'; token: string; operation: ApiOperation }
-  | { kind: 'web'; cookie: string; origin: string; method: string; operation: ApiOperation }) & { traceId?: string };
+  | { kind: 'web'; cookie: string; origin: string; requestOrigin?: string; method: string; operation: ApiOperation }) & { traceId?: string };
 
 function isAccessRequest(value: unknown): value is ApiAccessRequest {
   if (!value || typeof value !== 'object') return false;
@@ -28,6 +29,7 @@ function isAccessRequest(value: unknown): value is ApiAccessRequest {
   if (value.kind === 'partner' || value.kind === 'mobile') return 'token' in value && typeof value.token === 'string' && value.token.length <= 8192;
   return value.kind === 'web' && 'cookie' in value && typeof value.cookie === 'string' && value.cookie.length <= 16384
     && 'origin' in value && typeof value.origin === 'string' && value.origin.length <= 256
+    && (!('requestOrigin' in value) || (typeof value.requestOrigin === 'string' && value.requestOrigin.length <= 256))
     && 'method' in value && typeof value.method === 'string' && ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(value.method);
 }
 
@@ -62,7 +64,10 @@ async function decideApiAccess(deps: ApiAccessDependencies, input: ApiAccessRequ
     }
     if (!input.cookie) return unauthorized;
     if (!deps.web) return { allowed: false, error: 'access_unavailable', status: 503 };
-    if (!['GET', 'HEAD'].includes(input.method) && !deps.web.allowedOrigins.includes(input.origin)) return { allowed: false, error: 'forbidden', status: 403 };
+    const target = input.requestOrigin ?? deps.web.defaultOrigin ?? deps.web.allowedOrigins[0];
+    if (!target || !deps.web.allowedOrigins.includes(target)) return { allowed: false, error: 'forbidden', status: 403 };
+    const localDevelopment = target === 'http://localhost:8787' && input.origin === 'http://localhost:5173' && deps.web.allowedOrigins.includes(input.origin);
+    if (!['GET', 'HEAD'].includes(input.method) && input.origin !== target && !localDevelopment) return { allowed: false, error: 'forbidden', status: 403 };
     // Refresh remains in /auth/session so a business RPC never loses a rotated cookie.
     const verified = await deps.web.authenticate(input.cookie, false);
     return verified ? await application.webUser(verified.identity, input.operation) : unauthorized;
@@ -89,7 +94,7 @@ export function mountApiAccess(app: Hono<{ Bindings: IdentityEnv }>, authorize: 
       const token = authHeader?.match(/^Bearer ([A-Za-z0-9_.-]+)$/i)?.[1] ?? '';
       const request: ApiAccessRequest = kind === 'partner'
         ? { kind, token, operation: 'quotes:create', traceId }
-        : { kind, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create', traceId };
+        : { kind, requestOrigin: new URL(c.req.url).origin, cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('Origin') ?? '', method: c.req.method, operation: 'quotes:create', traceId };
       const decision = await authorize(request);
       if (!decision.allowed) {
         if (decision.status === 401 && kind === 'partner') c.header('WWW-Authenticate', 'Bearer realm="solventa"');

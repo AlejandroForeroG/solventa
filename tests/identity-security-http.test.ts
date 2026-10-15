@@ -33,8 +33,36 @@ function fixture(webConfigured = true) {
     mobile: { configuration: { clientId: 'client_synthetic', redirectUri: 'solventa://auth/callback' }, provider, sessions: new MobileSessions(sessions) },
     devices: new RegisteredDevices({ execute: async () => assert.fail('unexpected device store access') }, security),
   });
-  return { app, events, fail: () => { fail = true; } };
+  return { app, deps, events, fail: () => { fail = true; } };
 }
+
+test('cross-alias consent and quote writes preserve their correlation and require durable denial recording', async () => {
+  const canonical = 'https://dev.solventa.site';
+  for (const failing of [false, true]) {
+    for (const [target, source] of [[canonical, origin], [origin, canonical]]) {
+      const state = fixture();
+      state.deps.web = { allowedOrigins: [canonical, origin], defaultOrigin: origin,
+        authenticate: async () => assert.fail('cross-alias write reached provider') };
+      if (failing) state.fail();
+      const store = new MemoryStore();
+      const access = new IdentityApiAccess({ authorizeApiAccessV1: input => authorizeApiAccess(state.deps, input) });
+      const quotes = createQuoteHttp({ quotes: new CreateQuote({ access, store, clock: { now: () => new Date() }, protector }) });
+      for (const [app, path] of [[state.app, '/api/v1/consents'], [quotes, '/api/v1/me/quotes']] as const) {
+        const response = await app.request(target + path, { method: 'POST', headers: {
+          Origin: source, Cookie: '__Host-solventa-session=synthetic-private-cookie', 'X-Trace-Id': TRACE.toUpperCase(),
+          'X-Request-Origin': source, 'X-Forwarded-Host': new URL(source).host, 'Content-Type': 'application/json',
+        }, body: '{}' }, env);
+        assert.equal(response.status, failing ? 503 : 403);
+        assert.deepEqual(await response.json(), { error: failing ? 'access_unavailable' : 'forbidden', traceId: TRACE });
+        assert.equal(response.headers.get('x-trace-id'), TRACE);
+      }
+      assert.equal(store.saved.length, 0);
+      assert.equal(state.events.length, failing ? 0 : 2);
+      assert.ok(state.events.every(event => event.correlationId === TRACE && event.cause === 'forbidden'));
+      assert.ok(!JSON.stringify(state.events).includes('synthetic-private-cookie'));
+    }
+  }
+});
 
 test('an absent web cookie is recorded without a provider while supplied cookies require configuration', async () => {
   const state = fixture(false);

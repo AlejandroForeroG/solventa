@@ -56,6 +56,20 @@ const call = (http: Http, method: string, path: string, init: { as?: string | nu
 const grant = (http: Http, key = 'key-1', init: Parameters<typeof call>[3] = {}) =>
   call(http, 'POST', '/api/v1/consents', { ...init, headers: { 'idempotency-key': key, ...init.headers } });
 
+test('a consent write cannot spoof its target host through headers or use a sibling alias Origin', async () => {
+  const { http, deps } = app();
+  const canonical = 'https://dev.solventa.site';
+  deps.web.allowedOrigins.push(canonical);
+  for (const [target, source] of [[canonical, origin], [origin, canonical]]) {
+    const response = await http.request(target + '/api/v1/consents', { method: 'POST', headers: {
+      Cookie: cookie('ana'), Origin: source, 'X-Forwarded-Host': new URL(source).host, 'X-Request-Origin': source,
+      'Content-Type': 'application/json', 'Idempotency-Key': 'cross-host',
+    }, body: JSON.stringify({ textVersion: 2, locale: 'es-CO' }) }, env);
+    assert.equal(response.status, 403);
+  }
+  assert.equal((await (await call(http, 'GET', '/api/v1/consents')).json()).items.length, 0);
+});
+
 test('the terms endpoint serves the terms of the contract example', async () => {
   const { http } = app();
   const res = await call(http, 'GET', '/api/v1/consents/terms', { headers: { 'x-trace-id': TRACE } });

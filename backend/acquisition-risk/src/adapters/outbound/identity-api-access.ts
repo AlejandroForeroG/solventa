@@ -42,7 +42,9 @@ export class IdentityApiAccess implements ApiAccess {
     const actor = credential.kind === 'partner'
       ? { kind: 'partner', token: credential.token.length <= 8192 ? credential.token : '', operation: 'quotes:create' }
       : { kind: 'web', cookie: credential.cookie.length <= 16384 ? credential.cookie : '',
-        origin: credential.origin.length <= 256 ? credential.origin : '', method: credential.method, operation: 'quotes:create' };
+        origin: credential.origin.length <= 256 ? credential.origin : '',
+        ...(credential.requestOrigin === undefined ? {} : { requestOrigin: credential.requestOrigin.length <= 256 ? credential.requestOrigin : '' }),
+        method: credential.method, operation: 'quotes:create' };
     const correlationId = canonicalTraceId(traceId);
     const request = { ...actor, ...(correlationId ? { traceId: correlationId } : {}) };
     let timer: ReturnType<typeof setTimeout> | undefined;
