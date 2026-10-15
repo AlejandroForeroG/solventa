@@ -1,0 +1,165 @@
+# Security controls
+
+This guide maps the current public routes, trust boundaries and stored data to security controls. It distinguishes implementation from the deployment evidence needed to validate it. It is not a certification of PCI-DSS compliance or a claim that unimplemented payment, policy, profiling or event-consumer flows are secure.
+
+## Trust boundaries
+
+The web Worker is the public gateway. Identity, Acquisition and Policy are private Workers reached through Service Bindings; each owns its SQL schema, runtime role and transactions. An internal binding does not grant a caller arbitrary business permission. Identity verifies credentials, and the owning use case must enforce resource ownership and applicable consent. See [backend boundaries](architecture.md).
+
+Web sessions, native user tokens, partner M2M tokens and the infrastructure diagnostic secret are different credentials. A `subjectToken`, installation UUID, partner ID or correlation UUID does not authenticate a request. Neither an authenticated session nor a device binding establishes consent, biometric attestation or operational privileges.
+
+## Actor, resource and action matrix
+
+The matrix describes application behavior. Availability also depends on the configured environment and its deployed revision. All `/api/v1` paths pass the gateway's [version gate](shared/contracts/README.md).
+
+| Actor | Resource and action | Allowed boundary | Denied boundary |
+|---|---|---|---|
+| Anonymous caller | `GET /health`; `GET`/`HEAD /api/docs/*`; `GET /api/v1/mobile/config` | Liveness, published contracts and public native client configuration only | No principal, session, secret or business data; missing native configuration returns 503 |
+| Browser starting login | `GET /auth/login`, `GET /auth/callback` | OAuth transaction with PKCE, state, expiry and authenticated encryption; callback registers only a verified identity | Forged, expired or mismatched transaction cannot register a session |
+| Web user | `GET /auth/session`, `POST /auth/logout` | Verified sealed cookie; active local session for access; logout revokes the verified session locally before provider logout | Missing/invalid session cannot authenticate; logout requires the configured Origin; provider failure cannot undo committed local revocation |
+| Partner server | `GET /api/v1/access/partner`, `POST /api/v1/quotes` | Signed WorkOS M2M JWT with matching issuer/audience and current local issuer/organization/application registration; `quotes:create` must exist in both JWT and local scopes | Missing/invalid token, inactive partner, expired/revoked credential or missing scope blocks the operation; user sessions do not establish partner identity |
+| Web user | `GET /api/v1/access/web`, `POST /api/v1/me/quotes` | Verified cookie and active owned session; `quotes:create`; actual Origin checked for writes | Caller-supplied IDs cannot select another principal; an Authorization header on the web entry returns 400; foreign Origin returns 403 |
+| Partner or web user | Repeat quote with `Idempotency-Key` | Replay lookup is scoped to the verified partner or client; identical canonical request returns the original result | Same actor/key with different request returns 409; another actor's key cannot retrieve that actor's quote |
+| Web user | `GET /api/v1/consents/terms`, `GET /api/v1/consents` | Verified session and `consents:read`; list and cursor are scoped to the authenticated client | Another client's records are absent; unknown/foreign cursors return an empty page; malformed cursors return 400 |
+| Web user | `POST /api/v1/consents`, `POST /api/v1/consents/declines`, `POST /api/v1/consents/{consentId}/revoke` | `consents:write`, configured Origin and current terms; principal comes from the session | Another client's consent returns 404 on revoke, as does a missing record; mixed credentials, invalid fields and stale terms cannot grant consent |
+| Partner server | Read, grant, decline or revoke customer consent | No partner permission exists | Partner authorization denies `consents:read` and `consents:write`; consent HTTP routes require a web session and reject Authorization headers |
+| Native user | `POST /api/v1/mobile/session`, `GET /api/v1/mobile/session`, `DELETE /api/v1/mobile/session` | Current verified user JWT; registration cannot reopen an expired/revoked local session; deletion commits owner-scoped local revocation before provider revocation | Cookie headers, M2M tokens, foreign/expired user tokens and failed provider verification cannot authenticate; a suspended client cannot register |
+| Native user | `GET /api/v1/access/mobile` | Current token, active owned session and fixed `quotes:create` probe | This probe does not create a quote; native consent permissions are denied |
+| Native user | `POST`/`GET`/`DELETE /api/v1/mobile/devices/{installationId}` | Verified provider subject/session and exact owned installation binding; registration/read require active account/session; owner-scoped revocation/retries remain possible for suspended clients | Foreign or unknown binding returns opaque 401; registration window, replacement and reactivation rules deny invalid registrations; installation ID alone grants nothing |
+| Internal authorized consumer | `authorizeApiAccessV1` and `verifyConsentV1` Service Binding methods | Validated input; verified actor for API access; fresh subject/purpose/scope/state/seal for consent | Unknown operations, failed verification and unavailable dependencies deny use; a copied consent record is not permission |
+| Diagnostic operator | `GET /internal/infra` | Environment-specific diagnostic Bearer secret; fixed SQL/RPC health probes | Missing/invalid secret returns 401; the secret grants no business operation or arbitrary SQL |
+| Operational business actor | Policy, payment, claim or cross-customer management | No operational role or business permission catalog is implemented | Unpublished business routes return 404; unknown authorization operations return 400. Route absence is not evidence of a secured financial use case |
+| SQL runtime role | Owned tables and migration-ledger inspection | Explicit table grants for the owning schema and environment | No cross-owner/cross-environment reads, DDL, DELETE, audit UPDATE or migration-ledger writes |
+
+The detailed [web authentication](modules/identity-consent-ecosystem/authentication.md), [API access](modules/identity-consent-ecosystem/api-access.md), [native authentication](modules/identity-consent-ecosystem/mobile-authentication.md), [consent](modules/identity-consent-ecosystem/consent.md) and [quote](modules/acquisition-risk/README.md) guides remain authoritative for their contracts and failure cases. Unsupported methods return the route's documented method error and do not grant an alternative action.
+
+## Threat and control matrix
+
+| Threat | Implemented barrier | Remaining limit or verification |
+|---|---|---|
+| Forged or foreign-environment identity | Signature, exact provider/client configuration, JWT claim/time checks; sealed web cookie; current local session/credential checks | Verify real provider configuration and authenticated calls per environment. External provider session revocation is not checked through per-request introspection or a revocation-event consumer |
+| Client or partner impersonation through request fields | Principal is resolved from verified credentials; quote owner/idempotency and consent SQL queries use that principal | Enumerate both allowed and denied actor/resource combinations when adding each route; authentication alone is insufficient |
+| CSRF or credential-type confusion | Origin checks for web mutations; web entries reject Authorization headers; protected native entries reject Cookie headers | Native callers must follow their own token/callback contract; there is no generic cross-origin business API |
+| Expired, revoked or tampered consent | Fresh subject/purpose/scope check, active owner, computed expiry/revocation and HMAC content seal; denied/unavailable check blocks source and stored-copy use | Signal reader is not connected to a public profiling route or real provider. Consent check and another owner's transaction are not distributed atomicity |
+| Quote replay or changed payload under an old key | Actor-scoped idempotency key plus keyed request fingerprint; quote/result/audit/outbox commit together | This implements quote idempotency, not financial provider reconciliation or payment integrity |
+| Native binding replacement, replay or cross-session access | Domain registration window, exact session binding, no reactivation; owner-scoped session lock and transaction; shared web/native logout cascade | Device rows do not prove platform biometrics or hardware identity. Real native custody and platform behavior require separate validation |
+| PII or secret leakage through errors and telemetry | Canonical API errors and UUID correlation; quote validation does not echo values or unknown field names; error metadata is mapped through a finite technical-code allowlist | Unknown exception codes, messages, details and bodies are omitted. Caller-controlled identifiers elsewhere still require minimization and synthetic-request inspection |
+| SQL injection or access outside a backend's ownership | Parameterized repository values; fixed owner table/schema access; separate runtime grants and verified SQL TLS | Administrative credentials have broader powers; use the [read-only SQL procedure](infrastructure/read-only-sql.md) for inspection |
+| Lost or changed audit records | Supported writes commit their required audit/outbox in the owner's transaction; runtime audit grants are SELECT/INSERT only | Append-only applies to runtime roles. An administrator can change data/grants; no external immutable archive is implemented |
+| Undetected unauthorized access | Covered Identity access denials and fresh-consent failures persist security audit/outbox before returning the denial; an outbox publisher and optional email adapter are implemented | Coverage exclusions and delivery setup are below. No measured delivery or universal rejection-audit deadline is established |
+| Browser injection, framing or MIME confusion | The gateway applies restrictive CSP, frame denial, nosniff and HTTPS HSTS to assets, APIs and authentication responses; approved fonts are bundled from pinned, unmodified official files | Deployment, actual browser loading and a remote rescan are separate from source/build checks |
+| Altered payment, policy or consumed event | Policy tables and contracts reserve ownership/integrity boundaries | No payment/policy business use case or event consumer is implemented. A 404, schema constraint or quote/consent test cannot demonstrate rejection without financial effect |
+
+## Minimum data and custody
+
+Only synthetic data is suitable for verification until the required data controls and complete flows have been validated. Opaque references and keyed hashes remain linkable security-sensitive data; they are not proof of anonymization.
+
+| Data | Current handling | Boundary |
+|---|---|---|
+| Name, document, birth date and city submitted for a quote | Validate in memory; partner subject uses HMAC-SHA256(document), web subject comes from the session; fingerprint signs canonical request | Do not persist the plaintext quote request, echo it in errors, or log it. HMAC is pseudonymization/integrity, not reversible encryption |
+| Quote decision | Store product, age in years, amount, term, applied rate, credit reference, rule/contract versions, result and correlation | Stored credit references and idempotency keys are caller-controlled strings. Callers must use opaque identifiers; length validation does not guarantee absence of embedded PII |
+| Identity/session | SQL stores internal UUIDs, opaque provider subject/session references, state, expiry and revocation | No passwords, access tokens, refresh tokens or sealed cookies in SQL. Provider identifiers are linkable references and must remain protected |
+| Partner access | SQL stores registration/reference/scopes/expiry/revocation | No partner client secret or JWT in SQL, channel bundles or logs |
+| Consent | Store subject ownership, terms/language/fingerprint, sources/scopes, validity, quote reference, keyed seal and idempotency data | No raw external-source result or biometric data; a quote reference does not establish ownership of the quote in another backend |
+| Native installation | Random installation UUID and namespaced provider-session binding | No hardware ID, fingerprint, face or biometric template in SQL. Local credential custody belongs to the [mobile channel](channels/mobile/README.md) |
+| Audit/outbox | Opaque actor/resource IDs, canonical action/outcome, correlation and the required minimal capture | Do not copy request bodies, cookies, tokens, external raw responses or unnecessary personal fields. A stored outbox record does not prove publication or alert delivery |
+
+Retention is not yet a complete data lifecycle: some audit adapters use a provisional five-year period and authentication uses bounded session retention metadata. Retention timestamps do not perform deletion, archive protection or legal-policy validation. Maintenance requires separately authorized administrative operations; runtime roles have no DELETE permission.
+
+## Durable rejection records
+
+Identity's `SecurityDecisions` accepts only a fixed category, channel, operation and cause plus canonical UUID decision/correlation identifiers. It reconstructs the payload rather than copying caller objects. `SqlSecurityDecisions` inserts `security.denied` into `identity.audit_events` and `identity.security_denied` into `identity.outbox_events` in one SQL statement and implicit transaction. Both use the decision UUID as resource/aggregate identity; the event ID is the same UUID. The audit actor is the literal `unattributed`: no submitted identity, token, cookie, subject, installation ID, IP address or request body enters this generic rejection record. Retention metadata is 90 days. Runtime cannot update/delete audit rows, but this is not external immutable custody.
+
+| Decision path | Durable record boundary |
+|---|---|
+| `authorizeApiAccessV1` and access probes | Valid access-check inputs that end in 401 or 403, including missing/invalid credentials, revoked/out-of-scope partner access and forbidden web write Origin |
+| Web session/logout | Supplied invalid cookie, verified identity without an active local principal, unauthenticated logout and forbidden logout Origin |
+| Native session | Protected session calls denied for missing/invalid tokens or unavailable authorized local principal; the access probe uses the shared authorization recorder |
+| Native devices | Invalid credentials and unknown/foreign/unusable bindings produce the generic security decision. Existing registration-policy denials retain their transactional device capture/audit/outbox and are not recorded twice |
+| `verifyConsentV1` | Missing, revoked, expired or altered-seal consent, and invalid consent-check input; no subject or raw scope value enters the security payload |
+
+Required-record failure blocks access and returns the route's 503 unavailable response, or `allowed:false, reason:unavailable` for consent verification. It does not claim a committed rejection audit. No retry follows an uncertain audit commit. A denied request may leave a security record in Identity while producing no quote or other business write in its owner. These are local transactions, not distributed atomicity between Workers or a financial provider.
+
+Coverage is deliberately explicit: public quote HTTP requests with missing, malformed or oversized credentials retain their channel and reach Identity with an empty token/cookie, so its denial uses the same durable recording path; oversized Origin values become an unconfigured origin. Unexpected RPC 400 responses block the quote as 503 rather than becoming an unaudited 401. Calling `CreateQuote.execute` directly with a null credential remains a local guard outside the public HTTP flow. A foreign/missing consent revoke remains opaque 404; malformed HTTP requests and unsupported methods return their 400/405 contract without a generic security decision; technical 503 failures are not security-denial events. A normal anonymous `GET /auth/session` without a cookie creates no security alert. OAuth callback failures retain their redirect behavior. The diagnostic-token check, absent business routes and unimplemented financial/event flows do not use this recorder. A stored record does not prove that every access path has been covered or that its commit completed within five seconds.
+
+## Alert publication and email configuration
+
+`publishSecurityAlerts` claims only Identity's `identity.security_denied` and `identity.device_registration_denied` outbox events. It validates the event envelope and projects a minimal alert with schema version, event/decision/correlation UUIDs, occurrence timestamp and fixed category/channel/operation/cause. Historical device captures remain inside Identity: actor, provider session, installation and binding snapshots are not included in the email.
+
+Each run claims at most ten events under a unique lease owner and a 60-second lease, processing them through two acknowledgement-waiting lanes. Claims and acknowledgement updates are guarded by owner, state and lease expiry. Concurrent publishers cannot acknowledge another publisher's lease. There are at most five claims/attempts; eligible retry delays are 1, 2, 4 and 8 seconds, subject to the next publisher invocation. Invalid payloads and exhausted attempts become `dead_letter`. Expired publishing leases can be reclaimed; exhausted claims are moved to dead letter. An acknowledgement persistence failure leaves that lease recoverable; the publisher awaits both lanes' independent acknowledgement work before reporting its canonical failure. Other business events remain outside this publisher.
+
+Delivery is at least once. `CloudflareEmailDelivery` waits at most three seconds for the native binding's acknowledgement and accepts only a response containing a valid provider `messageId`. The binding exposes no cancellation signal: a timeout is an uncertain acknowledgement, so a late send or later retry may produce duplicate messages with the same event ID. Two waiting lanes do not limit actual provider sends to two in flight: after timed-out waits, up to ten sends from that invocation may remain unresolved, and later invocations can overlap. `published` means the provider accepted the send and the SQL acknowledgement succeeded; it does not establish mailbox delivery, inbox placement, reading or a 60-second end-to-end deadline. A lost SQL acknowledgement after provider acceptance must not trigger an immediate second provider call in that run.
+
+Email delivery is disabled by default. The Identity composition root requires the native `SECURITY_EMAIL` binding and optional `SECURITY_ALERT_EMAIL_CONFIG` secret containing exactly the selected `environment`, `from` and `to`. Keep addresses in secret custody, outside public Wrangler variables, Git, logs and client bundles. The environment marker must match `APP_ENV`. Missing/invalid configuration leaves durable rejection recording available and does not authorize a send. Configure and validate each environment independently; never reuse another environment's recipient or credentials.
+
+The background publisher uses `ctx.waitUntil` after Identity HTTP/access-RPC 401/403 results and denied consent RPC results. Remote environments also schedule a fallback once per minute; local has no cron. A normal anonymous session check can trigger an enabled backlog drain without creating a new security decision. Two waiting lanes reduce sequential acknowledgement delay, but backlog, scheduling, SQL latency, outages and retry delays can still exceed the request background lifetime or the alert target. A cron fallback is recovery, not a delivery guarantee. Measure from the actual denied attempt to durable audit visibility, provider acceptance and receiver observation separately; record dead letters, pending depth, expired leases and uncertain acknowledgements. An injected delivery adapter or local simulator does not establish a real email send.
+
+An invocation with claimed/dead-lettered events emits `security_alert_dispatch` with numeric result counters. Dispatch failures emit only `security_alert_dispatch_failed` and fixed code `security_alert_unavailable`, then reject with a canonical error. Scheduled failures remain visible to the platform; a `waitUntil` failure signals a background failure without changing the completed HTTP denial. These logs omit addresses, event payloads and raw provider errors. Pending/dead-letter state still requires operational inspection; counters alone are not a receiver receipt.
+
+Before enabling a real environment:
+
+1. Select an authorized sender domain and recipient. The sender must belong to a domain onboarded to Cloudflare Email Service using Cloudflare DNS; a Workers `workers.dev` address is not a sender domain. Follow [domain setup](https://developers.cloudflare.com/email-service/get-started/send-emails/).
+2. For delivery only to a controlled account destination, verify that destination through [Email Routing addresses](https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/). Cloudflare supports sends from routing domains to verified destinations even without full Email Sending onboarding. Arbitrary-recipient Email Sending has its own account/plan and domain requirements; consult the current [limits](https://developers.cloudflare.com/email-service/platform/limits/).
+3. Configure the Identity `send_email` binding named `SECURITY_EMAIL` using the [native Workers API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/). Restrict sender and recipient at the binding/account level where applicable, following [send-binding restrictions](https://developers.cloudflare.com/email-service/configuration/send-bindings/). A local binding simulator and a remote-enabled binding have different external effects.
+4. Store `SECURITY_ALERT_EMAIL_CONFIG` as an optional secret in the matching GitHub Environment, containing exactly `environment`, `from` and `to`, and retain an authorized custody copy outside Git. Normal CI/CD validates its environment, keys and addresses before adding it to Identity's secrets file. An absent GitHub secret becomes an empty Worker value and disables delivery; this prevents a stale manually configured recipient from remaining enabled. Use the normal PR/deployment flow for activation or disabling, rather than a separate manual Worker secret deployment. See [CI/CD secret restoration](infrastructure/ci-cd.md).
+5. Run an explicitly authorized synthetic rejection, inspect the committed record and provider receipt, and verify actual destination reception. Record timings and failure/retry behavior without exposing mailbox addresses or provider payloads in public evidence.
+
+No sender domain, recipient verification or actual delivery is established by this repository guide. Domain purchase, DNS onboarding and sending require their own authorized operation.
+
+## Error logging and browser headers
+
+Each backend owns a finite allowlist of recognized SQLSTATE, network and TLS error codes. Acquisition additionally retains `quote_hmac_key_invalid`. Unknown strings, including alphanumeric strings shaped like identifiers or SQLSTATEs, map to `unexpected_error`; database probes use `connection_failed`. Probes sanitize both their logs and returned diagnostics. Only an own data property is inspected, without invoking an error-code getter; failed proxy inspection falls back safely. Logging never serializes the exception or its message/detail. Correlation and canonical HTTP responses remain unchanged.
+
+The web gateway runs before every asset request (`assets.run_worker_first:true`) and applies response headers after route/version handling. It clones responses to preserve immutable binding responses, streaming bodies, status, Location, trace/version headers and repeated Set-Cookie values. All returned responses have `X-Content-Type-Options:nosniff`, `X-Frame-Options:DENY` and `Referrer-Policy:no-referrer`. HTTPS responses add `Strict-Transport-Security:max-age=31536000`; HTTP development responses remove that header.
+
+The application CSP allows scripts, stylesheets, fonts and connections only from the same origin, plus same-origin/data images. It disallows inline/eval scripts, plugins, base URL changes and framing; forms are same-origin. No current React screen needs inline styles. The API viewer retains its distinct original CSP, including its required inline styles, same-origin resources and `form-action 'none'`, on successful responses, redirects and errors. Partner integration is a server API, not an iframe embedding contract.
+
+The application no longer loads the external Google Fonts stylesheet. Its exact official WOFF2 response files are vendored under [shared web fonts](../packages/assets/fonts/web/README.md), preserving every declared family, weight and Unicode subset. Vite emits same-origin font assets, and the complete licenses remain in the emitted stylesheet's legal comment. Provenance and SHA-256 digests are recorded with the files. This removes the cross-origin stylesheet integrity dependency instead of pinning a digest to Google's user-agent-dependent CSS. The independent API viewer font package is unchanged. Verify source hashes, emitted assets and actual font loading after each update; a source fix and local browser comparison do not establish remote deployment or a clean remote scan.
+
+## Security checklist and evidence boundaries
+
+Use this checklist for a specific commit, deployment and environment. Record only actual observed results in the authorized evidence location. A declaration or test command below is not an executed result.
+
+| Control | Implemented configuration or behavior | Evidence required for the selected environment |
+|---|---|---|
+| Secret separation | WorkOS API/client and cookie keys, quote HMAC key, consent seal key, diagnostic token and SQL runtime passwords are held outside Git and separated by environment; CI/CD restores environment-scoped credentials | Verify secret names/presence and destination without revealing values; inspect tracked source/history and generated bundles for accidental exposure. Missing custody requires restoration, not invented credentials |
+| Key lifecycle | Missing/short quote or consent keys fail closed; secrets are not returned to clients | Custody/access and rotation procedure. Rotating a consent seal key invalidates existing seals unless a deliberate migration/key-version strategy is supplied |
+| Browser transport/session | Remote origins are HTTPS; cookie flags are HttpOnly, Secure, SameSite=Lax, Path=/ and `__Host-`; OAuth attempt uses AES-GCM and origin-bound AAD | Capture actual HTTPS behavior and cookie attributes with synthetic accounts; validate expired/forged state and cross-origin writes |
+| Native/provider transport | HTTPS provider endpoints and verified JWTs; native secrets remain on the device under the channel contract | Real PKCE/callback/login and secure-storage/biometric checks on the selected platform; server tests alone do not establish native custody |
+| SQL transport | Operator clients verify CA/hostname; remote Hyperdrive origin uses `verify-full`; runtime credentials belong to one owner/environment | Run environment verification and inspect active binding/TLS configuration. Local TLS tests do not establish remote settings |
+| SQL and backup encryption at rest | No application-level field encryption or repository-managed disk/backup encryption control is implemented; quote PII is minimized/pseudonymized | Obtain actual provider configuration and backup/custody evidence. Do not infer encryption-at-rest coverage from TLS, HMAC, a managed-service name or a schema |
+| Least privilege | Explicit owner/table grants, public privileges revoked, no runtime DDL/DELETE/cross-owner access, append-only runtime audit/inbox | Execute schema/grant and isolation checks with each relevant runtime role. Review administrative/CI/Cloudflare access separately |
+| Authentication and resource scope | Explicit operation catalog and actor-derived ownership; failed dependencies block protected execution | Run positive/negative route, contract and SQL cases with at least two independent synthetic users/partners and expired/revoked/out-of-scope credentials |
+| No PII in responses/logs | Minimal errors, canonical field names, UUID correlation and restricted failure logging | Inspect actual responses, captured logs and persisted fields from synthetic negative cases. Caller-controlled identifiers and new error codes require review |
+| Durable audit and alerts | Transactional business audit/outbox and covered Identity denials; leased publisher and optional native email adapter | Verify actual SQL atomicity, runtime immutability, environment configuration, receiver observation and timing. Default-disabled delivery and local tests do not establish a notification deadline |
+| Payment/event integrity | Owner schemas, decimal money and local-transaction architecture establish intended boundaries | Complete business implementation, tamper/replay tests, financial-effect checks and measured durable rejection audit are required |
+
+See [infrastructure operations](infrastructure/README.md), [SQL model and permissions](infrastructure/data-model.md), [migrations](infrastructure/migrations.md) and [CI/CD](infrastructure/ci-cd.md) for setup and recovery. Administrative SQL credentials are never runtime bindings or CD credentials. Runtime restrictions do not constrain an administrative operator, a compromised provider account or a deployment token with broader account scope.
+
+## Verification commands and limits
+
+From the repository root, the existing suites cover synthetic credentials, scopes, ownership, token failures, consent tampering, quote minimization, idempotency and HTTP/contract boundaries:
+
+```sh
+npm run test:authentication
+npm run test:consents
+npm run test:quotes
+npm run test:contracts
+npm run test:security
+```
+
+With local infrastructure prepared, the following suites use disposable SQL databases and actual runtime-role behavior:
+
+```sh
+npm run test:authentication:sql
+npm run test:partner-access:sql
+npm run test:consents:sql
+npm run test:quotes:sql
+npm run test:security:sql
+```
+
+`test:security` covers canonical rejection/alert projection, unknown error metadata, publisher retries/dead letters, optional configuration and gateway headers, including local workerd asset routing and repeated-cookie redirects. `test:security:sql` uses a disposable database and the actual Identity runtime role to exercise exclusive claims, guarded acknowledgements, lease recovery, five-attempt exhaustion, minimal device projection, the ten-event batch and unrelated-event isolation. Its delivery collaborator is synthetic; it does not send email. The authentication SQL suite separately checks atomic generic rejection audit/outbox, rollback on failed persistence and runtime audit permissions. Execute and inspect these suites before making any timing claim; listing them here does not assert they passed.
+
+For a separately authorized remote inspection, explicitly select the environment and follow its infrastructure verification procedure. Never substitute another environment's credentials or mutate a shared partner registration merely to create a negative case.
+
+A security verification record must identify the immutable commit/deployment, environment, synthetic actor/resource cases, observed responses and persisted effects, sanitized logs, timings and unresolved limits. Local in-memory tests, SQL tests, CI, deployed smoke checks, authenticated end-to-end tests and real native validation establish different claims. None alone demonstrates all security criteria, comprehensive vulnerability coverage or regulatory compliance. A ZAP report must come from an actual in-scope scan; this repository currently contains no automated ZAP workflow or report.

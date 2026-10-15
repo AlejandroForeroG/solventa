@@ -1,5 +1,6 @@
 import type { ConsentCheck, ConsentDenial, ConsentGuard } from '../../application/ports/consent-guard';
 import type { SignalScope } from '../../domain/signal';
+import { canonicalTraceId } from '../trace-id';
 
 // The Service Binding to Identity (`verifyConsentV1`). Its reply is untrusted until validated here.
 export interface IdentityConsentRpc {
@@ -31,11 +32,12 @@ function checkFrom(reply: unknown, now: Date): ConsentCheck {
 export class IdentityConsentGuard implements ConsentGuard {
   constructor(private readonly identity: IdentityConsentRpc, private readonly deadlineMs = 2000, private readonly now = () => new Date()) {}
 
-  async verify(subjectToken: string, scope: SignalScope): Promise<ConsentCheck> {
+  async verify(subjectToken: string, scope: SignalScope, traceId?: string): Promise<ConsentCheck> {
+    const correlationId = canonicalTraceId(traceId);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const reply = await Promise.race([
-        this.identity.verifyConsentV1({ subjectToken, purposeCode: PURPOSE, scope }),
+        this.identity.verifyConsentV1({ subjectToken, purposeCode: PURPOSE, scope, ...(correlationId ? { traceId: correlationId } : {}) }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('consent_deadline')), this.deadlineMs); })
       ]);
       return checkFrom(reply, this.now());
