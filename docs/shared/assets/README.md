@@ -45,7 +45,9 @@ All twelve SVGs are complete vectors: symbol and letters converted to paths, wit
 
 ## Editing or adding assets
 
-IBM Plex Sans (400/500/600/700) and Mono (400/600) complete WOFF2 files are centralized in `fonts/ibm-plex`, with their [pinned upstream versions and license](../../../packages/assets/fonts/ibm-plex/README.md). The API reference copies them into its same-origin public assets and declares `font-display: swap`; installing fonts on the user's device or accessing a font CDN is unnecessary. Other channels are unchanged by this reference-specific integration.
+The API reference uses IBM Plex Sans (400/500/600/700) and Mono (400/600) complete WOFF2 files centralized in `fonts/ibm-plex`, with their [pinned upstream versions and license](../../../packages/assets/fonts/ibm-plex/README.md). It copies them into its same-origin public assets and declares `font-display: swap`.
+
+The web application separately imports `@solventa/assets/fonts/web.css`, preserving its original Google Fonts family/weight/subset declarations using unmodified official WOFF2 files in `fonts/web`: IBM Plex Sans 400/500/600, IBM Plex Mono 400/500/600 and Space Grotesk 500/600/700. Its [manifest, licenses and update rules](../../../packages/assets/fonts/web/README.md) preserve the source URLs and binary hashes; complete license notices also ship in the built CSS. Vite emits all referenced files as same-origin assets, without copying fonts into the channel source, using a font CDN or installing system fonts. This does not replace the API viewer's independent font source or change native typography.
 
 Source geometry lives in `brand/source.json`. To change the brand, edit that source or colors/compositions in `scripts/generate.mjs`, then run from the root:
 

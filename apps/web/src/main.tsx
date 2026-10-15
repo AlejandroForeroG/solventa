@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@solventa/assets/fonts/web.css'
 import './index.css'
 import App from './App'
 import { brandAssets } from '@solventa/assets/web'

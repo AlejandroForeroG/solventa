@@ -4,6 +4,8 @@ import { Authentication } from '../../application/authentication';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
 import type { IdentitySessions } from '../../application/authentication';
+import type { SecurityDecisions } from '../../application/security-decisions';
+import { canonicalSecurityId } from '../../domain/security-decision';
 
 type AuthEnv = { Bindings: IdentityEnv };
 type Attempt = { state: string; codeVerifier: string; expires: number };
@@ -45,7 +47,7 @@ export type AuthenticationCollaborators = {
   sessions(connectionString: string): IdentitySessions;
 };
 
-export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators) {
+export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators, security?: Pick<SecurityDecisions, 'deny'>) {
   app.use('/auth/*', async (c, next) => { c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff'); await next(); });
   app.all('/auth/*', async c => {
     const config = configuration(c.env);
@@ -56,7 +58,13 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
     if (!['/auth/login','/auth/callback','/auth/session','/auth/logout'].includes(path)) return c.json({ error: 'not_found' }, 404);
     if (c.req.method !== (path === '/auth/logout' ? 'POST' : 'GET')) return c.json({ error: 'method_not_allowed' }, 405);
     const origins = config.local ? [config.origin, 'http://localhost:5173'] : [config.origin];
-    if (path === '/auth/logout' && !origins.includes(c.req.header('Origin') ?? '')) return c.json({ error: 'invalid_origin' }, 403);
+    const traceId = canonicalSecurityId(c.req.header('X-Trace-Id')) ?? crypto.randomUUID();
+    if (path === '/auth/logout' && !origins.includes(c.req.header('Origin') ?? '')) {
+      try { await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'forbidden' }, traceId); }
+      catch { return c.json({ error: 'authentication_unavailable' }, 503); }
+      c.header('X-Trace-Id', traceId);
+      return c.json({ error: 'invalid_origin' }, 403);
+    }
     try {
       const provider = collaborators.provider(config);
       const application = new Authentication(collaborators.sessions(c.env.IDENTITY_DB.connectionString));
@@ -79,12 +87,19 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
       const verified = cookie ? await provider.authenticate(cookie) : null;
       // A failed refresh from a parallel request must not erase the newer
       // cookie another response has just installed. Invalid cookies grant no access.
-      if (!verified) return c.json({ authenticated: false }, 401);
+      if (!verified) {
+        // Checking an absent browser session is normal anonymous navigation.
+        // A supplied invalid cookie or a denied logout is a protected denial.
+        if (cookie || path === '/auth/logout') {
+          await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'unauthorized' }, traceId);
+          c.header('X-Trace-Id', traceId);
+        }
+        return c.json({ authenticated: false }, 401);
+      }
       if (path === '/auth/logout') {
         // Durable local revocation precedes provider logout. A provider outage
         // cannot make the old cookie usable against Solventa again.
-        const suppliedTrace = c.req.header('X-Trace-Id') ?? '';
-        const correlation = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedTrace) ? suppliedTrace.toLowerCase() : crypto.randomUUID();
+        const correlation = traceId;
         c.header('X-Trace-Id', correlation);
         await application.logout(verified.identity, correlation);
         writeCookie(c, config, '');
@@ -92,7 +107,12 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
         return c.json({ logoutUrl: provider.logoutUrl(verified.identity) });
       }
       const principal = await application.principal(verified.identity);
-      if (!principal) { writeCookie(c, config, ''); return c.json({ authenticated: false }, 401); }
+      if (!principal) {
+        await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'unauthorized' }, traceId);
+        c.header('X-Trace-Id', traceId);
+        writeCookie(c, config, '');
+        return c.json({ authenticated: false }, 401);
+      }
       if (verified.cookie) writeCookie(c, config, verified.cookie);
       return c.json({ authenticated: true, principal });
     } catch {

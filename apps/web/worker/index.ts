@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
+import { withSecurityHeaders } from './security-headers';
 
 const quotesPath = /^\/api\/v1\/(me\/)?quotes(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
@@ -23,8 +24,7 @@ async function forwardToAcquisition(request: Request, env: WebEnv, headers: Reco
   finally { clearTimeout(timeout); }
 }
 
-export default {
-  async fetch(request: Request, env: WebEnv): Promise<Response> {
+async function route(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
@@ -61,5 +61,10 @@ export default {
       } catch { return Response.json({ ready: false }, { status: 503, headers }); }
     }
     return env.ASSETS.fetch(request);
+}
+
+export default {
+  async fetch(request: Request, env: WebEnv): Promise<Response> {
+    return withSecurityHeaders(request, await route(request, env));
   },
 } satisfies ExportedHandler<WebEnv>;

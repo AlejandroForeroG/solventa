@@ -51,12 +51,14 @@ Another module that wants to query a source asks Identity, through the Service B
 The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
 
 ```ts
-{ subjectToken, purposeCode: 'risk_profiling', scope }
+{ subjectToken, purposeCode: 'risk_profiling', scope, traceId }
 // { allowed: true, consent: { consentId, textVersion, expiresAt } }
 // { allowed: false, reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' }
 ```
 
 `subjectToken` is the internal pseudonymous identifier of the actor already authorized by the caller. `consent_invalid` means the stored record no longer matches its seal. The check is never cached, and the caller treats every `allowed: false` the same way: no source and no copy.
+
+`traceId` is optional and carries the initiating UUID into a security rejection record. Missing, revoked, expired or altered-seal consent, and invalid consent-check input, create a fixed `consent_use` security audit/outbox record before returning the denial. The security record contains the decision/correlation UUIDs and a canonical cause; it does not copy the subject, raw scope or consent contents. If this required record fails, verification returns `allowed:false, reason:unavailable`. Technical verification failures remain unavailable without a generic security event. See [security recording and optional delivery](../../security.md#durable-rejection-records). A foreign/missing HTTP consent revoke still returns opaque 404 and does not create a generic security decision.
 
 ### Guard in Acquisition
 
@@ -90,7 +92,7 @@ Replace `dev` consistently for staging or prod. `secret bulk` publishes a new Wo
 
 ## Limits
 
-- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the answer does not change: the failure is logged as `consent_expiry_audit_failed` with a short error code and the next read tries again.
+- Expiry has no business outbox event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the failure is logged as `consent_expiry_audit_failed` with an allowlisted technical code and the next read tries again. A denied fresh-use check also requires its separate security decision; failure of that required record changes its reason to `unavailable` while continuing to block use.
 - Consent is checked against the actor's subject only; Identity does not read quotes, so `quoteRef` is not validated.
 - No source is queried yet. Real providers, their adapters and the use of the answer belong to the profiling work.
 
@@ -103,7 +105,7 @@ Replace `dev` consistently for staging or prod. `secret bulk` publishes a new Wo
 | Missing key, malformed body or unknown field | 400 |
 | Outdated text, key reused with another request, revoking an expired consent | 409 |
 | Consent of another user | 404, indistinguishable from a missing one |
-| Verification or persistence unavailable | 503; nothing is recorded |
+| Verification or required persistence unavailable | 503; no successful consent mutation or durable rejection record is promised |
 
 ## Verification
 

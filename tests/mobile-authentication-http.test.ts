@@ -27,7 +27,7 @@ function setup(options: { verified?: boolean; registered?: boolean; unavailable?
   const app = createHttp({ authentication: unexpectedAuthentication,
     authorizeApiAccess: async input => {
       calls.push('authorize');
-      assert.deepEqual(input, { kind: 'mobile', token: 'synthetic.jwt.token', operation: 'quotes:create' });
+      assert.deepEqual(input, { kind: 'mobile', token: 'synthetic.jwt.token', operation: 'quotes:create', traceId: headers['X-Trace-Id'] });
       return active ? { allowed: true, actor } : { allowed: false, error: 'unauthorized', status: 401 };
     },
     mobile: {

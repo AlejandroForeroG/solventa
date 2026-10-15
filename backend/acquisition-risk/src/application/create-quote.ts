@@ -20,7 +20,7 @@ export class CreateQuote {
   async execute(input: CreateQuoteInput): Promise<CreateQuoteResult> {
     // Before validation, so a caller without access learns nothing about the rules.
     if (!input.credential) return { status: 'denied', error: 'unauthorized', httpStatus: 401 };
-    const decision = await this.deps.access.authorize(input.credential);
+    const decision = await this.deps.access.authorize(input.credential, input.traceId);
     if (!decision.allowed) return { status: 'denied', error: decision.error, httpStatus: decision.status };
     const { actor } = decision;
 

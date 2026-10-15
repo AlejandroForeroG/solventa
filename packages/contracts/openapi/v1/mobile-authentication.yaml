@@ -1,8 +1,15 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.2.0
-  description: Native WorkOS PKCE, session lifecycle and session-bound installation registration/revocation. Biometrics protect credentials on the device; the server does not attest biometric execution or store biometric templates.
+  version: 1.2.1
+  description: >
+    Native WorkOS PKCE, session lifecycle and session-bound installation registration/revocation.
+    Biometrics protect credentials on the device; the server does not attest biometric execution
+    or store biometric templates. Protected endpoint authorization denials commit their minimal
+    security audit and outbox before returning 401 or 403; failed required persistence returns
+    503 access_unavailable instead. Existing installation-registration policy decisions retain
+    their own atomic audit/outbox without a duplicate security decision. Security notifications
+    are asynchronous; these responses confirm neither email delivery nor a notification deadline.
 servers:
   - url: /api/v1
 tags:
@@ -170,7 +177,7 @@ components:
       description: WorkOS AuthKit USER access token obtained through native code+PKCE. Never a server API key, Connect M2M token, refresh token or web cookie.
   headers:
     TraceId:
-      description: Valid supplied UUID or a generated UUID, also present in the body.
+      description: Valid supplied UUID normalized to lowercase or a generated UUID, also present in the body and the security denial correlation.
       schema: { type: string, format: uuid }
     NoStore:
       description: Session responses must not be cached.
@@ -262,7 +269,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing, invalid, foreign or expired token; unverified/deleted user; absent, expired, suspended or revoked local session.
+      description: Missing, invalid, foreign or expired token; unverified/deleted user; absent, expired, suspended or revoked local session, or an unavailable installation binding. The required minimal security decision or existing installation-registration policy audit/outbox has committed; the public error remains opaque unauthorized.
       headers:
         <<: *headers
         WWW-Authenticate:
@@ -270,7 +277,7 @@ components:
           schema: { type: string, example: 'Bearer realm="solventa"' }
       content: *errorContent
     Forbidden:
-      description: Operation is outside the native user's current permission policy.
+      description: Operation is outside the native user's current permission policy. The minimal security denial audit and outbox have committed; the public error is forbidden.
       headers: *headers
       content: *errorContent
     MethodNotAllowed:
@@ -282,6 +289,6 @@ components:
           schema: { type: string }
       content: *errorContent
     Unavailable:
-      description: Configuration, provider verification, SQL registration/lookup or revocation is unavailable. A failed provider logout does not undo local revocation.
+      description: Configuration, provider verification, SQL registration/lookup, revocation or required security-denial persistence is unavailable. The response confirms no successful protected operation or durable denial record. A failed provider logout does not undo committed local revocation.
       headers: *headers
       content: *errorContent

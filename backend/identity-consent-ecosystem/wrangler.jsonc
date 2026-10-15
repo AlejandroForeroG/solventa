@@ -59,6 +59,16 @@
           "WORKOS_CLIENT_ID",
           "AUTH_COOKIE_PASSWORD"
         ]
+      },
+      "send_email": [
+        {
+          "name": "SECURITY_EMAIL"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "* * * * *"
+        ]
       }
     },
     "staging": {
@@ -83,6 +93,16 @@
           "WORKOS_API_KEY",
           "WORKOS_CLIENT_ID",
           "AUTH_COOKIE_PASSWORD"
+        ]
+      },
+      "send_email": [
+        {
+          "name": "SECURITY_EMAIL"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "* * * * *"
         ]
       }
     },
@@ -109,6 +129,16 @@
           "WORKOS_CLIENT_ID",
           "AUTH_COOKIE_PASSWORD"
         ]
+      },
+      "send_email": [
+        {
+          "name": "SECURITY_EMAIL"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "* * * * *"
+        ]
       }
     }
   },
@@ -119,5 +149,13 @@
       "AUTH_COOKIE_PASSWORD",
       "CONSENT_SEAL_KEY"
     ]
+  },
+  "send_email": [
+    {
+      "name": "SECURITY_EMAIL"
+    }
+  ],
+  "triggers": {
+    "crons": []
   }
 }
