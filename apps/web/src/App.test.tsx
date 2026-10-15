@@ -117,7 +117,7 @@ describe('privacy dashboard in the application', () => {
   it('is not offered without a session', async () => {
     serve(401);
     render(<App />);
-    expect(await screen.findByRole('link', { name: 'Continuar' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Calcular estimación' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Panel de privacidad' })).toBeNull();
   });
 

@@ -2,7 +2,7 @@
 
 Code: `apps/web`. Run commands from the repository root.
 
-React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes entry, session checking, logout, the minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
+React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes an anonymous calculator, session checking, logout, the authenticated minimum-data quote journey, consent and the privacy dashboard; later business flows are pending.
 
 Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Service Binding and does not receive tokens. See [authentication](../../modules/identity-consent-ecosystem/authentication.md) to start the complete local flow at `http://localhost:8787`.
 
@@ -20,7 +20,29 @@ The public home page introduces Solventa's mortgage life calculator, lists the i
 
 The landing creates no quote, reads no consent terms and submits no customer information. Session checking and the existing header sign-in/sign-out remain available. `/cotizar` retains the existing access, session recovery, quote and privacy states; an `auth=failed` return also opens that journey so its error remains visible. No OAuth callback, API contract, consent rule or contracting step changes in this increment.
 
+A valid same-tab estimate draft also opens the journey at `/`, allowing the existing OAuth callback to resume the quote directly instead of showing the landing. The draft is still consumed only by the existing authenticated handoff. Root visits without a draft show the landing for signed-in visitors too; the primary link opens their protected quote form.
+
 ## Quote journey
+
+### Anonymous estimate and sign-in
+
+The public calculator retains the approved seven-step indicator and its order: Quote, Result, Consent, Offer, Policy, Payment and Signature. Input and loading stay on step 1; the preliminary result and its sign-in guidance stay on step 2. Consent and later steps remain unavailable anonymously. After sign-in, confirming the customer details returns to the existing protected quote form at step 1; its saved result and explicit consent keep steps 2 and 3. The indicator never treats sign-in as consent or unlocks unimplemented steps.
+
+Completion and error announcements use the currently selected interface language even when it changes during a pending calculation. Choosing to sign in without retaining inputs clears any older draft as well.
+
+The header sign-in shortcut also retains complete calculator inputs; if storage is blocked it offers the same explicit choice to proceed without them.
+
+The public calculator stays usable during session checking. Each edit also updates the shell's in-memory inputs, so a slow session check (including a retry after an outage) can switch to the authenticated form without discarding the amount and term entered while it was pending. This does not persist identity fields or a price.
+
+An anonymous visitor starts with `PublicQuoteFlow`: age in completed years, loan amount in integer COP and term in months. It calls `POST /api/v1/quote-estimates` with `credentials: omit`, without checking access, reading SQL or querying any source. The backend reuses the saved-quote rating rule. This is an indicative calculator, not a stored business quote: it issues neither a quote identifier nor validity and cannot unlock an offer or contracting. The browser validates the response and its amount/term against the submitted inputs before showing it. Invalid inputs focus the first field; failures preserve the inputs and offer another calculation. The calculator remains available if session checking returns unavailable.
+
+Continuing shows instructions for existing accounts and registration through the existing hosted WorkOS login. It explicitly distinguishes sign-in from data authorization, explains that sources, purpose and validity will be shown before consent, and states the refusal/revocation options. It never authorizes on the customer's behalf or queries consent terms anonymously. Back navigation retains the estimate.
+
+The continuation link uses the existing `/auth/login` and `/auth/callback` without changing OAuth or adding return URLs. Immediately before following it, the browser saves only age, amount, term, a schema version and creation time in same-tab `sessionStorage`, for at most 30 minutes. No name, document, birth date, city, provider credential, quote identifier or trusted premium is saved. Invalid/expired drafts are discarded. If storage is blocked, the screen explains the loss and offers an explicit link to sign in without keeping inputs. A failed/cancelled login can return to the calculator with the inputs intact.
+
+After authentication, the draft is consumed and removed from storage. Amount and term prefill the protected form; a notice shows the age used for the estimate and asks for date of birth and the remaining customer fields. The authenticated quote endpoint revalidates and recalculates independently before showing its saved result and consent. A changed age can change the price; a browser draft never grants ownership, consent or a price. Logout clears any remaining draft. Visitors already signed in can use the protected quote form directly.
+
+### Authenticated quote
 
 `src/quote/` holds the form, the result and the access-denied screen; `src/i18n/` holds the es-CO and en-US catalogues (react-intl) and the switcher, which changes language without reloading. Amounts are always shown in COP. A single `aria-live` region announces state changes, and focus moves to the first invalid field or to the step heading.
 
