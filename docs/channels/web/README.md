@@ -8,6 +8,8 @@ Credentials are entered in WorkOS AuthKit. Web accesses Identity through a Servi
 
 The Worker applies API versioning to `/api/v<N>/...`: it adds deprecation headers and returns 410 when a version reaches its retirement date. See [contracts](../../shared/contracts/README.md).
 
+If an Identity or Acquisition binding fails, the gateway's 503 response normalizes a supplied valid RFC UUID trace to lowercase, or generates a new UUID for an invalid/missing value. The response body and `X-Trace-Id` header match; exception details are omitted.
+
 Every static asset also runs through the gateway (`assets.run_worker_first:true`). The gateway adds CSP, frame denial, nosniff and no-referrer headers after routing, preserving bodies, status, redirects, cookies and trace/version headers. HSTS is applied only to HTTPS responses. Application CSP permits only same-origin scripts/styles/fonts/connections; it needs no inline scripts or styles. The API reference keeps its separate restrictive policy, including its required inline viewer styles. See [browser security and font integrity](../../security.md#error-logging-and-browser-headers).
 
 The SPA reaches `/auth/*` through `src/api/auth.ts`. Its calls are protected by a Pact contract with the web Worker; changing them requires updating the pact ([consumer contracts](../../shared/contracts/README.md#consumer-contracts-pact)).
