@@ -58,7 +58,7 @@
     "test:consents:sql": "tsx infra/consents-smoke.mts",
     "test:contracts": "node --test tools/build-api-docs.test.mjs && tsx --test tests/api-versioning.test.ts tests/api-docs.test.ts tests/decision-capture.test.ts tests/quotes-contract.test.ts tests/identity-access-contract.test.ts tests/consents-contract.test.ts tests/mobile-authentication-http.test.ts",
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts",
-    "test:quotes": "tsx --test tests/quotes.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts",
+    "test:quotes": "tsx --test tests/quotes.test.ts tests/quote-estimates.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts",
     "test:quotes:sql": "tsx infra/quotes-smoke.mts",
     "test:web": "npm run test --workspace @solventa/web",
     "test:pact": "tsx --test tests/pact/*.test.ts",
