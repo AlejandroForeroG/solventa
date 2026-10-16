@@ -3,6 +3,7 @@ import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
 import { withSecurityHeaders } from './security-headers';
+import { fetchService } from './service-fetch';
 
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
@@ -17,11 +18,8 @@ function unavailable(request: Request, headers: Record<string, string>, error: s
 
 // Credentials travel untouched: Acquisition verifies them through Identity.
 async function forwardToAcquisition(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try { return await env.ACQUISITION.fetch(new Request(request, { signal: controller.signal })); }
+  try { return await fetchService(request, env.ACQUISITION); }
   catch { return unavailable(request, headers, 'service_unavailable'); }
-  finally { clearTimeout(timeout); }
 }
 
 async function route(request: Request, env: WebEnv): Promise<Response> {
@@ -34,11 +32,8 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
       if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile)(\/|$)/.test(path)) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
+        try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
         catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
-        finally { clearTimeout(timeout); }
       }
       const response = isQuotesPath(path) ? await forwardToAcquisition(request, env, headers) : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);

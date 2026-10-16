@@ -40,3 +40,38 @@ test('an unavailable Identity becomes a safe 503 with a trace id and no internal
   assert.equal(response.headers.get('x-trace-id'), body.traceId);
   assert.ok(!/10\.0\.0\.7|exploded/.test(text));
 });
+
+test('a failed upload reader returns a correlated 503 without calling Identity or exposing its cause', async () => {
+  let calls = 0;
+  const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(Error('synthetic-private-upload-failure')); } });
+  const init = { method: 'POST', body, duplex: 'half', headers: { 'x-trace-id': '50000000-0000-4000-8000-000000000001' } };
+  const response = await worker.fetch(new Request('https://web.example/api/v1/consents', init), { IDENTITY: { fetch: async () => { calls++; return new Response(); } } } as never);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'access_unavailable', traceId: '50000000-0000-4000-8000-000000000001' });
+  assert.equal(calls, 0);
+});
+
+test('transport caps match the owner and replace oversized bytes without forwarding their data or length', async () => {
+  for (const [path, limit, owner] of [
+    ['/api/v1/consents', 4096, 'IDENTITY'], ['/api/v1/me/quotes', 16384, 'ACQUISITION'],
+    ['/api/v1/quote-estimates', 16384, 'ACQUISITION']
+  ] as const) {
+    let received = '';
+    const payload = 'x'.repeat(limit);
+    const env = { [owner]: { fetch: async (request: Request) => {
+      received = await request.text();
+      assert.equal(request.headers.get('content-type'), 'application/json');
+      assert.equal(request.headers.get('cookie'), 'solventa-session=synthetic-session');
+      return Response.json({ received: received.length });
+    } } } as never;
+    let response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: payload, headers: { cookie: 'solventa-session=synthetic-session', 'content-type': 'application/json' } }), env);
+    assert.equal(response.status, 200); assert.equal(received, payload, 'the exact owner limit must pass unchanged');
+    const oversizedEnv = { [owner]: { fetch: async (request: Request) => {
+      assert.equal(request.headers.get('content-length'), null);
+      assert.equal(await request.text(), '{', 'no rejected input bytes cross the binding');
+      return new Response(null, { status: 401 });
+    } } } as never;
+    response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: payload + 'synthetic-private-marker', headers: { 'content-type': 'application/json', 'content-length': String(limit + 24) } }), oversizedEnv);
+    assert.equal(response.status, 401, 'the gateway preserves the owner decision before JSON validation');
+  }
+});
