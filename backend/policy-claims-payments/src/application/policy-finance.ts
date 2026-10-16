@@ -1,6 +1,8 @@
 import { canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
 import type { FinancialActor, FinancialErrorCode, FinancialResult, PolicyView } from '../domain/financial';
 import type { FinancialDependencies, FinancialTransaction, Payment, StoredPolicy } from './ports/financial';
+import { financialDecision, financialEventSource, financialRejection, gatewaySource } from './financial-decision';
+import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
 
 class Rejection extends Error {
   constructor(readonly code: FinancialErrorCode, readonly httpStatus: 400 | 403 | 404 | 409 = 409) { super(code); }
@@ -22,12 +24,17 @@ export class PolicyFinance {
       const error = caught instanceof InvalidFinancialRecord ? new Rejection('integrity_violation') : caught;
       if (error instanceof Rejection) {
         try {
-          await this.deps.store.rejection(this.deps.newId(), traceId, error.code);
+          const id = this.deps.newId();
+          await this.deps.store.rejection(id, traceId, error.code, financialRejection(id, traceId, error.code));
           return { status: 'denied', error: error.code, httpStatus: error.httpStatus, traceId };
         } catch { /* A rejection without its required audit must not claim durable completion. */ }
       }
       return { status: 'unavailable', error: 'financial_unavailable', httpStatus: 503, traceId };
     }
+  }
+
+  private decision(action: Exclude<FinancialAction, 'financial.denied'>, traceId: string, policy: StoredPolicy, outcome: string, evidence: FinancialEvidence = {}) {
+    return financialDecision(action, traceId, policy, outcome, this.deps.now().toISOString(), evidence);
   }
 
   private async checked(tx: FinancialTransaction, policy: StoredPolicy | null, actor?: FinancialActor): Promise<StoredPolicy> {
@@ -67,6 +74,7 @@ export class PolicyFinance {
       const id = this.deps.newId();
       const document = policyDocument(id, input.payload);
       const documentHash = await this.deps.integrity.digest(document);
+      const source = financialEventSource(input, this.deps.now().toISOString());
       return this.deps.store.transaction(async tx => {
         const inbox = await tx.inbox(input.eventId, 'policy.offer-accepted.v1');
         if (inbox) {
@@ -79,9 +87,11 @@ export class PolicyFinance {
         const policy: StoredPolicy = { id, clientId: offer.clientId, subjectToken: offer.subjectToken, status: 'pending',
           offer, termsHash, document, documentHash, premium: offer.premium, currency: offer.currency,
           offerId: offer.offerId, offerVersion: offer.offerVersion, effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, coverageSnapshot: offer.coverage };
-        await tx.createPolicy(policy, input.eventId, traceId);
+        const capture = this.decision('offer.accepted', traceId, policy, 'accepted', { sources: [source],
+          event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt } });
+        await tx.createPolicy(policy, input.eventId, traceId, capture);
         await tx.recordInbox(input.eventId, 'policy.offer-accepted.v1', hash, id, input.eventType, traceId);
-        await tx.audit('offer.accepted', id, traceId, 'accepted', offer.clientId);
+        await tx.audit('offer.accepted', id, traceId, 'accepted', offer.clientId, capture);
         return { status: 'ok', replayed: false, policy: view(policy) };
       });
     });
@@ -131,7 +141,8 @@ export class PolicyFinance {
             currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
           payment.hash = await this.deps.integrity.digest(paymentContent(payment));
           await tx.createPayment(payment, traceId);
-          await tx.audit('premium.requested', policy.id, traceId, 'pending', policy.clientId);
+          await tx.audit('premium.requested', policy.id, traceId, 'pending', policy.clientId,
+            this.decision('premium.requested', traceId, policy, 'pending', { payment }));
         }
         await this.checkPayment(payment, policy);
         if (payment.status === 'declined') return reject('payment_declined');
@@ -140,7 +151,7 @@ export class PolicyFinance {
       if (plan.completed) return { status: 'ok', replayed: plan.replayed, policy: plan.completed };
       if (!plan.payment) throw new Error('financial_plan_unavailable');
       const payment = plan.payment;
-      const refund = async (): Promise<FinancialResult> => {
+      const refund = async (reason: FinancialEvidence['refundReason'] = 'existing_refund_intent', sources: FinancialSource[] = []): Promise<FinancialResult> => {
         const refundPlan = await this.deps.store.transaction(async tx => {
           const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
           if (policy.status === 'issued') {
@@ -153,7 +164,8 @@ export class PolicyFinance {
           await this.checkPayment(premium, policy);
           if (policy.status !== 'refunding') {
             await tx.setPolicyStatus(policy.id, 'refunding');
-            await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId);
+            await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId,
+              this.decision('premium.refund_requested', traceId, policy, 'refunding', { payment: premium, refundReason: reason, sources }));
           }
           return { completed: null, payment: premium };
         });
@@ -161,9 +173,11 @@ export class PolicyFinance {
         const refundPayment = refundPlan.payment;
         if (!refundPayment) throw new Error('financial_refund_intent_missing');
         const known = await this.deps.payments.lookup(refundPayment);
+        const lookupSource = gatewaySource('lookup', known, refundPayment, this.deps.now().toISOString());
         if (!refundPayment.providerReference || known.reference !== refundPayment.providerReference
           || (known.status !== 'confirmed' && known.status !== 'refunded')) return reject('integrity_violation');
         const refunded = await this.deps.payments.refund(refundPayment);
+        const refundSource = gatewaySource('refund', refunded, refundPayment, this.deps.now().toISOString());
         if (refunded.status !== 'refunded') throw new Error('financial_refund_uncertain');
         await this.deps.store.transaction(async tx => {
           const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
@@ -171,7 +185,9 @@ export class PolicyFinance {
           if (policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
           await tx.setPaymentStatus(refundPayment.id, 'refunded', refunded.reference);
           await tx.setPolicyStatus(policy.id, 'refunded');
-          await tx.audit('premium.refunded', policy.id, traceId, 'refunded', policy.clientId);
+          await tx.audit('premium.refunded', policy.id, traceId, 'refunded', policy.clientId,
+            this.decision('premium.refunded', traceId, policy, 'refunded', { payment: { ...refundPayment, status: 'refunded', providerReference: refunded.reference },
+              refundReason: reason, sources: [lookupSource, refundSource] }));
         });
         return reject('signature_failed');
       };
@@ -184,7 +200,8 @@ export class PolicyFinance {
           if (policy.status === 'refunding') return true;
           if (policy.status === 'refunded') return reject('signature_failed');
           await tx.setPaymentStatus(payment.id, 'declined', settled.reference);
-          await tx.audit('premium.declined', policy.id, traceId, 'declined', policy.clientId);
+          await tx.audit('premium.declined', policy.id, traceId, 'declined', policy.clientId,
+            this.decision('premium.declined', traceId, policy, 'declined', { payment: { ...payment, status: 'declined', providerReference: settled.reference }, sources: settled.sources }));
           return false;
         });
         if (refundInProgress) return refund();
@@ -200,16 +217,20 @@ export class PolicyFinance {
         if (policy.status === 'pending') {
           await tx.setPaymentStatus(payment.id, 'confirmed', settled.reference);
           await tx.setPolicyStatus(policy.id, 'charged');
-          await tx.audit('premium.confirmed', policy.id, traceId, 'confirmed', policy.clientId);
+          await tx.audit('premium.confirmed', policy.id, traceId, 'confirmed', policy.clientId,
+            this.decision('premium.confirmed', traceId, policy, 'confirmed', { payment: { ...payment, status: 'confirmed', providerReference: settled.reference }, sources: settled.sources }));
         }
         return null;
       });
       if (completed) return { status: 'ok', replayed: true, policy: completed };
-      const signature = this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt)
-        ? { status: 'failed' as const } : await this.deps.signatures.sign(input.policyId, input.documentHash);
+      const expiredBeforeSignature = this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt);
+      const signature = expiredBeforeSignature ? { status: 'failed' as const } : await this.deps.signatures.sign(input.policyId, input.documentHash);
+      const signatureSources: FinancialSource[] = expiredBeforeSignature ? [] : [{ source: 'synthetic-signature-v1', capturedAt: this.deps.now().toISOString(),
+        quality: 'synthetic_result', degraded: false, operation: 'sign', result: signature.status }];
       if (signature.status === 'failed' || this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt) || !HEX.test(signature.receipt)
         || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', input.policyId, input.documentHash]), signature.receipt))) {
-        return refund();
+        return refund(expiredBeforeSignature || this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt) ? (expiredBeforeSignature ? 'expired_before_sign' : 'expired_after_sign')
+          : signature.status === 'failed' ? 'signature_refused' : 'signature_invalid', signatureSources);
       }
       const final = await this.deps.store.transaction(async tx => {
         const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
@@ -222,14 +243,22 @@ export class PolicyFinance {
             const signedAt = this.deps.now().toISOString();
             if (Date.parse(signedAt) >= Date.parse(policy.offer.expiresAt)) {
               await tx.setPolicyStatus(policy.id, 'refunding');
-              await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId);
+              const premium = await tx.payment(policy.id, 'premium');
+              if (!premium) throw new Error('financial_intent_missing');
+              await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId,
+                this.decision('premium.refund_requested', traceId, policy, 'refunding', { payment: premium,
+                  refundReason: 'expired_during_final_transaction', sources: signatureSources }));
               return null;
             }
             await tx.recordSignature(policy.id, input.documentHash, signature.receipt, signedAt,
               await this.deps.integrity.digest(issuanceTimeContent(policy.id, input.documentHash, signedAt)));
           }
           await tx.setPolicyStatus(policy.id, 'issued');
-          await tx.audit('policy.issued', policy.id, traceId, 'issued', policy.clientId);
+          const persistedSignature = await tx.signature(policy.id), premium = await tx.payment(policy.id, 'premium');
+          if (!persistedSignature || !premium) throw new Error('financial_issuance_evidence_missing');
+          await tx.audit('policy.issued', policy.id, traceId, 'issued', policy.clientId,
+            this.decision('policy.issued', traceId, policy, 'issued', { payment: premium, sources: signatureSources,
+              issuance: { signedAt: persistedSignature.signedAt, documentHash: persistedSignature.documentHash } }));
           policy.status = 'issued';
         }
         const result = view(policy);
@@ -252,16 +281,18 @@ export class PolicyFinance {
 
   private async settle(payment: Payment, allowNew = true) {
     const known = await this.deps.payments.lookup(payment);
+    const lookupSource = gatewaySource('lookup', known, payment, this.deps.now().toISOString());
     if (known.status !== 'unknown' && known.status !== 'declined' && known.reference !== 'MOCK-' + payment.id) return reject('integrity_violation');
     if (payment.status !== 'pending') {
       if (payment.status !== 'confirmed' || known.status !== 'confirmed'
         || !payment.providerReference || known.reference !== payment.providerReference) return reject('integrity_violation');
-      return known;
+      return { ...known, sources: [lookupSource] };
     }
     if (known.status === 'refunded') return reject('integrity_violation');
-    if (known.status !== 'unknown') return known;
+    if (known.status !== 'unknown') return { ...known, sources: [lookupSource] };
     if (!allowNew) return reject('offer_invalid');
-    return this.deps.payments.settle(payment);
+    const settled = await this.deps.payments.settle(payment);
+    return { ...settled, sources: [lookupSource, gatewaySource('settle', settled, payment, this.deps.now().toISOString())] };
   }
 
   consumeParametricEvent(input: unknown, trace: string): Promise<FinancialResult> {
@@ -269,6 +300,7 @@ export class PolicyFinance {
       if (!isParametricEnvelope(input, this.deps.environment) || Date.parse(input.occurredAt) > this.deps.now().getTime() + 60000
         || !(await this.deps.integrity.verify(eventContent(input), input.signature))) return reject('invalid_event', 400);
       const hash = await this.deps.integrity.digest(eventContent(input));
+      const source = financialEventSource(input, this.deps.now().toISOString());
       const plan = await this.deps.store.transaction(async tx => {
         const policy = await this.checked(tx, await tx.policy(input.payload.policyId));
         const previous = await tx.inbox(input.eventId, 'policy.parametric.v1');
@@ -287,7 +319,10 @@ export class PolicyFinance {
           payment.hash = await this.deps.integrity.digest(paymentContent(payment));
           await tx.createPayment(payment, traceId, { id: this.deps.newId(), indemnityId: this.deps.newId(), occurredAt: input.occurredAt });
           await tx.recordInbox(input.eventId, 'policy.parametric.v1', hash, policy.id, input.eventType, traceId);
-          await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', 'synthetic-oracle-v1');
+          await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', 'synthetic-oracle-v1',
+            this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
+              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
+              event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
         }
         await this.checkPayment(payment, policy);
         return { policy, payment, replayed: !!previous };
@@ -302,7 +337,12 @@ export class PolicyFinance {
         await this.checkPayment(payment, policy);
         if (payment.status !== 'confirmed') {
           await tx.setPaymentStatus(payment.id, 'confirmed', settled.reference);
-          await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', 'synthetic-oracle-v1');
+          const signature = await tx.signature(policy.id);
+          if (!signature) throw new Error('financial_issuance_evidence_missing');
+          await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', 'synthetic-oracle-v1',
+            this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...payment, status: 'confirmed', providerReference: settled.reference }, sources: [source, ...settled.sources],
+              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
+              event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
         }
       });
       return { status: 'ok', replayed: plan.replayed, policy: view(plan.policy) };
