@@ -7,7 +7,7 @@ export type SignalData = {
   income_obligations_12m: { monthlyIncomeCop: number; monthlyObligationsCop: number };
   payment_history_score: { score: number; latePayments12m: number };
   affiliation_regime: { regime: 'contributory' | 'subsidized' | 'special'; active: boolean };
-  identity_validation: { documentValid: boolean };
+  identity_validation: { verified: boolean };
 };
 
 export type ProviderResponse = { status: number; body: unknown };

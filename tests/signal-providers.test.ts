@@ -10,6 +10,7 @@ import { PROVIDER_FAILURES, ProviderFailure } from '../backend/acquisition-risk/
 import type { SignalProvider, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 import type { ConsentGuard } from '../backend/acquisition-risk/src/application/ports/consent-guard';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
+import { underwrite } from '../backend/acquisition-risk/src/domain/offer';
 import type { Signal, SignalScope } from '../backend/acquisition-risk/src/domain/signal';
 
 type Case = { name: string; scope: SignalScope; response: { status: number; body: unknown }; expected: { signal: Signal } | { failure: string } };
@@ -20,6 +21,8 @@ const adapters: Record<keyof typeof corpus.providers, (source: ProviderSource, d
 };
 const SUBJECT = 'subject-token-ana';
 const TRACE = '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47';
+const QUERIED_AT = new Date('2026-10-16T15:00:00.000Z');
+const clock = () => QUERIED_AT;
 
 // Captures what the adapter logs, so a test can assert the reason is recorded and nothing sensitive is.
 function capturingLogs(t: { mock: { method: (target: Console, name: 'error', fn: (line: string) => void) => unknown } }) {
@@ -82,8 +85,8 @@ test('a transport error is reported as unavailable without its message', async t
 });
 
 test('both simulated providers give the same signal for every scope', async () => {
-  const direct = new DirectSignalProvider('direct_simulated', simulatedDirectSource);
-  const aggregator = new AggregatorSignalProvider('aggregator_simulated', simulatedAggregatorSource);
+  const direct = new DirectSignalProvider('direct_simulated', simulatedDirectSource(clock));
+  const aggregator = new AggregatorSignalProvider('aggregator_simulated', simulatedAggregatorSource(clock));
   for (const scope of SIGNAL_SCOPES) assert.deepEqual(await aggregator.read(SUBJECT, scope, TRACE), await direct.read(SUBJECT, scope, TRACE), scope);
 });
 
@@ -98,7 +101,7 @@ test('ReadSignal behaves the same whichever provider the configuration selects',
   const snapshots: SignalSnapshots = { find: async () => null };
   const results = [];
   for (const name of ['direct_simulated', 'aggregator_simulated']) {
-    const provider = signalProviderFor(name);
+    const provider = signalProviderFor(name, clock);
     assert.ok(provider);
     const read = new ReadSignal({ guard, provider, snapshots });
     results.push(await Promise.all(SIGNAL_SCOPES.map(scope => read.execute({ subjectToken: SUBJECT, scope, traceId: TRACE }))));
@@ -119,4 +122,28 @@ test('the core names no provider, external format or provider configuration', ()
     const source = readFileSync(file, 'utf8');
     for (const term of external) assert.ok(!source.includes(term), `${file.pathname} mentions ${term}`);
   }
+});
+
+test('simulated answers are stamped with the query time, so consumers see a fresh signal', async () => {
+  for (const name of ['direct_simulated', 'aggregator_simulated']) {
+    const provider = signalProviderFor(name, clock);
+    assert.ok(provider);
+    for (const scope of SIGNAL_SCOPES) assert.equal((await provider.read(SUBJECT, scope, TRACE)).capturedAt, QUERIED_AT.toISOString(), `${name} ${scope}`);
+  }
+});
+
+// The offer underwriting rule is a real consumer of the port: either adapter must be able to feed it.
+test('both simulated adapters produce the signal fields the offer underwriting reads', async () => {
+  const quote = { id: 'q-1', quoteId: 'COT-2026-00123', amount: 320000000, termMonths: 180, ageYears: 34, validUntil: '2026-11-05T15:00:00.000Z' };
+  const authorization = { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-06T15:00:00Z' };
+  const premiums = [];
+  for (const name of ['direct_simulated', 'aggregator_simulated']) {
+    const provider = signalProviderFor(name, clock);
+    assert.ok(provider);
+    const signals = await Promise.all(SIGNAL_SCOPES.map(scope => provider.read(SUBJECT, scope, TRACE)));
+    const decision = underwrite(quote, signals, authorization, TRACE);
+    assert.ok(decision?.accepted, `${name} must be accepted by the underwriting rule`);
+    if (decision?.accepted) premiums.push(decision.premium);
+  }
+  assert.equal(premiums[1], premiums[0]);
 });

@@ -98,7 +98,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": true
+              "verified": true
             }
           }
         }
@@ -145,7 +145,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": false
+              "verified": false
             }
           }
         }
@@ -532,7 +532,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": true
+              "verified": true
             }
           }
         }

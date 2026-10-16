@@ -94,7 +94,7 @@ After acceptance, resolve the policy through the [Policy flow](../policy-claims-
 
 ## External integrations
 
-The financial offer flow above retains its own `MockRiskSignals` and `MockFlightSchedule` fixtures. `SIGNAL_PROVIDER` does not select or replace those financial fixtures. Its direct/aggregator translators are separate adapters for the internal `ReadSignal` capability and configuration diagnostics; neither `ReadSignal` nor the ACORD translator is mounted on a public route. No adapter here connects to a real signal, payment, signature or oracle provider.
+The financial offer flow above retains its own `MockRiskSignals` and `MockFlightSchedule` fixtures. `SIGNAL_PROVIDER` does not select or replace those financial fixtures. Its direct/aggregator translators are separate adapters for the internal `ReadSignal` capability and configuration diagnostics. They produce the same fields the offer underwriting reads (`monthlyIncomeCop`, `monthlyObligationsCop`, `score`, `active`, `verified`), and a test feeds that rule with each of them, so either could replace those fixtures by changing only the offer composition; neither `ReadSignal` nor the ACORD translator is mounted on a public route. No adapter here connects to a real signal, payment, signature or oracle provider.
 
 Every external format is translated in an adapter; the domain, use cases and ports only see internal models. Replacing a provider changes an adapter and configuration, never `src/domain` or `src/application`. The shared rule and the integrations that are not implemented yet are in [architecture](../../architecture.md#external-integrations); the schemas and corpus are described in [contracts](../../shared/contracts/README.md#integration-schemas-and-corpus).
 
@@ -118,9 +118,9 @@ The direct and aggregator adapters produce the same signal for each scope (`Sign
 | `income_obligations_12m` | `monthlyIncomeCop`, `monthlyObligationsCop` (whole pesos) |
 | `payment_history_score` | `score` (0 to 1000), `latePayments12m` |
 | `affiliation_regime` | `regime` (`contributory`, `subsidized` or `special`), `active` |
-| `identity_validation` | `documentValid` |
+| `identity_validation` | `verified` |
 
-`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. An impossible date or time, such as `2026-02-30` or `24:00`, is an `invalid_response`, never rolled over to another day. Unknown state codes (affiliation, document, aggregator state) are also `invalid_response`. DANE statistics are aggregated public data outside the consent and are not a signal scope.
+`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. The simulated sources stamp every answer with the query time, so a consumer that requires a fresh signal accepts it. An impossible date or time, such as `2026-02-30` or `24:00`, is an `invalid_response`, never rolled over to another day. Unknown state codes (affiliation, document, aggregator state) are also `invalid_response`. DANE statistics are aggregated public data outside the consent and are not a signal scope.
 
 **Failures.** Provider payloads are untrusted. Each adapter applies a 700 ms deadline, cancels the call when it expires and rejects only with `ProviderFailure`, whose code is one of:
 
