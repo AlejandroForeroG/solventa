@@ -1,0 +1,11 @@
+{
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://solventa-web-staging.ja-forerog1.workers.dev"
+      }
+    }
+  }
+}

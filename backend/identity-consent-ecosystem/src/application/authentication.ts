@@ -1,4 +1,4 @@
-export type VerifiedIdentity = { providerSubject: string; sessionReference: string; emailVerified: boolean };
+export type VerifiedIdentity = { providerSubject: string; sessionReference: string; emailVerified: boolean; authenticatedAt?: number };
 export type Principal = { clientId: string; subjectToken: string };
 export interface IdentitySessions {
   open(identity: VerifiedIdentity): Promise<Principal>;

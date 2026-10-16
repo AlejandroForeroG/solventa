@@ -26,7 +26,7 @@ test('web quotes reach Acquisition with the session cookie and Origin untouched,
 test('quote sub-paths are forwarded but look-alike paths are not', async () => {
   assert.equal((await run('/api/v1/quotes/COT-2026-00001')).seen.length, 1);
   assert.equal((await run('/api/v1/me/quotes/COT-2026-00001')).seen.length, 1);
-  for (const path of ['/api/v1/quotes-other', '/api/v1/quotesx', '/api/v1/quote', '/api/v1/me/quotes-other', '/api/v1/me', '/api/v1/me/other']) {
+  for (const path of ['/api/v1/quotes-other', '/api/v1/quotesx', '/api/v1/quote', '/api/v1/me/quotes-other', '/api/v1/me', '/api/v1/me/other', '/api/v1/quote-estimates-other']) {
     const { response, seen } = await run(path, { method: 'POST', body: '{}' });
     assert.equal(seen.length, 0, path);
     assert.equal(response.status, 404, path);
@@ -41,7 +41,7 @@ test('other /api paths stay unimplemented and static assets are untouched', asyn
 
 test('a failing Acquisition binding preserves a valid trace id without leaking details', async () => {
   const env = { APP_ENV: 'local', ACQUISITION: { fetch: async () => { throw new Error('binding exploded at 10.0.0.7 with token abc'); } } } as never;
-  for (const path of ['/api/v1/quotes', '/api/v1/me/quotes']) for (const traceId of ['7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47', '7F3C2A9E-1B4D-4C8E-9A52-0D6E8F1A3B47']) {
+  for (const path of ['/api/v1/quotes', '/api/v1/me/quotes', '/api/v1/quote-estimates']) for (const traceId of ['7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47', '7F3C2A9E-1B4D-4C8E-9A52-0D6E8F1A3B47']) {
     const response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: '{}', headers: { 'x-trace-id': traceId } }), env);
     const text = await response.text();
     const body = JSON.parse(text);
