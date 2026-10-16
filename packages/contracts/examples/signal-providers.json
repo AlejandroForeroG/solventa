@@ -359,6 +359,61 @@
         "expected": {
           "failure": "invalid_response"
         }
+      },
+      {
+        "name": "impossible-calendar-date",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "consulta": {
+              "puntaje": 742,
+              "moras12m": 0,
+              "fechaConsulta": "2026-02-30"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "hour-out-of-range",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": 450000000,
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 12,
+              "asOf": "2026-09-30T24:00:00Z"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "unknown-affiliation-state",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "fechaCorte": "2026-09-30",
+            "afiliaciones": [
+              {
+                "subsistema": "SALUD",
+                "regimen": "CONTRIBUTIVO",
+                "estado": "PENDIENTE"
+              }
+            ]
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
       }
     ],
     "aggregator": [
@@ -655,6 +710,24 @@
         },
         "expected": {
           "failure": "unavailable"
+        }
+      },
+      {
+        "name": "impossible-cutoff-instant",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "registraduria",
+            "fecha_corte": "2026-04-31T00:00:00-05:00",
+            "resultado": {
+              "cedula_vigente": true
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
         }
       }
     ]

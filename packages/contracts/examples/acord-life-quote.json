@@ -206,7 +206,7 @@
         "errors": [
           {
             "field": "schemaVersion",
-            "code": "unsupported_version"
+            "code": "required"
           }
         ]
       }
@@ -234,6 +234,41 @@
         "errors": [
           {
             "field": "TXLifeRequest",
+            "code": "required"
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing-transaction",
+      "message": {
+        "schemaVersion": "1",
+        "TXLifeRequest": {
+          "Party": {
+            "FullName": "Laura Catalina Restrepo Ochoa",
+            "GovtIDTC": "CC",
+            "GovtID": "1020884771",
+            "BirthDate": "1992-03-14",
+            "City": "Bogotá D.C."
+          },
+          "Holding": {
+            "Policy": {
+              "ProductCode": "MORTGAGE_LIFE"
+            },
+            "Loan": {
+              "LoanNumber": "CRE-88-2026",
+              "LoanAmt": 320000000,
+              "LoanTermMonths": 180,
+              "CurrencyTypeCode": "COP"
+            }
+          }
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "errors": [
+          {
+            "field": "TXLifeRequest.TransType",
             "code": "required"
           }
         ]
@@ -307,6 +342,41 @@
           {
             "field": "TXLifeRequest.Holding.Loan.CurrencyTypeCode",
             "code": "unsupported_currency"
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing-currency",
+      "message": {
+        "schemaVersion": "1",
+        "TXLifeRequest": {
+          "TransType": "QuoteRequest",
+          "Party": {
+            "FullName": "Laura Catalina Restrepo Ochoa",
+            "GovtIDTC": "CC",
+            "GovtID": "1020884771",
+            "BirthDate": "1992-03-14",
+            "City": "Bogotá D.C."
+          },
+          "Holding": {
+            "Policy": {
+              "ProductCode": "MORTGAGE_LIFE"
+            },
+            "Loan": {
+              "LoanNumber": "CRE-88-2026",
+              "LoanAmt": 320000000,
+              "LoanTermMonths": 180
+            }
+          }
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "errors": [
+          {
+            "field": "TXLifeRequest.Holding.Loan.CurrencyTypeCode",
+            "code": "required"
           }
         ]
       }
@@ -477,6 +547,45 @@
           {
             "field": "TXLifeRequest.Holding.Loan.LoanAmt",
             "code": "invalid_type"
+          }
+        ]
+      }
+    },
+    {
+      "name": "amount-above-exact-integer-range",
+      "message": {
+        "schemaVersion": "1",
+        "TXLifeRequest": {
+          "TransType": "QuoteRequest",
+          "Party": {
+            "FullName": "Laura Catalina Restrepo Ochoa",
+            "GovtIDTC": "CC",
+            "GovtID": "1020884771",
+            "BirthDate": "1992-03-14",
+            "City": "Bogotá D.C."
+          },
+          "Holding": {
+            "Policy": {
+              "ProductCode": "MORTGAGE_LIFE"
+            },
+            "Loan": {
+              "LoanNumber": "CRE-88-2026",
+              "LoanAmt": 9007199254740992,
+              "LoanTermMonths": 180,
+              "CurrencyTypeCode": "COP"
+            }
+          }
+        }
+      },
+      "schemaValid": false,
+      "expected": {
+        "errors": [
+          {
+            "field": "TXLifeRequest.Holding.Loan.LoanAmt",
+            "code": "amount_out_of_range",
+            "params": {
+              "min": 1
+            }
           }
         ]
       }

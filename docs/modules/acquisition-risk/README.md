@@ -99,7 +99,7 @@ Every adapter produces the same signal for each scope (`SignalData` in `src/adap
 | `affiliation_regime` | `regime` (`contributory`, `subsidized` or `special`), `active` |
 | `identity_validation` | `documentValid` |
 
-`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. DANE statistics are aggregated public data outside the consent and are not a signal scope.
+`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. An impossible date or time, such as `2026-02-30` or `24:00`, is an `invalid_response`, never rolled over to another day. Unknown state codes (affiliation, document, aggregator state) are also `invalid_response`. DANE statistics are aggregated public data outside the consent and are not a signal scope.
 
 **Failures.** Provider payloads are untrusted. Each adapter applies a 700 ms deadline, cancels the call when it expires and rejects only with `ProviderFailure`, whose code is one of:
 
@@ -122,7 +122,7 @@ Before rejecting, the adapter logs one line, for example `{"event":"signal_provi
 
 | Function | Direction |
 |---|---|
-| `readAcordQuoteRequest(message)` | ACORD request to the `CreateQuote` body. It checks the envelope only: `schemaVersion` `1`, `TransType` `QuoteRequest`, currency `COP` and product `MORTGAGE_LIFE`; unknown properties are ignored |
+| `readAcordQuoteRequest(message)` | ACORD request to the `CreateQuote` body. It checks the envelope only: `schemaVersion` `1`, `TransType` `QuoteRequest`, currency `COP` and product `MORTGAGE_LIFE`. A missing envelope field is `required`; another value is `unsupported_version`, `unsupported_transaction`, `unsupported_currency` or `unsupported_product`. Unknown properties are ignored |
 | `acordFieldErrors(errors)` | Domain validation errors with the ACORD path the partner sent, for example `credit.amount` to `TXLifeRequest.Holding.Loan.LoanAmt` |
 | `writeAcordQuoteResponse(result)` | A created or replayed quote to an ACORD response |
 | `writeAcordFailure(errors, traceId)` | Rejection reasons to an ACORD response, with paths and codes but never the submitted values |
