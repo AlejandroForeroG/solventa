@@ -40,15 +40,19 @@ export class PolicyFinance {
       || canonical(policy.coverageSnapshot) !== canonical(offer.coverage)
       || Date.parse(policy.effectiveFrom) !== Date.parse(offer.effectiveFrom) || Date.parse(policy.effectiveUntil) !== Date.parse(offer.effectiveUntil)
       || policy.document !== policyDocument(policy.id, offer) || !(await this.deps.integrity.verify(policy.document, policy.documentHash))) return reject('integrity_violation');
+    const premium = await tx.payment(policy.id, 'premium');
+    if (premium) await this.checkPayment(premium, policy);
+    if ((policy.status === 'pending' && premium && !['pending', 'declined'].includes(premium.status))
+      || (['charged', 'refunding', 'issued'].includes(policy.status) && premium?.status !== 'confirmed')
+      || (policy.status === 'refunded' && premium?.status !== 'refunded')) return reject('integrity_violation');
+    const signature = await tx.signature(policy.id);
+    if (policy.status !== 'issued' && signature) return reject('integrity_violation');
     if (policy.status === 'issued') {
-      const signature = await tx.signature(policy.id);
-      const premium = await tx.payment(policy.id, 'premium');
       if (!signature || signature.documentHash !== policy.documentHash
         || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash]), signature.receipt))
         || !iso(signature.signedAt) || !signature.timeSeal || !eventWithinIssuedCoverage(signature.signedAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)
         || !(await this.deps.integrity.verify(issuanceTimeContent(policy.id, policy.documentHash, signature.signedAt), signature.timeSeal))
         || !premium || premium.status !== 'confirmed') return reject('integrity_violation');
-      await this.checkPayment(premium, policy);
     }
     return policy;
   }
@@ -126,6 +130,7 @@ export class PolicyFinance {
             currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
           payment.hash = await this.deps.integrity.digest(paymentContent(payment));
           await tx.createPayment(payment, traceId);
+          await tx.audit('premium.requested', policy.id, traceId, 'pending', policy.clientId);
         }
         await this.checkPayment(payment, policy);
         if (payment.status === 'declined') return reject('payment_declined');
@@ -149,6 +154,9 @@ export class PolicyFinance {
           return null;
         });
         if (completed) return { status: 'ok', replayed: true, policy: completed };
+        const known = await this.deps.payments.lookup(payment);
+        if (!payment.providerReference || known.reference !== payment.providerReference
+          || (known.status !== 'confirmed' && known.status !== 'refunded')) return reject('integrity_violation');
         const refunded = await this.deps.payments.refund(payment);
         if (refunded.status !== 'refunded') throw new Error('financial_refund_uncertain');
         await this.deps.store.transaction(async tx => {
@@ -170,6 +178,7 @@ export class PolicyFinance {
           if (policy.status === 'refunding') return true;
           if (policy.status === 'refunded') return reject('signature_failed');
           await tx.setPaymentStatus(payment.id, 'declined', settled.reference);
+          await tx.audit('premium.declined', policy.id, traceId, 'declined', policy.clientId);
           return false;
         });
         if (refundInProgress) return refund();
@@ -224,11 +233,20 @@ export class PolicyFinance {
       : policy.offer.coverage.kind === 'flight_delay' ? policy.offer.coverage.payoutAmount : null;
     if (!amount || !UUID.test(payment.id) || payment.policyId !== policy.id || payment.amount !== amount || payment.currency !== 'COP'
       || payment.key !== (payment.operation === 'premium' ? 'initial-premium' : 'parametric-once')
+      || (payment.status === 'pending' && payment.providerReference !== null)
+      || (['confirmed', 'refunded'].includes(payment.status) && payment.providerReference !== 'MOCK-' + payment.id)
       || !(await this.deps.integrity.verify(paymentContent(payment), payment.hash))) return reject('integrity_violation');
   }
 
   private async settle(payment: Payment, allowNew = true) {
     const known = await this.deps.payments.lookup(payment);
+    if (known.status !== 'unknown' && known.status !== 'declined' && known.reference !== 'MOCK-' + payment.id) return reject('integrity_violation');
+    if (payment.status !== 'pending') {
+      if (payment.status !== 'confirmed' || known.status !== 'confirmed'
+        || !payment.providerReference || known.reference !== payment.providerReference) return reject('integrity_violation');
+      return known;
+    }
+    if (known.status === 'refunded') return reject('integrity_violation');
     if (known.status !== 'unknown') return known;
     if (!allowNew) return reject('offer_invalid');
     return this.deps.payments.settle(payment);

@@ -18,11 +18,13 @@ export async function authorizeFinancialAccess(deps: {
   if (!input || typeof input !== 'object' || !('operation' in input) || typeof input.operation !== 'string' || !operations.includes(input.operation)) {
     return { allowed: false, error: 'invalid_request', status: 400 };
   }
-  if (!('kind' in input) || input.kind !== 'web') return { allowed: false, error: 'forbidden', status: 403 };
+  if (!('kind' in input) || typeof input.kind !== 'string' || !['web', 'partner', 'mobile'].includes(input.kind)) return { allowed: false, error: 'invalid_request', status: 400 };
   try {
     const access = await deps.authorize(input);
     if (!access.allowed) return access;
-    if (access.actor.kind !== 'user' || access.actor.channel !== 'web') return { allowed: false, error: 'forbidden', status: 403 };
+    // Actual native/partner denials come from the audited operation policy above. An impossible
+    // positive actor here is an inconsistent dependency response, never a business authorization.
+    if (input.kind !== 'web' || access.actor.kind !== 'user' || access.actor.channel !== 'web') return { allowed: false, error: 'access_unavailable', status: 503 };
     if (input.operation !== 'offers:create' && input.operation !== 'offers:accept') return { allowed: true, actor: access.actor };
     let authorized: { consentId: string; textVersion: number; expiresAt: string } | undefined;
     for (const scope of scopes) {

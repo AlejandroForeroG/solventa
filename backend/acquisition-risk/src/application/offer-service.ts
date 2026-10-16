@@ -13,15 +13,16 @@ export class OfferService {
     return this.deps.enabled && input.authorization.textVersion > 0 && !!input.authorization.consentId
       && Date.parse(input.authorization.expiresAt) > this.deps.clock.now().getTime();
   }
-  private async valid(offer: StoredOffer): Promise<boolean> {
-    return offer.terms.status === 'definitive' && offer.terms.synthetic === true && await this.deps.integrity.verify(offer.terms, offer.seal, offer);
+  private async valid(offer: StoredOffer, actor: OfferActor): Promise<boolean> {
+    return offer.terms.clientId === actor.clientId && offer.terms.subjectToken === actor.subjectToken
+      && offer.terms.status === 'definitive' && offer.terms.synthetic === true && await this.deps.integrity.verify(offer.terms, offer.seal, offer);
   }
   async create(input: Command & { quoteId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };
     if (!this.authorized(input)) return { status: 'denied' as const };
     if (!validKey(input.idempotencyKey)) return { status: 'invalid' as const };
     const previous = await this.deps.store.byKey(input.actor, input.idempotencyKey);
-    if (previous) return previous.terms.quoteId === input.quoteId && await this.valid(previous)
+    if (previous) return previous.terms.quoteId === input.quoteId && await this.valid(previous, input.actor)
       ? { status: 'replayed' as const, offer: previous.terms } : { status: 'conflict' as const };
     const quote = await this.deps.store.quote(input.actor, input.quoteId);
     if (!quote) return { status: 'not_found' as const };
@@ -43,14 +44,14 @@ export class OfferService {
     const consent = { consentId: input.authorization.consentId, consentVersion: input.authorization.textVersion };
     const offer: StoredOffer = { terms, seal: await this.deps.integrity.seal(terms, consent), ...consent };
     const result = await this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, key: input.idempotencyKey, offer, capture: decision.capture, traceId: input.traceId });
-    if (result.offer.terms.quoteId !== input.quoteId || !await this.valid(result.offer)) return { status: 'conflict' as const };
+    if (result.offer.terms.quoteId !== input.quoteId || !await this.valid(result.offer, input.actor)) return { status: 'conflict' as const };
     return { status: result.created ? 'created' as const : 'replayed' as const, offer: result.offer.terms };
   }
   async createFlight(input: { actor: OfferActor; flightReference: string; idempotencyKey: string; traceId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };
     if (!validKey(input.idempotencyKey) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input.flightReference)) return { status: 'invalid' as const };
     const previous = await this.deps.store.byKey(input.actor, input.idempotencyKey);
-    if (previous) return previous.terms.coverage.kind === 'flight_delay' && previous.terms.coverage.flightReference === input.flightReference && await this.valid(previous)
+    if (previous) return previous.terms.coverage.kind === 'flight_delay' && previous.terms.coverage.flightReference === input.flightReference && await this.valid(previous, input.actor)
       ? { status: 'replayed' as const, offer: previous.terms } : { status: 'conflict' as const };
     let schedule;
     try { schedule = await this.deps.flights.read(input.flightReference); } catch { return { status: 'unavailable' as const }; }
@@ -65,14 +66,14 @@ export class OfferService {
       sources: [{ source: 'mock:flight-schedule', capturedAt: schedule.capturedAt, quality: 'mock', degraded: false }], consent: { status: 'not_required' }, rule: { id: 'flight-underwriting', version: terms.ruleVersion }, outcome: 'accepted' };
     const stored = { terms, seal: await this.deps.integrity.seal(terms, { consentId: '', consentVersion: 0 }), consentId: '', consentVersion: 0 };
     const result = await this.deps.store.create({ actor: input.actor, quote: null, sourceReference: input.flightReference, key: input.idempotencyKey, offer: stored, capture, traceId: input.traceId });
-    if (result.offer.terms.coverage.kind !== 'flight_delay' || result.offer.terms.coverage.flightReference !== input.flightReference || !await this.valid(result.offer)) return { status: 'conflict' as const };
+    if (result.offer.terms.coverage.kind !== 'flight_delay' || result.offer.terms.coverage.flightReference !== input.flightReference || !await this.valid(result.offer, input.actor)) return { status: 'conflict' as const };
     return { status: result.created ? 'created' as const : 'replayed' as const, offer: result.offer.terms };
   }
   async get(input: { actor: OfferActor; offerId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };
     const offer = await this.deps.store.get(input.actor, input.offerId);
     if (!offer) return { status: 'not_found' as const };
-    if (!await this.valid(offer)) return { status: 'integrity_invalid' as const };
+    if (!await this.valid(offer, input.actor)) return { status: 'integrity_invalid' as const };
     return { status: 'found' as const, offer: offer.terms };
   }
   async accept(input: Omit<Command, 'authorization'> & { authorization?: OfferAuthorization; offerId: string }) {
@@ -82,7 +83,7 @@ export class OfferService {
     if (!offer) return { status: 'not_found' as const };
     if (offer.terms.product === 'vida_hipotecario' && (!input.authorization || !this.authorized({ ...input, authorization: input.authorization })
       || input.authorization.consentId !== offer.consentId || input.authorization.textVersion !== offer.consentVersion)) return { status: 'denied' as const };
-    if (!await this.valid(offer)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'integrity_invalid'); return { status: 'integrity_invalid' as const }; }
+    if (!await this.valid(offer, input.actor)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'integrity_invalid'); return { status: 'integrity_invalid' as const }; }
     const previous = await this.deps.store.acceptance(input.actor, input.idempotencyKey);
     if (previous) return previous.offerId === input.offerId ? { status: 'replayed' as const, acceptance: previous } : { status: 'conflict' as const };
     const now = this.deps.clock.now().toISOString();

@@ -23,7 +23,7 @@ export interface FinancialTransaction {
   recordInbox(eventId: string, consumer: string, hash: string, policyId: string, eventType: string, traceId: string): Promise<void>;
   signature(policyId: string): Promise<{ documentHash: string; receipt: string; signedAt: string; timeSeal: string | null } | null>;
   recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<void>;
-  audit(action: 'offer.accepted' | 'premium.confirmed' | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed' | 'financial.denied', resourceId: string, traceId: string, outcome: string, actorReference?: string): Promise<void>;
+  audit(action: 'offer.accepted' | 'premium.requested' | 'premium.declined' | 'premium.confirmed' | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed' | 'financial.denied', resourceId: string, traceId: string, outcome: string, actorReference?: string): Promise<void>;
 }
 export interface FinancialStore {
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
@@ -35,7 +35,7 @@ export interface FinancialIntegrity {
 }
 export interface PaymentGateway {
   settle(input: Payment): Promise<{ status: 'confirmed' | 'declined' | 'uncertain'; reference: string | null }>;
-  lookup(input: Payment): Promise<{ status: 'confirmed' | 'declined' | 'unknown'; reference: string | null }>;
+  lookup(input: Payment): Promise<{ status: 'confirmed' | 'refunded' | 'declined' | 'unknown'; reference: string | null }>;
   refund(input: Payment): Promise<{ status: 'refunded' | 'uncertain'; reference: string | null }>;
 }
 export interface SignatureProvider {

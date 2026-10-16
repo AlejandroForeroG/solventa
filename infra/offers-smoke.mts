@@ -142,6 +142,15 @@ try {
   await admin.query("UPDATE acquisition.outbox_events SET status='publishing',attempts=5,lease_owner='synthetic-expired-lease',lease_until=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
   assert.equal((await publisher.publish()).claimed, 0);
   assert.equal((await admin.query('SELECT status FROM acquisition.outbox_events WHERE event_id=$1', [eventId])).rows[0].status, 'dead_letter', 'interrupted final lease becomes visible');
+  try {
+    await admin.query('UPDATE acquisition.offer_contexts SET client_id=$2,subject_token=$3 WHERE offer_id=$1', [created.offer.offerId, other.clientId, other.subjectToken]);
+    const foreignRead = await service.get({ actor: other, offerId: created.offer.offerId });
+    assert.equal(foreignRead.status, 'integrity_invalid'); assert.equal('offer' in foreignRead, false);
+    assert.equal((await service.accept({ actor: other, authorization, offerId: created.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() })).status, 'integrity_invalid');
+    assert.equal((await admin.query('SELECT count(*)::INT4 AS n FROM acquisition.offer_acceptances WHERE offer_id=$1', [created.offer.offerId])).rows[0].n, 1, 'altered lookup owner cannot create another acceptance');
+  } finally {
+    await admin.query('UPDATE acquisition.offer_contexts SET client_id=$2,subject_token=$3 WHERE offer_id=$1', [created.offer.offerId, actor.clientId, actor.subjectToken]);
+  }
   const probe = clientFor(runtime, { ca: (config.ssl as { ca?: string }).ca, rejectUnauthorized: true }); await probe.connect();
   try {
     for (const table of ['offer_contexts', 'offer_acceptances', 'offer_revisions']) {
@@ -156,7 +165,7 @@ try {
     const decisions = (await admin.query('SELECT id FROM acquisition.underwriting_decisions WHERE correlation_id=ANY($1::UUID[])', [traces])).rows.map(r => r.id);
     const quotes = (await admin.query('SELECT id FROM acquisition.quotes WHERE client_id=$1', [actor.clientId])).rows.map(r => r.id);
     await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id=ANY($1::UUID[]) OR correlation_id=ANY($2::UUID[])', [[...offers, ...quotes, ...decisions], traces]);
-    await admin.query('DELETE FROM acquisition.audit_events WHERE actor_reference=$1', [actor.clientId]);
+    await admin.query('DELETE FROM acquisition.audit_events WHERE actor_reference=$1 OR correlation_id=ANY($2::UUID[])', [actor.clientId, traces]);
     await admin.query('DELETE FROM acquisition.offer_acceptances WHERE client_id=$1', [actor.clientId]);
     await admin.query('DELETE FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId]);
     await admin.query('DELETE FROM acquisition.offer_revisions WHERE offer_id=ANY($1::UUID[])', [offers]);

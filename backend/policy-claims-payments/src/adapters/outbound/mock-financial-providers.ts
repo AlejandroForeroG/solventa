@@ -26,10 +26,10 @@ export class SqlMockPaymentGateway implements PaymentGateway {
       return { status: row.status === 'confirmed' ? 'confirmed' : 'declined', reference: row.provider_reference };
     });
   }
-  async lookup(input: Payment): Promise<{ status: 'confirmed' | 'declined' | 'unknown'; reference: string | null }> {
+  async lookup(input: Payment): Promise<{ status: 'confirmed' | 'refunded' | 'unknown'; reference: string | null }> {
     return this.client(async db => {
       const row = await this.find(db, input);
-      return row ? { status: row.status === 'confirmed' ? 'confirmed' : 'declined', reference: row.provider_reference }
+      return row ? { status: row.status, reference: row.provider_reference }
         : { status: 'unknown', reference: null };
     });
   }

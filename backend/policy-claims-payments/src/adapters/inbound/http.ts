@@ -44,12 +44,12 @@ export function createHttp(deps?: PolicyHttpDependencies) {
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: Record<string, unknown>, status: 200 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
         { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-      const method = operation === 'policies:read' ? 'GET' : 'POST';
-      if (c.req.method !== method) { c.header('Allow', method); return reply({ error: 'method_not_allowed' }, 405); }
-      if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
-      if (!deps) return reply({ error: 'financial_unavailable' }, 503);
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
+        const method = operation === 'policies:read' ? 'GET' : 'POST';
+        if (c.req.method !== method) { c.header('Allow', method); return reply({ error: 'method_not_allowed' }, 405); }
+        if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
+        if (!deps) return reply({ error: 'financial_unavailable' }, 503);
         const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method,
           cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('origin') ?? '' }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]);
@@ -91,7 +91,14 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         }
         return reply({ error: result.error }, result.httpStatus);
       } catch { return reply({ error: 'financial_unavailable' }, 503); }
-      finally { clearTimeout(timer); }
+      finally {
+        clearTimeout(timer);
+        if (c.req.raw.body && !c.req.raw.bodyUsed) {
+          await c.req.raw.body.cancel().catch(() => {
+            console.error(JSON.stringify({ event: 'financial_body_cancel_failed', traceId, code: 'request_body_unavailable' }));
+          });
+        }
+      }
     };
   }
   app.notFound((c) => c.json({ error: 'not_found' }, 404));

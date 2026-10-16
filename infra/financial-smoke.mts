@@ -95,6 +95,37 @@ try {
   await denied(traceId => finance.acceptOffer(expired, traceId), 'invalid_event');
 
   const key = randomUUID();
+  const intentRollback = await acceptedOffer(); const intentRollbackPolicy = await importOffer(intentRollback); const intentRollbackKey = randomUUID();
+  const beforeIntentFailure = await counts(['payments', 'financial_commands', 'mock_gateway_operations']);
+  await db.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy');
+  try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
+  finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
+  assert.deepEqual(await counts(['payments', 'financial_commands', 'mock_gateway_operations']), beforeIntentFailure,
+    'the first premium intent, command and provider effect must not survive a failed atomic outbox write');
+  assert.equal(ok(await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).policy.status, 'issued');
+  const noProofOffer = await acceptedOffer(); const noProofPolicy = await importOffer(noProofOffer); const noProofKey = randomUUID();
+  const noProofGateway: PaymentGateway = { lookup: payment => gateway.lookup(payment), refund: payment => gateway.refund(payment),
+    async settle() { return { status: 'uncertain', reference: null }; } };
+  assert.equal((await issue(new PolicyFinance({ ...base, payments: noProofGateway }), noProofOffer, noProofPolicy, noProofKey)).status, 'unavailable');
+  await db.query("UPDATE policy.policies SET status='charged' WHERE id=$1", [noProofPolicy.policyId]);
+  await db.query("UPDATE policy.payments SET status='confirmed',provider_reference='MOCK-'||id::STRING WHERE policy_id=$1", [noProofPolicy.policyId]);
+  await denied(traceId => finance.issue({ actor: noProofOffer.payload, policyId: noProofPolicy.policyId, documentHash: noProofPolicy.documentHash,
+    idempotencyKey: noProofKey, traceId }), 'integrity_violation');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [noProofPolicy.policyId])).rows[0].n, 0,
+    'a forged charged/confirmed projection with no provider proof must never start a new charge');
+  const declinedOffer = await acceptedOffer(); const declinedPolicy = await importOffer(declinedOffer); const declinedKey = randomUUID();
+  let interruptDecline = true;
+  const decliningGateway: PaymentGateway = { async lookup() { return { status: 'unknown', reference: null }; }, refund: payment => gateway.refund(payment),
+    async settle() { if (interruptDecline) { interruptDecline = false; await db!.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy'); } return { status: 'declined', reference: null }; } };
+  const decliningService = new PolicyFinance({ ...base, payments: decliningGateway });
+  try { assert.equal((await issue(decliningService, declinedOffer, declinedPolicy, declinedKey)).status, 'unavailable'); }
+  finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
+  assert.equal((await db.query("SELECT status FROM policy.payments WHERE policy_id=$1 AND operation='premium'", [declinedPolicy.policyId])).rows[0].status, 'pending',
+    'a declined transition must roll back when its corresponding outbox write fails');
+  const declineResult = await issue(decliningService, declinedOffer, declinedPolicy, declinedKey);
+  assert.ok(declineResult.status === 'denied' && declineResult.error === 'payment_declined');
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.requested'", [declinedPolicy.policyId])).rows[0].n, 1);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.declined'", [declinedPolicy.policyId])).rows[0].n, 1);
   assert.equal(ok(await issue(finance, offer, policy, key)).policy.status, 'issued');
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
@@ -194,6 +225,9 @@ try {
   await db.query('UPDATE policy.policy_signatures SET signed_at=$2 WHERE policy_id=$1', [laterPolicy.policyId, issuedAt]);
 
   // A stored policy alteration is detected before the provider. Restore only this disposable fixture afterwards.
+  await db.query("UPDATE policy.payments SET provider_reference='altered-reference' WHERE policy_id=$1 AND operation='premium'", [policy.policyId]);
+  await denied(traceId => finance.get({ actor: offer.payload, policyId: policy.policyId, traceId }), 'integrity_violation');
+  await db.query("UPDATE policy.payments SET provider_reference='MOCK-'||id::STRING WHERE policy_id=$1 AND operation='premium'", [policy.policyId]);
   await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
   await denied(traceId => finance.get({ actor: offer.payload, policyId: policy.policyId, traceId }), 'integrity_violation');
   await db.query('UPDATE policy.policies SET premium=$2 WHERE id=$1', [policy.policyId, offer.payload.premium]);
@@ -213,7 +247,7 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } finally {
   await db?.end();
   if (created && migrationsComplete) await admin.query(`DROP DATABASE ${name} CASCADE`);

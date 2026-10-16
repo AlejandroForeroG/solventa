@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, paymentContent } from '../backend/policy-claims-payments/src/domain/financial';
+import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
+import type { FinancialTransaction, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
@@ -78,5 +79,47 @@ test('the deployed financial composition rejects missing or malformed hexadecima
     const finance = createPolicyFinance({ APP_ENV: 'dev', FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: key,
       POLICY_DB: { connectionString: 'unused' } });
     assert.equal((await finance.acceptOffer({}, randomUUID())).status, 'unavailable');
+  }
+});
+
+async function stateFixture(policyStatus: StoredPolicy['status'], paymentStatus: Payment['status'], known: Awaited<ReturnType<PaymentGateway['lookup']>>) {
+  const offer = (await acceptedOffer()).payload, id = randomUUID();
+  const document = policyDocument(id, offer);
+  const policy: StoredPolicy = { id, clientId: offer.clientId, subjectToken: offer.subjectToken, status: policyStatus, offer,
+    termsHash: await financialIntegrity.digest(offerContent(offer)), document, documentHash: await financialIntegrity.digest(document),
+    premium: offer.premium, currency: 'COP', offerId: offer.offerId, offerVersion: offer.offerVersion,
+    effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, coverageSnapshot: offer.coverage };
+  const payment: Payment = { id: randomUUID(), policyId: id, operation: 'premium', key: 'initial-premium', amount: offer.premium,
+    currency: 'COP', hash: '', status: paymentStatus, providerReference: paymentStatus === 'pending' || paymentStatus === 'declined' ? null : 'MOCK-confirmed' };
+  if (paymentStatus === 'confirmed' || paymentStatus === 'refunded') payment.providerReference = 'MOCK-' + payment.id;
+  payment.hash = await financialIntegrity.digest(paymentContent(payment));
+  let settled = 0, rejected = 0;
+  // Deliberately narrow unit fixture: SQL persistence and rollback are exercised by financial-smoke.mts.
+  const tx = { async policy() { return policy; }, async payment() { return payment; }, async signature() { return null; },
+    async command() { return null; }, async createCommand() {} } as unknown as FinancialTransaction;
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } },
+    payments: { async lookup() { return { ...known, reference: known.reference === 'MOCK-confirmed' ? payment.providerReference : known.reference }; }, async settle() { settled++; return { status: 'uncertain', reference: null }; }, async refund() { throw new Error('unexpected_refund'); } },
+    signatures: { async sign() { throw new Error('unexpected_signature'); } } });
+  return { finance, policy, actor: offer, counts: () => ({ settled, rejected }) };
+}
+
+test('incoherent policy and premium states are audited before a provider can be called', async () => {
+  for (const [policy, payment] of [['pending', 'confirmed'], ['charged', 'pending'], ['refunding', 'declined'], ['refunded', 'confirmed']] as const) {
+    const fixture = await stateFixture(policy, payment, { status: 'unknown', reference: null });
+    const result = await fixture.finance.get({ actor: fixture.actor, policyId: fixture.policy.id, traceId: randomUUID() });
+    assert.ok(result.status === 'denied' && result.error === 'integrity_violation');
+    assert.deepEqual(fixture.counts(), { settled: 0, rejected: 1 });
+  }
+});
+
+test('a claimed confirmation cannot create a new charge or replace its provider reference', async () => {
+  for (const known of [{ status: 'unknown' as const, reference: null }, { status: 'confirmed' as const, reference: 'altered-reference' },
+    { status: 'refunded' as const, reference: 'MOCK-confirmed' }]) {
+    const fixture = await stateFixture('charged', 'confirmed', known);
+    const result = await fixture.finance.issue({ actor: fixture.actor, policyId: fixture.policy.id, documentHash: fixture.policy.documentHash,
+      idempotencyKey: randomUUID(), traceId: randomUUID() });
+    assert.ok(result.status === 'denied' && result.error === 'integrity_violation');
+    assert.deepEqual(fixture.counts(), { settled: 0, rejected: 1 });
   }
 });

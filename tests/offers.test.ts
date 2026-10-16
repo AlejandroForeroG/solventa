@@ -128,3 +128,22 @@ test('a late Queue acknowledgment cannot turn a timed-out publishing attempt int
   await sendWithinDeadline(Promise.resolve(), 5);
   await assert.rejects(sendWithinDeadline(Promise.reject(new Error('queue unavailable')), 5), /queue unavailable/);
 });
+test('changing lookup ownership cannot transfer an offer whose sealed owner is another actor', async () => {
+  const f = fixture();
+  const flightReference = randomUUID();
+  const first = await f.service.createFlight({ actor, flightReference, idempotencyKey: 'victim-offer', traceId: randomUUID() });
+  if (first.status !== 'created') throw Error('unreachable');
+  const victim = f.store.rows.get(first.offer.offerId)!;
+  // Simulate altered lookup columns; the financial terms and their valid HMAC still name the victim.
+  f.store.get = async () => victim;
+  f.store.byKey = async () => victim;
+  const read = await f.service.get({ actor: other, offerId: victim.terms.offerId });
+  assert.equal(read.status, 'integrity_invalid'); assert.equal('offer' in read, false);
+  assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'victim-offer', traceId: randomUUID() })).status, 'conflict');
+  assert.equal((await f.service.accept({ actor: other, offerId: victim.terms.offerId, idempotencyKey: 'foreign-accept', traceId: randomUUID() })).status, 'integrity_invalid');
+  assert.equal(f.store.accepted.size, 0); assert.equal(f.store.events.length, 0);
+  // A concurrent insert winner must be checked too, not only the initial lookup.
+  f.store.byKey = async () => null;
+  f.store.create = async () => ({ created: false, offer: victim });
+  assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'race', traceId: randomUUID() })).status, 'conflict');
+});

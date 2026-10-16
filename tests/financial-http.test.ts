@@ -174,3 +174,20 @@ test('a denied mortgage acceptance is recorded and an unavailable denial audit f
     assert.deepEqual(calls.at(-1), { operation: 'securityDenial', input: { operation: 'offers:accept', traceId } });
   }
 });
+
+test('both financial owners cancel unread bodies before returning early denials, method errors and read responses', async () => {
+  for (const policyRoute of [false, true]) for (const outcome of ['denied', 'method', 'mixed', 'read'] as const) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('{"unfinished":')); }, cancel() { cancelled = true; } });
+    const path = policyRoute ? `/policies/${id}${outcome === 'read' ? '' : '/issue'}` : outcome === 'read' ? `/offers/${id}` : '/quotes/COT-2026-00001/offers';
+    const init: RequestInit & { duplex: 'half' } = { method: outcome === 'method' ? 'PUT' : 'POST', body, duplex: 'half', headers: { 'x-trace-id': traceId, ...(outcome === 'mixed' ? { authorization: 'Bearer synthetic-token' } : {}) } };
+    const req = new Request('https://web.example/api/v1' + path, init);
+    // Node's constructor disallows GET bodies; Workers can receive such an HTTP request.
+    // Keep a real transport stream and set only the fixture's received method.
+    if (outcome === 'read') Object.defineProperty(req, 'method', { value: 'GET' });
+    const { run } = setup(outcome === 'denied' ? { allowed: false, status: 401, error: 'unauthorized' } : undefined);
+    const response = await run(req, policyRoute);
+    assert.equal(response.status, outcome === 'denied' ? 401 : outcome === 'method' ? 405 : outcome === 'mixed' ? 400 : 200);
+    assert.equal(cancelled, true, `${policyRoute ? 'policy' : 'offer'} ${outcome}`);
+  }
+});
