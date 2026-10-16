@@ -84,6 +84,8 @@ Every external format is translated in an adapter; the domain, use cases and por
 
 Both are **simulated**: their source returns fixed synthetic answers for one fictitious person and never reaches a real provider. They exist to keep the core independent of any provider format; a real provider adds a source (HTTP client) and an entry in `src/adapters/outbound/signal-providers.ts`, and the configuration value selects it.
 
+**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. Simulated providers are the intended source in every environment, so the first use case that reads signals in a real flow, such as profiling, must make both simulated sources dynamic before relying on them. Each one then selects a deterministic synthetic persona from the subject token (for example good payer, late payer, no health affiliation, unknown subject, failing source), so the same subject always gets the same answer and different subjects get different profiles and failures. Only the simulated sources change; the translators, the port and the core stay as they are, and the corpus gains a case per persona.
+
 Every adapter produces the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
 
 | Scope | `data` |
