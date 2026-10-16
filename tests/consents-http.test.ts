@@ -81,6 +81,29 @@ test('the terms endpoint serves the terms of the contract example', async () => 
   assert.equal(res.headers.get('cache-control'), 'no-store');
 });
 
+test('revocation and authorization rejection cancel unused request bodies before responding', async () => {
+  for (const outcome of ['revoked', 'foreign', 'unauthorized']) {
+    const { http } = app();
+    const consent = await (await grant(http)).json();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{}')); },
+      cancel() { cancelled = true; }
+    });
+    const init: RequestInit & { duplex: 'half' } = {
+      method: 'POST', body, duplex: 'half',
+      headers: { origin, ...(outcome !== 'unauthorized' ? { cookie: cookie(outcome === 'foreign' ? 'luis' : 'ana') } : {}) }
+    };
+    const request = new Request(origin + `/api/v1/consents/${consent.consentId}/revoke`, init);
+    const response = await http.fetch(request, env);
+    assert.equal(response.status, outcome === 'revoked' ? 200 : outcome === 'foreign' ? 404 : 401);
+    assert.equal(cancelled, true, 'no unfinished upload may outlive the response');
+    const result = await response.json();
+    if (outcome === 'revoked') assert.equal(result.status, 'revoked');
+    else assert.equal(result.error, outcome === 'foreign' ? 'not_found' : 'unauthorized');
+  }
+});
+
 test('grant, replay, list and revoke answer with the contract shapes', async () => {
   const { http } = app();
   const created = await grant(http);

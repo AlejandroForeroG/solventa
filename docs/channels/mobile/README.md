@@ -24,6 +24,8 @@ npm install
 npm run dev:mobile
 ```
 
+The start and web scripts bind Metro to localhost. Start that server with `npm run dev:mobile` before running the workspace `android` or `ios` script; both native scripts include `--no-bundler` so they cannot open another Metro server. For an Android device, use the documented USB forwarding setup. Direct `expo run:android` or `expo run:ios` invocations also need `--no-bundler` when using this server. Do not use LAN or tunnel mode for the currently affected development toolchain. See the [dependency security limits](../../development.md#dependency-security-limits).
+
 Mobile workspace checks:
 
 ```sh
@@ -145,7 +147,7 @@ From `apps/mobile`, build locally or through EAS, then start the development cli
 ```sh
 npx expo run:android
 # Alternatively: npx eas-cli@latest build --profile development --platform android
-npx expo start --dev-client --clear
+npx expo start --dev-client --clear --localhost
 ```
 
 For iOS, use `npx expo run:ios` on macOS or the development profile with EAS. Existing generated `android`/`ios` folders must be regenerated through `npx expo prebuild --platform android --no-install` (or iOS) after these changes; do not edit native files by hand.

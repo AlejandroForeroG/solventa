@@ -28,6 +28,14 @@ npm run check
 
 Create the candidate branch from staging and open its PR to dev without a required suffix. Use a separate integration branch with any valid name when dev contains unrelated changes. Promote the tested candidate through a PR to staging; each release goes from staging to prod. If an integration branch is used, cherry-pick relevant fixes back to the candidate, then synchronize and test again. Follow [Gitflow and CI/CD](infrastructure/ci-cd.md), including merge and prior deployment requirements.
 
+## Dependency security limits
+
+Wrangler is pinned to 4.149.0, including its matched Miniflare/workerd versions. The assets tool pins sharp 0.35.5; both dependency paths include the fix for [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w). Do not override Miniflare independently of Wrangler.
+
+The mobile development toolchain still includes braces 3.0.3 ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)) and node-forge 1.4.0 ([GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)). No patched package version was published when these dependencies were reviewed. Keep the risks open and recheck upstream before changing the lockfile. The Expo/Metro major downgrades suggested by `npm audit fix --force` are not compatible remediation.
+
+Restrict Metro to localhost/USB forwarding and process only controlled source trees, glob patterns, certificates and development-signing material. These precautions reduce exposure; they do not repair certificate verification or the glob parser. Never treat a production-only audit of the web/backends as clearance of the mobile or build toolchain. This project remains limited to synthetic validation until its security requirements are satisfied.
+
 ## Local development
 
 Brand SVGs and variants are in [shared assets](shared/assets/README.md). Import `brandAssets` from `@solventa/assets/web` or `@solventa/assets/mobile`; the path catalog is in `@solventa/assets`. Both channels consume the same source.

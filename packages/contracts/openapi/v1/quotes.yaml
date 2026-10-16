@@ -5,8 +5,9 @@ info:
   description: >
     Quote with minimum data. The same input and rule version always give the same premium;
     no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
-    Saved quotes require authentication and the quotes:create permission verified by Identity; see identity-access.yaml.
-    The anonymous calculator returns only an indicative estimate, without persistence or external data.
+    Saved quotes require authentication and the quotes:create permission verified by Identity;
+    see identity-access.yaml. The anonymous calculator returns only an indicative estimate,
+    without persistence or external data.
     When Identity returns a 401 or 403 authorization denial, its minimal security audit and outbox
     have committed together without credentials or request data. Failure to persist that decision
     returns 503 access_unavailable and blocks the quote. Missing, malformed or oversized HTTP
