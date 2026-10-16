@@ -6,6 +6,7 @@ import type { ProviderSource, SignalData } from './signal-provider-call';
 
 // Each source is queried separately and answers in its own format (formats version 1).
 const REGIMES = new Map<unknown, SignalData['affiliation_regime']['regime']>([['CONTRIBUTIVO', 'contributory'], ['SUBSIDIADO', 'subsidized'], ['ESPECIAL', 'special']]);
+const AFFILIATION_STATES = new Map<unknown, boolean>([['ACTIVO', true], ['RETIRADO', false], ['SUSPENDIDO', false]]);
 const DOCUMENT_STATES = new Map<unknown, boolean>([['VIGENTE', true], ['CANCELADA', false], ['CANCELADA_POR_MUERTE', false]]);
 
 // Open Finance (Bancolombia): amounts in COP cents over a 12 month period.
@@ -31,8 +32,9 @@ function affiliation(body: unknown): Signal {
   const health = reply.afiliaciones.map(record).find(entry => entry.subsistema === 'SALUD');
   if (!health) throw new ProviderFailure('not_found');
   const regime = REGIMES.get(health.regimen);
-  if (!regime || typeof health.estado !== 'string') throw invalidResponse();
-  return signalOf('affiliation_regime', reply.fechaCorte, { regime, active: health.estado === 'ACTIVO' });
+  const active = AFFILIATION_STATES.get(health.estado);
+  if (!regime || active === undefined) throw invalidResponse();
+  return signalOf('affiliation_regime', reply.fechaCorte, { regime, active });
 }
 
 // Registraduría Nacional.

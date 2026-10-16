@@ -30,13 +30,21 @@ export function signalOf<S extends SignalScope>(scope: S, capturedAt: unknown, d
   return { scope, capturedAt: instant(capturedAt), data };
 }
 
+const TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+// Date.parse silently rolls 2026-02-30 over to March 2, so the calendar date must round-trip.
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 // Providers report either an instant or a Bogotá calendar date; a signal always carries a UTC instant.
 function instant(value: unknown): string {
   if (typeof value !== 'string') throw invalidResponse();
   const text = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00-05:00` : value;
-  const time = Date.parse(text);
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(text) || Number.isNaN(time)) throw invalidResponse();
-  return new Date(time).toISOString();
+  const parts = TIMESTAMP.exec(text);
+  if (!parts || !isCalendarDate(Number(parts[1]), Number(parts[2]), Number(parts[3]))) throw invalidResponse();
+  return new Date(Date.parse(text)).toISOString();
 }
 
 function failureForStatus(status: number): ProviderFailureCode | null {

@@ -33,15 +33,24 @@ const definedOnly = (source: Record<string, unknown>) => Object.fromEntries(Obje
 // A container that is not an object is passed through so the domain reports it with its usual code.
 const mapObject = (value: unknown, map: (source: Record<string, unknown>) => Record<string, unknown>) => (isObject(value) ? definedOnly(map(value)) : value);
 
+// A required envelope field that is absent is `required`; one present with another value is unsupported.
+function constantError(value: unknown, expected: string, field: string, unsupported: AcordErrorCode): AcordFieldError[] {
+  if (value === undefined) return [{ field, code: 'required' }];
+  return value === expected ? [] : [{ field, code: unsupported }];
+}
+
 function envelopeErrors(message: unknown): AcordFieldError[] {
   if (!isObject(message)) return [{ field: '', code: 'invalid_type' }];
-  if (message.schemaVersion !== ACORD_SCHEMA_VERSION) return [{ field: 'schemaVersion', code: 'unsupported_version' }];
+  const version = constantError(message.schemaVersion, ACORD_SCHEMA_VERSION, 'schemaVersion', 'unsupported_version');
+  if (version.length) return version;
   const request = message.TXLifeRequest;
   if (request === undefined) return [{ field: 'TXLifeRequest', code: 'required' }];
   if (!isObject(request)) return [{ field: 'TXLifeRequest', code: 'invalid_type' }];
-  if (request.TransType !== 'QuoteRequest') return [{ field: 'TXLifeRequest.TransType', code: 'unsupported_transaction' }];
+  const transaction = constantError(request.TransType, 'QuoteRequest', 'TXLifeRequest.TransType', 'unsupported_transaction');
+  if (transaction.length) return transaction;
   const loan = isObject(request.Holding) ? request.Holding.Loan : undefined;
-  if (isObject(loan) && loan.CurrencyTypeCode !== 'COP') return [{ field: 'TXLifeRequest.Holding.Loan.CurrencyTypeCode', code: 'unsupported_currency' }];
+  const currency = isObject(loan) ? constantError(loan.CurrencyTypeCode, 'COP', 'TXLifeRequest.Holding.Loan.CurrencyTypeCode', 'unsupported_currency') : [];
+  if (currency.length) return currency;
   const productCode = productCodeOf(request);
   if (productCode !== undefined && !PRODUCTS.has(productCode)) return [{ field: 'TXLifeRequest.Holding.Policy.ProductCode', code: 'unsupported_product' }];
   return [];
