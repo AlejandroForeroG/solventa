@@ -24,7 +24,8 @@
   },
   "account_id": "803fd559877aae8f638140610f106857",
   "vars": {
-    "APP_ENV": "local"
+    "APP_ENV": "local",
+    "SIGNAL_PROVIDER": "direct_simulated"
   },
   "hyperdrive": [
     {
@@ -38,7 +39,8 @@
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "dev"
+        "APP_ENV": "dev",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "hyperdrive": [
         {
@@ -58,7 +60,8 @@
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "staging"
+        "APP_ENV": "staging",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "hyperdrive": [
         {
@@ -78,7 +81,8 @@
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "prod"
+        "APP_ENV": "prod",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "hyperdrive": [
         {

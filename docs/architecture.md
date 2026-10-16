@@ -20,4 +20,22 @@ Identity implements web authentication use cases through session and persistence
 
 Acquisition implements the minimum-data quote through its own domain, application ports and adapters; quote, decision capture, audit and outbox are committed together. Identity also implements consent registration, listing, revocation and fresh verification, alongside native session registration and revocation. See the [Acquisition guide](modules/acquisition-risk/README.md), [consent guide](modules/identity-consent-ecosystem/consent.md) and [native session contract](modules/identity-consent-ecosystem/mobile-authentication.md).
 
-The signal-reading use case checks consent before reaching its provider or stored copy, but no public profiling route or real signal provider is wired yet. Policy still has no business use cases. Stored outbox records do not establish event publication/consumption, complete financial flows or native biometric functionality.
+The signal-reading use case checks consent before reaching its provider or stored copy. Its providers are simulated adapters selected by configuration, and no public profiling route calls it yet. Policy still has no business use cases. Stored outbox records do not establish event publication/consumption, complete financial flows or native biometric functionality.
+
+## External integrations
+
+Each external party is reached or received through an adapter that translates its format and failures; the core only sees internal models and normalized errors. Replacing a provider changes an adapter and configuration, never the domain, use cases or ports. This holds in both directions: requests Solventa sends to providers (outbound adapters) and messages partners send to Solventa (inbound adapters). Industry-standard messages, such as ACORD, are translated at that same edge. Provider data, partner messages and industry-standard formats also have a versioned schema or format version and an agreed corpus that runs in CI; see [integration schemas and corpus](shared/contracts/README.md#integration-schemas-and-corpus).
+
+| Integration | Direction | Current state |
+|---|---|---|
+| Signal sources: Open Finance, credit bureau, health affiliation, identity registry | Solventa queries | Two simulated adapters behind `SignalProvider`, in every environment; see [Acquisition](modules/acquisition-risk/README.md#signal-providers) |
+| Distribution partners in ACORD Life inspired format | Partner sends a quote request, Solventa answers | Translator to and from the quote model, not mounted on a route; see [Acquisition](modules/acquisition-risk/README.md#acord-life-inspired-quote-messages) |
+| Authentication and partner tokens (WorkOS) | Solventa queries | Implemented in Identity adapters (`workos-*.ts`); see [authentication](modules/identity-consent-ecosystem/authentication.md) and [API access](modules/identity-consent-ecosystem/api-access.md) |
+| Identity verification (KYC) | Solventa queries | Partly covered: the `identity_validation` signal checks only that the document is valid. Biometric matching and AML/sanctions lists are not implemented; no separate port |
+| Public statistics (DANE) | Solventa queries | Not implemented; aggregated data outside the consent and outside the signal scopes |
+| Reinsurers, ACORD cession and portfolio reports | Solventa sends, reinsurer confirms | Not implemented; needs Policy's issued policies |
+| Payment gateways | Solventa requests, gateway notifies | Not implemented; owned by Policy |
+| Electronic signature and notification | Solventa requests, provider notifies | Not implemented; owned by Policy |
+| Telemetry and parametric events | Provider sends events | Not implemented |
+
+An integration that is not implemented has no port or adapter yet: create them with the first use case that needs it, in the module that owns that capability, following the same rule and adding its schema and corpus.
