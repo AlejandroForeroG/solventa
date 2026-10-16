@@ -75,7 +75,7 @@ The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in
 
 ## Definitive synthetic offers
 
-The existing calculator and saved minimum-data quote remain preliminary. Creating an offer does not change their meaning. The explicit academic offer rule runs only with `FINANCIAL_PROVIDER_MODE=mock`, an environment-specific `FINANCIAL_EVENT_KEY` of at least 32 characters, and local/dev/staging. Production and missing configuration fail closed. The simulated sources are external adapters; ownership, current consent, underwriting, persistence, historical capture and idempotency execute in Solventa. These offers do not establish approved actuarial terms or real insurance coverage.
+The existing calculator and saved minimum-data quote remain preliminary. Creating an offer does not change their meaning. The explicit academic offer rule runs only with `FINANCIAL_PROVIDER_MODE=mock`, an environment-specific `FINANCIAL_EVENT_KEY` of exactly 64 lowercase hexadecimal characters, and local/dev/staging. Production and missing configuration fail closed. The simulated sources are external adapters; ownership, current consent, underwriting, persistence, historical capture and idempotency execute in Solventa. These offers do not establish approved actuarial terms or real insurance coverage.
 
 | Route | Web operation and behavior |
 |---|---|
