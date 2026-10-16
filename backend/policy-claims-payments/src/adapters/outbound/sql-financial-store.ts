@@ -1,5 +1,6 @@
 import { Client } from 'pg';
-import { FINANCIAL_RULE, InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
+import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
+import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
 import type { Command, FinancialStore, FinancialTransaction, Inbox, Payment, StoredPolicy } from '../../application/ports/financial';
 
@@ -33,14 +34,11 @@ class SqlFinancialTransaction implements FinancialTransaction {
     const row = (await this.db.query<PolicyRow>(selectPolicy + " WHERE f.terms->>'offerId'=$1 AND f.terms->>'offerVersion'=$2 FOR UPDATE OF p", [offerId, String(offerVersion)])).rows[0];
     return row ? policyFrom(row) : null;
   }
-  async createPolicy(policy: StoredPolicy, eventId: string, traceId: string): Promise<void> {
+  async createPolicy(policy: StoredPolicy, eventId: string, traceId: string, capture: FinancialDecisionCapture): Promise<void> {
     const offer = policy.offer;
     await this.db.query(`INSERT INTO policy.policies(id,subject_token,offer_id,offer_version,idempotency_key,request_hash,status,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
       VALUES($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11,$12)`, [policy.id, policy.subjectToken, policy.offerId, policy.offerVersion,
       offer.acceptanceId, policy.termsHash, policy.premium, policy.currency, JSON.stringify(offer.coverage), policy.effectiveFrom, policy.effectiveUntil, traceId]);
-    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: traceId,
-      inputs: { acceptanceId: offer.acceptanceId, offerId: offer.offerId, offerVersion: offer.offerVersion, premium: offer.premium, currency: offer.currency, coverage: offer.coverage, synthetic: true },
-      sources: [], consent: { status: 'not_required' }, rule: { id: 'accepted-offer-import', version: FINANCIAL_RULE }, outcome: 'pending' };
     await this.db.query(`INSERT INTO policy.financial_contracts(policy_id,client_id,acceptance_id,acceptance_event_id,terms,terms_hash,document,document_hash,decision_capture)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [policy.id, policy.clientId, offer.acceptanceId, eventId, JSON.stringify(offer), policy.termsHash, policy.document, policy.documentHash, JSON.stringify(capture)]);
   }
@@ -105,11 +103,9 @@ class SqlFinancialTransaction implements FinancialTransaction {
     await this.db.query(`INSERT INTO policy.policy_signatures(policy_id,document_hash,provider,receipt,signed_at,time_seal)
       VALUES($1,$2,'synthetic-signature-v1',$3,$4,$5)`, [policyId, documentHash, receipt, signedAt, timeSeal]);
   }
-  async audit(action: Parameters<FinancialTransaction['audit']>[0], resourceId: string, traceId: string, outcome: string, actorReference = 'unattributed'): Promise<void> {
+  async audit(action: Parameters<FinancialTransaction['audit']>[0], resourceId: string, traceId: string, outcome: string, actorReference: string, capture: FinancialDecisionCapture): Promise<void> {
     await this.db.query(`INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
       VALUES($5,$1,'financial_decision',$2,$3,$4,now()+interval '90 days')`, [action, resourceId, outcome, traceId, actorReference]);
-    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: traceId, inputs: { resourceId, synthetic: true },
-      sources: [], consent: { status: 'not_required' }, rule: { id: action, version: FINANCIAL_RULE }, outcome };
     await this.db.query(`INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
       VALUES(gen_random_uuid(),'financial_decision',$1,$2,1,$3,$4)`, [resourceId, 'policy.' + action, JSON.stringify(capture), traceId]);
   }
@@ -131,7 +127,7 @@ export class SqlFinancialStore implements FinancialStore {
       } finally { await db.end().catch(() => {}); }
     }
   }
-  async rejection(id: string, traceId: string, cause: FinancialErrorCode): Promise<void> {
-    await this.transaction(tx => tx.audit('financial.denied', id, traceId, cause));
+  async rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void> {
+    await this.transaction(tx => tx.audit('financial.denied', id, traceId, cause, 'unattributed', capture));
   }
 }

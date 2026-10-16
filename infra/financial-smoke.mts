@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import Ajv from 'ajv';
+import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
 import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
 import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
-import type { FinancialResult, SignedOfferAcceptanceV1 } from '../backend/policy-claims-payments/src/domain/financial';
+import type { AcceptedOffer, FinancialResult, SignedOfferAcceptanceV1 } from '../backend/policy-claims-payments/src/domain/financial';
 import type { FinancialDependencies, FinancialStore, PaymentGateway, SignatureProvider } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from '../tests/financial-fixtures';
 
@@ -51,6 +53,8 @@ try {
     payments: gateway, signatures: new MockSignatureProvider(financialIntegrity), now: financialNow, newId: randomUUID };
   const finance = new PolicyFinance(base);
   const count = async (table: string) => Number((await db!.query(`SELECT count(*)::INT4 AS n FROM policy.${table}`)).rows[0].n);
+  const captures = async (policyId: string, action: string) => (await db!.query<{ payload: FinancialDecisionCapture }>(
+    'SELECT payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type=$2 ORDER BY created_at,event_id', [policyId, 'policy.' + action])).rows.map(row => row.payload);
   const counts = async (tables: string[]) => { const result = []; for (const table of tables) result.push(await count(table)); return result; };
   const ok = (result: FinancialResult) => { assert.equal(result.status, 'ok', JSON.stringify(result)); if (result.status !== 'ok') throw new Error('unexpected_result'); return result; };
   const importOffer = async (event: SignedOfferAcceptanceV1) => ok(await finance.acceptOffer(event, randomUUID())).policy;
@@ -156,6 +160,8 @@ try {
   await denied(traceId => finance.issue({ actor: recoveryOffer.payload, policyId: recoveryPolicy.policyId, documentHash: recoveryPolicy.documentHash, idempotencyKey: recoveryKey, traceId }), 'integrity_violation');
   await db.query('UPDATE policy.payments SET amount=$2 WHERE policy_id=$1', [recoveryPolicy.policyId, recoveryOffer.payload.premium]);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), recoveryOffer, recoveryPolicy, recoveryKey)).policy.status, 'issued');
+  assert.deepEqual((await captures(recoveryPolicy.policyId, 'premium.confirmed'))[0].sources.map(source => [source.operation, source.result]),
+    [['lookup', 'confirmed']], 'recovery records actual lookup proof without inventing another settlement');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [recoveryPolicy.policyId])).rows[0].n), 1);
   const afterCharge = await acceptedOffer(); const afterChargePolicy = await importOffer(afterCharge); const afterChargeKey = randomUUID();
   const signatureProvider = new MockSignatureProvider(financialIntegrity);
@@ -178,6 +184,12 @@ try {
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [refusedPolicy.policyId])).rows[0].status, 'refunded');
   assert.equal((await db.query('SELECT status FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [refusedPolicy.policyId])).rows[0].status, 'refunded');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [refusedPolicy.policyId])).rows[0].n), 0);
+  const refusedCaptures = { confirmed: (await captures(refusedPolicy.policyId, 'premium.confirmed'))[0],
+    requested: (await captures(refusedPolicy.policyId, 'premium.refund_requested'))[0], refunded: (await captures(refusedPolicy.policyId, 'premium.refunded'))[0] };
+  assert.equal(refusedCaptures.requested.inputs.refundReason, 'signature_refused');
+  assert.deepEqual(refusedCaptures.requested.sources.map(source => [source.operation, source.result]), [['sign', 'failed']]);
+  assert.equal(refusedCaptures.confirmed.sources.at(-1)?.result, 'confirmed', 'later provider refund cannot rewrite historical confirmation');
+  assert.deepEqual(refusedCaptures.refunded.sources.map(source => [source.operation, source.result]), [['lookup', 'confirmed'], ['refund', 'refunded']]);
   let signatureClock = financialNow();
   const expiringGateway: PaymentGateway = { lookup: payment => gateway.lookup(payment), refund: payment => gateway.refund(payment),
     async settle(payment) { const result = await gateway.settle(payment); signatureClock = new Date('2026-10-16T02:16:00.000Z'); return result; } };
@@ -185,9 +197,12 @@ try {
   const expiredSignature = await issue(new PolicyFinance({ ...base, payments: expiringGateway, now: () => signatureClock }), expiring, expiringPolicy);
   assert.ok(expiredSignature.status === 'denied' && expiredSignature.error === 'signature_failed', JSON.stringify({ status: expiredSignature.status, error: expiredSignature.status === 'ok' ? null : expiredSignature.error }));
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [expiringPolicy.policyId])).rows[0].status, 'refunded');
+  const expiredCapture = (await captures(expiringPolicy.policyId, 'premium.refund_requested'))[0];
+  assert.equal(expiredCapture.inputs.refundReason, 'expired_before_sign');
+  assert.deepEqual(expiredCapture.sources, [], 'expiry before sign must not invent a signature consultation');
   const finalLockOffer = await acceptedOffer(); const finalLockPolicy = await importOffer(finalLockOffer);
   let finalLockClock = financialNow(), finalTransactions = 0;
-  const finalLockStore: FinancialStore = { rejection: (id, trace, cause) => store.rejection(id, trace, cause),
+  const finalLockStore: FinancialStore = { rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
     transaction: work => store.transaction(tx => {
       const transactionNumber = ++finalTransactions;
       return work(new Proxy(tx, { get(target, key) {
@@ -215,6 +230,10 @@ try {
   const recoveredRefund = await issue(new PolicyFinance(base), refundRecovery, refundRecoveryPolicy, refundRecoveryKey);
   assert.ok(recoveredRefund.status === 'denied' && recoveredRefund.error === 'signature_failed');
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [refundRecoveryPolicy.policyId])).rows[0].status, 'refunded');
+  assert.equal((await captures(refundRecoveryPolicy.policyId, 'premium.refund_requested')).length, 1, 'recovery preserves the original refund decision');
+  const recoveredRefundCapture = (await captures(refundRecoveryPolicy.policyId, 'premium.refunded'))[0];
+  assert.equal(recoveredRefundCapture.inputs.refundReason, 'existing_refund_intent');
+  assert.deepEqual(recoveredRefundCapture.sources.map(source => [source.operation, source.result]), [['lookup', 'refunded'], ['refund', 'refunded']]);
 
   const flight = await acceptedOffer('flight_delay'); const flightPolicy = await importOffer(flight);
   assert.equal(ok(await issue(finance, flight, flightPolicy)).policy.status, 'issued');
@@ -230,6 +249,15 @@ try {
   const secondEvent = { ...event, eventId: randomUUID() }; secondEvent.signature = await financialIntegrity.digest(eventContent(secondEvent));
   await denied(traceId => finance.consumeParametricEvent(secondEvent, traceId), 'event_conflict');
   assert.equal(Number((await db.query("SELECT count(*)::INT4 AS n FROM policy.payments WHERE policy_id=$1 AND operation='indemnity'", [flightPolicy.policyId])).rows[0].n), 1);
+  const parametricCapture = (await captures(flightPolicy.policyId, 'parametric.accepted'))[0];
+  assert.deepEqual(parametricCapture.inputs.event, { eventId: event.eventId, eventType: event.eventType, environment: 'local', occurredAt: event.occurredAt, delayMinutes: 180 });
+  assert.deepEqual(parametricCapture.inputs.issuance, { signedAt: financialNow().toISOString(), documentHash: flightPolicy.documentHash });
+  assert.deepEqual(parametricCapture.sources, [{ source: 'synthetic-oracle-v1', capturedAt: financialNow().toISOString(), quality: 'synthetic_verified',
+    degraded: false, operation: 'consume', result: 'authenticated', eventId: event.eventId, occurredAt: event.occurredAt }]);
+  assert.deepEqual((await captures(flightPolicy.policyId, 'indemnity.confirmed'))[0].sources.map(source => [source.source, source.operation, source.result]),
+    [['synthetic-oracle-v1', 'consume', 'authenticated'], ['synthetic-gateway-v1', 'lookup', 'unknown'], ['synthetic-gateway-v1', 'settle', 'confirmed']]);
+  assert.equal((await captures(flightPolicy.policyId, 'parametric.accepted')).length, 1);
+  assert.equal((await captures(flightPolicy.policyId, 'indemnity.confirmed')).length, 1, 'event replay cannot duplicate historical decisions');
   const laterFlight = await acceptedOffer('flight_delay'); const laterPolicy = await importOffer(laterFlight);
   const issuedAt = '2026-10-16T02:01:00.000Z';
   const laterService = new PolicyFinance({ ...base, now: () => new Date(issuedAt) });
@@ -254,7 +282,9 @@ try {
   await db.query("UPDATE policy.payments SET provider_reference='altered-reference' WHERE policy_id=$1 AND operation='premium'", [policy.policyId]);
   await denied(traceId => finance.get({ actor: offer.payload, policyId: policy.policyId, traceId }), 'integrity_violation');
   await db.query("UPDATE policy.payments SET provider_reference='MOCK-'||id::STRING WHERE policy_id=$1 AND operation='premium'", [policy.policyId]);
+  const historicalIssued = (await captures(policy.policyId, 'policy.issued'))[0];
   await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+  assert.deepEqual((await captures(policy.policyId, 'policy.issued'))[0], historicalIssued, 'altered live premium cannot rewrite the persisted historical snapshot');
   await denied(traceId => finance.get({ actor: offer.payload, policyId: policy.policyId, traceId }), 'integrity_violation');
   await db.query('UPDATE policy.policies SET premium=$2 WHERE id=$1', [policy.policyId, offer.payload.premium]);
   const rollbackOffer = await acceptedOffer(); const beforeRollback = await count('policies');
@@ -268,9 +298,49 @@ try {
   try {
     await assert.rejects(auditRole.query("UPDATE policy.audit_events SET outcome='changed'"), error => (error as { code?: string }).code === '42501');
     await assert.rejects(auditRole.query('DELETE FROM policy.inbox_events'), error => (error as { code?: string }).code === '42501');
+    await assert.rejects(auditRole.query("UPDATE policy.financial_contracts SET decision_capture='{}'"), error => (error as { code?: string }).code === '42501');
     assert.equal((await auditRole.query("SELECT has_schema_privilege(current_user,'policy','CREATE') AS allowed")).rows[0].allowed, false);
   } finally { await auditRole.end(); }
+  const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>('SELECT event_type,payload FROM policy.outbox_events')).rows;
+  const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
+    'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'financial.denied'];
+  const expectedPaymentStatus: Record<string, string> = { 'premium.requested': 'pending', 'premium.declined': 'declined', 'premium.confirmed': 'confirmed',
+    'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed' };
+  for (const action of requiredActions) assert.ok(persisted.some(row => row.event_type === 'policy.' + action), 'missing persisted decision ' + action);
+  for (const row of persisted) {
+    assert.equal(validateCapture(row.payload), true, JSON.stringify(validateCapture.errors));
+    if (row.event_type === 'policy.financial.denied') { assert.deepEqual(Object.keys(row.payload.inputs).sort(), ['resourceId', 'synthetic']); continue; }
+    const capture = row.payload, action = row.event_type.slice('policy.'.length);
+    const contract: { terms: AcceptedOffer; terms_hash: string; document_hash: string; decision_capture: FinancialDecisionCapture } =
+      (await db.query('SELECT terms,terms_hash,document_hash,decision_capture FROM policy.financial_contracts WHERE policy_id=$1', [capture.inputs.resourceId])).rows[0];
+    const terms: AcceptedOffer = contract.terms;
+    assert.deepEqual(capture.inputs.offer, { acceptanceId: terms.acceptanceId, offerId: terms.offerId, offerVersion: terms.offerVersion, product: terms.product,
+      premium: terms.premium, currency: terms.currency, coverage: terms.coverage, effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil,
+      expiresAt: terms.expiresAt, acceptedAt: terms.acceptedAt, ruleVersion: terms.ruleVersion });
+    assert.equal(capture.inputs.documentHash, contract.document_hash); assert.equal(capture.inputs.termsHash, contract.terms_hash);
+    assert.equal(capture.rule.id, action); assert.equal(capture.rule.version, 'academic-financial-1');
+    assert.match(String(capture.inputs.evaluatedAt), /^2026-10-16T02:/);
+    if (action === 'offer.accepted') {
+      assert.deepEqual(contract.decision_capture, capture, 'contract and outbox must retain the same application decision');
+      assert.equal(capture.sources[0].source, 'acquisition.offer-accepted.v1');
+      assert.ok(capture.inputs.event && typeof capture.inputs.event === 'object');
+    } else {
+      const operation = ['parametric.accepted', 'indemnity.confirmed'].includes(action) ? 'indemnity' : 'premium';
+      const payment: { id: string; amount: string; currency: string; payment_key: string; request_hash: string } =
+        (await db.query('SELECT p.id,p.amount::STRING,p.currency,i.payment_key,i.request_hash FROM policy.financial_payment_intents i JOIN policy.payments p ON p.id=i.payment_id WHERE i.policy_id=$1 AND i.operation=$2', [capture.inputs.resourceId, operation])).rows[0];
+      assert.ok(payment);
+      assert.deepEqual(capture.inputs.payment, { paymentId: payment.id, operation, amount: payment.amount, currency: payment.currency,
+        intentKey: payment.payment_key, intentHash: payment.request_hash, status: expectedPaymentStatus[action],
+        providerReference: ['pending', 'declined'].includes(expectedPaymentStatus[action]) ? null : 'MOCK-' + payment.id });
+      if (action === 'premium.requested') assert.deepEqual(capture.sources, [], 'no provider has been consulted when the intent is committed');
+      if (action === 'premium.declined') assert.equal(capture.sources.at(-1)?.result, 'declined');
+    }
+    assert.equal(JSON.stringify(capture).includes(terms.clientId), false); assert.equal(JSON.stringify(capture).includes(terms.subjectToken), false);
+    assert.equal(JSON.stringify(capture).includes(key), false, 'raw caller idempotency key is not historical business input');
+  }
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
+    persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));

@@ -1,4 +1,5 @@
 import type { AcceptedOffer, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
+import type { FinancialAction, FinancialDecisionCapture } from '../financial-decision';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
   offer: AcceptedOffer; termsHash: string; document: string; documentHash: string;
@@ -11,7 +12,7 @@ export interface FinancialTransaction {
   policy(id: string): Promise<StoredPolicy | null>;
   acceptedPolicy(acceptanceId: string): Promise<StoredPolicy | null>;
   offeredPolicy(offerId: string, offerVersion: number): Promise<StoredPolicy | null>;
-  createPolicy(policy: StoredPolicy, eventId: string, traceId: string): Promise<void>;
+  createPolicy(policy: StoredPolicy, eventId: string, traceId: string, capture: FinancialDecisionCapture): Promise<void>;
   setPolicyStatus(id: string, status: PolicyStatus): Promise<void>;
   command(actorId: string, key: string): Promise<Command | null>;
   createCommand(actorId: string, key: string, policyId: string, requestHash: string): Promise<void>;
@@ -23,11 +24,11 @@ export interface FinancialTransaction {
   recordInbox(eventId: string, consumer: string, hash: string, policyId: string, eventType: string, traceId: string): Promise<void>;
   signature(policyId: string): Promise<{ documentHash: string; receipt: string; signedAt: string; timeSeal: string | null } | null>;
   recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<void>;
-  audit(action: 'offer.accepted' | 'premium.requested' | 'premium.declined' | 'premium.confirmed' | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed' | 'financial.denied', resourceId: string, traceId: string, outcome: string, actorReference?: string): Promise<void>;
+  audit(action: FinancialAction, resourceId: string, traceId: string, outcome: string, actorReference: string, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialStore {
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
-  rejection(id: string, traceId: string, cause: FinancialErrorCode): Promise<void>;
+  rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialIntegrity {
   digest(content: string): Promise<string>;

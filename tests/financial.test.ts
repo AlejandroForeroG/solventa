@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import Ajv from 'ajv';
+import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
 import type { FinancialTransaction, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -131,13 +134,16 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
     let clock = financialNow(), transactions = 0, refunds = 0, signatures = 0;
     let externalStatus: 'unknown' | 'confirmed' | 'refunded' = 'unknown';
     const actions: string[] = [];
+    const captures: FinancialDecisionCapture[] = [];
     const tx = { async policy() {
       if (scenario === 'expired_after_final_lock' && transactions === 3) clock = new Date(policy.offer.expiresAt);
       return { ...policy };
     }, async payment() { return { ...payment }; }, async signature() { return null; }, async command() { return null; }, async createCommand() {},
     async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
     async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
-    async audit(action: string) { actions.push(action); }, async recordSignature() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
+    async audit(action: string, _id: string, _trace: string, _outcome: string, _actor: string, capture: FinancialDecisionCapture) {
+      actions.push(action); captures.push(capture);
+    }, async recordSignature() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: () => clock, newId: randomUUID,
       store: { async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
       payments: { async lookup() { return { status: externalStatus, reference: externalStatus === 'unknown' ? null : 'MOCK-' + payment.id }; },
@@ -151,6 +157,31 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
     assert.equal(policy.status, 'refunded'); assert.equal(payment.status, 'refunded');
     assert.equal(refunds, 1); assert.equal(signatures, 0); assert.equal(actions.includes('policy.issued'), false);
     assert.deepEqual(actions, ['premium.confirmed', 'premium.refund_requested', 'premium.refunded', 'signature_failed']);
+    const validate = new Ajv({ allErrors: true }).compile(JSON.parse(readFileSync('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
+    for (const capture of captures) {
+      assert.equal(validate(capture), true, JSON.stringify(validate.errors));
+      assert.equal(capture.inputs.documentHash, policy.documentHash);
+      assert.equal(capture.inputs.termsHash, policy.termsHash);
+      assert.deepEqual(capture.inputs.offer, { acceptanceId: policy.offer.acceptanceId, offerId: policy.offerId, offerVersion: policy.offerVersion,
+        product: policy.offer.product, premium: policy.offer.premium, currency: 'COP', coverage: policy.offer.coverage,
+        effectiveFrom: policy.effectiveFrom, effectiveUntil: policy.effectiveUntil, expiresAt: policy.offer.expiresAt,
+        acceptedAt: policy.offer.acceptedAt, ruleVersion: policy.offer.ruleVersion });
+      assert.deepEqual(capture.inputs.payment, { paymentId: payment.id, operation: 'premium', amount: policy.premium,
+        currency: 'COP', intentKey: 'initial-premium', intentHash: payment.hash,
+        status: capture.rule.id === 'premium.refunded' ? 'refunded' : 'confirmed', providerReference: 'MOCK-' + payment.id });
+      assert.equal(JSON.stringify(capture).includes(policy.clientId), false);
+      assert.equal(JSON.stringify(capture).includes(policy.subjectToken), false);
+    }
+    assert.deepEqual(captures[0].sources.map(source => [source.operation, source.result]), [['lookup', 'unknown'], ['settle', 'confirmed']]);
+    assert.equal(captures[1].inputs.refundReason, scenario === 'signature_refused' ? 'signature_refused' : 'expired_during_final_transaction');
+    assert.deepEqual(captures[1].sources.map(source => [source.operation, source.result]), [['sign', scenario === 'signature_refused' ? 'failed' : 'signed']]);
+    assert.deepEqual(captures[2].sources.map(source => [source.operation, source.result, source.reference]),
+      [['lookup', 'confirmed', 'MOCK-' + payment.id], ['refund', 'refunded', 'MOCK-' + payment.id]]);
+    const captured = JSON.stringify(captures);
+    policy.offer.premium = '1.0000';
+    if (policy.offer.coverage.kind === 'mortgage_life') policy.offer.coverage.sumInsured = '1.0000';
+    payment.amount = '1.0000';
+    assert.equal(JSON.stringify(captures), captured, 'later projection or fixture mutation cannot rewrite decision evidence');
   }
 });
 
