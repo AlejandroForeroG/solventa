@@ -1,0 +1,662 @@
+{
+  "description": "Agreed corpus for the simulated signal providers, format version 1 of each. Every case runs in CI through the provider adapter: a valid answer must become the canonical signal and every other answer must fail with its normalized code.",
+  "providers": {
+    "direct": [
+      {
+        "name": "income_obligations_12m-valid",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": 450000000,
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 12,
+              "asOf": "2026-09-30T05:00:00Z"
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "income_obligations_12m",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "monthlyIncomeCop": 4500000,
+              "monthlyObligationsCop": 1200000
+            }
+          }
+        }
+      },
+      {
+        "name": "payment_history_score-valid",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "consulta": {
+              "puntaje": 742,
+              "moras12m": 0,
+              "fechaConsulta": "2026-09-30"
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "payment_history_score",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "score": 742,
+              "latePayments12m": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "affiliation_regime-valid",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "fechaCorte": "2026-09-30",
+            "afiliaciones": [
+              {
+                "subsistema": "PENSION",
+                "regimen": "RAIS",
+                "estado": "ACTIVO"
+              },
+              {
+                "subsistema": "SALUD",
+                "regimen": "CONTRIBUTIVO",
+                "estado": "ACTIVO"
+              }
+            ]
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "affiliation_regime",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "regime": "contributory",
+              "active": true
+            }
+          }
+        }
+      },
+      {
+        "name": "identity_validation-valid",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estadoCedula": "VIGENTE",
+            "fechaConsulta": "2026-09-30T05:00:00Z"
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "identity_validation",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "documentValid": true
+            }
+          }
+        }
+      },
+      {
+        "name": "inactive-affiliation-is-reported",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "fechaCorte": "2026-09-30",
+            "afiliaciones": [
+              {
+                "subsistema": "SALUD",
+                "regimen": "SUBSIDIADO",
+                "estado": "RETIRADO"
+              }
+            ]
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "affiliation_regime",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "regime": "subsidized",
+              "active": false
+            }
+          }
+        }
+      },
+      {
+        "name": "cancelled-document-is-reported",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estadoCedula": "CANCELADA_POR_MUERTE",
+            "fechaConsulta": "2026-09-30T05:00:00Z"
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "identity_validation",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "documentValid": false
+            }
+          }
+        }
+      },
+      {
+        "name": "income-period-is-not-12-months",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": 450000000,
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 6,
+              "asOf": "2026-09-30T05:00:00Z"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "income-amount-as-text",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": "450000000",
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 12,
+              "asOf": "2026-09-30T05:00:00Z"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "income-timestamp-without-zone",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": 450000000,
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 12,
+              "asOf": "2026-09-30T05:00:00"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "score-out-of-scale",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "consulta": {
+              "puntaje": 1200,
+              "moras12m": 0,
+              "fechaConsulta": "2026-09-30"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "health-affiliation-missing",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "fechaCorte": "2026-09-30",
+            "afiliaciones": [
+              {
+                "subsistema": "PENSION",
+                "regimen": "RAIS",
+                "estado": "ACTIVO"
+              }
+            ]
+          }
+        },
+        "expected": {
+          "failure": "not_found"
+        }
+      },
+      {
+        "name": "unknown-regime",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "fechaCorte": "2026-09-30",
+            "afiliaciones": [
+              {
+                "subsistema": "SALUD",
+                "regimen": "toString",
+                "estado": "ACTIVO"
+              }
+            ]
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "document-not-registered",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estadoCedula": "NO_REGISTRA",
+            "fechaConsulta": "2026-09-30T05:00:00Z"
+          }
+        },
+        "expected": {
+          "failure": "not_found"
+        }
+      },
+      {
+        "name": "unknown-document-state",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estadoCedula": "EN_TRAMITE",
+            "fechaConsulta": "2026-09-30T05:00:00Z"
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "empty-body",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": null
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "credentials-rejected",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 401,
+          "body": {
+            "error": "invalid_client",
+            "message": "client secret expired"
+          }
+        },
+        "expected": {
+          "failure": "unauthorized"
+        }
+      },
+      {
+        "name": "subject-unknown",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 404,
+          "body": {
+            "mensaje": "Usuario no encontrado"
+          }
+        },
+        "expected": {
+          "failure": "not_found"
+        }
+      },
+      {
+        "name": "rate-limited",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 429,
+          "body": {}
+        },
+        "expected": {
+          "failure": "rate_limited"
+        }
+      },
+      {
+        "name": "provider-down",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 503,
+          "body": "Service Unavailable"
+        },
+        "expected": {
+          "failure": "unavailable"
+        }
+      },
+      {
+        "name": "unexpected-status",
+        "scope": "identity_validation",
+        "response": {
+          "status": 302,
+          "body": null
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      }
+    ],
+    "aggregator": [
+      {
+        "name": "income_obligations_12m-valid",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "bancolombia",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "ingresos_promedio_mensual": 4500000,
+              "obligaciones_mensuales": 1200000
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "income_obligations_12m",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "monthlyIncomeCop": 4500000,
+              "monthlyObligationsCop": 1200000
+            }
+          }
+        }
+      },
+      {
+        "name": "payment_history_score-valid",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "datacredito",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "score": 742,
+              "moras_ultimos_12_meses": 0
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "payment_history_score",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "score": 742,
+              "latePayments12m": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "affiliation_regime-valid",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "ruaf",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "regimen_salud": "C",
+              "afiliado_activo": true
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "affiliation_regime",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "regime": "contributory",
+              "active": true
+            }
+          }
+        }
+      },
+      {
+        "name": "identity_validation-valid",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "registraduria",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "cedula_vigente": true
+            }
+          }
+        },
+        "expected": {
+          "signal": {
+            "scope": "identity_validation",
+            "capturedAt": "2026-09-30T05:00:00.000Z",
+            "data": {
+              "documentValid": true
+            }
+          }
+        }
+      },
+      {
+        "name": "no-data-for-subject",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "SIN_DATOS",
+            "fuente": "datacredito"
+          }
+        },
+        "expected": {
+          "failure": "not_found"
+        }
+      },
+      {
+        "name": "source-failed-behind-aggregator",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "ERROR_FUENTE",
+            "fuente": "ruaf",
+            "detalle": "timeout RUAF"
+          }
+        },
+        "expected": {
+          "failure": "unavailable"
+        }
+      },
+      {
+        "name": "unknown-state",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "PARCIAL",
+            "fuente": "registraduria",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "cedula_vigente": true
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "answer-from-another-source",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "datacredito",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "ingresos_promedio_mensual": 4500000,
+              "obligaciones_mensuales": 1200000
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "missing-result",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "bancolombia",
+            "fecha_corte": "2026-09-30T00:00:00-05:00"
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "negative-income",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "bancolombia",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "ingresos_promedio_mensual": -1,
+              "obligaciones_mensuales": 0
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "unknown-regime-code",
+        "scope": "affiliation_regime",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "ruaf",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "regimen_salud": "X",
+              "afiliado_activo": true
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "validity-as-text",
+        "scope": "identity_validation",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "registraduria",
+            "fecha_corte": "2026-09-30T00:00:00-05:00",
+            "resultado": {
+              "cedula_vigente": "true"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "unreadable-cutoff-date",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "datacredito",
+            "fecha_corte": "30/09/2026",
+            "resultado": {
+              "score": 742,
+              "moras_ultimos_12_meses": 0
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "credentials-rejected",
+        "scope": "identity_validation",
+        "response": {
+          "status": 403,
+          "body": {
+            "error": "forbidden"
+          }
+        },
+        "expected": {
+          "failure": "unauthorized"
+        }
+      },
+      {
+        "name": "rate-limited",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 429,
+          "body": null
+        },
+        "expected": {
+          "failure": "rate_limited"
+        }
+      },
+      {
+        "name": "provider-down",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 500,
+          "body": {
+            "error": "internal"
+          }
+        },
+        "expected": {
+          "failure": "unavailable"
+        }
+      }
+    ]
+  }
+}

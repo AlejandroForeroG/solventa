@@ -4,7 +4,7 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The minimum-data quote (`POST /api/v1/quotes`) is implemented; profiling, Open Finance, fallback, offers and asynchronous refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The minimum-data quote (`POST /api/v1/quotes`) is implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Profiling, real provider access, stored signal copies, offers and asynchronous refresh require implementation.
 
 ## Minimum-data quote
 
@@ -56,6 +56,72 @@ npm run test:quotes:sql   # real local SQL for both actors; requires npm run inf
 The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in session cookie or a partner token.
 
 **Limits.** Authenticated browser and M2M quote journeys require separate environment verification; local stand-ins, contracts and builds do not establish real provider access. For M2M, verify valid creation/replay, changed-payload conflicts and denied revoked or out-of-scope credentials, checking that rejected requests create no quote, audit or outbox record. Use dedicated synthetic credentials and revoke them after verification; never alter another operator's integration credential. Each quote adds one Identity call to the critical path, so performance must be measured through the complete authenticated path. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
+
+## External integrations
+
+Every external format is translated in an adapter; the domain, use cases and ports only see internal models. Replacing a provider changes an adapter and configuration, never `src/domain` or `src/application`. The shared rule and the integrations that are not implemented yet are in [architecture](../../architecture.md#external-integrations); the schemas and corpus are described in [contracts](../../shared/contracts/README.md#integration-schemas-and-corpus).
+
+### Signal providers
+
+`ReadSignal` (`src/application/read-signal.ts`) reads a signal through the `SignalProvider` port (`src/application/ports/signal-sources.ts`) after the [consent check](../identity-consent-ecosystem/consent.md#guard-in-acquisition). Two adapters implement the port:
+
+| `SIGNAL_PROVIDER` | Adapter | External model (format version 1) |
+|---|---|---|
+| `direct_simulated` | `src/adapters/outbound/direct-signal-provider.ts` | Each source answers in its own format: Open Finance (Bancolombia) amounts in COP cents, Datacrédito Experian score, RUAF affiliations per subsystem, Registraduría document status |
+| `aggregator_simulated` | `src/adapters/outbound/aggregator-signal-provider.ts` | One aggregator returns every source in a common envelope with its own state codes, amounts in whole pesos |
+
+Both are **simulated**: their source returns fixed synthetic answers for one fictitious person and never reaches a real provider. They exist to keep the core independent of any provider format; a real provider adds a source (HTTP client) and an entry in `src/adapters/outbound/signal-providers.ts`, and the configuration value selects it.
+
+Every adapter produces the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
+
+| Scope | `data` |
+|---|---|
+| `income_obligations_12m` | `monthlyIncomeCop`, `monthlyObligationsCop` (whole pesos) |
+| `payment_history_score` | `score` (0 to 1000), `latePayments12m` |
+| `affiliation_regime` | `regime` (`contributory`, `subsidized` or `special`), `active` |
+| `identity_validation` | `documentValid` |
+
+`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. DANE statistics are aggregated public data outside the consent and are not a signal scope.
+
+**Failures.** Provider payloads are untrusted. Each adapter applies a 700 ms deadline, cancels the call when it expires and rejects only with `ProviderFailure`, whose code is one of:
+
+| Code | Cause |
+|---|---|
+| `timeout` | No answer within the deadline |
+| `unavailable` | 5xx, a transport error or a provider state reporting its own source failure |
+| `rate_limited` | 429 |
+| `unauthorized` | 401 or 403 |
+| `not_found` | 404 or a provider state reporting no data for the subject |
+| `invalid_response` | Any other status, or a body that does not match the provider format |
+
+Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` does not use the code: any failure falls back to a stored copy (`degraded`) or `unavailable`, as documented in the consent guide.
+
+**Configuration.** `SIGNAL_PROVIDER` is a variable in `backend/acquisition-risk/wrangler.jsonc`, read only in `src/index.ts`. Every environment, prod included, uses `direct_simulated`, so signal data is synthetic everywhere. `ReadSignal` has no route yet; meanwhile `infraStatus` reports the configured `signalProvider` and is not ready when the value is unknown, so a misconfigured deployment fails its verification. Changing provider is a one-line change of this value.
+
+### ACORD Life inspired quote messages
+
+`src/adapters/inbound/acord-life-quote.ts` translates a partner's quote request in Solventa's ACORD Life inspired format to the internal `QuoteRequest`, and a quote result back to an ACORD response. This is a synthetic subset with its own versioned schemas, not the licensed ACORD standard.
+
+| Function | Direction |
+|---|---|
+| `readAcordQuoteRequest(message)` | ACORD request to the `CreateQuote` body. It checks the envelope only: `schemaVersion` `1`, `TransType` `QuoteRequest`, currency `COP` and product `MORTGAGE_LIFE`; unknown properties are ignored |
+| `acordFieldErrors(errors)` | Domain validation errors with the ACORD path the partner sent, for example `credit.amount` to `TXLifeRequest.Holding.Loan.LoanAmt` |
+| `writeAcordQuoteResponse(result)` | A created or replayed quote to an ACORD response |
+| `writeAcordFailure(errors, traceId)` | Rejection reasons to an ACORD response, with paths and codes but never the submitted values |
+
+| ACORD field | Internal field |
+|---|---|
+| `Party.FullName`, `GovtIDTC`, `GovtID`, `BirthDate`, `City` | `customer.fullName`, `documentType`, `documentNumber`, `birthDate`, `city` |
+| `Holding.Policy.ProductCode` `MORTGAGE_LIFE` | `product` `vida_hipotecario` |
+| `Holding.Loan.LoanNumber`, `LoanAmt`, `LoanTermMonths` | `credit.partnerCreditId`, `amount`, `termMonths` |
+
+Field rules (age, formats, amount and term ranges) stay in `src/domain/quote.ts`. The translator is not mounted on a route: a partner endpoint for ACORD needs its OpenAPI specification, contract tests and versioning, and must use the partner channel (`POST /api/v1/quotes` credentials), never the web session.
+
+**Verification.**
+
+```sh
+npm run test:integrations   # both provider corpora, failures and logs, deadline, configuration and the ACORD corpus
+```
 
 ## Documents
 
