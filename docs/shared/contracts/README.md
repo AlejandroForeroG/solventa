@@ -59,6 +59,9 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
 | `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
+| `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
+| `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |
+| `examples/signal-providers.json` | Agreed corpus of answers from each simulated signal provider format, checked by `tests/signal-providers.test.ts` |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
@@ -97,9 +100,11 @@ Set its `deprecatedAt` and `sunset` in `apiVersions`; in **every** spec in its d
 npm run lint:openapi     # Redocly checks all .yaml files in openapi/
 npm run test:contracts   # Versioning, registry/spec agreement, capture schema and responses of quotes and access probes against their schemas
 npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
+npm run test:integrations # Provider and ACORD corpora through their adapters
+npm run test:financial   # Synthetic financial HTTP/event contracts and integrity boundaries
 ```
 
-All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+All five run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
 
 ## Consumer contracts (Pact)
 
@@ -145,6 +150,27 @@ Run `npm run pact:update` only for an intentional contract change, never to make
 Pact protects only what a consumer test declares. A new API call in the SPA without its consumer test is not detected, so add the test in the same change as the call.
 
 To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test and its name in `verifiedProviders` (`tests/pact/support/pact-files.ts`); the guard test fails for a pact whose provider is not listed there. Specify only the fields the consumer reads and use matchers for values that vary.
+
+## Integration schemas and corpus
+
+External formats are boundary contracts too. Each one has a versioned schema or a documented format version, and an agreed corpus that runs in `npm run test:integrations` (part of `npm run check`) through the real adapter. A corpus case states the input and its exact expected result: the internal model, or the normalized errors.
+
+| Contract | Version | Adapter | What the corpus checks |
+|---|---|---|---|
+| ACORD Life inspired quote request and response | Schemas `v1`; message field `schemaVersion: "1"` | `backend/acquisition-risk/src/adapters/inbound/acord-life-quote.ts` | The schema verdict, the translated `QuoteRequest` or the errors with ACORD paths, and responses that validate against the response schema |
+| Direct signal sources and signal aggregator | Format version 1 of each provider | `backend/acquisition-risk/src/adapters/outbound/direct-signal-provider.ts`, `aggregator-signal-provider.ts` | Valid answers become the canonical signal; every other answer fails with its normalized code and one log line |
+
+The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
+
+The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Their external payment, signature and oracle protocols are explicit mocks; their owner SQL, event authentication and recovery checks do not establish a real provider integration. Neither a `ReadSignal` route nor an ACORD endpoint is enabled by publishing a schema or corpus.
+
+To change an integration contract:
+
+1. Update the schema (or the provider format version) and its adapter in the same change.
+2. Add corpus cases for the new behavior, valid and negative. Never delete or weaken a case to make the suite pass; a case only changes with an intentional contract change.
+3. Run `npm run test:integrations` and `npm run check`.
+
+To add a provider, add its adapter and corpus section, and register its `SIGNAL_PROVIDER` value; the core and the port do not change. Integrations that are not implemented yet are listed in [architecture](../../architecture.md#external-integrations).
 
 ## Historical capture
 

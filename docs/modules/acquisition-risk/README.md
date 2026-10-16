@@ -4,7 +4,7 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented; profiling, Open Finance, fallback, offers and asynchronous refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the separate explicit financial mock mode described below. Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
 
 ## Anonymous indicative calculator
 
@@ -75,7 +75,7 @@ The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in
 
 ## Definitive synthetic offers
 
-The existing calculator and saved minimum-data quote remain preliminary. Creating an offer does not change their meaning. The explicit academic offer rule runs only with `FINANCIAL_PROVIDER_MODE=mock`, an environment-specific `FINANCIAL_EVENT_KEY` of at least 32 characters, and local/dev/staging. Production and missing configuration fail closed. The simulated sources are external adapters; ownership, current consent, underwriting, persistence, historical capture and idempotency execute in Solventa. These offers do not establish approved actuarial terms or real insurance coverage.
+The existing calculator and saved minimum-data quote remain preliminary. Creating an offer does not change their meaning. The explicit academic offer rule runs only with `FINANCIAL_PROVIDER_MODE=mock`, an environment-specific `FINANCIAL_EVENT_KEY` of exactly 64 lowercase hexadecimal characters, and local/dev/staging. Production and missing configuration fail closed. The simulated sources are external adapters; ownership, current consent, underwriting, persistence, historical capture and idempotency execute in Solventa. These offers do not establish approved actuarial terms or real insurance coverage.
 
 | Route | Web operation and behavior |
 |---|---|
@@ -91,6 +91,76 @@ The immutable offer carries its premium, coverage, effective dates, expiry and r
 The explicit `academic-mortgage-1` rule requires verified identity, active affiliation, payment score at least 600 and monthly obligations no higher than 50% of monthly income. A score of at least 750 with obligations no higher than 30% applies a 10% discount to the existing provisional monthly premium. All calculations use integer units before the established four-decimal money representation. The offer expires within 15 minutes, capped by the quote and current consent expiry. Accepted and declined underwriting captures preserve the actual normalized source inputs/timestamps and rule version with the owner's audit/outbox; a decline does not create a definitive offer. The independent `academic-flight-1` fixture uses a verified mock schedule, a COP 10,000.0000 premium, COP 100,000.0000 indemnity at 180 minutes of delay and a one-day coverage window. These values are versioned academic fixtures, not source-approved commercial tariffs.
 
 After acceptance, resolve the policy through the [Policy flow](../policy-claims-payments/README.md#financial-http-flow). The [offers OpenAPI](../../../packages/contracts/openapi/v1/offers.yaml), [event schema](../../../packages/contracts/schemas/financial-event.v1.json) and [synthetic examples](../../../packages/contracts/examples/financial.json) describe the boundaries. Example signatures are deliberately invalid and never authenticate a message. Additive offer migrations and runtime grants are prerequisites; resource/secret provisioning and a real browser/Queue/SQL acceptance check are separate from builds. Unit and HTTP checks run in `npm run test:financial`; SQL checks run in `npm run test:offers:sql`.
+
+## External integrations
+
+The financial offer flow above retains its own `MockRiskSignals` and `MockFlightSchedule` fixtures. `SIGNAL_PROVIDER` does not select or replace those financial fixtures. Its direct/aggregator translators are separate adapters for the internal `ReadSignal` capability and configuration diagnostics; neither `ReadSignal` nor the ACORD translator is mounted on a public route. No adapter here connects to a real signal, payment, signature or oracle provider.
+
+Every external format is translated in an adapter; the domain, use cases and ports only see internal models. Replacing a provider changes an adapter and configuration, never `src/domain` or `src/application`. The shared rule and the integrations that are not implemented yet are in [architecture](../../architecture.md#external-integrations); the schemas and corpus are described in [contracts](../../shared/contracts/README.md#integration-schemas-and-corpus).
+
+### Signal providers
+
+`ReadSignal` (`src/application/read-signal.ts`) reads a signal through the `SignalProvider` port (`src/application/ports/signal-sources.ts`) after the [consent check](../identity-consent-ecosystem/consent.md#guard-in-acquisition). Two adapters implement the port:
+
+| `SIGNAL_PROVIDER` | Adapter | External model (format version 1) |
+|---|---|---|
+| `direct_simulated` | `src/adapters/outbound/direct-signal-provider.ts` | Each source answers in its own format: Open Finance (Bancolombia) amounts in COP cents, Datacrédito Experian score, RUAF affiliations per subsystem, Registraduría document status |
+| `aggregator_simulated` | `src/adapters/outbound/aggregator-signal-provider.ts` | One aggregator returns every source in a common envelope with its own state codes, amounts in whole pesos |
+
+Both are **simulated**: their source returns fixed synthetic answers for one fictitious person and never reaches a real provider. They exist to keep the core independent of any provider format; a real provider adds a source (HTTP client) and an entry in `src/adapters/outbound/signal-providers.ts`, and the configuration value selects it.
+
+**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. Simulated providers are the intended source in every environment, so the first deployed flow that consumes either of these two adapters, such as profiling, must make both simulated sources dynamic before relying on them. The current synthetic financial flow uses its separate, explicitly versioned fixture adapters instead. Each one then selects a deterministic synthetic persona from the subject token (for example good payer, late payer, no health affiliation, unknown subject, failing source), so the same subject always gets the same answer and different subjects get different profiles and failures. Only the simulated sources change; the translators, the port and the core stay as they are, and the corpus gains a case per persona.
+
+The direct and aggregator adapters produce the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
+
+| Scope | `data` |
+|---|---|
+| `income_obligations_12m` | `monthlyIncomeCop`, `monthlyObligationsCop` (whole pesos) |
+| `payment_history_score` | `score` (0 to 1000), `latePayments12m` |
+| `affiliation_regime` | `regime` (`contributory`, `subsidized` or `special`), `active` |
+| `identity_validation` | `documentValid` |
+
+`capturedAt` is the provider's cut-off as a UTC instant; a provider date without time is midnight in Bogotá. An impossible date or time, such as `2026-02-30` or `24:00`, is an `invalid_response`, never rolled over to another day. Unknown state codes (affiliation, document, aggregator state) are also `invalid_response`. DANE statistics are aggregated public data outside the consent and are not a signal scope.
+
+**Failures.** Provider payloads are untrusted. Each adapter applies a 700 ms deadline, cancels the call when it expires and rejects only with `ProviderFailure`, whose code is one of:
+
+| Code | Cause |
+|---|---|
+| `timeout` | No answer within the deadline |
+| `unavailable` | 5xx, a transport error or a provider state reporting its own source failure |
+| `rate_limited` | 429 |
+| `unauthorized` | 401 or 403 |
+| `not_found` | 404 or a provider state reporting no data for the subject |
+| `invalid_response` | Any other status, or a body that does not match the provider format |
+
+Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` does not use the code: any failure falls back to a stored copy (`degraded`) or `unavailable`, as documented in the consent guide.
+
+**Configuration.** `SIGNAL_PROVIDER` is a variable in `backend/acquisition-risk/wrangler.jsonc`, read only in `src/index.ts`. Every environment, prod included, uses `direct_simulated`, so signal data is synthetic everywhere. `ReadSignal` has no route yet; meanwhile `infraStatus` reports the configured `signalProvider` and is not ready when the value is unknown, so a misconfigured deployment fails its verification. Changing provider is a one-line change of this value.
+
+### ACORD Life inspired quote messages
+
+`src/adapters/inbound/acord-life-quote.ts` translates a partner's quote request in Solventa's ACORD Life inspired format to the internal `QuoteRequest`, and a quote result back to an ACORD response. This is a synthetic subset with its own versioned schemas, not the licensed ACORD standard.
+
+| Function | Direction |
+|---|---|
+| `readAcordQuoteRequest(message)` | ACORD request to the `CreateQuote` body. It checks the envelope only: `schemaVersion` `1`, `TransType` `QuoteRequest`, currency `COP` and product `MORTGAGE_LIFE`. A missing envelope field is `required`; another value is `unsupported_version`, `unsupported_transaction`, `unsupported_currency` or `unsupported_product`. Unknown properties are ignored |
+| `acordFieldErrors(errors)` | Domain validation errors with the ACORD path the partner sent, for example `credit.amount` to `TXLifeRequest.Holding.Loan.LoanAmt` |
+| `writeAcordQuoteResponse(result)` | A created or replayed quote to an ACORD response |
+| `writeAcordFailure(errors, traceId)` | Rejection reasons to an ACORD response, with paths and codes but never the submitted values |
+
+| ACORD field | Internal field |
+|---|---|
+| `Party.FullName`, `GovtIDTC`, `GovtID`, `BirthDate`, `City` | `customer.fullName`, `documentType`, `documentNumber`, `birthDate`, `city` |
+| `Holding.Policy.ProductCode` `MORTGAGE_LIFE` | `product` `vida_hipotecario` |
+| `Holding.Loan.LoanNumber`, `LoanAmt`, `LoanTermMonths` | `credit.partnerCreditId`, `amount`, `termMonths` |
+
+Field rules (age, formats, amount and term ranges) stay in `src/domain/quote.ts`. The translator is not mounted on a route: a partner endpoint for ACORD needs its OpenAPI specification, contract tests and versioning, and must use the partner channel (`POST /api/v1/quotes` credentials), never the web session.
+
+**Verification.**
+
+```sh
+npm run test:integrations   # both provider corpora, failures and logs, deadline, configuration, a core that names no provider, and the ACORD corpus
+```
 
 ## Documents
 

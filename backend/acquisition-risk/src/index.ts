@@ -10,6 +10,7 @@ import { SqlQuoteStore } from './adapters/outbound/sql-quote-store';
 import { createOffers } from './adapters/outbound/offer-composition';
 import { FinancialOutboxPublisher } from './adapters/outbound/financial-outbox-publisher';
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
+import { signalProviderFor } from './adapters/outbound/signal-providers';
 
 // Composition root: platform wiring and operational probes stay outside the core.
 export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string }> {
@@ -43,6 +44,8 @@ export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?
     let identity = false;
     try { const target = await this.env.IDENTITY_SERVICE.liveness(); identity = target.service === 'identity-consent-ecosystem' && target.environment === this.env.APP_ENV; } catch {}
     const database = probe.ready && probe.databaseName === `solventa_${this.env.APP_ENV}`;
-    return { service: 'acquisition-risk', environment: this.env.APP_ENV, databaseName: probe.databaseName, ready: database && identity, database, databaseCode: probe.code, identity };
+    // ReadSignal has no route yet; this check keeps an unknown SIGNAL_PROVIDER from deploying unnoticed.
+    const signalProvider = signalProviderFor(this.env.SIGNAL_PROVIDER) ? this.env.SIGNAL_PROVIDER : null;
+    return { service: 'acquisition-risk', environment: this.env.APP_ENV, databaseName: probe.databaseName, ready: database && identity && signalProvider !== null, database, databaseCode: probe.code, identity, signalProvider };
   }
 }

@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "acord-life-quote-response.v1",
+  "title": "ACORD Life inspired quote response v1",
+  "description": "Answer to an ACORD Life inspired quote request: the quote, or the reasons it was refused. A synthetic subset, not the licensed ACORD standard. Consumers must ignore unknown properties.",
+  "type": "object",
+  "required": ["schemaVersion", "TXLifeResponse"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "TXLifeResponse": {
+      "type": "object",
+      "required": ["TransType", "TransRefGUID", "TransResult"],
+      "properties": {
+        "TransType": { "const": "QuoteResponse" },
+        "TransRefGUID": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "Trace identifier of the request." },
+        "TransResult": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["ResultCode", "Replayed"],
+              "properties": {
+                "ResultCode": { "const": "Success" },
+                "Replayed": { "type": "boolean", "description": "True when the same idempotency key returned an existing quote." }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["ResultCode", "ResultInfo"],
+              "properties": {
+                "ResultCode": { "const": "Failure" },
+                "ResultInfo": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["ResultInfoCode", "PropertyPath"],
+                    "properties": {
+                      "ResultInfoCode": { "enum": ["required", "invalid_type", "invalid_format", "age_out_of_range", "amount_out_of_range", "term_out_of_range", "unsupported_product", "unsupported_version", "unsupported_transaction", "unsupported_currency"] },
+                      "PropertyPath": { "type": "string", "description": "Path in the request message, never the submitted value." },
+                      "Params": { "type": "object", "additionalProperties": { "type": "number" } }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Quote": {
+          "type": "object",
+          "required": ["QuoteNumber", "ProductCode", "ModalPremiumAmt", "PaymentMode", "FaceAmt", "TermMonths", "CurrencyTypeCode", "ExpirationDate", "RateVersion", "QuoteBasis"],
+          "properties": {
+            "QuoteNumber": { "type": "string", "minLength": 1 },
+            "ProductCode": { "const": "MORTGAGE_LIFE" },
+            "ModalPremiumAmt": { "type": "integer", "minimum": 0, "description": "Premium per payment period in whole pesos." },
+            "PaymentMode": { "const": "Monthly" },
+            "FaceAmt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Sum insured in whole pesos." },
+            "TermMonths": { "type": "integer", "minimum": 12, "maximum": 240 },
+            "CurrencyTypeCode": { "const": "COP" },
+            "ExpirationDate": { "type": "string", "format": "date-time" },
+            "RateVersion": { "type": "string", "minLength": 1 },
+            "QuoteBasis": { "const": "MinimumData" }
+          }
+        }
+      },
+      "if": { "properties": { "TransResult": { "type": "object", "properties": { "ResultCode": { "const": "Success" } } } } },
+      "then": { "required": ["Quote"] },
+      "else": { "not": { "required": ["Quote"] } }
+    }
+  }
+}

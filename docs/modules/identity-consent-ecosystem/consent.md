@@ -60,7 +60,7 @@ The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it d
 
 `subjectToken` is the internal pseudonymous identifier of the actor already authorized by the caller. `consent_invalid` means the stored record no longer matches its seal. The check is never cached, and the caller treats every `allowed: false` the same way: no source and no copy.
 
-`traceId` is optional and carries the initiating UUID into a security rejection record. Missing, revoked, expired or altered-seal consent, and invalid consent-check input, create a fixed `consent_use` security audit/outbox record before returning the denial. The security record contains the decision/correlation UUIDs and a canonical cause; it does not copy the subject, raw scope or consent contents. If this required record fails, verification returns `allowed:false, reason:unavailable`. Technical verification failures remain unavailable without a generic security event. See [security recording and optional delivery](../../security.md#durable-rejection-records). A foreign/missing HTTP consent revoke still returns opaque 404 and does not create a generic security decision.
+`traceId` is optional and carries the initiating UUID into a security rejection record. Missing, revoked, expired or altered-seal consent, and invalid consent-check input, create a fixed `consent_use` security audit/outbox record before returning the denial. The security record contains the decision/correlation UUIDs and a canonical cause; it does not copy the subject, raw scope or consent contents. If this required record fails, verification returns `allowed:false, reason:unavailable`. Technical verification failures remain unavailable without a generic security event. See [security recording and optional delivery](../../security.md#durable-rejection-records). A foreign/missing HTTP consent revoke records its minimal resource denial before the opaque 404, as described above.
 
 SQL rejection-record failures emit `security_denial_persistence_failed` with a fixed `connect` or `write` phase and an allowlisted technical error code. Unknown metadata becomes `unexpected_error`; exception messages, SQL details and request values are omitted. This diagnostic does not claim that either record committed.
 
@@ -76,7 +76,7 @@ Acquisition reaches a source or a stored copy of its data only through `ReadSign
 | Allowed, provider answers | Called | Not read | `available` |
 | Allowed, provider fails | Called | Read | `degraded` if the copy was captured under this same valid consent, otherwise `unavailable` |
 
-The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it, and the real provider adapter replaces the simulated one used in tests.
+The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
 
 ## Operation
 
