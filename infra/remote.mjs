@@ -45,6 +45,12 @@ async function verifyResources(api) {
   if (!config.ssl.ca) throw Error('Remote TLS verification requires DATABASE_CA_FILE');
   const expectedCA = caFingerprint(config.ssl.ca);
   const verifiedCAs = new Set();
+  if (environment !== 'prod') {
+    const queues = await api('/queues?page=1&per_page=100');
+    for (const name of [`solventa-financial-events-${environment}`, `solventa-financial-events-dlq-${environment}`]) {
+      assert.ok(queues.some(queue => queue.queue_name === name), 'Provision the financial queue before deployment');
+    }
+  }
   for (const owner of owners) {
     const worker = JSON.parse(await readFile(`backend/${owner.name}/wrangler.jsonc`, 'utf8'));
     assert.equal(worker.account_id, account);
@@ -123,7 +129,7 @@ async function deploy(api) {
   }
   // Targets must exist before a consumer binds to them.
   for (const name of ['identity-consent-ecosystem', 'policy-claims-payments', 'acquisition-risk']) {
-    const authSecrets = name === 'identity-consent-ecosystem' ? ['--secrets-file', `infra/.local/identity.${environment}.secrets.json`] : [];
+    const authSecrets = ['--secrets-file', `infra/.local/${name === 'identity-consent-ecosystem' ? 'identity' : 'financial'}.${environment}.secrets.json`];
     wrangler(['deploy', '--config', `backend/${name}/wrangler.jsonc`, '--env', environment, ...authSecrets]);
   }
   wrangler(['deploy', '--config', 'apps/web/wrangler.jsonc', '--env', environment, '--secrets-file', path]);

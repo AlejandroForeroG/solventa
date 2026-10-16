@@ -1,6 +1,6 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write';
+export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -15,10 +15,10 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
+const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
-const webUserOperations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write'];
+const webUserOperations: readonly ApiOperation[] = operations;
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
 const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;

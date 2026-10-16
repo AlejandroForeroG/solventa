@@ -20,8 +20,10 @@ import { WorkosMobileAuthentication } from './adapters/outbound/workos-mobile-au
 import { MobileSessions } from './application/mobile-sessions';
 import { RegisteredDevices } from './application/registered-devices';
 import { SqlRegisteredDevices } from './adapters/outbound/registered-devices';
+import { authorizeFinancialAccess } from './application/financial-access';
 import { SecurityDecisions } from './application/security-decisions';
 import { SqlSecurityDecisions } from './adapters/outbound/sql-security-decisions';
+import { denyResourceAccess } from './application/resource-access-denials';
 import { publishSecurityAlerts } from './application/security-alerts';
 import { SqlSecurityAlertOutbox } from './adapters/outbound/security-alert-outbox';
 import { CloudflareEmailDelivery } from './adapters/outbound/cloudflare-security-alerts';
@@ -76,12 +78,12 @@ async function dispatchSecurityAlerts(env: ConsentEnv) {
   }
 }
 
-function consentsFor(env: ConsentEnv) {
+function consentsFor(env: ConsentEnv, audit = true) {
   return new Consents({
     store: new SqlConsents(env.IDENTITY_DB.connectionString),
     platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
     integrity: new HmacIntegrity(env.CONSENT_SEAL_KEY ?? ''),
-    security: securityFor(env),
+    security: audit ? securityFor(env) : undefined,
   });
 }
 
@@ -103,7 +105,10 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         sessions: new MobileSessions(new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)),
       } : null,
     }).fetch(request, this.env, this.ctx);
-    if (response.status === 401 || response.status === 403) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    const url = new URL(request.url);
+    const consentResourceDenial = (response.status === 404 && /^\/api\/v1\/consents\/[^/]+\/revoke$/.test(url.pathname))
+      || (response.status === 200 && url.pathname === '/api/v1/consents' && url.searchParams.has('after'));
+    if (response.status === 401 || response.status === 403 || consentResourceDenial) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return response;
   }
   async scheduled() { await dispatchSecurityAlerts(this.env); }
@@ -117,6 +122,17 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
     const decision = await consentsFor(this.env).verify(request);
     if (!decision.allowed) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return decision;
+  }
+  async authorizeFinancialAccessV1(request: unknown) {
+    const decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input),
+      verifyConsent: input => consentsFor(this.env, false).verify(input), security: securityFor(this.env) }, request);
+    if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return decision;
+  }
+  async denyResourceAccessV1(request: unknown) {
+    const result = await denyResourceAccess(securityFor(this.env), request);
+    if (result.recorded) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return result;
   }
   async infraStatus() {
     const probe = await databaseProbe(this.env.IDENTITY_DB.connectionString);

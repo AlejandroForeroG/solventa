@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa identity access
-  version: 1.0.1
+  version: 1.1.0
   description: >
     Permission probes for partner integrations and authenticated web users. These endpoints do not
     create quotes or grant consent. Before returning a 401 or 403 authorization denial, Identity
@@ -154,8 +154,8 @@ components:
           type: array
           items:
             type: string
-            enum: [quotes:create]
-          description: Operation allowed by the web user policy for the user's own principal. It does not represent consent.
+            enum: [quotes:create, consents:read, consents:write, offers:create, offers:create-flight, offers:read, offers:accept, policies:read, policies:issue]
+          description: Explicit operation allowed by the web user policy for the user's own principal. The public access probe still checks only quotes:create. Financial operations use the private combined access RPC and owner checks. Permission does not represent consent.
     PartnerAccess:
       type: object
       required: [actor, traceId]
