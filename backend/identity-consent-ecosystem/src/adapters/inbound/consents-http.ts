@@ -64,6 +64,13 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
       } catch (error) {
         console.error(JSON.stringify({ event: 'consent_failed', traceId, code: safeCode(error) }));
         return reply({ error: 'access_unavailable' }, 503);
+      } finally {
+        // Revocation and early denials do not consume a body; finish its transport before the binding responds.
+        if (c.req.raw.body && !c.req.raw.bodyUsed) {
+          await c.req.raw.body.cancel().catch(() => {
+            console.error(JSON.stringify({ event: 'consent_body_cancel_failed', traceId, code: 'request_body_unavailable' }));
+          });
+        }
       }
     };
   }
