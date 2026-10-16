@@ -67,8 +67,22 @@ test('offer creation uses one authorization, real Origin and server-derived acto
   const body = await contractual(response, 'offers', 'Offer');
   assert.ok(!('clientId' in body) && !('subjectToken' in body));
   assert.deepEqual(calls.map(c => c.operation), ['authorize', 'create']);
-  assert.deepEqual(calls[0].input, { kind: 'web', operation: 'offers:create', traceId, cookie: 'synthetic-sealed', origin: 'https://web.example', method: 'POST' });
+  assert.deepEqual(calls[0].input, { kind: 'web', operation: 'offers:create', traceId, cookie: 'synthetic-sealed', origin: 'https://web.example', method: 'POST', requestOrigin: 'https://web.example' });
   assert.deepEqual(calls[1].input, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
+});
+
+test('financial authorization binds Origin to the actual destination for primary and retained hosts', async () => {
+  for (const host of ['https://dev.solventa.site', 'https://solventa-web-dev.ja-forerog1.workers.dev']) {
+    for (const policyRoute of [false, true]) {
+      const {calls, run} = setup({allowed:false,status:403,error:'forbidden'});
+      const path = policyRoute ? `/policies/${id}/issue` : '/quotes/COT-2026-00001/offers';
+      const req = new Request(host + '/api/v1' + path, {method:'POST',body:'{}',headers:{origin:'https://foreign.invalid'}});
+      assert.equal((await run(req, policyRoute)).status,403);
+      assert.equal((calls[0].input as {requestOrigin:string}).requestOrigin,host);
+      assert.equal((calls[0].input as {origin:string}).origin,'https://foreign.invalid');
+      assert.equal(calls.length,1);
+    }
+  }
 });
 
 test('all financial writes reject client-selected money, actor or approval without calling business logic', async () => {
