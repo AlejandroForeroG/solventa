@@ -56,6 +56,7 @@
           {
             "max_retries": 5,
             "max_batch_size": 10,
+            "max_batch_timeout": 1,
             "dead_letter_queue": "solventa-financial-events-dlq-dev",
             "queue": "solventa-financial-events-dev"
           }
@@ -87,6 +88,7 @@
           {
             "max_retries": 5,
             "max_batch_size": 10,
+            "max_batch_timeout": 1,
             "dead_letter_queue": "solventa-financial-events-dlq-staging",
             "queue": "solventa-financial-events-staging"
           }
@@ -129,6 +131,7 @@
       {
         "max_retries": 5,
         "max_batch_size": 10,
+            "max_batch_timeout": 1,
         "dead_letter_queue": "solventa-financial-events-dlq-local",
         "queue": "solventa-financial-events-local"
       }
