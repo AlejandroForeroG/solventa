@@ -1,5 +1,6 @@
 import type { Principal } from '../../backend/identity-consent-ecosystem/src/application/authentication';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../backend/identity-consent-ecosystem/src/application/ports/consents';
+import { ConsentCursorNotOwned } from '../../backend/identity-consent-ecosystem/src/application/ports/consents';
 import type { Consent } from '../../backend/identity-consent-ecosystem/src/domain/consent';
 import { statusOf } from '../../backend/identity-consent-ecosystem/src/domain/consent';
 
@@ -40,7 +41,8 @@ export class MemoryConsents implements ConsentStore {
     const newest = (a: Consent, b: Consent) => b.grantedAt.getTime() - a.grantedAt.getTime() || a.id.localeCompare(b.id);
     const ordered = owned.sort(newest);
     const anchor = after === undefined ? -1 : ordered.findIndex(c => c.consentCode === after);
-    return after !== undefined && anchor === -1 ? [] : ordered.slice(anchor + 1, anchor + 1 + limit);
+    if (after !== undefined && anchor === -1) throw new ConsentCursorNotOwned();
+    return ordered.slice(anchor + 1, anchor + 1 + limit);
   }
 
   async revoke(principal: Principal, consentCode: string, now: Date): Promise<RevokeResult> {

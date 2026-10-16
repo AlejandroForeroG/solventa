@@ -1,6 +1,10 @@
 import type { Consent } from '../../domain/consent';
 import type { Principal } from '../authentication';
 
+export class ConsentCursorNotOwned extends Error {
+  constructor() { super('consent_cursor_not_owned'); }
+}
+
 export type NewConsent = Omit<Consent, 'consentCode' | 'revokedAt'> & {
   subjectToken: string;
   idempotencyKey: string;

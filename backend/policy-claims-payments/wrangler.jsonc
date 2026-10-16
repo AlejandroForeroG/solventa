@@ -21,7 +21,8 @@
   },
   "account_id": "803fd559877aae8f638140610f106857",
   "vars": {
-    "APP_ENV": "local"
+    "APP_ENV": "local",
+    "FINANCIAL_PROVIDER_MODE": "mock"
   },
   "hyperdrive": [
     {
@@ -35,42 +36,105 @@
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "dev"
+        "APP_ENV": "dev",
+        "FINANCIAL_PROVIDER_MODE": "mock"
       },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
           "id": "2e62599bd8ea401092bd70c45b124af2"
         }
-      ]
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-dev"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "max_retries": 5,
+            "max_batch_size": 10,
+            "max_batch_timeout": 1,
+            "dead_letter_queue": "solventa-financial-events-dlq-dev",
+            "queue": "solventa-financial-events-dev"
+          }
+        ]
+      }
     },
     "staging": {
       "name": "solventa-policy-claims-payments-staging",
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "staging"
+        "APP_ENV": "staging",
+        "FINANCIAL_PROVIDER_MODE": "mock"
       },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
           "id": "9eab620dc2654d4c823128fb884f0664"
         }
-      ]
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-staging"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "max_retries": 5,
+            "max_batch_size": 10,
+            "max_batch_timeout": 1,
+            "dead_letter_queue": "solventa-financial-events-dlq-staging",
+            "queue": "solventa-financial-events-staging"
+          }
+        ]
+      }
     },
     "prod": {
       "name": "solventa-policy-claims-payments-prod",
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
-        "APP_ENV": "prod"
+        "APP_ENV": "prod",
+        "FINANCIAL_PROVIDER_MODE": "disabled"
       },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
           "id": "0821ea6b041445ce976921a4c28f07b5"
         }
-      ]
+      ],
+      "services": [
+        {
+          "binding": "IDENTITY_SERVICE",
+          "service": "solventa-identity-consent-ecosystem-prod"
+        }
+      ],
+      "queues": {
+        "consumers": []
+      }
     }
+  },
+  "services": [
+    {
+      "binding": "IDENTITY_SERVICE",
+      "service": "solventa-identity-consent-ecosystem-local"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "max_retries": 5,
+        "max_batch_size": 10,
+            "max_batch_timeout": 1,
+        "dead_letter_queue": "solventa-financial-events-dlq-local",
+        "queue": "solventa-financial-events-local"
+      }
+    ]
   }
 }
