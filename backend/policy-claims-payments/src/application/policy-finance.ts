@@ -50,7 +50,8 @@ export class PolicyFinance {
     if (policy.status === 'issued') {
       if (!signature || signature.documentHash !== policy.documentHash
         || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash]), signature.receipt))
-        || !iso(signature.signedAt) || !signature.timeSeal || !eventWithinIssuedCoverage(signature.signedAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)
+        || !iso(signature.signedAt) || Date.parse(signature.signedAt) >= Date.parse(offer.expiresAt)
+        || !signature.timeSeal || !eventWithinIssuedCoverage(signature.signedAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)
         || !(await this.deps.integrity.verify(issuanceTimeContent(policy.id, policy.documentHash, signature.signedAt), signature.timeSeal))
         || !premium || premium.status !== 'confirmed') return reject('integrity_violation');
     }
@@ -140,30 +141,35 @@ export class PolicyFinance {
       if (!plan.payment) throw new Error('financial_plan_unavailable');
       const payment = plan.payment;
       const refund = async (): Promise<FinancialResult> => {
-        const completed = await this.deps.store.transaction(async tx => {
+        const refundPlan = await this.deps.store.transaction(async tx => {
           const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
           if (policy.status === 'issued') {
-            const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result); return result;
+            const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result); return { completed: result, payment: null };
           }
           if (policy.status === 'refunded') return reject('signature_failed');
           if (policy.status !== 'charged' && policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
+          const premium = await tx.payment(policy.id, 'premium');
+          if (!premium || premium.status !== 'confirmed') return reject('integrity_violation');
+          await this.checkPayment(premium, policy);
           if (policy.status !== 'refunding') {
             await tx.setPolicyStatus(policy.id, 'refunding');
             await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId);
           }
-          return null;
+          return { completed: null, payment: premium };
         });
-        if (completed) return { status: 'ok', replayed: true, policy: completed };
-        const known = await this.deps.payments.lookup(payment);
-        if (!payment.providerReference || known.reference !== payment.providerReference
+        if (refundPlan.completed) return { status: 'ok', replayed: true, policy: refundPlan.completed };
+        const refundPayment = refundPlan.payment;
+        if (!refundPayment) throw new Error('financial_refund_intent_missing');
+        const known = await this.deps.payments.lookup(refundPayment);
+        if (!refundPayment.providerReference || known.reference !== refundPayment.providerReference
           || (known.status !== 'confirmed' && known.status !== 'refunded')) return reject('integrity_violation');
-        const refunded = await this.deps.payments.refund(payment);
+        const refunded = await this.deps.payments.refund(refundPayment);
         if (refunded.status !== 'refunded') throw new Error('financial_refund_uncertain');
         await this.deps.store.transaction(async tx => {
           const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
           if (policy.status === 'refunded') return;
           if (policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
-          await tx.setPaymentStatus(payment.id, 'refunded', refunded.reference);
+          await tx.setPaymentStatus(refundPayment.id, 'refunded', refunded.reference);
           await tx.setPolicyStatus(policy.id, 'refunded');
           await tx.audit('premium.refunded', policy.id, traceId, 'refunded', policy.clientId);
         });
@@ -205,7 +211,7 @@ export class PolicyFinance {
         || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', input.policyId, input.documentHash]), signature.receipt))) {
         return refund();
       }
-      return this.deps.store.transaction(async tx => {
+      const final = await this.deps.store.transaction(async tx => {
         const policy = await this.checked(tx, await tx.policy(input.policyId), input.actor);
         if (policy.status === 'refunded' || policy.status === 'refunding') return reject('signature_failed');
         if (policy.status !== 'issued') {
@@ -214,6 +220,11 @@ export class PolicyFinance {
           if (existing && existing.documentHash !== input.documentHash) return reject('document_mismatch');
           if (!existing) {
             const signedAt = this.deps.now().toISOString();
+            if (Date.parse(signedAt) >= Date.parse(policy.offer.expiresAt)) {
+              await tx.setPolicyStatus(policy.id, 'refunding');
+              await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId);
+              return null;
+            }
             await tx.recordSignature(policy.id, input.documentHash, signature.receipt, signedAt,
               await this.deps.integrity.digest(issuanceTimeContent(policy.id, input.documentHash, signedAt)));
           }
@@ -223,8 +234,9 @@ export class PolicyFinance {
         }
         const result = view(policy);
         await tx.finishCommand(input.actor.clientId, commandKey, result);
-        return { status: 'ok', replayed: plan.replayed, policy: result };
+        return { status: 'ok' as const, replayed: plan.replayed, policy: result };
       });
+      return final ?? refund();
     });
   }
 

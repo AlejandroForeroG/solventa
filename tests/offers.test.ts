@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { OfferService } from '../backend/acquisition-risk/src/application/offer-service';
-import type { AcceptedOffer, AcceptanceEvent, OfferStore, StoredOffer } from '../backend/acquisition-risk/src/application/ports/offer-store';
-import type { OfferActor, OfferQuote } from '../backend/acquisition-risk/src/domain/offer';
+import type { AcceptedOffer, AcceptanceEvent, OfferStore, StoredOffer, StoredOfferRequest } from '../backend/acquisition-risk/src/application/ports/offer-store';
+import { offerRequestIdentity, type OfferActor, type OfferQuote } from '../backend/acquisition-risk/src/domain/offer';
 import { HmacOfferIntegrity, acceptanceContent } from '../backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
 import { MockRiskSignals, MockFlightSchedule } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
 import { eventContent, isOfferEnvelope } from '../backend/policy-claims-payments/src/domain/financial';
@@ -16,15 +16,22 @@ const authorization = { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: 
 const quote: OfferQuote = { id: randomUUID(), quoteId: 'COT-2026-00001', amount: 320000000, termMonths: 180, ageYears: 35, validUntil: '2026-11-01T12:00:00.000Z' };
 class MemoryOffers implements OfferStore {
   rows = new Map<string, StoredOffer>(); keys = new Map<string, StoredOffer>(); accepted = new Map<string, AcceptedOffer>(); events: AcceptanceEvent[] = [];
-  declines = 0; rejected: string[] = [];
+  declines = 0; rejected: string[] = []; rejectionDetails: { traceId: string; operation: string }[] = []; requests = new Map<string, StoredOfferRequest>();
+  async request(a: OfferActor, key: string) { return this.requests.get(a.clientId + key) ?? null; }
   async quote(a: OfferActor, id: string) { return a.clientId === actor.clientId && a.subjectToken === actor.subjectToken && id === quote.quoteId ? quote : null; }
   async byKey(a: OfferActor, key: string) { return this.keys.get(a.clientId + key) ?? null; }
   async get(a: OfferActor, id: string) { const r = this.rows.get(id); return r?.terms.clientId === a.clientId && r.terms.subjectToken === a.subjectToken ? r : null; }
   async create(i: Parameters<OfferStore['create']>[0]) {
-    const existing = this.keys.get(i.actor.clientId + i.key); if (existing) return { created: false, offer: existing };
-    this.rows.set(i.offer.terms.offerId, structuredClone(i.offer)); this.keys.set(i.actor.clientId + i.key, i.offer); return { created: true, offer: i.offer };
+    const existing = this.requests.get(i.actor.clientId + i.key); if (existing) return { created: false, request: existing };
+    const request: StoredOfferRequest = { actor: i.actor, requestIdentity: i.requestIdentity, outcome: 'accepted', offer: i.offer };
+    this.rows.set(i.offer.terms.offerId, structuredClone(i.offer)); this.keys.set(i.actor.clientId + i.key, i.offer); this.requests.set(i.actor.clientId + i.key, request);
+    return { created: true, request };
   }
-  async decline() { this.declines++; }
+  async decline(i: Parameters<OfferStore['decline']>[0]) {
+    const existing = this.requests.get(i.actor.clientId + i.key); if (existing) return { created: false, request: existing };
+    const request: StoredOfferRequest = { actor: i.actor, requestIdentity: i.requestIdentity, outcome: 'declined' };
+    this.requests.set(i.actor.clientId + i.key, request); this.declines++; return { created: true, request };
+  }
   async acceptance(a: OfferActor, key: string) { return this.accepted.get(a.clientId + key) ?? null; }
   async accept(i: Parameters<OfferStore['accept']>[0]): ReturnType<OfferStore['accept']> {
     const previous = this.accepted.get(i.actor.clientId + i.key);
@@ -32,7 +39,7 @@ class MemoryOffers implements OfferStore {
     if ([...this.accepted.values()].some(x => x.offerId === i.acceptance.offerId)) return { status: 'conflict' };
     this.accepted.set(i.actor.clientId + i.key, i.acceptance); this.events.push(i.event); return { status: 'created', acceptance: i.acceptance };
   }
-  async reject(_a: OfferActor, _id: string, _trace: string, reason: string) { this.rejected.push(reason); }
+  async reject(_a: OfferActor, _id: string, traceId: string, reason: string, operation = 'offer.accept') { this.rejected.push(reason); this.rejectionDetails.push({ traceId, operation }); }
 }
 function fixture() {
   let now = new Date('2026-10-16T10:00:00.000Z');
@@ -137,13 +144,59 @@ test('changing lookup ownership cannot transfer an offer whose sealed owner is a
   // Simulate altered lookup columns; the financial terms and their valid HMAC still name the victim.
   f.store.get = async () => victim;
   f.store.byKey = async () => victim;
-  const read = await f.service.get({ actor: other, offerId: victim.terms.offerId });
+  const read = await f.service.get({ actor: other, offerId: victim.terms.offerId, traceId: randomUUID() });
   assert.equal(read.status, 'integrity_invalid'); assert.equal('offer' in read, false);
   assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'victim-offer', traceId: randomUUID() })).status, 'conflict');
   assert.equal((await f.service.accept({ actor: other, offerId: victim.terms.offerId, idempotencyKey: 'foreign-accept', traceId: randomUUID() })).status, 'integrity_invalid');
   assert.equal(f.store.accepted.size, 0); assert.equal(f.store.events.length, 0);
   // A concurrent insert winner must be checked too, not only the initial lookup.
   f.store.byKey = async () => null;
-  f.store.create = async () => ({ created: false, offer: victim });
+  f.store.create = async () => ({ created: false, request: { actor: other, requestIdentity: offerRequestIdentity('flight_delay', flightReference), outcome: 'accepted', offer: victim } });
   assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'race', traceId: randomUUID() })).status, 'conflict');
+});
+
+test('a declined first outcome replays without reading changed sources and rejects another request with the same key', async () => {
+  const f = fixture(), original = f.deps.provider.read.bind(f.deps.provider);
+  f.deps.provider.read = async (s, scope, t) => scope === 'income_obligations_12m'
+    ? { scope, capturedAt: f.deps.clock.now().toISOString(), data: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 5000000 } } : original(s, scope, t);
+  assert.equal((await f.service.create(f.command)).status, 'declined');
+  f.deps.provider.read = async () => { throw Error('replay must not call changed providers'); };
+  assert.equal((await f.service.create(f.command)).status, 'declined');
+  assert.equal((await f.service.create({ ...f.command, quoteId: 'COT-2026-00002' })).status, 'conflict');
+  assert.equal((await f.service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: f.command.idempotencyKey, traceId: randomUUID() })).status, 'conflict');
+  assert.equal(f.store.declines, 1); assert.equal(f.store.rows.size, 0); assert.equal(f.store.requests.size, 1);
+});
+
+test('concurrent accepted and declined underwriting share one first outcome', async () => {
+  for (const declineFirst of [true, false]) {
+    const f = fixture(), original = f.deps.provider.read.bind(f.deps.provider);
+    const declined = new OfferService({ ...f.deps, provider: { read: async (s, scope, t) => scope === 'income_obligations_12m'
+      ? { scope, capturedAt: f.deps.clock.now().toISOString(), data: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 5000000 } } : original(s, scope, t) } });
+    const create = f.store.create.bind(f.store), decline = f.store.decline.bind(f.store);
+    let release!: () => void; const firstWritten = new Promise<void>(resolve => { release = resolve; });
+    f.store.create = async i => { if (declineFirst) await firstWritten; const result = await create(i); if (!declineFirst) release(); return result; };
+    f.store.decline = async i => { if (!declineFirst) await firstWritten; const result = await decline(i); if (declineFirst) release(); return result; };
+    const results = await Promise.all([f.service.create(f.command), declined.create(f.command)]);
+    assert.equal(f.store.requests.size, 1);
+    if (declineFirst) { assert.deepEqual(results.map(r => r.status), ['declined', 'declined']); assert.equal(f.store.rows.size, 0); assert.equal(f.store.declines, 1); }
+    else { assert.deepEqual(results.map(r => r.status), ['created', 'replayed']); assert.equal(f.store.rows.size, 1); assert.equal(f.store.declines, 0); }
+  }
+});
+
+test('offers created before the request ledger retain their original key and sealed ownership', async () => {
+  const f = fixture(), created = await f.service.create(f.command); assert.equal(created.status, 'created');
+  f.store.requests.clear();
+  f.deps.provider.read = async () => { throw Error('legacy replay must not call sources'); };
+  assert.equal((await f.service.create(f.command)).status, 'replayed');
+  assert.equal((await f.service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: f.command.idempotencyKey, traceId: randomUUID() })).status, 'conflict');
+});
+
+test('reading altered sealed terms records the read trace and fails unavailable if the audit cannot persist', async () => {
+  const f = fixture(), created = await f.service.create(f.command); if (created.status !== 'created') throw Error('unreachable');
+  f.store.rows.get(created.offer.offerId)!.terms.premium = '1.0000';
+  const traceId = randomUUID(), read = await f.service.get({ actor, offerId: created.offer.offerId, traceId });
+  assert.equal(read.status, 'integrity_invalid'); assert.equal('offer' in read, false);
+  assert.deepEqual(f.store.rejectionDetails, [{ traceId, operation: 'offer.read' }]);
+  f.store.reject = async () => { throw Error('audit unavailable'); };
+  assert.equal((await f.service.get({ actor, offerId: created.offer.offerId, traceId: randomUUID() })).status, 'unavailable');
 });

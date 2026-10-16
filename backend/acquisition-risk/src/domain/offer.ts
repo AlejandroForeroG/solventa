@@ -3,6 +3,9 @@ import type { Signal } from './signal';
 
 export const UNDERWRITING_VERSION = 'academic-mortgage-1';
 export const OFFER_TTL_MS = 15 * 60 * 1000;
+export function offerRequestIdentity(product: 'vida_hipotecario' | 'flight_delay', sourceReference: string): string {
+  return JSON.stringify([product, sourceReference]);
+}
 export type OfferActor = { clientId: string; subjectToken: string };
 export type OfferAuthorization = { consentId: string; textVersion: number; expiresAt: string };
 export type OfferQuote = { id: string; quoteId: string; amount: number; termMonths: number; ageYears: number; validUntil: string };
