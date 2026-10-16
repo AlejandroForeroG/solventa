@@ -50,12 +50,12 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
   function route(operation: 'consents:read' | 'consents:write', handler: Handler) {
     return async (c: Context<{ Bindings: IdentityEnv }>) => {
       const supplied = c.req.header('X-Trace-Id') ?? '';
-      const traceId = UUID.test(supplied) ? supplied : crypto.randomUUID();
+      const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: object, status: Status) => c.json({ ...body, traceId }, status, { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
       try {
         if (c.req.header('Authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
         const decision = await deps.authorizeApiAccess({
-          kind: 'web', operation, method: c.req.method, origin: c.req.header('Origin') ?? '',
+          kind: 'web', operation, requestOrigin: new URL(c.req.url).origin, method: c.req.method, origin: c.req.header('Origin') ?? '', traceId,
           cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? ''
         });
         if (!decision.allowed) return reply({ error: decision.error }, decision.status);
@@ -64,6 +64,13 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
       } catch (error) {
         console.error(JSON.stringify({ event: 'consent_failed', traceId, code: safeCode(error) }));
         return reply({ error: 'access_unavailable' }, 503);
+      } finally {
+        // Revocation and early denials do not consume a body; finish its transport before the binding responds.
+        if (c.req.raw.body && !c.req.raw.bodyUsed) {
+          await c.req.raw.body.cancel().catch(() => {
+            console.error(JSON.stringify({ event: 'consent_body_cancel_failed', traceId, code: 'request_body_unavailable' }));
+          });
+        }
       }
     };
   }

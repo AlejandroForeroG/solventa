@@ -21,7 +21,7 @@
     "typecheck": "npm run types && npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps backend packages --ignore-pattern **/worker-configuration.d.ts",
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run test:git && npm run architecture:check && npm run test:architecture && npm run test:database && npm run test:environments && npm run test:authentication && npm run test:consents && npm run test:runtime && npm run test:quotes && npm run test:web && npm run test:contracts && npm run test:integrations && npm run test:pact && npm run lint:openapi && npm run lint && npm run typecheck && npm run build && npm run build:remote",
+    "check": "npm run test:git && npm run architecture:check && npm run test:architecture && npm run test:database && npm run test:environments && npm run test:authentication && npm run test:consents && npm run test:security && npm run test:runtime && npm run test:quotes && npm run test:web && npm run test:contracts && npm run test:integrations && npm run test:pact && npm run lint:openapi && npm run lint && npm run typecheck && npm run build && npm run build:remote",
     "infra:up": "node infra/local.mjs up",
     "infra:down": "node infra/local.mjs down",
     "infra:verify": "node infra/database.mjs verify local",
@@ -49,9 +49,9 @@
     "infra:prod:verify": "node infra/remote.mjs verify prod",
     "prepare": "node tools/install-hooks.mjs",
     "test:git": "node --test tools/git-policy.test.mjs tools/promotion-policy.test.mjs",
-    "test:authentication": "tsx --test tests/authentication.test.ts tests/partner-token.test.ts tests/api-access.test.ts tests/api-access-http.test.ts tests/mobile-authentication.test.ts tests/mobile-authentication-http.test.ts tests/biometric-authentication.test.ts tests/registered-devices.test.ts tests/mobile-channel-authentication.test.ts tests/mobile-biometric-authentication.test.ts tests/mobile-localization.test.ts",
+    "test:authentication": "tsx --test tests/authentication.test.ts tests/partner-token.test.ts tests/api-access.test.ts tests/api-access-http.test.ts tests/mobile-authentication.test.ts tests/mobile-authentication-http.test.ts tests/biometric-authentication.test.ts tests/registered-devices.test.ts tests/identity-security.test.ts tests/identity-security-http.test.ts tests/mobile-channel-authentication.test.ts tests/mobile-biometric-authentication.test.ts tests/mobile-localization.test.ts",
     "test:mobile": "tsx --test tests/mobile-channel-authentication.test.ts tests/mobile-biometric-authentication.test.ts tests/mobile-localization.test.ts",
-    "test:runtime": "node --test tests/access-runtime.test.mjs",
+    "test:runtime": "node --test tests/access-runtime.test.mjs tests/security-alert-runtime.test.mjs",
     "test:authentication:sql": "tsx infra/authentication-smoke.mts",
     "lint:openapi": "node tools/lint-openapi.mjs",
     "test:consents": "tsx --test tests/consents.test.ts tests/consents-http.test.ts tests/web-worker-consents.test.ts tests/consent-guard.test.ts",
@@ -61,6 +61,8 @@
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts",
     "test:quotes": "tsx --test tests/quotes.test.ts tests/quote-estimates.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts",
     "test:quotes:sql": "tsx infra/quotes-smoke.mts",
+    "test:security": "tsx --test tests/security-logging.test.ts tests/security-alerts.test.ts tests/security-alert-configuration.test.ts tests/web-security-headers.test.ts",
+    "test:security:sql": "tsx infra/security-alerts-smoke.mts",
     "test:web": "npm run test --workspace @solventa/web",
     "test:pact": "tsx --test tests/pact/*.test.ts",
     "pact:update": "node tools/update-pacts.mjs"
@@ -79,7 +81,7 @@
     "pg": "8.23.1",
     "tsx": "4.23.15",
     "typescript": "~6.0.3",
-    "wrangler": "4.146.0",
+    "wrangler": "4.149.0",
     "yaml": "^2.9.1"
   }
 }

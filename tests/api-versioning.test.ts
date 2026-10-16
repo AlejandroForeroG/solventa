@@ -101,9 +101,9 @@ test('the web Worker keeps answering 404 for an unimplemented version without de
 });
 
 test('access gateway failures preserve valid trace IDs and replace invalid ones', async () => {
-  const validTrace = '50000000-0000-4000-8000-000000000001';
-  for (const trace of [validTrace, 'invalid']) {
-    const response = await worker.fetch(new Request('https://solventa.invalid/api/v1/access/web', { headers: { 'X-Trace-Id': trace } }), {
+  const validTrace = '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47';
+  for (const path of ['/api/v1/access/web', '/api/v1/consents', '/api/v1/mobile/session']) for (const trace of [validTrace, validTrace.toUpperCase(), 'invalid']) {
+    const response = await worker.fetch(new Request('https://solventa.invalid' + path, { headers: { 'X-Trace-Id': trace } }), {
       IDENTITY: { fetch: async () => { throw new Error('unavailable'); } },
     } as WebEnv);
     const body = await response.json() as { error: string; traceId: string };
@@ -111,7 +111,7 @@ test('access gateway failures preserve valid trace IDs and replace invalid ones'
     assert.equal(body.error, 'access_unavailable');
     assert.equal(response.headers.get('x-trace-id'), body.traceId);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    if (trace === validTrace) assert.equal(body.traceId, trace);
+    if (trace.toLowerCase() === validTrace) assert.equal(body.traceId, validTrace);
     else assert.match(body.traceId, /^[0-9a-f-]{36}$/);
   }
 });

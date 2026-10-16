@@ -38,7 +38,7 @@ To change the wording: edit the messages, add the new `textVersion` and fingerpr
 - **Code:** `CNS-YYYY-NNNNN`, readable and unique per year, next to the internal `(id, version)` key. Five digits are the minimum width, not an annual limit: the counter grows through the exact INT8 range, up to 19 digits. Existing five-digit codes remain valid.
 - **Status:** `active`, `revoked` or `expired` is computed from `revoked_at` and `expires_at` on every read; it is not stored, so it cannot go stale.
 - **Panel:** returns at most 50 records per page, newest first with stable ID ordering for equal timestamps. Pass `nextCursor` as `after` until it is null to reach every authorization. Previous/next controls render only the current page; a revocation preserves the anchor. Unknown or foreign cursors return an empty page; malformed cursors return 400. Contract revision 1.1.0 adds optional cursor fields compatibly.
-- **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked.
+- **Revocation:** sets `revoked_at` on the existing revision. A revoked consent stays in the panel, and decisions already taken with it are kept for audit. Revoking twice returns the same record; an expired consent cannot be revoked. The route does not use a request payload. Consent handlers cancel an unused upload before returning, including authorization failures, so a Service Binding cannot continue reading it after the public response finishes. Cancellation failures emit only a fixed technical event and correlation ID; they do not reverse a committed revocation.
 - **Seal:** a keyed hash of the consent content, including the language and the wording fingerprint, shown in the panel so a later change to the record can be detected.
 - **Decline:** "I do not authorize" creates no consent and queries nothing. It leaves only an audit event. The customer keeps the minimum-data estimate; no offer, policy or charge follows. The screen advances only after the refusal is recorded; a failed write offers a retry and outdated terms are reloaded, without granting access.
 - **Audit:** grant, decline, revocation and expiry leave an event without personal data and with the correlation ID.
@@ -51,16 +51,22 @@ Another module that wants to query a source asks Identity, through the Service B
 The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
 
 ```ts
-{ subjectToken, purposeCode: 'risk_profiling', scope }
+{ subjectToken, purposeCode: 'risk_profiling', scope, traceId }
 // { allowed: true, consent: { consentId, textVersion, expiresAt } }
 // { allowed: false, reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' }
 ```
 
 `subjectToken` is the internal pseudonymous identifier of the actor already authorized by the caller. `consent_invalid` means the stored record no longer matches its seal. The check is never cached, and the caller treats every `allowed: false` the same way: no source and no copy.
 
+`traceId` is optional and carries the initiating UUID into a security rejection record. Missing, revoked, expired or altered-seal consent, and invalid consent-check input, create a fixed `consent_use` security audit/outbox record before returning the denial. The security record contains the decision/correlation UUIDs and a canonical cause; it does not copy the subject, raw scope or consent contents. If this required record fails, verification returns `allowed:false, reason:unavailable`. Technical verification failures remain unavailable without a generic security event. See [security recording and optional delivery](../../security.md#durable-rejection-records). A foreign/missing HTTP consent revoke still returns opaque 404 and does not create a generic security decision.
+
+SQL rejection-record failures emit `security_denial_persistence_failed` with a fixed `connect` or `write` phase and an allowlisted technical error code. Unknown metadata becomes `unexpected_error`; exception messages, SQL details and request values are omitted. This diagnostic does not claim that either record committed.
+
 ### Guard in Acquisition
 
 Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. A grant must carry a positive integer text version and an expiry strictly after Acquisition's clock when the reply is received; a consent that expired in transit reaches neither a provider nor a stored copy. This local check adds no remote call. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
+
+`ReadSignal` forwards its initiating `traceId` through the guard and RPC into Identity's required security rejection record. The optional RPC field remains compatible with older callers. The outbound adapter accepts RFC-variant UUID versions 1 through 8, normalizes them to lowercase and omits invalid or missing values; Identity then supplies its safe fallback. Failure to append a required rejection record returns `unavailable` and reaches neither a provider nor a stored copy.
 
 | Consent check | Provider | Stored copy | Result |
 |---|---|---|---|
@@ -90,7 +96,7 @@ Replace `dev` consistently for staging or prod. `secret bulk` publishes a new Wo
 
 ## Limits
 
-- Expiry has no event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the answer does not change: the failure is logged as `consent_expiry_audit_failed` with a short error code and the next read tries again.
+- Expiry has no business outbox event of its own. The `consent.expired` audit event is written once, the first time the panel or a check finds the consent expired. If that write fails, the failure is logged as `consent_expiry_audit_failed` with an allowlisted technical code and the next read tries again. A denied fresh-use check also requires its separate security decision; failure of that required record changes its reason to `unavailable` while continuing to block use.
 - Consent is checked against the actor's subject only; Identity does not read quotes, so `quoteRef` is not validated.
 - No source is queried yet. Real providers, their adapters and the use of the answer belong to the profiling work.
 
@@ -103,7 +109,7 @@ Replace `dev` consistently for staging or prod. `secret bulk` publishes a new Wo
 | Missing key, malformed body or unknown field | 400 |
 | Outdated text, key reused with another request, revoking an expired consent | 409 |
 | Consent of another user | 404, indistinguishable from a missing one |
-| Verification or persistence unavailable | 503; nothing is recorded |
+| Verification or required persistence unavailable | 503; no successful consent mutation or durable rejection record is promised |
 
 ## Verification
 

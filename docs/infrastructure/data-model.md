@@ -18,7 +18,7 @@ Each owner adds `audit_events`, `outbox_events` and `inbox_events`: 29 tables, p
 
 ## Events and permissions
 
-Commit result, audit and outbox in one local transaction. Outbox maintains leases, attempts and availability; mark `published` only after confirming transport. Commit effect and inbox together; UNIQUE(event_id, consumer) deduplicates per consumer. Handlers, Queues, retries, DLQ and reconciliation still require implementation.
+Commit result, audit and outbox in one local transaction. Outbox maintains leases, attempts and availability; mark `published` only after confirming transport. Commit effect and inbox together; UNIQUE(event_id, consumer) deduplicates per consumer. Identity implements a scoped publisher for security-denial events with leases, bounded retries and dead-letter states; its optional email adapter confirms provider acceptance, not inbox delivery. See [security publication](../security.md#alert-publication-and-email-configuration). Business-event handlers, Queues, consumer effects and financial reconciliation still require implementation.
 
 `runtime-grants.json` enumerates owned tables/privileges: no DELETE, DDL, cross-owner access or ledger writes. Audit and inbox are append-only for runtime. Retention/maintenance require an administrative operator. These permissions isolate backends; they do not replace user authorization or consent.
 

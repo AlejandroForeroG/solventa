@@ -4,6 +4,8 @@ import { Authentication } from '../../application/authentication';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
 import type { IdentitySessions } from '../../application/authentication';
+import type { SecurityDecisions } from '../../application/security-decisions';
+import { canonicalSecurityId } from '../../domain/security-decision';
 
 type AuthEnv = { Bindings: IdentityEnv };
 type Attempt = { state: string; codeVerifier: string; expires: number };
@@ -28,12 +30,20 @@ export async function unsealAttempt(value: string, password: string, origin: str
     return attempt;
   } catch { return null; }
 }
-export function configuration(env: IdentityEnv): AuthConfiguration | null {
+export function authenticationOrigins(environment: string): readonly string[] {
+  if (environment === 'local') return ['http://localhost:8787'];
+  const host = environment === 'dev' ? 'dev.solventa.site' : environment === 'staging' ? 'staging.solventa.site' : environment === 'prod' ? 'solventa.site' : null;
+  return host ? [`https://${host}`, `https://solventa-web-${environment}.ja-forerog1.workers.dev`] : [];
+}
+
+export function configuration(env: IdentityEnv, requestOrigin?: string): AuthConfiguration | null {
   if (!env.WORKOS_API_KEY || !env.WORKOS_CLIENT_ID || !env.AUTH_COOKIE_PASSWORD || env.AUTH_COOKIE_PASSWORD.length < 32) return null;
-  const origin = env.AUTH_ORIGIN;
-  const expected = env.APP_ENV === 'local' ? 'http://localhost:8787' : `https://solventa-web-${env.APP_ENV}.ja-forerog1.workers.dev`;
-  if (origin !== expected || env.AUTH_REDIRECT_URI !== origin + '/auth/callback') return null;
-  return { apiKey: env.WORKOS_API_KEY, clientId: env.WORKOS_CLIENT_ID, cookiePassword: env.AUTH_COOKIE_PASSWORD, origin, redirectUri: env.AUTH_REDIRECT_URI, local: env.APP_ENV === 'local' };
+  const origins = authenticationOrigins(env.APP_ENV);
+  if (!origins.includes(env.AUTH_ORIGIN) || env.AUTH_REDIRECT_URI !== env.AUTH_ORIGIN + '/auth/callback') return null;
+  const origin = requestOrigin ?? env.AUTH_ORIGIN;
+  if (!origins.includes(origin)) return null;
+  // Each alias finishes the transaction on the host that owns its OAuth cookie.
+  return { apiKey: env.WORKOS_API_KEY, clientId: env.WORKOS_CLIENT_ID, cookiePassword: env.AUTH_COOKIE_PASSWORD, origin, redirectUri: origin + '/auth/callback', local: env.APP_ENV === 'local' };
 }
 function cookieName(config: AuthConfiguration, attempt = false) { return (config.local ? '' : '__Host-') + (attempt ? 'solventa-oauth' : 'solventa-session'); }
 function writeCookie(c: Context<AuthEnv>, config: AuthConfiguration, value: string, attempt = false) {
@@ -45,18 +55,24 @@ export type AuthenticationCollaborators = {
   sessions(connectionString: string): IdentitySessions;
 };
 
-export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators) {
+export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators, security?: Pick<SecurityDecisions, 'deny'>) {
   app.use('/auth/*', async (c, next) => { c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff'); await next(); });
   app.all('/auth/*', async c => {
-    const config = configuration(c.env);
-    if (!config) return c.json({ error: 'authentication_unavailable' }, 503);
+    if (!configuration(c.env)) return c.json({ error: 'authentication_unavailable' }, 503);
     const url = new URL(c.req.url);
-    if (url.origin !== config.origin) return c.json({ error: 'invalid_origin' }, 400);
+    const config = configuration(c.env, url.origin);
+    if (!config) return c.json({ error: 'invalid_origin' }, 400);
     const path = url.pathname;
     if (!['/auth/login','/auth/callback','/auth/session','/auth/logout'].includes(path)) return c.json({ error: 'not_found' }, 404);
     if (c.req.method !== (path === '/auth/logout' ? 'POST' : 'GET')) return c.json({ error: 'method_not_allowed' }, 405);
     const origins = config.local ? [config.origin, 'http://localhost:5173'] : [config.origin];
-    if (path === '/auth/logout' && !origins.includes(c.req.header('Origin') ?? '')) return c.json({ error: 'invalid_origin' }, 403);
+    const traceId = canonicalSecurityId(c.req.header('X-Trace-Id')) ?? crypto.randomUUID();
+    if (path === '/auth/logout' && !origins.includes(c.req.header('Origin') ?? '')) {
+      try { await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'forbidden' }, traceId); }
+      catch { return c.json({ error: 'authentication_unavailable' }, 503); }
+      c.header('X-Trace-Id', traceId);
+      return c.json({ error: 'invalid_origin' }, 403);
+    }
     try {
       const provider = collaborators.provider(config);
       const application = new Authentication(collaborators.sessions(c.env.IDENTITY_DB.connectionString));
@@ -79,12 +95,19 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
       const verified = cookie ? await provider.authenticate(cookie) : null;
       // A failed refresh from a parallel request must not erase the newer
       // cookie another response has just installed. Invalid cookies grant no access.
-      if (!verified) return c.json({ authenticated: false }, 401);
+      if (!verified) {
+        // Checking an absent browser session is normal anonymous navigation.
+        // A supplied invalid cookie or a denied logout is a protected denial.
+        if (cookie || path === '/auth/logout') {
+          await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'unauthorized' }, traceId);
+          c.header('X-Trace-Id', traceId);
+        }
+        return c.json({ authenticated: false }, 401);
+      }
       if (path === '/auth/logout') {
         // Durable local revocation precedes provider logout. A provider outage
         // cannot make the old cookie usable against Solventa again.
-        const suppliedTrace = c.req.header('X-Trace-Id') ?? '';
-        const correlation = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedTrace) ? suppliedTrace.toLowerCase() : crypto.randomUUID();
+        const correlation = traceId;
         c.header('X-Trace-Id', correlation);
         await application.logout(verified.identity, correlation);
         writeCookie(c, config, '');
@@ -92,7 +115,12 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
         return c.json({ logoutUrl: provider.logoutUrl(verified.identity) });
       }
       const principal = await application.principal(verified.identity);
-      if (!principal) { writeCookie(c, config, ''); return c.json({ authenticated: false }, 401); }
+      if (!principal) {
+        await security?.deny({ category: 'api_access', channel: 'web', operation: 'web:session', cause: 'unauthorized' }, traceId);
+        c.header('X-Trace-Id', traceId);
+        writeCookie(c, config, '');
+        return c.json({ authenticated: false }, 401);
+      }
       if (verified.cookie) writeCookie(c, config, verified.cookie);
       return c.json({ authenticated: true, principal });
     } catch {
