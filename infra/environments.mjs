@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 export const remoteEnvironments = ['dev', 'staging', 'prod'];
+export const publicOrigins = Object.freeze({ dev: 'https://dev.solventa.site', staging: 'https://staging.solventa.site', prod: 'https://solventa.site' });
+export const legacyOrigins = Object.freeze(Object.fromEntries(remoteEnvironments.map(environment => [environment, `https://solventa-web-${environment}.ja-forerog1.workers.dev`])));
 export const account = '803fd559877aae8f638140610f106857';
+export const publicZone = 'a750d13e4cc496c6f26671cf1e8ad099';
 const zero = '00000000000000000000000000000000';
 const services = [
   { name: 'acquisition-risk', binding: 'ACQUISITION_DB' },
@@ -27,6 +30,11 @@ export function validateEnvironments(configs, provisionedEnvironment) {
       assert.equal(target.vars.APP_ENV, environment);
       assert.equal(target.preview_urls, false);
       assert.equal(target.workers_dev, name === 'web');
+      assert.deepEqual(target.routes ?? [], name === 'web' ? [{ pattern: new URL(publicOrigins[environment]).hostname, custom_domain: true, zone_id: publicZone }] : []);
+      if (name === 'identity-consent-ecosystem') {
+        assert.equal(target.vars.AUTH_ORIGIN, publicOrigins[environment]);
+        assert.equal(target.vars.AUTH_REDIRECT_URI, publicOrigins[environment] + '/auth/callback');
+      }
       const expectedServices = name === 'web' ? [
         { binding: 'ACQUISITION', service: `solventa-acquisition-risk-${environment}` },
         { binding: 'IDENTITY', service: `solventa-identity-consent-ecosystem-${environment}` },

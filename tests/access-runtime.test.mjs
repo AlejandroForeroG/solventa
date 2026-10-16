@@ -125,3 +125,50 @@ test('workerd gateway bounds stalled Identity service calls', { timeout: 30000 }
   });
 
 });
+
+test('workerd Identity-first rollout preserves legacy RPC writes before Acquisition sends requestOrigin', { timeout: 30000 }, async t => {
+  // The real composition root, HTTP adapters and access policy run in workerd.
+  // Provider authentication, session lookup and denial persistence are fakes; the SQL driver rejects any accidental query.
+  const stubs = {
+    'workos-authentication': `export class WorkosAuthentication {
+      async authenticate(cookie) { return cookie === 'synthetic-session' ? { identity: { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true } } : null; }
+    }`,
+    'identity-sessions': `export class SqlIdentitySessions {
+      async find() { return { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: '40000000-0000-4000-8000-000000000001' }; }
+    }`,
+    'sql-security-decisions': `export class SqlSecurityDecisions { async append() {} }`,
+    pg: `export class Pool { query() { throw new Error('unexpected_sql_query'); } connect() { throw new Error('unexpected_sql_connection'); } } export class Client extends Pool {}`,
+  };
+  const bundle = await build({
+    entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['cloudflare:workers', 'node:*'],
+    plugins: [{ name: 'synthetic-provider-and-sessions', setup(builder) {
+      builder.onResolve({ filter: /\/(workos-authentication|identity-sessions|sql-security-decisions)$/ }, args => ({ path: args.path.split('/').at(-1), namespace: 'synthetic' }));
+      builder.onResolve({ filter: /^pg$/ }, () => ({ path: 'pg', namespace: 'synthetic' }));
+      builder.onLoad({ filter: /.*/, namespace: 'synthetic' }, args => ({ contents: stubs[args.path], loader: 'js' }));
+    } }],
+  });
+  const canonical = 'https://dev.solventa.site';
+  const legacy = 'https://solventa-web-dev.ja-forerog1.workers.dev';
+  const config = JSON.parse(await readFile('backend/identity-consent-ecosystem/wrangler.jsonc', 'utf8'));
+  const runtime = new Miniflare(convertV4MiniflareOptions({
+    host: '127.0.0.1', port: 0,
+    workers: [
+      { name: 'identity-domain-rollout', modules: true, script: bundle.outputFiles[0].text, compatibilityDate: config.compatibility_date, compatibilityFlags: config.compatibility_flags,
+        bindings: { APP_ENV: 'dev', AUTH_ORIGIN: canonical, AUTH_REDIRECT_URI: canonical + '/auth/callback', WORKOS_API_KEY: 'sk_synthetic', WORKOS_CLIENT_ID: 'client_synthetic', AUTH_COOKIE_PASSWORD: 'a'.repeat(64), IDENTITY_DB: { connectionString: 'postgresql://synthetic.invalid/unused' } } },
+      { name: 'caller', modules: true, compatibilityDate: config.compatibility_date, script: `export default { async fetch(request, env) { return Response.json(await env.IDENTITY.authorizeApiAccessV1(await request.json())); } };`,
+        serviceBindings: { IDENTITY: 'identity-domain-rollout' } },
+    ],
+  }));
+  t.after(() => runtime.dispose());
+  await runtime.ready;
+  const caller = await runtime.getWorker('caller');
+  const authorize = async input => (await caller.fetch('http://caller/authorize', { method: 'POST', body: JSON.stringify({ kind: 'web', cookie: 'synthetic-session', method: 'POST', operation: 'quotes:create', ...input }) })).json();
+
+  assert.equal((await authorize({ origin: legacy })).allowed, true, 'the previous Acquisition release remains authorized after Identity changes AUTH_ORIGIN');
+  assert.deepEqual(await authorize({ origin: canonical }), { allowed: false, error: 'forbidden', status: 403 }, 'old callers do not acquire the canonical alias implicitly');
+  for (const host of [canonical, legacy]) {
+    assert.equal((await authorize({ origin: host, requestOrigin: host })).allowed, true);
+    assert.deepEqual(await authorize({ origin: host === canonical ? legacy : canonical, requestOrigin: host }), { allowed: false, error: 'forbidden', status: 403 });
+  }
+  assert.deepEqual(await authorize({ origin: 'https://staging.solventa.site', requestOrigin: 'https://staging.solventa.site' }), { allowed: false, error: 'forbidden', status: 403 });
+});

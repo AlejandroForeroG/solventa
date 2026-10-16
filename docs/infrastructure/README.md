@@ -77,3 +77,23 @@ Web authentication has its own [guide and limits](../modules/identity-consent-ec
 The optional `SECURITY_ALERT_EMAIL_CONFIG` is restored from the selected GitHub Environment by normal CI/CD, after validating the exact environment/from/to shape and addresses. Its absence explicitly disables Worker email delivery. Keep an authorized per-environment custody copy; do not put addresses in public variables or activate sending through an unrelated manual Worker deployment. Dispatch logs expose only fixed event names and numeric counters; background/cron failures and pending/dead-letter SQL state need operational inspection. Provider acknowledgement is not a mailbox receipt. Follow [CI/CD](ci-cd.md) and the security guide when enabling or disabling this configuration.
 
 References: [Wrangler environments](https://developers.cloudflare.com/workers/wrangler/environments/), [Hyperdrive and TLS](https://developers.cloudflare.com/hyperdrive/configuration/tls-ssl-certificates-for-hyperdrive/), [Service Bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/), [secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
+
+## Public domains
+
+Only the web Worker has a public Custom Domain. The gateway continues to serve `/auth/*`, `/api/v1/*` and `/api/docs/*` on the same origin; backends remain private behind Service Bindings.
+
+| Environment | Canonical origin | Web Worker |
+|---|---|---|
+| dev | `https://dev.solventa.site` | `solventa-web-dev` |
+| staging | `https://staging.solventa.site` | `solventa-web-staging` |
+| prod | `https://solventa.site` | `solventa-web-prod` |
+
+Each web environment declares an exact Wrangler route with `custom_domain: true`. An active owned zone in the configured account is required; Cloudflare provisions DNS/certificates for [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/). Resolve conflicting records explicitly before binding a hostname. Do not attach domains to backends or create a separate API hostname. Keep web `workers_dev: true` during transition and all previews disabled.
+
+Use normal [CI/CD promotion](ci-cd.md), starting with an isolated staging candidate and a separate integration branch when dev contains unrelated work. Register the new exact WorkOS redirects first, preserving previous and native callbacks; follow the [authentication transition](../modules/identity-consent-ecosystem/authentication.md#custom-domain-transition). Domain publication requires zone-scoped routing permission in addition to the Worker deployment permissions. Wrangler 4.146.0 sends a Custom Domain records PUT even when the declared connection already exists; preprovisioning through the dashboard alone does not establish that the existing CD token can publish it. Verify the authorized deployment identity's permissions before publication; do not rotate or broaden credentials automatically.
+
+Deployment writes the canonical URL to `infra/.local/<environment>-endpoint.json`. Smoke checks canonical health, session/login, diagnostics and environment isolation, then canonical and legacy health, session/login callback and API reference/catalog availability. A dry run proves packaging only. Verify TLS, the live reference/JSON, a real login/callback/logout and a protected same-origin operation in dev before promotion; repeat in each released environment. Keep real evidence outside the product repository and exclude callback queries, cookies, tokens and credentials.
+
+Identity-first publication remains compatible with the previous Acquisition version: private web RPC writes without `requestOrigin` keep the exact legacy workers.dev Origin only. Updated HTTP adapters send their actual target origin and can use either same-environment host with strict Origin matching. Do not remove this fallback while older callers may still be deployed. A local workerd composition regression checks this mixed-version window with provider and SQL fakes; it does not prove a live deployment or database operation.
+
+Exact legacy aliases `https://solventa-web-<environment>.ja-forerog1.workers.dev` remain functional. Do not redirect pending OAuth callbacks or transfer cookies between hosts; start a fresh session on the new domain. Mobile and partner operators can migrate their configured API base while legacy callers continue working. Native `solventa://auth/callback` and WorkOS endpoints do not change. Retiring legacy routing/redirects requires a separate compatibility decision after callers and pending transactions have migrated; this change does not disable workers.dev.

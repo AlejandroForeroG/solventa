@@ -115,9 +115,9 @@ test('public estimates do not unlock saved quotes or create Identity credentials
     const response = await app.request(`https://web.example${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }, { APP_ENV: 'dev' } as never);
     assert.equal(response.status, 401);
   }
-  assert.deepEqual(access.calls.map(credential => credential.kind === 'partner'
-    ? { kind: credential.kind, token: credential.token }
-    : { kind: credential.kind, cookie: credential.cookie }),
-  [{ kind: 'partner', token: '' }, { kind: 'web', cookie: '' }], 'protected requests preserve their channel for audited authorization denial');
+  assert.deepEqual(access.calls, [
+    { kind: 'partner', token: '' },
+    { kind: 'web', cookie: '', origin: '', requestOrigin: 'https://web.example', method: 'POST' },
+  ], 'protected quote attempts still reach Identity for a recorded credential denial');
   assert.equal(store.saved.length, 0);
 });

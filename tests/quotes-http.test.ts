@@ -36,7 +36,7 @@ function app() {
 type Http = ReturnType<typeof createHttp>;
 type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; stream?: ReadableStream<Uint8Array>; env?: string };
 const send = (http: Http, path: string, headers: Record<string, string>, init: Init) =>
-  http.request(path, {
+  http.request('https://web.example' + path, {
     method: 'POST',
     headers: { 'idempotency-key': 'key-1', 'content-type': 'application/json', ...headers, ...init.headers },
     body: init.stream ?? init.raw ?? JSON.stringify(init.body ?? base),
@@ -167,7 +167,7 @@ test('partner: valid Bearer values reach Identity while missing or malformed cre
 test('web user: the sealed cookie value, the Origin and the real method are what Identity receives', async () => {
   const { http, access } = app();
   await web(http);
-  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', method: 'POST' });
+  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', requestOrigin: 'https://web.example', method: 'POST' });
 });
 
 test('web user: the cookie name follows Identity (no prefix locally, __Host- elsewhere)', async () => {
@@ -193,7 +193,7 @@ test('web user: missing session cookies reach Identity as empty authorization at
   const { http, access } = app();
   assert.equal((await send(http, '/api/v1/me/quotes', {}, {})).status, 401);
   assert.equal((await send(http, '/api/v1/me/quotes', { cookie: 'other=1' }, {})).status, 401);
-  assert.deepEqual(access.calls, Array.from({ length: 2 }, () => ({ kind: 'web', cookie: '', origin: '', method: 'POST' })));
+  assert.deepEqual(access.calls, Array.from({ length: 2 }, () => ({ kind: 'web', cookie: '', origin: '', requestOrigin: 'https://web.example', method: 'POST' })));
 });
 
 test('access errors keep their difference and match the contract: 401, 403 and 503 with only the canonical code', async () => {
