@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "start": "expo start --localhost",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "expo run:android --no-bundler",
+    "ios": "expo run:ios --no-bundler",
     "web": "expo start --web --localhost",
     "build": "expo export --platform web",
     "lint": "expo lint",
