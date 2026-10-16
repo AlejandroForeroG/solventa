@@ -8,11 +8,13 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+
 | Environment | API reference |
 |---|---|
-| Dev | [OpenAPI viewer](https://solventa-web-dev.ja-forerog1.workers.dev/api/docs/) |
-| Staging | [OpenAPI viewer](https://solventa-web-staging.ja-forerog1.workers.dev/api/docs/) |
-| Prod | [OpenAPI viewer](https://solventa-web-prod.ja-forerog1.workers.dev/api/docs/) |
+| Dev | [OpenAPI viewer](https://dev.solventa.site/api/docs/) |
+| Staging | [OpenAPI viewer](https://staging.solventa.site/api/docs/) |
+| Prod | [OpenAPI viewer](https://solventa.site/api/docs/) |
 | Local | [OpenAPI viewer](http://localhost:8787/api/docs/) after building web and starting the local Workers |
 
 Select a domain/version to inspect its operations, parameters, request/response schemas, examples and security requirements. The responsive reference includes sidebar navigation, search and request/response examples alongside operations. The `spec` query parameter preserves the selected domain/version when reloading or sharing operation links, for example `/api/docs/?spec=v1/quotes`. **OpenAPI JSON** opens the selected bundled specification; `/api/docs/catalog.json` lists available specifications. The viewer identifies its current environment. Relative `servers` URLs refer to that same environment.

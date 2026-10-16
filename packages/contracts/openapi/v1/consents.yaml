@@ -384,7 +384,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ConsentError' }
     Forbidden:
-      description: A write from an origin that is not configured, or an operation outside the web user policy; error is forbidden. The minimal security denial audit and outbox have committed.
+      description: A write whose Origin differs from its actual allowed request origin, including between canonical and legacy aliases, or an operation outside the web user policy; error is forbidden. The minimal security denial audit and outbox have committed.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
         Cache-Control: { $ref: '#/components/headers/NoStore' }

@@ -21,6 +21,16 @@ Logout also revokes native installation bindings owned by that same provider ses
 
 Each environment needs its own WorkOS application, exact Redirect URI, Initiate login URI and Sign-out URI. `AUTH_ORIGIN` and `AUTH_REDIRECT_URI` are in Wrangler. Secrets: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` and `AUTH_COOKIE_PASSWORD` (64 random hexadecimal characters, held separately per environment). Do not share keys. Production requires enabling its WorkOS environment before configuring credentials.
 
+### Custom Domain transition
+
+The canonical origins are `https://dev.solventa.site`, `https://staging.solventa.site` and `https://solventa.site`. Each environment also accepts its exact previous `https://solventa-web-<environment>.ja-forerog1.workers.dev` origin during transition. Arbitrary subdomains, suffixes, HTTP origins, non-default ports and other environments' hosts are rejected. Configuration must use an allowed environment origin and its exact `/auth/callback`; invalid configuration fails closed with 503.
+
+Before publication, register the new exact `https://<host>/auth/callback` Redirect URI, `https://<host>/auth/login` Initiate login URI and `https://<host>/` Sign-out URI in the corresponding WorkOS application. Preserve the previous callback/sign-out URI and native `solventa://auth/callback`; change the default web callback and Initiate login URI to the canonical host after verifying deployment. Follow [WorkOS AuthKit configuration](https://workos.com/docs/authkit/vanilla/nodejs). The AuthKit issuer, audience, client ID, keys and native scheme do not change.
+
+Login, code exchange, OAuth transaction encryption and provider logout use the validated request's own origin. No automatic redirect moves an in-flight callback between aliases. Logout requires that exact Origin, including between aliases in one environment. Cookies remain host-only with the `__Host-` prefix; a workers.dev session does not sign a user into solventa.site. Start a new login on the chosen host. Never broaden cookie Domain or CSRF to all subdomains. The [API authorization guide](api-access.md) describes the corresponding business-write check.
+
+See [public domains](../../infrastructure/README.md#public-domains) for routing and rollout. Configured routes and local builds do not establish DNS, certificate or live OAuth readiness.
+
 In Authentication, enable email/password and Magic Auth; keep social providers disabled until an approved integration exists. The operator's Outlook account does not imply enabling Microsoft as a product provider.
 
 In Branding, use SVGs from `packages/assets/brand`: green logo/icon for light mode and white for dark mode, IBM Plex Sans and System appearance. Light/dark colors: background `#F7F6F3`/`#062F2A`, button/links `#0B6B5F`/`#12D9B8`, button text `#FFFFFF`/`#062F2A`. The editor permits copying branding alone between environments; save and check the actual AuthKit page afterward. Language follows AuthKit localization according to browser preferences.
