@@ -50,7 +50,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         if (c.req.method !== method) { c.header('Allow', method); return reply({ error: 'method_not_allowed' }, 405); }
         if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
         if (!deps) return reply({ error: 'financial_unavailable' }, 503);
-        const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method,
+        const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method, requestOrigin: new URL(c.req.url).origin,
           cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('origin') ?? '' }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]);
         if (!record(decision)) return reply({ error: 'access_unavailable' }, 503);
