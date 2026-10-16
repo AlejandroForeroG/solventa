@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clientId", "redirectUri", "authorizationEndpoint", "tokenEndpoint", "traceId"],
+  "properties": {
+    "clientId": { "type": "string", "pattern": "^client_[a-zA-Z0-9]+$" },
+    "redirectUri": { "type": "string", "enum": ["solventa://auth/callback"] },
+    "authorizationEndpoint": { "type": "string", "enum": ["https://api.workos.com/user_management/authorize"] },
+    "tokenEndpoint": { "type": "string", "enum": ["https://api.workos.com/user_management/authenticate"] },
+    "traceId": { "type": "string", "format": "uuid" }
+  }
+}

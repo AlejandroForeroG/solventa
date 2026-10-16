@@ -3,12 +3,16 @@ import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
 import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
+import { EstimateQuote } from '../../../backend/acquisition-risk/src/application/estimate-quote';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { HmacIntegrity } from '../../../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
 import { Consents } from '../../../backend/identity-consent-ecosystem/src/application/consents';
+import { MobileSessions } from '../../../backend/identity-consent-ecosystem/src/application/mobile-sessions';
+import { RegisteredDevices } from '../../../backend/identity-consent-ecosystem/src/application/registered-devices';
+import { InMemoryDeviceStore } from '../../support/registered-device-store';
 import { unexpectedAuthentication } from '../../support/authentication-fakes';
 import { ANA, MemoryConsents, SEAL_KEY, TRACE, clock } from '../../support/consent-fakes';
 import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
@@ -93,7 +97,7 @@ const activeSessionProvider: AuthenticationCollaborators = {
 // Identity's decision is simulated by the cookie value; its verification is covered by the access suites.
 function realAcquisition(store = new MemoryStore()): Binding {
   const quotes = new CreateQuote({ access: new InMemoryAccess(), store, clock: { now: () => new Date('2026-10-06T15:00:00Z') }, protector });
-  const app = createAcquisitionHttp({ quotes });
+  const app = createAcquisitionHttp({ quotes, estimates: new EstimateQuote() });
   return { fetch: request => Promise.resolve(app.request(request, undefined, { APP_ENV: 'dev' } as AcquisitionEnv)) };
 }
 
@@ -117,8 +121,26 @@ async function acquisitionWithQuote(idempotencyKey: string, cookie: string): Pro
 
 const authorizedCookie = 'sealed-cookie';
 
+function nativeWorld(): Partial<World> {
+  const principal = { clientId: '00000000-0000-4000-8000-000000000001', subjectToken: '00000000-0000-4000-8000-000000000002' };
+  const sessions = new MobileSessions({ register: async () => principal, find: async () => principal, revokeOrBlock: async () => {} });
+  const access = new ApiAccess({ find: async () => null }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
+  const provider = { authenticate: async (token: string) => token === 'synthetic.jwt.token' ? identity : null, revoke: async () => {} };
+  const store = new InMemoryDeviceStore({ observedAt: 60_000,
+    session: { clientActive: true, createdAt: 0, expiresAt: 120_000, revoked: false },
+    bindings: [{ id: principal.clientId, installationId: '00000000-0000-4000-8000-000000000003', revoked: false }] });
+  const app = createIdentityHttp({ authentication: unexpectedAuthentication,
+    authorizeApiAccess: input => authorizeApiAccess({ ...consentAccess, mobile: {
+      authenticate: provider.authenticate, authorize: (verified, operation) => access.mobileUser(verified, operation),
+    } }, input),
+    mobile: { configuration: { clientId: 'client_01M47F52THNNZZZ4WSGACX8KA4', redirectUri: 'solventa://auth/callback' }, provider, sessions },
+    devices: new RegisteredDevices(store) });
+  return { identity: { fetch: request => Promise.resolve(app.request(new Request(origin + new URL(request.url).pathname, request), undefined, identityEnv)) } };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  'a native session with its installation binding': nativeWorld,
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
@@ -129,6 +151,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
     acquisition: await acquisitionWithQuote(parameters?.idempotencyKey ?? '', authorizedCookie),
   }),
   'the quote service is down': () => ({ sessionCookie: authorizedCookie, acquisition: unavailableService }),
+  'the calculator is down': () => ({ acquisition: unavailableService }),
   'a customer ready to authorize consent': () => consentWorld(),
   'a customer with an active consent': () => consentWorld(world => world.grant('seed-key', consentRequestSeed)),
   'a customer with 51 active consents': () => consentWorld(async world => {

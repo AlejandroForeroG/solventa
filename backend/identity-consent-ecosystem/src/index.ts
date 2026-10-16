@@ -18,6 +18,8 @@ import { WorkosPartnerAuthentication } from './adapters/outbound/workos-partner-
 import { configuration } from './adapters/inbound/authentication-http';
 import { WorkosMobileAuthentication } from './adapters/outbound/workos-mobile-authentication';
 import { MobileSessions } from './application/mobile-sessions';
+import { RegisteredDevices } from './application/registered-devices';
+import { SqlRegisteredDevices } from './adapters/outbound/registered-devices';
 
 async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecision> {
   try {
@@ -63,6 +65,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         sessions: connectionString => new SqlIdentitySessions(connectionString),
       },
       consents: consentsFor(this.env),
+      devices: new RegisteredDevices(new SqlRegisteredDevices(this.env.IDENTITY_DB.connectionString)),
       mobile: config ? {
         configuration: { clientId: config.clientId, redirectUri: 'solventa://auth/callback' },
         provider: new WorkosMobileAuthentication({ clientId: config.clientId, apiKey: config.apiKey }),

@@ -15,6 +15,8 @@ Registration commits client, identity link, session, audit and creation event in
 
 ## Configuration and running
 
+Logout also revokes native installation bindings owned by that same provider session, including when a web cookie and native bearer refer to one WorkOS session. Session/device changes, audit and device outbox/capture commit together; persistence failure returns 503 before provider logout or cookie clearing. Both local logout paths repair leftover active bindings on already-revoked sessions without duplicating completed effects. `/auth/logout` keeps its body, cookie and Origin contract; its supplied or generated `X-Trace-Id` correlates the session/device records. See [native installation bindings](mobile-authentication.md#installation-bindings).
+
 Each environment needs its own WorkOS application, exact Redirect URI, Initiate login URI and Sign-out URI. `AUTH_ORIGIN` and `AUTH_REDIRECT_URI` are in Wrangler. Secrets: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` and `AUTH_COOKIE_PASSWORD` (64 random hexadecimal characters, held separately per environment). Do not share keys. Production requires enabling its WorkOS environment before configuring credentials.
 
 In Authentication, enable email/password and Magic Auth; keep social providers disabled until an approved integration exists. The operator's Outlook account does not imply enabling Microsoft as a product provider.
@@ -33,6 +35,6 @@ Tests: `npm run test:authentication` and, with local SQL running, `npm run test:
 
 The [API access foundation](api-access.md) reuses this session to authorize `quotes:create` probes and private RPC calls. `subjectToken` is an internal pseudonymous identifier, not a Bearer credential. Web access depends on the verified session, its local record and the explicit user operation policy, never on a partner credential. Business authorization neither refreshes cookies nor registers sessions; refresh remains in `/auth/session`.
 
-A session grants neither consent, operational permissions nor access to other owners. The [native connection](mobile-authentication.md) accepts user access tokens after mobile PKCE login; its channel implementation needs native secure storage and callback validation. Do not reuse web cookies or server keys. Device tables exist, but biometrics, device registration/revocation and native validation require implementation. A row does not establish biometrics.
+A session grants neither consent, operational permissions nor access to other owners. The [native connection](mobile-authentication.md) accepts user access tokens after mobile PKCE login and implements session-bound installation registration/revocation. Native secure custody and callback validation remain channel responsibilities. Do not reuse web cookies or server keys. Device rows do not establish biometrics; native credential protection and real platform validation remain separate from server session authorization.
 
 See [SQL model](../../infrastructure/data-model.md), [boundaries](../../architecture.md) and [operations](../../infrastructure/README.md).

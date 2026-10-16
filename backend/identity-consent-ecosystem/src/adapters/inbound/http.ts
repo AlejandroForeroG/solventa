@@ -7,13 +7,16 @@ import type { Consents } from '../../application/consents';
 import type { AuthorizeApiAccess } from './api-access-http';
 import { mountMobileAuthentication } from './mobile-authentication-http';
 import type { MobileAuthenticationDependencies } from './mobile-authentication-http';
+import { mountRegisteredDevices } from './registered-devices-http';
+import type { RegisteredDevices } from '../../application/registered-devices';
 
-export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null }) {
+export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null; devices?: RegisteredDevices }) {
   const app = new Hono<{ Bindings: IdentityEnv }>();
   app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'alive' }));
   mountAuthentication(app, deps.authentication);
   mountApiAccess(app, deps.authorizeApiAccess);
   mountMobileAuthentication(app, deps.mobile ?? null, deps.authorizeApiAccess);
+  mountRegisteredDevices(app, deps.mobile ?? null, deps.devices);
   if (deps.consents) mountConsents(app, { authorizeApiAccess: deps.authorizeApiAccess, consents: deps.consents });
   app.onError((_, c) => c.json({ error: 'service_unavailable' }, 503));
   app.notFound((c) => c.json({ error: 'not_found' }, 404));

@@ -14,7 +14,7 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
   for (const path of ['/api/v1/mobile/config', '/api/v1/mobile/session', '/api/v1/access/mobile']) {
     app.all(path, async c => {
       const supplied = c.req.header('X-Trace-Id') ?? '';
-      const traceId = uuid.test(supplied) ? supplied : crypto.randomUUID();
+      const traceId = uuid.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       c.header('X-Trace-Id', traceId);
       c.header('Cache-Control', 'no-store');
       c.header('X-Content-Type-Options', 'nosniff');
@@ -52,7 +52,7 @@ export function mountMobileAuthentication(app: Hono<{ Bindings: IdentityEnv }>, 
         if (!identity) return fail('unauthorized', 401);
         if (c.req.method === 'DELETE') {
           // Local revocation is durable even if provider revocation needs a retry.
-          await dependencies.sessions.revoke(identity);
+          await dependencies.sessions.revoke(identity, traceId);
           await dependencies.provider.revoke(identity);
           return c.json({ status: 'signed_out', traceId });
         }

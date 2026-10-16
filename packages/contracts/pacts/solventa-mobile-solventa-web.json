@@ -1,0 +1,366 @@
+{
+  "consumer": {
+    "name": "solventa-mobile"
+  },
+  "interactions": [
+    {
+      "description": "mobile access",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/access/mobile"
+      },
+      "response": {
+        "body": {
+          "actor": {
+            "channel": "mobile",
+            "kind": "user",
+            "operations": [
+              "quotes:create"
+            ],
+            "principal": {
+              "clientId": "00000000-0000-4000-8000-000000000001",
+              "subjectToken": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile configuration",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/config"
+      },
+      "response": {
+        "body": {
+          "authorizationEndpoint": "https://api.workos.com/user_management/authorize",
+          "clientId": "client_01M47F52THNNZZZ4WSGACX8KA4",
+          "redirectUri": "solventa://auth/callback",
+          "tokenEndpoint": "https://api.workos.com/user_management/authenticate",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile device DELETE",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "DELETE",
+        "path": "/api/v1/mobile/devices/00000000-0000-4000-8000-000000000003"
+      },
+      "response": {
+        "body": {
+          "device": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "installationId": "00000000-0000-4000-8000-000000000003",
+            "status": "revoked"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile device GET",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/devices/00000000-0000-4000-8000-000000000003"
+      },
+      "response": {
+        "body": {
+          "device": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "installationId": "00000000-0000-4000-8000-000000000003",
+            "status": "active"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile device POST",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/devices/00000000-0000-4000-8000-000000000003"
+      },
+      "response": {
+        "body": {
+          "device": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "installationId": "00000000-0000-4000-8000-000000000003",
+            "status": "active"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile inspect",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/session"
+      },
+      "response": {
+        "body": {
+          "channel": "mobile",
+          "principal": {
+            "clientId": "00000000-0000-4000-8000-000000000001",
+            "subjectToken": "00000000-0000-4000-8000-000000000002"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile logout",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "DELETE",
+        "path": "/api/v1/mobile/session"
+      },
+      "response": {
+        "body": {
+          "status": "signed_out",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile register",
+      "providerStates": [
+        {
+          "name": "a native session with its installation binding"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/session"
+      },
+      "response": {
+        "body": {
+          "channel": "mobile",
+          "principal": {
+            "clientId": "00000000-0000-4000-8000-000000000001",
+            "subjectToken": "00000000-0000-4000-8000-000000000002"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "solventa-web"
+  }
+}

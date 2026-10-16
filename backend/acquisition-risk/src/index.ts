@@ -2,6 +2,7 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createHttp } from './adapters/inbound/http';
 import { CreateQuote } from './application/create-quote';
+import { EstimateQuote } from './application/estimate-quote';
 import { databaseProbe } from './adapters/outbound/database-probe';
 import { HmacProtector } from './adapters/outbound/hmac-protector';
 import { IdentityApiAccess } from './adapters/outbound/identity-api-access';
@@ -17,7 +18,7 @@ export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
-    return createHttp({ quotes }).fetch(request, this.env, this.ctx);
+    return createHttp({ quotes, estimates: new EstimateQuote() }).fetch(request, this.env, this.ctx);
   }
   liveness() { return { service: 'acquisition-risk', environment: this.env.APP_ENV }; }
   async infraStatus() {

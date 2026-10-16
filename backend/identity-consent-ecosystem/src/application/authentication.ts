@@ -1,9 +1,9 @@
-export type VerifiedIdentity = { providerSubject: string; sessionReference: string; emailVerified: boolean };
+export type VerifiedIdentity = { providerSubject: string; sessionReference: string; emailVerified: boolean; authenticatedAt?: number };
 export type Principal = { clientId: string; subjectToken: string };
 export interface IdentitySessions {
   open(identity: VerifiedIdentity): Promise<Principal>;
   find(identity: VerifiedIdentity): Promise<Principal | null>;
-  revoke(identity: VerifiedIdentity): Promise<void>;
+  revoke(identity: VerifiedIdentity, correlationId?: string): Promise<void>;
 }
 
 // Only the provider adapter may produce VerifiedIdentity after token validation.
@@ -17,5 +17,5 @@ export class Authentication {
     if (!identity.emailVerified) return null;
     return this.sessions.find(identity);
   }
-  async logout(identity: VerifiedIdentity): Promise<void> { await this.sessions.revoke(identity); }
+  async logout(identity: VerifiedIdentity, correlationId?: string): Promise<void> { await this.sessions.revoke(identity, correlationId); }
 }

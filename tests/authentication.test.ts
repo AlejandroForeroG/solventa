@@ -50,3 +50,25 @@ test('authorization uses SDK PKCE and token cookies fail validation', async () =
   assert.ok(flow.codeVerifier.length>=43);
   assert.equal(await provider.authenticate('forged_cookie'),null);
 });
+
+test('web logout forwards its request correlation and stops provider logout after a local failure', async () => {
+  const identity = { providerSubject: 'user_shared', sessionReference: 'session_shared', emailVerified: true };
+  for (const [trace, failLocal] of [['00000000-0000-4000-8000-000000000007', false], ['ABCDEF12-3456-4789-8ABC-DEF012345678', false], ['invalid', false], ['00000000-0000-4000-8000-000000000007', true]] as const) {
+    const calls: string[] = [];
+    let localTrace: string | undefined;
+    const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
+      provider: () => ({ begin: async () => assert.fail('unexpected_login'), exchange: async () => assert.fail('unexpected_exchange'),
+        authenticate: async () => ({ identity }), revoke: async () => { calls.push('provider'); }, logoutUrl: () => 'https://synthetic.example/logout' }),
+      sessions: () => ({ open: async () => assert.fail('unexpected_registration'), find: async () => null,
+        revoke: async (verified, correlation) => { assert.deepEqual(verified, identity); localTrace = correlation; calls.push('local'); if (failLocal) throw new Error('sql_offline'); } }),
+    } });
+    const response = await app.request(origin + '/auth/logout', { method: 'POST', headers: { Origin: origin, Cookie: '__Host-solventa-session=synthetic', 'X-Trace-Id': trace } }, env);
+    assert.equal(response.status, failLocal ? 503 : 200);
+    assert.equal(localTrace, response.headers.get('x-trace-id'));
+    assert.match(localTrace ?? '', /^[0-9a-f-]{36}$/i);
+    if (trace !== 'invalid') assert.equal(localTrace, trace.toLowerCase());
+    assert.deepEqual(calls, failLocal ? ['local'] : ['local', 'provider']);
+    assert.deepEqual(await response.json(), failLocal ? { error: 'authentication_unavailable' } : { logoutUrl: 'https://synthetic.example/logout' });
+    if (failLocal) assert.equal(response.headers.get('set-cookie'), null);
+  }
+});
