@@ -22,7 +22,7 @@ export type ConsentView = {
   seal: string;
 };
 
-export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string };
+export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string; traceId?: string };
 export type ConsentDecision =
   | { allowed: true; consent: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
@@ -103,6 +103,17 @@ export class Consents {
 
   // Called on every use of a source, never cached: a revocation blocks the next call.
   async verify(input: ConsentCheck): Promise<ConsentDecision> {
+    const decision = await this.checkConsent(input);
+    if (!decision.allowed && decision.reason !== 'unavailable') {
+      try {
+        await this.deps.security?.deny({ category: 'consent_use', channel: 'internal', operation: 'consent:use',
+          cause: decision.reason === 'invalid_request' ? 'consent_request_invalid' : decision.reason }, input?.traceId);
+      } catch { return { allowed: false, reason: 'unavailable' }; }
+    }
+    return decision;
+  }
+
+  private async checkConsent(input: ConsentCheck): Promise<ConsentDecision> {
     if (!input || typeof input.subjectToken !== 'string' || !UUID.test(input.subjectToken) || input.purposeCode !== PURPOSE_RISK_PROFILING
       || typeof input.scope !== 'string' || !SCOPES.includes(input.scope)) return { allowed: false, reason: 'invalid_request' };
     try {

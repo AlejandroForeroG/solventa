@@ -81,7 +81,7 @@ test('public routing calculates with no credential, Identity call or stored quot
   assert.equal(unavailable.$ref, undefined, 'calculator recovery is separate from uncertain quote writes');
   assert.match(unavailable.description, /No write occurs/);
   assert.match(unavailable.description, /without an idempotency key/);
-  assert.equal(spec.info.version, '1.2.0');
+  assert.equal(spec.info.version, '1.2.1');
 });
 
 test('malformed and oversized public bodies are rejected with redacted contractual errors', async () => {
@@ -110,10 +110,14 @@ test('malformed and oversized public bodies are rejected with redacted contractu
 test('public estimates do not unlock saved quotes or create Identity credentials', async () => {
   const { app, access, store } = setup();
   await app.request(request(JSON.stringify(input)));
+  assert.equal(access.calls.length, 0, 'an anonymous estimate never authenticates or opens a session');
   for (const path of ['/api/v1/quotes', '/api/v1/me/quotes']) {
     const response = await app.request(`https://web.example${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }, { APP_ENV: 'dev' } as never);
     assert.equal(response.status, 401);
   }
-  assert.equal(access.calls.length, 0);
+  assert.deepEqual(access.calls.map(credential => credential.kind === 'partner'
+    ? { kind: credential.kind, token: credential.token }
+    : { kind: credential.kind, cookie: credential.cookie }),
+  [{ kind: 'partner', token: '' }, { kind: 'web', cookie: '' }], 'protected requests preserve their channel for audited authorization denial');
   assert.equal(store.saved.length, 0);
 });

@@ -41,15 +41,14 @@ test('other /api paths stay unimplemented and static assets are untouched', asyn
 
 test('a failing Acquisition binding preserves a valid trace id without leaking details', async () => {
   const env = { APP_ENV: 'local', ACQUISITION: { fetch: async () => { throw new Error('binding exploded at 10.0.0.7 with token abc'); } } } as never;
-  for (const path of ['/api/v1/quotes', '/api/v1/me/quotes', '/api/v1/quote-estimates']) {
-    const traceId = '50000000-0000-4000-8000-000000000001';
+  for (const path of ['/api/v1/quotes', '/api/v1/me/quotes', '/api/v1/quote-estimates']) for (const traceId of ['7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47', '7F3C2A9E-1B4D-4C8E-9A52-0D6E8F1A3B47']) {
     const response = await worker.fetch(new Request('https://web.example' + path, { method: 'POST', body: '{}', headers: { 'x-trace-id': traceId } }), env);
     const text = await response.text();
     const body = JSON.parse(text);
     assert.equal(response.status, 503);
     assert.equal(body.error, 'service_unavailable');
     assert.equal(response.headers.get('x-trace-id'), body.traceId);
-    assert.equal(body.traceId, traceId);
+    assert.equal(body.traceId, traceId.toLowerCase());
     assert.deepEqual(Object.keys(body).sort(), ['error', 'traceId']);
     assert.ok(!/10\.0\.0\.7|token|exploded/.test(text));
   }

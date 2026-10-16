@@ -232,3 +232,19 @@ test('when persistence or the seal key fail the answer is 503 with no internal d
   assert.equal((await grant(noKey.http)).status, 503);
   assert.equal(noKey.store.consents.length, 0);
 });
+
+test('unknown exception codes cannot carry personal data into consent logs or responses', async () => {
+  const logs: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
+  try {
+    const { http, store } = app();
+    store.grant = async () => { throw Object.assign(new Error('SyntheticPerson123 private detail'), { code: 'SyntheticPerson123' }); };
+    const res = await grant(http, 'failure', { headers: { 'x-trace-id': TRACE } });
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get('x-trace-id'), TRACE);
+    assert.deepEqual(await res.json(), { error: 'access_unavailable', traceId: TRACE });
+    assert.deepEqual(logs.map(line => JSON.parse(line)), [{ event: 'consent_failed', traceId: TRACE, code: 'unexpected_error' }]);
+    assert.equal(store.consents.length + store.audit.length + store.outbox.length, 0);
+  } finally { console.error = original; }
+});
