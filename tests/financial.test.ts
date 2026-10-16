@@ -101,7 +101,7 @@ async function stateFixture(policyStatus: StoredPolicy['status'], paymentStatus:
     store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } },
     payments: { async lookup() { return { ...known, reference: known.reference === 'MOCK-confirmed' ? payment.providerReference : known.reference }; }, async settle() { settled++; return { status: 'uncertain', reference: null }; }, async refund() { throw new Error('unexpected_refund'); } },
     signatures: { async sign() { throw new Error('unexpected_signature'); } } });
-  return { finance, policy, actor: offer, counts: () => ({ settled, rejected }) };
+  return { finance, policy, payment, actor: offer, counts: () => ({ settled, rejected }) };
 }
 
 test('incoherent policy and premium states are audited before a provider can be called', async () => {
@@ -122,4 +122,48 @@ test('a claimed confirmation cannot create a new charge or replace its provider 
     assert.ok(result.status === 'denied' && result.error === 'integrity_violation');
     assert.deepEqual(fixture.counts(), { settled: 0, rejected: 1 });
   }
+});
+
+test('signature refusal and expiry while acquiring the final lock refund the fresh confirmed payment without issuing', async () => {
+  for (const scenario of ['signature_refused', 'expired_after_final_lock'] as const) {
+    const fixture = await stateFixture('pending', 'pending', { status: 'unknown', reference: null });
+    const { policy, payment } = fixture;
+    let clock = financialNow(), transactions = 0, refunds = 0, signatures = 0;
+    let externalStatus: 'unknown' | 'confirmed' | 'refunded' = 'unknown';
+    const actions: string[] = [];
+    const tx = { async policy() {
+      if (scenario === 'expired_after_final_lock' && transactions === 3) clock = new Date(policy.offer.expiresAt);
+      return { ...policy };
+    }, async payment() { return { ...payment }; }, async signature() { return null; }, async command() { return null; }, async createCommand() {},
+    async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
+    async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
+    async audit(action: string) { actions.push(action); }, async recordSignature() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
+    const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: () => clock, newId: randomUUID,
+      store: { async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
+      payments: { async lookup() { return { status: externalStatus, reference: externalStatus === 'unknown' ? null : 'MOCK-' + payment.id }; },
+        async settle() { externalStatus = 'confirmed'; return { status: 'confirmed', reference: 'MOCK-' + payment.id }; },
+        async refund(input) { assert.equal(input.status, 'confirmed'); assert.equal(input.providerReference, 'MOCK-' + payment.id);
+          refunds++; externalStatus = 'refunded'; return { status: 'refunded', reference: 'MOCK-' + payment.id }; } },
+      signatures: { async sign(id, hash) { return scenario === 'signature_refused' ? { status: 'failed' } : {
+        status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
+    const result = await finance.issue({ actor: fixture.actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+    assert.ok(result.status === 'denied' && result.error === 'signature_failed', JSON.stringify(result));
+    assert.equal(policy.status, 'refunded'); assert.equal(payment.status, 'refunded');
+    assert.equal(refunds, 1); assert.equal(signatures, 0); assert.equal(actions.includes('policy.issued'), false);
+    assert.deepEqual(actions, ['premium.confirmed', 'premium.refund_requested', 'premium.refunded', 'signature_failed']);
+  }
+});
+
+test('a persisted issuance timestamp at the offer deadline is rejected even with a valid keyed seal', async () => {
+  const fixture = await stateFixture('issued', 'confirmed', { status: 'unknown', reference: null });
+  const { policy, payment } = fixture, signedAt = policy.offer.expiresAt;
+  let rejected = 0;
+  const tx = { async policy() { return policy; }, async payment() { return payment; }, async signature() { return {
+    documentHash: policy.documentHash, signedAt, receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash])),
+    timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) }; } } as unknown as FinancialTransaction;
+  const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+  const result = await finance.get({ actor: fixture.actor, policyId: policy.id, traceId: randomUUID() });
+  assert.ok(result.status === 'denied' && result.error === 'integrity_violation'); assert.equal(rejected, 1);
 });

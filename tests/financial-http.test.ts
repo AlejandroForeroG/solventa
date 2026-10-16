@@ -205,3 +205,14 @@ test('both financial owners cancel unread bodies before returning early denials,
     assert.equal(cancelled, true, `${policyRoute ? 'policy' : 'offer'} ${outcome}`);
   }
 });
+
+test('offer reads pass the original trace to core integrity auditing and map an unavailable audit to 503', async () => {
+  for (const status of ['integrity_invalid', 'unavailable'] as const) {
+    const { calls, run, offers } = setup();
+    offers.get = async input => { calls.push({ operation: 'get', input }); return { status }; };
+    const response = await run(request(`/offers/${id}`, undefined, {}, 'GET'));
+    assert.equal(response.status, status === 'integrity_invalid' ? 409 : 503);
+    assert.deepEqual(await response.json(), { error: status === 'integrity_invalid' ? status : 'financial_unavailable', traceId });
+    assert.deepEqual(calls.find(c => c.operation === 'get')?.input, { actor, offerId: id, traceId });
+  }
+});

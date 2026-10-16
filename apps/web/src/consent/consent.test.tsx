@@ -348,8 +348,10 @@ describe.each(['es-CO', 'en-US'] as const)('privacy dashboard in %s', locale => 
   it('works from the keyboard alone', async () => {
     const { user, api } = setup();
     const button = await screen.findByRole('button', { name: t.revoke('CNS-2026-00003') });
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: t.panel })).toHaveFocus());
     button.focus();
     await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('button', { name: t.confirm })).toHaveFocus());
     await user.keyboard('{Enter}');
     await waitFor(() => expect(api.revokeConsent).toHaveBeenCalledOnce());
   });

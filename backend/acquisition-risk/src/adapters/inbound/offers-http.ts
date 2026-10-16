@@ -71,7 +71,7 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         if ((operation === 'offers:read' || operation === 'offers:accept') && !UUID.test(offerId)) return reply({ error: 'invalid_request' }, 400);
         if (operation === 'offers:create' && !/^COT-\d{4}-\d{5}$/.test(quoteId)) return reply({ error: 'invalid_request' }, 400);
         if (operation === 'offers:read') {
-          const result = await deps.offers.get({ actor, offerId });
+          const result = await deps.offers.get({ actor, offerId, traceId });
           return result.status === 'found' ? reply(publicOffer(result.offer), 200) : failure(result.status);
         }
         const body = await bodyFrom(c.req.raw);

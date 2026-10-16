@@ -51,5 +51,9 @@
   "offer_acceptances": [
     "SELECT",
     "INSERT"
+  ],
+  "offer_requests": [
+    "SELECT",
+    "INSERT"
   ]
 }

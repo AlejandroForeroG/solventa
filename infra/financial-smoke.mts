@@ -5,7 +5,7 @@ import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
 import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
-import { eventContent } from '../backend/policy-claims-payments/src/domain/financial';
+import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
 import type { FinancialResult, SignedOfferAcceptanceV1 } from '../backend/policy-claims-payments/src/domain/financial';
 import type { FinancialDependencies, FinancialStore, PaymentGateway, SignatureProvider } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from '../tests/financial-fixtures';
@@ -174,7 +174,7 @@ try {
   const failedSignature: SignatureProvider = { async sign() { return { status: 'failed' }; } };
   const refused = await acceptedOffer(); const refusedPolicy = await importOffer(refused);
   const refusal = await issue(new PolicyFinance({ ...base, signatures: failedSignature }), refused, refusedPolicy);
-  assert.ok(refusal.status === 'denied' && refusal.error === 'signature_failed');
+  assert.ok(refusal.status === 'denied' && refusal.error === 'signature_failed', JSON.stringify({ status: refusal.status, error: refusal.status === 'ok' ? null : refusal.error }));
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [refusedPolicy.policyId])).rows[0].status, 'refunded');
   assert.equal((await db.query('SELECT status FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [refusedPolicy.policyId])).rows[0].status, 'refunded');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [refusedPolicy.policyId])).rows[0].n), 0);
@@ -183,8 +183,29 @@ try {
     async settle(payment) { const result = await gateway.settle(payment); signatureClock = new Date('2026-10-16T02:16:00.000Z'); return result; } };
   const expiring = await acceptedOffer(); const expiringPolicy = await importOffer(expiring);
   const expiredSignature = await issue(new PolicyFinance({ ...base, payments: expiringGateway, now: () => signatureClock }), expiring, expiringPolicy);
-  assert.ok(expiredSignature.status === 'denied' && expiredSignature.error === 'signature_failed');
+  assert.ok(expiredSignature.status === 'denied' && expiredSignature.error === 'signature_failed', JSON.stringify({ status: expiredSignature.status, error: expiredSignature.status === 'ok' ? null : expiredSignature.error }));
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [expiringPolicy.policyId])).rows[0].status, 'refunded');
+  const finalLockOffer = await acceptedOffer(); const finalLockPolicy = await importOffer(finalLockOffer);
+  let finalLockClock = financialNow(), finalTransactions = 0;
+  const finalLockStore: FinancialStore = { rejection: (id, trace, cause) => store.rejection(id, trace, cause),
+    transaction: work => store.transaction(tx => {
+      const transactionNumber = ++finalTransactions;
+      return work(new Proxy(tx, { get(target, key) {
+        if (key === 'policy') return async (id: string) => {
+          const locked = await target.policy(id);
+          if (transactionNumber === 3) finalLockClock = new Date(finalLockOffer.payload.expiresAt);
+          return locked;
+        };
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } }));
+    }) };
+  const finalLockResult = await issue(new PolicyFinance({ ...base, store: finalLockStore, now: () => finalLockClock }), finalLockOffer, finalLockPolicy);
+  assert.ok(finalLockResult.status === 'denied' && finalLockResult.error === 'signature_failed', JSON.stringify({ status: finalLockResult.status, error: finalLockResult.status === 'ok' ? null : finalLockResult.error }));
+  assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [finalLockPolicy.policyId])).rows[0].status, 'refunded');
+  assert.equal((await db.query('SELECT status FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [finalLockPolicy.policyId])).rows[0].status, 'refunded');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [finalLockPolicy.policyId])).rows[0].n, 0);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='policy.issued'", [finalLockPolicy.policyId])).rows[0].n, 0);
   let uncertainRefund = true;
   const refundGateway: PaymentGateway = { lookup: payment => gateway.lookup(payment), settle: payment => gateway.settle(payment),
     async refund(payment) { const result = await gateway.refund(payment); if (uncertainRefund) { uncertainRefund = false; return { status: 'uncertain', reference: null }; } return result; } };
@@ -223,6 +244,11 @@ try {
   await db.query('UPDATE policy.policy_signatures SET signed_at=$2 WHERE policy_id=$1', [laterPolicy.policyId, financialNow().toISOString()]);
   await denied(traceId => laterService.get({ actor: laterFlight.payload, policyId: laterPolicy.policyId, traceId }), 'integrity_violation');
   await db.query('UPDATE policy.policy_signatures SET signed_at=$2 WHERE policy_id=$1', [laterPolicy.policyId, issuedAt]);
+  const savedSeal = (await db.query('SELECT time_seal FROM policy.policy_signatures WHERE policy_id=$1', [laterPolicy.policyId])).rows[0].time_seal;
+  const deadlineSeal = await financialIntegrity.digest(issuanceTimeContent(laterPolicy.policyId, laterPolicy.documentHash, laterFlight.payload.expiresAt));
+  await db.query('UPDATE policy.policy_signatures SET signed_at=$2,time_seal=$3 WHERE policy_id=$1', [laterPolicy.policyId, laterFlight.payload.expiresAt, deadlineSeal]);
+  await denied(traceId => laterService.get({ actor: laterFlight.payload, policyId: laterPolicy.policyId, traceId }), 'integrity_violation');
+  await db.query('UPDATE policy.policy_signatures SET signed_at=$2,time_seal=$3 WHERE policy_id=$1', [laterPolicy.policyId, issuedAt, savedSeal]);
 
   // A stored policy alteration is detected before the provider. Restore only this disposable fixture afterwards.
   await db.query("UPDATE policy.payments SET provider_reference='altered-reference' WHERE policy_id=$1 AND operation='premium'", [policy.policyId]);
@@ -247,7 +273,7 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } finally {
   await db?.end();
   if (created && migrationsComplete) await admin.query(`DROP DATABASE ${name} CASCADE`);
