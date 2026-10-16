@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { AggregatorSignalProvider, simulatedAggregatorSource } from '../backend/acquisition-risk/src/adapters/outbound/aggregator-signal-provider';
 import { DirectSignalProvider, simulatedDirectSource } from '../backend/acquisition-risk/src/adapters/outbound/direct-signal-provider';
 import { signalProviderFor } from '../backend/acquisition-risk/src/adapters/outbound/signal-providers';
@@ -105,4 +105,18 @@ test('ReadSignal behaves the same whichever provider the configuration selects',
   }
   assert.ok(results[0].every(result => result.status === 'available'));
   assert.deepEqual(results[1], results[0]);
+});
+
+// Substituting a provider changes an adapter and SIGNAL_PROVIDER only: the core cannot depend on either.
+test('the core names no provider, external format or provider configuration', () => {
+  const core = ['domain', 'application'].flatMap(layer => {
+    const dir = new URL(`../backend/acquisition-risk/src/${layer}/`, import.meta.url);
+    return readdirSync(dir, { recursive: true }).map(String).filter(file => file.endsWith('.ts')).map(file => new URL(file, dir));
+  });
+  assert.ok(core.length >= 5);
+  const external = ['SIGNAL_PROVIDER', 'direct_simulated', 'aggregator_simulated', 'DirectSignalProvider', 'AggregatorSignalProvider', 'incomeMonthlyCents', 'puntaje', 'afiliaciones', 'estadoCedula', 'fecha_corte', 'TXLifeRequest', 'GovtID', 'MORTGAGE_LIFE'];
+  for (const file of core) {
+    const source = readFileSync(file, 'utf8');
+    for (const term of external) assert.ok(!source.includes(term), `${file.pathname} mentions ${term}`);
+  }
 });

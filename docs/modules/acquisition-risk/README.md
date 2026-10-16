@@ -134,7 +134,7 @@ Field rules (age, formats, amount and term ranges) stay in `src/domain/quote.ts`
 **Verification.**
 
 ```sh
-npm run test:integrations   # both provider corpora, failures and logs, deadline, configuration and the ACORD corpus
+npm run test:integrations   # both provider corpora, failures and logs, deadline, configuration, a core that names no provider, and the ACORD corpus
 ```
 
 ## Documents
