@@ -7,7 +7,7 @@ export type SignalData = {
   income_obligations_12m: { monthlyIncomeCop: number; monthlyObligationsCop: number };
   payment_history_score: { score: number; latePayments12m: number };
   affiliation_regime: { regime: 'contributory' | 'subsidized' | 'special'; active: boolean };
-  identity_validation: { documentValid: boolean };
+  identity_validation: { verified: boolean };
 };
 
 export type ProviderResponse = { status: number; body: unknown };
@@ -30,7 +30,7 @@ export function signalOf<S extends SignalScope>(scope: S, capturedAt: unknown, d
   return { scope, capturedAt: instant(capturedAt), data };
 }
 
-const TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+const TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,3})?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/;
 
 // Date.parse silently rolls 2026-02-30 over to March 2, so the calendar date must round-trip.
 function isCalendarDate(year: number, month: number, day: number): boolean {
@@ -43,8 +43,9 @@ function instant(value: unknown): string {
   if (typeof value !== 'string') throw invalidResponse();
   const text = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00-05:00` : value;
   const parts = TIMESTAMP.exec(text);
-  if (!parts || !isCalendarDate(Number(parts[1]), Number(parts[2]), Number(parts[3]))) throw invalidResponse();
-  return new Date(Date.parse(text)).toISOString();
+  const time = Date.parse(text);
+  if (!parts || !isCalendarDate(Number(parts[1]), Number(parts[2]), Number(parts[3])) || Number.isNaN(time)) throw invalidResponse();
+  return new Date(time).toISOString();
 }
 
 function failureForStatus(status: number): ProviderFailureCode | null {

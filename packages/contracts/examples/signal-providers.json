@@ -98,7 +98,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": true
+              "verified": true
             }
           }
         }
@@ -145,7 +145,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": false
+              "verified": false
             }
           }
         }
@@ -414,6 +414,24 @@
         "expected": {
           "failure": "invalid_response"
         }
+      },
+      {
+        "name": "offset-minutes-out-of-range",
+        "scope": "income_obligations_12m",
+        "response": {
+          "status": 200,
+          "body": {
+            "data": {
+              "incomeMonthlyCents": 450000000,
+              "obligationsMonthlyCents": 120000000,
+              "periodMonths": 12,
+              "asOf": "2026-09-30T05:00:00-05:60"
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
       }
     ],
     "aggregator": [
@@ -514,7 +532,7 @@
             "scope": "identity_validation",
             "capturedAt": "2026-09-30T05:00:00.000Z",
             "data": {
-              "documentValid": true
+              "verified": true
             }
           }
         }
@@ -723,6 +741,25 @@
             "fecha_corte": "2026-04-31T00:00:00-05:00",
             "resultado": {
               "cedula_vigente": true
+            }
+          }
+        },
+        "expected": {
+          "failure": "invalid_response"
+        }
+      },
+      {
+        "name": "offset-out-of-range",
+        "scope": "payment_history_score",
+        "response": {
+          "status": 200,
+          "body": {
+            "estado": "OK",
+            "fuente": "datacredito",
+            "fecha_corte": "2026-09-30T00:00:00+24:00",
+            "resultado": {
+              "score": 742,
+              "moras_ultimos_12_meses": 0
             }
           }
         },

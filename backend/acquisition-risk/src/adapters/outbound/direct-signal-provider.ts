@@ -41,9 +41,9 @@ function affiliation(body: unknown): Signal {
 function identity(body: unknown): Signal {
   const reply = record(body);
   if (reply.estadoCedula === 'NO_REGISTRA') throw new ProviderFailure('not_found');
-  const documentValid = DOCUMENT_STATES.get(reply.estadoCedula);
-  if (documentValid === undefined) throw invalidResponse();
-  return signalOf('identity_validation', reply.fechaConsulta, { documentValid });
+  const verified = DOCUMENT_STATES.get(reply.estadoCedula);
+  if (verified === undefined) throw invalidResponse();
+  return signalOf('identity_validation', reply.fechaConsulta, { verified });
 }
 
 const TRANSLATORS: Record<SignalScope, (body: unknown) => Signal> = {
@@ -53,14 +53,18 @@ const TRANSLATORS: Record<SignalScope, (body: unknown) => Signal> = {
   identity_validation: identity
 };
 
-// Synthetic answers for one fictitious person; no real source is reached.
-const SIMULATED: Record<SignalScope, unknown> = {
-  income_obligations_12m: { data: { incomeMonthlyCents: 450000000, obligationsMonthlyCents: 120000000, periodMonths: 12, asOf: '2026-09-30T05:00:00Z' } },
-  payment_history_score: { consulta: { puntaje: 742, moras12m: 0, fechaConsulta: '2026-09-30' } },
-  affiliation_regime: { fechaCorte: '2026-09-30', afiliaciones: [{ subsistema: 'PENSION', regimen: 'RAIS', estado: 'ACTIVO' }, { subsistema: 'SALUD', regimen: 'CONTRIBUTIVO', estado: 'ACTIVO' }] },
-  identity_validation: { estadoCedula: 'VIGENTE', fechaConsulta: '2026-09-30T05:00:00Z' }
-};
-export const simulatedDirectSource: ProviderSource = async scope => ({ status: 200, body: SIMULATED[scope] });
+// Synthetic answers for one fictitious person, stamped with the query time; no real source is reached.
+function simulatedAnswer(scope: SignalScope, at: string): unknown {
+  switch (scope) {
+    case 'income_obligations_12m': return { data: { incomeMonthlyCents: 450000000, obligationsMonthlyCents: 120000000, periodMonths: 12, asOf: at } };
+    case 'payment_history_score': return { consulta: { puntaje: 742, moras12m: 0, fechaConsulta: at } };
+    case 'affiliation_regime': return { fechaCorte: at, afiliaciones: [{ subsistema: 'PENSION', regimen: 'RAIS', estado: 'ACTIVO' }, { subsistema: 'SALUD', regimen: 'CONTRIBUTIVO', estado: 'ACTIVO' }] };
+    case 'identity_validation': return { estadoCedula: 'VIGENTE', fechaConsulta: at };
+  }
+}
+export function simulatedDirectSource(now = () => new Date()): ProviderSource {
+  return async scope => ({ status: 200, body: simulatedAnswer(scope, now().toISOString()) });
+}
 
 export class DirectSignalProvider implements SignalProvider {
   constructor(private readonly name: string, private readonly source: ProviderSource, private readonly deadlineMs = DEFAULT_DEADLINE_MS) {}
