@@ -52,6 +52,7 @@ jobs:
           RUNTIME_STATE_JSON: ${{ secrets.RUNTIME_STATE_JSON }}
           WEB_INFRA_TOKEN: ${{ secrets.WEB_INFRA_TOKEN }}
           IDENTITY_AUTH_JSON: ${{ secrets.IDENTITY_AUTH_JSON }}
+          FINANCIAL_EVENT_JSON: ${{ secrets.FINANCIAL_EVENT_JSON }}
         run: node infra/ci.mjs prepare "$TARGET_ENVIRONMENT"
       - name: Deploy and verify Cloudflare services
         env:

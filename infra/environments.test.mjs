@@ -32,3 +32,17 @@ test('private backends cannot enable a public preview', async () => {
   configs['policy-claims-payments'].env.prod.preview_urls = true;
   assert.throws(() => validateEnvironments(configs));
 });
+
+test('financial consumers and signatures stay within the selected environment', async () => {
+  for (const mutate of [
+    configs => { configs['policy-claims-payments'].env.dev.services[0].service = 'solventa-identity-consent-ecosystem-prod'; },
+    configs => { configs['acquisition-risk'].env.staging.queues.producers[0].queue = 'solventa-financial-events-dev'; },
+    configs => { configs['policy-claims-payments'].env.staging.queues.consumers[0].dead_letter_queue = 'solventa-financial-events-dlq-dev'; },
+    configs => { configs['policy-claims-payments'].env.prod.vars.FINANCIAL_PROVIDER_MODE = 'mock'; },
+  ]) {
+    const configs = await configurations();
+    mutate(configs);
+    assert.throws(() => validateEnvironments(configs));
+  }
+  validateEnvironments(await configurations());
+});

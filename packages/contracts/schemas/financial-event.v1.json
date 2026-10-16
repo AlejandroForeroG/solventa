@@ -1,0 +1,251 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://solventa.site/schemas/financial-event.v1.json",
+  "title": "Synthetic financial event v1",
+  "description": "Internal Queue boundary only. HMAC verification, environment isolation, expiry, ownership and product/coverage consistency remain mandatory consumer checks. JSON Schema validation is not authentication.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "eventType",
+        "eventId",
+        "environment",
+        "synthetic",
+        "occurredAt",
+        "correlationId",
+        "payload",
+        "signature"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "eventType": {
+          "const": "offer.accepted"
+        },
+        "eventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "local",
+            "dev",
+            "staging"
+          ]
+        },
+        "synthetic": {
+          "const": true
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "acceptanceId",
+            "offerId",
+            "offerVersion",
+            "clientId",
+            "subjectToken",
+            "product",
+            "premium",
+            "currency",
+            "coverage",
+            "effectiveFrom",
+            "effectiveUntil",
+            "expiresAt",
+            "ruleVersion",
+            "acceptedAt"
+          ],
+          "properties": {
+            "acceptanceId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offerId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "offerVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "clientId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "subjectToken": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "product": {
+              "enum": [
+                "vida_hipotecario",
+                "flight_delay"
+              ]
+            },
+            "premium": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+            },
+            "currency": {
+              "const": "COP"
+            },
+            "coverage": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "sumInsured"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "mortgage_life"
+                    },
+                    "sumInsured": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "flightReference",
+                    "thresholdMinutes",
+                    "payoutAmount"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "flight_delay"
+                    },
+                    "flightReference": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "thresholdMinutes": {
+                      "const": 180
+                    },
+                    "payoutAmount": {
+                      "const": "100000.0000"
+                    }
+                  }
+                }
+              ]
+            },
+            "effectiveFrom": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "effectiveUntil": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expiresAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "ruleVersion": {
+              "type": "string",
+              "pattern": "^academic-[a-z0-9-]{1,60}$"
+            },
+            "acceptedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "eventType",
+        "eventId",
+        "environment",
+        "synthetic",
+        "occurredAt",
+        "correlationId",
+        "payload",
+        "signature"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "eventType": {
+          "const": "flight.delay_verified"
+        },
+        "eventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "enum": [
+            "local",
+            "dev",
+            "staging"
+          ]
+        },
+        "synthetic": {
+          "const": true
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policyId",
+            "flightReference",
+            "delayMinutes"
+          ],
+          "properties": {
+            "policyId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "flightReference": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "delayMinutes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10080
+            }
+          }
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  ]
+}

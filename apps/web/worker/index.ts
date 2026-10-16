@@ -5,6 +5,8 @@ import { isApiDocsPath, serveApiDocs } from './api-docs';
 
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
+const offersPath = /^\/api\/v1\/offers(\/|$)/;
+const policiesPath = /^\/api\/v1\/policies(\/|$)/;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
@@ -20,6 +22,14 @@ async function forwardToAcquisition(request: Request, env: WebEnv, headers: Reco
   const timeout = setTimeout(() => controller.abort(), 5000);
   try { return await env.ACQUISITION.fetch(new Request(request, { signal: controller.signal })); }
   catch { return unavailable(request, headers, 'service_unavailable'); }
+  finally { clearTimeout(timeout); }
+}
+
+async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try { return await env.POLICY.fetch(new Request(request, { signal: controller.signal })); }
+  catch { return unavailable(request, headers, 'financial_unavailable'); }
   finally { clearTimeout(timeout); }
 }
 
@@ -43,7 +53,9 @@ export default {
           return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
         } finally { clearTimeout(timeout); }
       }
-      const response = isQuotesPath(path) ? await forwardToAcquisition(request, env, headers) : Response.json({ error: 'not_implemented' }, { status: 404, headers });
+      const response = isQuotesPath(path) || offersPath.test(path) ? await forwardToAcquisition(request, env, headers)
+        : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
+        : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }
     if (path.startsWith('/internal/')) {

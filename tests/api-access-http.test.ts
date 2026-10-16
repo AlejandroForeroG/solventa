@@ -53,7 +53,7 @@ test('missing credentials, unavailable M2M config, forged web cookie and mutatio
   assert.equal((await app.request(origin + '/api/v1/access/web', { headers: { Cookie: '__Host-solventa-session=forged' } }, env)).status, 401);
   assert.deepEqual(await authorizeApiAccess(deps, { kind: 'web', cookie: 'forged', origin: 'https://attacker.invalid', method: 'POST', operation: 'quotes:create' }), { allowed: false, error: 'forbidden', status: 403 });
   assert.equal((await authorizeApiAccess(deps, { kind: 'partner', token: '', operation: '*' })).status, 400);
-  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', operation: 'policies:issue' })).status, 400);
+  assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', operation: 'policies:delete' })).status, 400);
   assert.equal((await authorizeApiAccess(deps, { kind: 'web', cookie: 'synthetic', origin, method: 'GET', scope: 'quotes:create' })).status, 400);
   assert.equal((await authorizeApiAccess(deps, null)).status, 400);
 });
@@ -75,7 +75,7 @@ test('gateway forwards only the published probes and handles a failed identity b
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { forwarded: '/api/v1/access/' + kind });
   }
-  assert.equal((await web.fetch(new Request(origin + '/api/v1/offers'), mockEnv)).status, 404);
+  assert.equal((await web.fetch(new Request(origin + '/api/v1/unimplemented-resource'), mockEnv)).status, 404);
   const unavailable = await web.fetch(new Request(origin + '/api/v1/access/partner'), { IDENTITY: { fetch: async () => { throw Error('private detail'); } } } as WebEnv);
   assert.equal(unavailable.status, 503);
   const body = await unavailable.json() as { error: string; traceId: string };

@@ -1,0 +1,24 @@
+import type { OfferActor, OfferCapture, OfferQuote, OfferTerms } from '../../domain/offer';
+
+export type StoredOffer = { terms: OfferTerms; seal: string; consentId: string; consentVersion: number };
+export type AcceptedOffer = { acceptanceId: string; offerId: string; eventId: string; acceptedAt: string; status: 'pending_issuance'; synthetic: true };
+export type AcceptanceEvent = { version: 1; eventType: 'offer.accepted'; eventId: string; environment: string; synthetic: true; occurredAt: string; correlationId: string; payload: Omit<OfferTerms, 'quoteId' | 'synthetic' | 'status'> & { acceptanceId: string; acceptedAt: string }; signature: string };
+export interface OfferStore {
+  quote(actor: OfferActor, quoteId: string): Promise<OfferQuote | null>;
+  byKey(actor: OfferActor, key: string): Promise<StoredOffer | null>;
+  get(actor: OfferActor, offerId: string): Promise<StoredOffer | null>;
+  create(input: { actor: OfferActor; quote: OfferQuote | null; sourceReference: string; key: string; offer: StoredOffer; capture: OfferCapture | Record<string, unknown>; traceId: string }): Promise<{ created: boolean; offer: StoredOffer }>;
+  decline(input: { actor: OfferActor; quote: OfferQuote; capture: OfferCapture; traceId: string }): Promise<void>;
+  acceptance(actor: OfferActor, key: string): Promise<AcceptedOffer | null>;
+  accept(input: { actor: OfferActor; key: string; offer: StoredOffer; event: AcceptanceEvent; acceptance: AcceptedOffer; traceId: string; now: string; authorizedUntil: string }): Promise<{ status: 'created' | 'replayed'; acceptance: AcceptedOffer } | { status: 'conflict' | 'expired' }>;
+  reject(actor: OfferActor, offerId: string, traceId: string, reason: 'expired' | 'integrity_invalid'): Promise<void>;
+}
+export interface OfferIntegrity {
+  id(): string;
+  seal(terms: OfferTerms, consent: { consentId: string; consentVersion: number }): Promise<string>;
+  verify(terms: OfferTerms, seal: string, consent: { consentId: string; consentVersion: number }): Promise<boolean>;
+  sign(event: Omit<AcceptanceEvent, 'signature'>): Promise<AcceptanceEvent>;
+}
+export interface FlightSchedule {
+  read(flightReference: string): Promise<{ available: boolean; capturedAt: string; providerMode: 'mock' }>;
+}

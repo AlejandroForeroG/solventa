@@ -1,0 +1,173 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { settings, clientFor, owners, applyMigrations, applyRuntimeGrants } from './database.mjs';
+import { CreateQuote } from '../backend/acquisition-risk/src/application/create-quote';
+import { SqlQuoteStore } from '../backend/acquisition-risk/src/adapters/outbound/sql-quote-store';
+import { HmacProtector } from '../backend/acquisition-risk/src/adapters/outbound/hmac-protector';
+import { SqlOfferStore } from '../backend/acquisition-risk/src/adapters/outbound/sql-offer-store';
+import { HmacOfferIntegrity } from '../backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
+import { FinancialOutboxPublisher } from '../backend/acquisition-risk/src/adapters/outbound/financial-outbox-publisher';
+import { OfferService } from '../backend/acquisition-risk/src/application/offer-service';
+import { MockFlightSchedule, MockRiskSignals } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
+import type { AcceptanceEvent } from '../backend/acquisition-risk/src/application/ports/offer-store';
+
+// Real local owner SQL; Identity and external data sources are explicit stand-ins.
+const config = await settings('local');
+assert.equal(config.database, 'solventa_local');
+const suppliedDatabase = process.env.OFFERS_SQL_DATABASE;
+if (suppliedDatabase) assert.match(suppliedDatabase, /^solventa_offers_test_[a-f0-9]{32}$/);
+// The publisher drains ready rows. Never run it against another developer's persistent outbox.
+const isolatedDatabase = suppliedDatabase ?? 'solventa_offers_test_' + randomUUID().replaceAll('-', '');
+assert.match(isolatedDatabase, /^solventa_offers_test_[a-f0-9]{32}$/);
+const state = JSON.parse(await readFile('infra/.local/runtime.local.json', 'utf8'));
+const url = new URL(config.url); url.pathname = '/' + isolatedDatabase;
+const runtime = new URL(url); runtime.username = 'solventa_local_acquisition'; runtime.password = state.passwords.acquisition;
+runtime.searchParams.set('sslmode', 'verify-full'); runtime.searchParams.set('sslrootcert', 'infra/.local/certs/ca.crt');
+const admin = clientFor(url, config.ssl);
+const provisioner = suppliedDatabase ? null : clientFor(config.url, config.ssl);
+if (provisioner) {
+  let created = false;
+  try {
+    await provisioner.connect(); await provisioner.query(`CREATE DATABASE ${isolatedDatabase}`); created = true;
+    await admin.connect();
+    await admin.query(`REVOKE ALL ON DATABASE ${isolatedDatabase} FROM public`); await admin.query('REVOKE ALL ON SCHEMA public FROM public');
+    await admin.query('CREATE SCHEMA acquisition'); await admin.query('REVOKE ALL ON SCHEMA acquisition FROM public');
+    await admin.query('CREATE TABLE acquisition.schema_migrations (version STRING PRIMARY KEY, checksum STRING NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
+    await applyMigrations(admin, owners[0]);
+    const ledger = (await admin.query('SELECT * FROM acquisition.schema_migrations ORDER BY version')).rows;
+    await applyMigrations(admin, owners[0]);
+    assert.deepEqual((await admin.query('SELECT * FROM acquisition.schema_migrations ORDER BY version')).rows, ledger, 'unchanged migration replay preserves history');
+    await admin.query(`GRANT CONNECT ON DATABASE ${isolatedDatabase} TO solventa_local_acquisition`);
+    await admin.query('GRANT USAGE ON SCHEMA acquisition TO solventa_local_acquisition');
+    await admin.query('GRANT SELECT ON TABLE acquisition.schema_migrations TO solventa_local_acquisition');
+    await applyRuntimeGrants(admin, owners[0], 'solventa_local_acquisition', JSON.parse(await readFile('backend/acquisition-risk/runtime-grants.json', 'utf8')));
+  } catch (error) {
+    // Failed DDL may survive rollback. Preserve this database and its guard for reconciliation.
+    if (created) console.log(JSON.stringify({ preservedGeneratedDatabaseForReconciliation: isolatedDatabase }));
+    await admin.end().catch(() => {}); await provisioner.end().catch(() => {}); throw error;
+  }
+} else await admin.connect();
+const actor = { clientId: randomUUID(), subjectToken: randomUUID() };
+const other = { clientId: randomUUID(), subjectToken: randomUUID() };
+const traces: string[] = [];
+const trace = () => { const value = randomUUID(); traces.push(value); return value; };
+const now = new Date(), integrity = new HmacOfferIntegrity('local-synthetic-financial-key-'.padEnd(40, 'x'));
+const store = new SqlOfferStore(runtime.toString());
+const service = new OfferService({ store, provider: new MockRiskSignals(), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
+const authorization = { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: new Date(now.getTime() + 3600000).toISOString() };
+try {
+  const quote = await new CreateQuote({ access: { async authorize() { return { allowed: true, actor: { kind: 'user', ...actor } }; } }, store: new SqlQuoteStore(runtime.toString()), protector: new HmacProtector('local-synthetic-quote-key-'.padEnd(40, 'x')), clock: { now: () => now } }).execute({
+    credential: { kind: 'web', cookie: 'synthetic', origin: 'http://localhost:8787', method: 'POST' }, idempotencyKey: randomUUID(), traceId: trace(),
+    body: { product: 'vida_hipotecario', customer: { fullName: 'Synthetic Offers SQL', documentType: 'CC', documentNumber: '1099999999', birthDate: '1992-03-14', city: 'Synthetic' }, credit: { partnerCreditId: randomUUID(), amount: 320000000, termMonths: 180 } }
+  });
+  assert.equal(quote.status, 'created'); if (quote.status !== 'created') throw Error('quote failed');
+  const command = { actor, authorization, quoteId: quote.quote.quoteId, idempotencyKey: randomUUID(), traceId: trace() };
+  const created = await service.create(command); assert.equal(created.status, 'created'); if (created.status !== 'created') throw Error('offer failed');
+  assert.equal((await service.create(command)).status, 'replayed');
+  assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
+  assert.equal((await service.get({ actor: other, offerId: created.offer.offerId })).status, 'not_found');
+  const race = { ...command, idempotencyKey: randomUUID(), traceId: trace() };
+  const raced = await Promise.all(Array.from({ length: 3 }, () => service.create(race)));
+  assert.equal(raced.filter(x => x.status === 'created').length, 1);
+  assert.equal(raced.filter(x => x.status === 'replayed').length, 2);
+  const c = await admin.query(`SELECT (SELECT count(*)::INT4 FROM acquisition.offer_contexts WHERE offer_id=$1) AS contexts,
+    (SELECT count(*)::INT4 FROM acquisition.offer_revisions WHERE offer_id=$1) AS revisions,
+    (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.create') AS audit,
+    (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.created') AS outbox`, [created.offer.offerId]);
+  assert.deepEqual(c.rows[0], { contexts: 1, revisions: 1, audit: 1, outbox: 1 });
+  const acceptance = { actor, authorization, offerId: created.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() };
+  const accepted = await Promise.all(Array.from({ length: 3 }, () => service.accept(acceptance)));
+  assert.equal(accepted.filter(x => x.status === 'created').length, 1); assert.equal(accepted.filter(x => x.status === 'replayed').length, 2);
+  assert.equal((await service.accept({ ...acceptance, idempotencyKey: randomUUID() })).status, 'conflict');
+  assert.equal((await service.accept({ ...acceptance, authorization: undefined })).status, 'denied');
+  const effects = await admin.query(`SELECT (SELECT count(*)::INT4 FROM acquisition.offer_acceptances WHERE offer_id=$1) AS acceptances,
+    (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.accept' AND outcome='success') AS audit,
+    (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.accepted') AS outbox`, [created.offer.offerId]);
+  assert.deepEqual(effects.rows[0], { acceptances: 1, audit: 1, outbox: 1 });
+  const flight = await service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: randomUUID(), traceId: trace() });
+  assert.equal(flight.status, 'created'); if (flight.status !== 'created') throw Error('flight failed');
+  assert.equal((await service.accept({ actor, offerId: flight.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() })).status, 'created');
+  // A context constraint fails after decision, offer and revision inserts; none may survive rollback.
+  const storedQuote = await store.quote(actor, quote.quote.quoteId); assert.ok(storedQuote);
+  const existing = await store.get(actor, created.offer.offerId); assert.ok(existing);
+  const badOfferId = randomUUID(), badTrace = trace();
+  await assert.rejects(store.create({ actor, quote: storedQuote, sourceReference: quote.quote.quoteId, key: randomUUID(),
+    offer: { ...existing, terms: { ...existing.terms, offerId: badOfferId }, seal: 'invalid' },
+    capture: { synthetic: true }, traceId: badTrace }), /constraint|check/i);
+  assert.equal((await admin.query('SELECT count(*)::INT4 AS n FROM acquisition.offers WHERE id=$1', [badOfferId])).rows[0].n, 0);
+  assert.equal((await admin.query('SELECT count(*)::INT4 AS n FROM acquisition.underwriting_decisions WHERE correlation_id=$1', [badTrace])).rows[0].n, 0);
+  // Admin-only tamper fixture proves acceptance fails closed without another financial event.
+  await admin.query("UPDATE acquisition.offer_contexts SET terms=jsonb_set(terms,'{premium}','\"1.0000\"'::JSONB) WHERE offer_id=$1", [flight.offer.offerId]);
+  assert.equal((await service.accept({ actor, offerId: flight.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() })).status, 'integrity_invalid');
+  const published: AcceptanceEvent[] = [];
+  const publisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity, queue: { async send(e) { published.push(e); } } });
+  const publication = await publisher.publish(); assert.equal(publication.published, 2); assert.equal(published.length, 2);
+  assert.equal((await publisher.publish()).claimed, 0, 'confirmed records are not republished');
+  const eventId = published[0].eventId;
+  await admin.query("UPDATE acquisition.outbox_events SET status='pending',published_at=NULL,attempts=0,available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  let acknowledgeLate!: () => void;
+  const pendingTransport = new Promise<void>(resolve => { acknowledgeLate = resolve; });
+  const attemptedIds: string[] = [];
+  const slowPublisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity, sendDeadlineMs: 5,
+    queue: { send(event) { attemptedIds.push(event.eventId); return pendingTransport; } } });
+  assert.equal((await slowPublisher.publish()).deferred, 1);
+  acknowledgeLate(); await pendingTransport;
+  const late = (await admin.query('SELECT status,published_at FROM acquisition.outbox_events WHERE event_id=$1', [eventId])).rows[0];
+  assert.equal(late.status, 'pending'); assert.equal(late.published_at, null, 'late transport acknowledgment cannot mark a timed-out attempt published');
+  await admin.query("UPDATE acquisition.outbox_events SET available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  const recoveredPublisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity,
+    queue: { async send(event) { attemptedIds.push(event.eventId); } } });
+  assert.equal((await recoveredPublisher.publish()).published, 1); assert.deepEqual(attemptedIds, [eventId, eventId], 'recovery preserves the event ID after an uncertain Queue write');
+  await admin.query("UPDATE acquisition.outbox_events SET status='pending',published_at=NULL,attempts=0,available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  const expiredLeasePublisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity,
+    queue: { async send() { await admin.query("UPDATE acquisition.outbox_events SET lease_until=now()-interval '1 minute' WHERE event_id=$1", [eventId]); } } });
+  assert.equal((await expiredLeasePublisher.publish()).published, 0);
+  const unconfirmed = (await admin.query('SELECT status,published_at FROM acquisition.outbox_events WHERE event_id=$1', [eventId])).rows[0];
+  assert.equal(unconfirmed.status, 'publishing'); assert.equal(unconfirmed.published_at, null, 'an expired lease cannot confirm even with the original owner');
+  assert.equal((await recoveredPublisher.publish()).published, 1, 'an expired lease remains recoverable');
+  await admin.query("UPDATE acquisition.outbox_events SET status='pending',published_at=NULL,attempts=0,available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  const failedPublisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity, queue: { async send() { throw Error('synthetic queue unavailable'); } } });
+  const failure = await failedPublisher.publish(); assert.equal(failure.deferred, 1); assert.equal(failure.published, 0);
+  const pending = (await admin.query('SELECT status,published_at FROM acquisition.outbox_events WHERE event_id=$1', [eventId])).rows[0];
+  assert.equal(pending.status, 'pending'); assert.equal(pending.published_at, null, 'failure before acknowledgment cannot mark published');
+  await admin.query("UPDATE acquisition.outbox_events SET available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  published.length = 0;
+  await Promise.all([publisher.publish(), publisher.publish()]);
+  assert.equal(published.length, 1, 'concurrent publisher leases allow one dispatch of a ready row');
+  await admin.query(`UPDATE acquisition.outbox_events SET status='pending',published_at=NULL,attempts=0,available_at=now()-interval '1 minute',
+    payload=payload || '{"unexpected":"synthetic-rejected-marker"}'::JSONB WHERE event_id=$1`, [eventId]);
+  published.length = 0;
+  assert.equal((await publisher.publish()).deadLetter, 1); assert.equal(published.length, 0, 'appended unsealed fields cannot be published');
+  await admin.query("UPDATE acquisition.outbox_events SET status='publishing',attempts=5,lease_owner='synthetic-expired-lease',lease_until=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
+  assert.equal((await publisher.publish()).claimed, 0);
+  assert.equal((await admin.query('SELECT status FROM acquisition.outbox_events WHERE event_id=$1', [eventId])).rows[0].status, 'dead_letter', 'interrupted final lease becomes visible');
+  const probe = clientFor(runtime, { ca: (config.ssl as { ca?: string }).ca, rejectUnauthorized: true }); await probe.connect();
+  try {
+    for (const table of ['offer_contexts', 'offer_acceptances', 'offer_revisions']) {
+      await assert.rejects(probe.query(`DELETE FROM acquisition.${table}`), /privilege|permission|denied/i);
+      await assert.rejects(probe.query(`UPDATE acquisition.${table} SET ${table === 'offer_contexts' ? 'terms_seal=terms_seal' : table === 'offer_acceptances' ? 'result=result' : 'premium=premium'}`), /privilege|permission|denied/i);
+    }
+  } finally { await probe.end(); }
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'actor ownership and payload/key conflicts', 'concurrent create and acceptance deduplicate atomically', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'stored term tamper rejected', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
+} finally {
+  try {
+    const offers = (await admin.query('SELECT offer_id FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId])).rows.map(r => r.offer_id);
+    const decisions = (await admin.query('SELECT id FROM acquisition.underwriting_decisions WHERE correlation_id=ANY($1::UUID[])', [traces])).rows.map(r => r.id);
+    const quotes = (await admin.query('SELECT id FROM acquisition.quotes WHERE client_id=$1', [actor.clientId])).rows.map(r => r.id);
+    await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id=ANY($1::UUID[]) OR correlation_id=ANY($2::UUID[])', [[...offers, ...quotes, ...decisions], traces]);
+    await admin.query('DELETE FROM acquisition.audit_events WHERE actor_reference=$1', [actor.clientId]);
+    await admin.query('DELETE FROM acquisition.offer_acceptances WHERE client_id=$1', [actor.clientId]);
+    await admin.query('DELETE FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId]);
+    await admin.query('DELETE FROM acquisition.offer_revisions WHERE offer_id=ANY($1::UUID[])', [offers]);
+    await admin.query('DELETE FROM acquisition.offers WHERE id=ANY($1::UUID[])', [offers]);
+    await admin.query('DELETE FROM acquisition.underwriting_decisions WHERE id=ANY($1::UUID[])', [decisions]);
+    await admin.query('DELETE FROM acquisition.quotes WHERE client_id=$1', [actor.clientId]);
+  } finally {
+    await admin.end();
+    if (provisioner) {
+      try { await provisioner.query(`DROP DATABASE ${isolatedDatabase} CASCADE`); }
+      finally { await provisioner.end(); }
+    }
+  }
+}

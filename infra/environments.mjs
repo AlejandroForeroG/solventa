@@ -31,10 +31,28 @@ export function validateEnvironments(configs, provisionedEnvironment) {
         { binding: 'ACQUISITION', service: `solventa-acquisition-risk-${environment}` },
         { binding: 'IDENTITY', service: `solventa-identity-consent-ecosystem-${environment}` },
         { binding: 'POLICY', service: `solventa-policy-claims-payments-${environment}` },
-      ] : name === 'acquisition-risk' ? [
+      ] : ['acquisition-risk', 'policy-claims-payments'].includes(name) ? [
         { binding: 'IDENTITY_SERVICE', service: `solventa-identity-consent-ecosystem-${environment}` },
       ] : [];
       assert.deepEqual(target.services ?? [], expectedServices);
+      if (['acquisition-risk', 'policy-claims-payments'].includes(name)) {
+        assert.equal(target.vars.FINANCIAL_PROVIDER_MODE, environment === 'prod' ? 'disabled' : 'mock');
+        const queues = target.queues ?? {};
+        if (name === 'acquisition-risk') {
+          assert.deepEqual(queues.producers ?? [], environment === 'prod' ? [] : [
+            { binding: 'FINANCIAL_EVENTS', queue: `solventa-financial-events-${environment}` },
+          ]);
+        } else {
+          const consumers = queues.consumers ?? [];
+          assert.equal(consumers.length, environment === 'prod' ? 0 : 1);
+          if (environment !== 'prod') {
+            assert.equal(consumers[0].queue, `solventa-financial-events-${environment}`);
+            assert.equal(consumers[0].dead_letter_queue, `solventa-financial-events-dlq-${environment}`);
+            assert.equal(consumers[0].max_retries, 5);
+            assert.equal(consumers[0].max_batch_size, 10);
+          }
+        }
+      }
       if (name === 'web') {
         assert.deepEqual(target.secrets.required, ['DEV_INFRA_TOKEN']);
       } else {

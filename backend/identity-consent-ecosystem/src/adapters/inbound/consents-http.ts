@@ -77,10 +77,10 @@ export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { auth
 
   app.get('/api/v1/consents/terms', route('consents:read', async (_c, _principal, _traceId, reply) => reply(consents.terms(), 200)));
 
-  app.get('/api/v1/consents', route('consents:read', async (c, principal, _traceId, reply) => {
+  app.get('/api/v1/consents', route('consents:read', async (c, principal, traceId, reply) => {
     const after = c.req.query('after');
     if (after !== undefined && !isConsentCode(after)) return reply({ error: 'invalid_request' }, 400);
-    return reply(await consents.list(principal, after), 200);
+    return reply(await consents.list(principal, after, traceId), 200);
   }));
 
   app.post('/api/v1/consents', route('consents:write', async (c, principal, traceId, reply) => {

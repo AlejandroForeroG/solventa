@@ -53,6 +53,10 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
+| `openapi/v1/offers.yaml` | Owned definitive synthetic offers, explicit current risk consent for mortgage creation/acceptance, and asynchronous acceptance |
+| `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
+| `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
+| `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
@@ -123,6 +127,8 @@ A pact exists only for a consumer that is implemented. These public endpoints ar
 | `POST /api/v1/quotes` | A partner integration (bearer token) |
 | `GET /api/v1/access/partner` | A partner integration |
 | `GET /api/v1/access/web` | Any web or mobile client that probes access directly |
+| Offer creation/read/acceptance in `offers.yaml` | An implemented web consumer of the synthetic financial API |
+| Policy lookup/read/issue in `policies.yaml` | An implemented web consumer of the synthetic financial API |
 
 The change that adds the first real consumer of one of these endpoints, or of any new public route, must add its consumer pact and provider states in the same branch and PR. Do not write a pact from a hand-built request that no real client sends: it would approve a contract nobody depends on. The mobile app must register its own consumer when it calls the web Worker. Private RPC between Workers is outside Pact, which covers only HTTP.
 

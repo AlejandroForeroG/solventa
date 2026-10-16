@@ -1,5 +1,7 @@
 # Consent
 
+Resource denials preserve their public privacy behavior while requiring durable security evidence. Revoking an absent or foreign consent records the same minimal `consents:write` forbidden decision before opaque 404. A foreign or nonexistent pagination anchor records `consents:read` forbidden and keeps the compatible 200 empty page; the SQL adapter identifies this case using only an owner-scoped anchor lookup. An ordinary empty listing or exhausted page after an owned anchor generates no denial. If required denial persistence fails, the HTTP result is correlated 503 rather than an unaudited 404 or empty success. Telemetry contains the operation and trace UUID, without the actor or consent identifier. `tests/consent-security-boundaries.test.ts` covers these paths and audit failure; owner SQL smoke remains a separate verification layer.
+
 Identity owns the consent record. A customer authorizes, once and explicitly, the query of a fixed list of sources for one purpose; the authorization lasts 90 days and can be revoked at any time. The public contract is [consents.yaml](../../../packages/contracts/openapi/v1/consents.yaml) with [examples](../../../packages/contracts/examples/consents.json). Data shape and permissions are in [Identity and consent data](data.md).
 
 A web session is not consent. Having a consent is not a business permission either: each use of a source checks it again.

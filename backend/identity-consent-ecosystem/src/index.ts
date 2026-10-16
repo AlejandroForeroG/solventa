@@ -20,6 +20,14 @@ import { WorkosMobileAuthentication } from './adapters/outbound/workos-mobile-au
 import { MobileSessions } from './application/mobile-sessions';
 import { RegisteredDevices } from './application/registered-devices';
 import { SqlRegisteredDevices } from './adapters/outbound/registered-devices';
+import { authorizeFinancialAccess } from './application/financial-access';
+import { SecurityDecisions } from './application/security-decisions';
+import { SqlSecurityDecisions } from './adapters/outbound/sql-security-decisions';
+import { denyResourceAccess } from './application/resource-access-denials';
+
+function securityFor(env: IdentityEnv) {
+  return new SecurityDecisions(new SqlSecurityDecisions(env.IDENTITY_DB.connectionString), () => crypto.randomUUID());
+}
 
 async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecision> {
   try {
@@ -27,6 +35,7 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
     const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
+      security: securityFor(env),
       mobile: config ? {
         authenticate: token => new WorkosMobileAuthentication({ clientId: config.clientId, apiKey: config.apiKey }).authenticate(token),
         authorize: (identity, operation) => application.mobileUser(identity, operation),
@@ -47,11 +56,12 @@ async function authorize(env: IdentityEnv, input: unknown): Promise<AccessDecisi
 // Composition root: platform wiring and operational probes stay outside the core.
 type ConsentEnv = IdentityEnv & { CONSENT_SEAL_KEY?: string };
 
-function consentsFor(env: ConsentEnv) {
+function consentsFor(env: ConsentEnv, audit = true) {
   return new Consents({
     store: new SqlConsents(env.IDENTITY_DB.connectionString),
     platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
-    integrity: new HmacIntegrity(env.CONSENT_SEAL_KEY ?? '')
+    integrity: new HmacIntegrity(env.CONSENT_SEAL_KEY ?? ''),
+    security: audit ? securityFor(env) : undefined,
   });
 }
 
@@ -79,6 +89,17 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
   }
   async verifyConsentV1(request: ConsentCheck) {
     return consentsFor(this.env).verify(request);
+  }
+  async authorizeFinancialAccessV1(request: unknown) {
+    const decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input),
+      verifyConsent: input => consentsFor(this.env, false).verify(input), security: securityFor(this.env) }, request);
+    if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return decision;
+  }
+  async denyResourceAccessV1(request: unknown) {
+    const result = await denyResourceAccess(securityFor(this.env), request);
+    if (result.recorded) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return result;
   }
   async infraStatus() {
     const probe = await databaseProbe(this.env.IDENTITY_DB.connectionString);

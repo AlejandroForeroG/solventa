@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import type { Principal } from '../../application/authentication';
 import { safeCode } from '../safe-code';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../application/ports/consents';
+import { ConsentCursorNotOwned } from '../../application/ports/consents';
 import type { Consent, Locale, ScopeCode, SourceCode } from '../../domain/consent';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
@@ -100,7 +101,7 @@ export class SqlConsents implements ConsentStore {
       if (after !== undefined) {
         anchor = (await client.query<{ granted_at: Date; id: string }>(
           'SELECT granted_at, id FROM identity.consents WHERE client_id = $1 AND consent_code = $2', [principal.clientId, after])).rows[0];
-        if (!anchor) return [];
+        if (!anchor) throw new ConsentCursorNotOwned();
       }
       const result = await client.query<Row>(
         `SELECT ${plain} FROM identity.consents WHERE client_id = $1 AND consent_code IS NOT NULL
