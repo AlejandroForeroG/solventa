@@ -2,12 +2,13 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { owners } from './database.mjs';
 import { localToken } from './secrets.mjs';
+import { randomUUID } from 'node:crypto';
 
 const token = await localToken();
 const configs = ['apps/web/wrangler.jsonc', ...owners.map(o => `backend/${o.name}/wrangler.local.json`)];
 const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js','dev','--local','--port','8790',...configs.flatMap(c => ['-c',c])], { windowsHide: true, stdio: ['ignore','pipe','pipe'] });
 function diagnostics(chunk) {
-  for (const line of chunk.toString().split('\n')) if (line.includes('database_probe_failed') || line.includes('probe_result')) console.log(line);
+  for (const line of chunk.toString().split('\n')) if (line.includes('database_probe_failed') || line.includes('probe_result') || line.includes('security_denial_persistence_failed')) console.log(line);
 }
 child.stdout.on('data', diagnostics); child.stderr.on('data', diagnostics);
 let exited = false;
@@ -36,11 +37,20 @@ try {
   }
   assert.equal((await fetch(base+'/api/v1/quotes')).status,404);
   const json={'content-type':'application/json'};
+  async function credentialAttempt(path, method, headers = {}) {
+    const traceId = randomUUID();
+    const response = await fetch(base+path,{method,headers:{...headers,'x-trace-id':traceId},...(method==='POST'?{body:'{}'}:{})});
+    const body = await response.json();
+    const error = ['unauthorized','forbidden','access_unavailable','service_unavailable','invalid_request'].includes(body?.error) ? body.error : 'unknown_response';
+    console.log(JSON.stringify({event:'credential_smoke',path,status:response.status,error,traceId:body?.traceId===traceId?traceId:undefined}));
+    return {status:response.status,error};
+  }
+  assert.equal((await credentialAttempt('/api/v1/access/partner','GET')).status,401);
   // An invalid partner token is 401 once partner verification is configured and 503 while it is not.
-  assert.ok([401,503].includes((await fetch(base+'/api/v1/quotes',{method:'POST',headers:{...json,authorization:'Bearer invalid.partner.token'},body:'{}'})).status));
-  assert.equal((await fetch(base+'/api/v1/quotes',{method:'POST',headers:json,body:'{}'})).status,401);
-  assert.equal((await fetch(base+'/api/v1/me/quotes',{method:'POST',headers:json,body:'{}'})).status,401);
-  assert.equal((await fetch(base+'/api/v1/me/quotes',{method:'POST',headers:{...json,authorization:'Bearer x'},body:'{}'})).status,400);
+  assert.ok([401,503].includes((await credentialAttempt('/api/v1/quotes','POST',{...json,authorization:'Bearer invalid.partner.token'})).status));
+  assert.equal((await credentialAttempt('/api/v1/quotes','POST',json)).status,401);
+  assert.equal((await credentialAttempt('/api/v1/me/quotes','POST',json)).status,401);
+  assert.equal((await credentialAttempt('/api/v1/me/quotes','POST',{...json,authorization:'Bearer x'})).status,400);
   assert.equal((await fetch(base+'/')).status,200);
   console.log(JSON.stringify({ status:'passed', checks:['SQL through Workers','RPC service bindings','invalid-token rejection','static web','quote API rejects missing and invalid credentials on both entries'], services:result.services }));
 } finally {

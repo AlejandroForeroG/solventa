@@ -1,0 +1,76 @@
+{
+  "offer": {
+    "offerId": "10000000-0000-4000-8000-000000000001",
+    "offerVersion": 1,
+    "quoteId": "COT-2026-00001",
+    "product": "vida_hipotecario",
+    "premium": "77760.0000",
+    "currency": "COP",
+    "coverage": {
+      "kind": "mortgage_life",
+      "sumInsured": "320000000.0000"
+    },
+    "effectiveFrom": "2026-10-15T00:00:00.000Z",
+    "effectiveUntil": "2027-10-15T00:00:00.000Z",
+    "expiresAt": "2026-10-15T00:15:00.000Z",
+    "ruleVersion": "academic-mortgage-1",
+    "synthetic": true,
+    "status": "definitive",
+    "traceId": "50000000-0000-4000-8000-000000000001"
+  },
+  "acceptance": {
+    "acceptanceId": "10000000-0000-4000-8000-000000000001",
+    "offerId": "10000000-0000-4000-8000-000000000001",
+    "eventId": "10000000-0000-4000-8000-000000000001",
+    "acceptedAt": "2026-10-15T00:01:00.000Z",
+    "status": "pending_issuance",
+    "synthetic": true,
+    "traceId": "50000000-0000-4000-8000-000000000001"
+  },
+  "policy": {
+    "policyId": "10000000-0000-4000-8000-000000000001",
+    "offerId": "10000000-0000-4000-8000-000000000001",
+    "offerVersion": 1,
+    "status": "pending",
+    "premium": "77760.0000",
+    "currency": "COP",
+    "effectiveFrom": "2026-10-15T00:00:00.000Z",
+    "effectiveUntil": "2027-10-15T00:00:00.000Z",
+    "document": "{\"synthetic\":true}",
+    "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "synthetic": true,
+    "providerMode": "mock",
+    "replayed": false,
+    "traceId": "50000000-0000-4000-8000-000000000001"
+  },
+  "event": {
+    "version": 1,
+    "eventType": "offer.accepted",
+    "eventId": "10000000-0000-4000-8000-000000000001",
+    "environment": "local",
+    "synthetic": true,
+    "occurredAt": "2026-10-15T00:01:00.000Z",
+    "correlationId": "50000000-0000-4000-8000-000000000001",
+    "payload": {
+      "acceptanceId": "10000000-0000-4000-8000-000000000001",
+      "offerId": "10000000-0000-4000-8000-000000000001",
+      "offerVersion": 1,
+      "clientId": "30000000-0000-4000-8000-000000000001",
+      "subjectToken": "40000000-0000-4000-8000-000000000001",
+      "product": "vida_hipotecario",
+      "premium": "77760.0000",
+      "currency": "COP",
+      "coverage": {
+        "kind": "mortgage_life",
+        "sumInsured": "320000000.0000"
+      },
+      "effectiveFrom": "2026-10-15T00:00:00.000Z",
+      "effectiveUntil": "2027-10-15T00:00:00.000Z",
+      "expiresAt": "2026-10-15T00:15:00.000Z",
+      "ruleVersion": "academic-mortgage-1",
+      "acceptedAt": "2026-10-15T00:01:00.000Z"
+    },
+    "signature": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "signatureNotice": "The signature is an intentionally invalid schema example, not an authentic HMAC."
+}

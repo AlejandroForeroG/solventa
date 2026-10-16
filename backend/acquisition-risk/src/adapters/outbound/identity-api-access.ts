@@ -1,4 +1,5 @@
 import type { AccessCredential, AccessDecision, ApiAccess, QuoteActor } from '../../application/ports/api-access';
+import { canonicalTraceId } from '../trace-id';
 
 // The Service Binding to Identity (`authorizeApiAccessV1`). Its reply is untrusted until validated here.
 export interface IdentityAccessRpc {
@@ -25,8 +26,9 @@ function decisionFrom(reply: unknown): AccessDecision {
     const actor = actorFrom(reply.actor);
     return actor ? { allowed: true, actor } : unavailable;
   }
-  // Identity answers 400 only for input it cannot verify at all, which is a failed authentication here.
-  if (reply.status === 401 || reply.status === 400) return { allowed: false, error: 'unauthorized', status: 401 };
+  // This adapter supplies the fixed RPC shape. A 400 is an integration failure,
+  // not a recorded authentication denial that can be exposed as 401.
+  if (reply.status === 401) return { allowed: false, error: 'unauthorized', status: 401 };
   if (reply.status === 403) return { allowed: false, error: 'forbidden', status: 403 };
   return unavailable;
 }
@@ -34,10 +36,17 @@ function decisionFrom(reply: unknown): AccessDecision {
 export class IdentityApiAccess implements ApiAccess {
   constructor(private readonly identity: IdentityAccessRpc, private readonly deadlineMs = 2000) {}
 
-  async authorize(credential: AccessCredential): Promise<AccessDecision> {
-    const request = credential.kind === 'partner'
-      ? { kind: 'partner', token: credential.token, operation: 'quotes:create' }
-      : { kind: 'web', cookie: credential.cookie, origin: credential.origin, method: credential.method, operation: 'quotes:create' };
+  async authorize(credential: AccessCredential, traceId?: string): Promise<AccessDecision> {
+    // Preserve the credential kind while dropping oversized untrusted values.
+    // Identity then records a canonical denial without receiving the large data.
+    const actor = credential.kind === 'partner'
+      ? { kind: 'partner', token: credential.token.length <= 8192 ? credential.token : '', operation: 'quotes:create' }
+      : { kind: 'web', cookie: credential.cookie.length <= 16384 ? credential.cookie : '',
+        origin: credential.origin.length <= 256 ? credential.origin : '',
+        ...(credential.requestOrigin === undefined ? {} : { requestOrigin: credential.requestOrigin.length <= 256 ? credential.requestOrigin : '' }),
+        method: credential.method, operation: 'quotes:create' };
+    const correlationId = canonicalTraceId(traceId);
+    const request = { ...actor, ...(correlationId ? { traceId: correlationId } : {}) };
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const reply = await Promise.race([

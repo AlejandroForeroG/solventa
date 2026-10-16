@@ -2,29 +2,34 @@ import { timingSafeEqual } from 'node:crypto';
 import { apiVersions } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
+import { withSecurityHeaders } from './security-headers';
+import { fetchService } from './service-fetch';
 
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
+const offersPath = /^\/api\/v1\/offers(\/|$)/;
+const policiesPath = /^\/api\/v1\/policies(\/|$)/;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
   const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied)
-    ? supplied
+    ? supplied.toLowerCase()
     : crypto.randomUUID();
   return Response.json({ error, traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } });
 }
 
 // Credentials travel untouched: Acquisition verifies them through Identity.
 async function forwardToAcquisition(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try { return await env.ACQUISITION.fetch(new Request(request, { signal: controller.signal })); }
+  try { return await fetchService(request, env.ACQUISITION); }
   catch { return unavailable(request, headers, 'service_unavailable'); }
-  finally { clearTimeout(timeout); }
 }
 
-export default {
-  async fetch(request: Request, env: WebEnv): Promise<Response> {
+async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+  try { return await fetchService(request, env.POLICY); }
+  catch { return unavailable(request, headers, 'financial_unavailable'); }
+}
+
+async function route(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (path === '/health') return Response.json({ status: 'alive', environment: env.APP_ENV }, { headers });
@@ -34,16 +39,12 @@ export default {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
       if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile)(\/|$)/.test(path)) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        try { return withHeaders(await env.IDENTITY.fetch(new Request(request, { signal: controller.signal })), gate.headers); }
-        catch {
-          const requestedTrace = request.headers.get('X-Trace-Id') ?? '';
-          const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTrace) ? requestedTrace : crypto.randomUUID();
-          return withHeaders(Response.json({ error: 'access_unavailable', traceId }, { status: 503, headers: { ...headers, 'x-trace-id': traceId } }), gate.headers);
-        } finally { clearTimeout(timeout); }
+        try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
+        catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
       }
-      const response = isQuotesPath(path) ? await forwardToAcquisition(request, env, headers) : Response.json({ error: 'not_implemented' }, { status: 404, headers });
+      const response = isQuotesPath(path) || offersPath.test(path) ? await forwardToAcquisition(request, env, headers)
+        : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
+        : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }
     if (path.startsWith('/internal/')) {
@@ -61,5 +62,10 @@ export default {
       } catch { return Response.json({ ready: false }, { status: 503, headers }); }
     }
     return env.ASSETS.fetch(request);
+}
+
+export default {
+  async fetch(request: Request, env: WebEnv): Promise<Response> {
+    return withSecurityHeaders(request, await route(request, env));
   },
 } satisfies ExportedHandler<WebEnv>;

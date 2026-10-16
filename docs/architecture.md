@@ -20,7 +20,7 @@ Identity implements web authentication use cases through session and persistence
 
 Acquisition implements the minimum-data quote through its own domain, application ports and adapters; quote, decision capture, audit and outbox are committed together. Identity also implements consent registration, listing, revocation and fresh verification, alongside native session registration and revocation. See the [Acquisition guide](modules/acquisition-risk/README.md), [consent guide](modules/identity-consent-ecosystem/consent.md) and [native session contract](modules/identity-consent-ecosystem/mobile-authentication.md).
 
-The signal-reading use case checks consent before reaching its provider or stored copy. Its providers are simulated adapters selected by configuration, and no public profiling route calls it yet. Policy still has no business use cases. Stored outbox records do not establish event publication/consumption, complete financial flows or native biometric functionality.
+The signal-reading use case checks consent before reaching its provider or stored copy. Its providers are simulated adapters selected by configuration, and no public profiling route calls it yet. The separate academic financial flow implements definitive offer acceptance, durable outbox publication through Cloudflare Queue, Policy inbox import, mock premium settlement/signature, issuance and synthetic parametric indemnity. Each owner keeps its SQL, audit and transaction; the real Queue transport does not provide distributed atomicity. Mock financial providers do not establish external settlement or legal signature validity. Customer notification delivery, autonomous issuance reconciliation and native biometric validation remain pending.
 
 ## External integrations
 
@@ -33,9 +33,9 @@ Each external party is reached or received through an adapter that translates it
 | Authentication and partner tokens (WorkOS) | Solventa queries | Implemented in Identity adapters (`workos-*.ts`); see [authentication](modules/identity-consent-ecosystem/authentication.md) and [API access](modules/identity-consent-ecosystem/api-access.md) |
 | Identity verification (KYC) | Solventa queries | Partly covered: the `identity_validation` signal checks only that the document is valid. Biometric matching and AML/sanctions lists are not implemented; no separate port |
 | Public statistics (DANE) | Solventa queries | Not implemented; aggregated data outside the consent and outside the signal scopes |
-| Reinsurers, ACORD cession and portfolio reports | Solventa sends, reinsurer confirms | Not implemented; needs Policy's issued policies |
-| Payment gateways | Solventa requests, gateway notifies | Not implemented; owned by Policy |
-| Electronic signature and notification | Solventa requests, provider notifies | Not implemented; owned by Policy |
-| Telemetry and parametric events | Provider sends events | Not implemented |
+| Reinsurers, ACORD cession and portfolio reports | Solventa sends, reinsurer confirms | Not implemented |
+| Payment gateways | Solventa requests, gateway answers | Mock adapter in Policy for the academic financial flow (`mock-financial-providers.ts`, `FINANCIAL_PROVIDER_MODE=mock` outside prod); no real gateway; see [Policy](modules/policy-claims-payments/README.md) |
+| Electronic signature and notification | Solventa requests, provider answers | Mock signature in Policy's issuance flow, same adapter and mode; no legal signature provider; customer notification delivery not implemented |
+| Telemetry and parametric events | Provider sends events | Synthetic flight-delay events evaluated by Policy's internal consumer; no external telemetry provider |
 
 An integration that is not implemented has no port or adapter yet: create them with the first use case that needs it, in the module that owns that capability, following the same rule and adding its schema and corpus.

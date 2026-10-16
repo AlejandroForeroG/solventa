@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes, X509Certificate, createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { owners, settings, provision, verifyIsolation, verifyEnvironmentIsolation } from './database.mjs';
-import { account, remoteEnvironments, configurations, validateEnvironments } from './environments.mjs';
+import { account, remoteEnvironments, configurations, validateEnvironments, publicOrigins, legacyOrigins } from './environments.mjs';
 
 // Every action requires an explicit target. There is no default remote environment.
 const environment = process.argv[3];
@@ -45,6 +45,12 @@ async function verifyResources(api) {
   if (!config.ssl.ca) throw Error('Remote TLS verification requires DATABASE_CA_FILE');
   const expectedCA = caFingerprint(config.ssl.ca);
   const verifiedCAs = new Set();
+  if (environment !== 'prod') {
+    const queues = await api('/queues?page=1&per_page=100');
+    for (const name of [`solventa-financial-events-${environment}`, `solventa-financial-events-dlq-${environment}`]) {
+      assert.ok(queues.some(queue => queue.queue_name === name), 'Provision the financial queue before deployment');
+    }
+  }
   for (const owner of owners) {
     const worker = JSON.parse(await readFile(`backend/${owner.name}/wrangler.jsonc`, 'utf8'));
     assert.equal(worker.account_id, account);
@@ -123,14 +129,13 @@ async function deploy(api) {
   }
   // Targets must exist before a consumer binds to them.
   for (const name of ['identity-consent-ecosystem', 'policy-claims-payments', 'acquisition-risk']) {
-    const authSecrets = name === 'identity-consent-ecosystem' ? ['--secrets-file', `infra/.local/identity.${environment}.secrets.json`] : [];
+    const authSecrets = ['--secrets-file', `infra/.local/${name === 'identity-consent-ecosystem' ? 'identity' : 'financial'}.${environment}.secrets.json`];
     wrangler(['deploy', '--config', `backend/${name}/wrangler.jsonc`, '--env', environment, ...authSecrets]);
   }
   wrangler(['deploy', '--config', 'apps/web/wrangler.jsonc', '--env', environment, '--secrets-file', path]);
-  const subdomain = await api('/workers/subdomain');
-  const url = `https://solventa-web-${environment}.${subdomain.subdomain}.workers.dev`;
+  const url = publicOrigins[environment];
   await writeFile(`infra/.local/${environment}-endpoint.json`, JSON.stringify({ url, account, environment }));
-  // A newly created workers.dev route can take a few seconds to propagate.
+  // A new Custom Domain and its certificate can take time to become ready.
   let reachable = false;
   for (let attempt = 0; attempt < 20; attempt++) {
     try { reachable = (await fetch(url + '/health', { signal: AbortSignal.timeout(5000) })).status === 200; } catch {}
@@ -142,7 +147,7 @@ async function deploy(api) {
 }
 async function smoke(api) {
   await verifyResources(api);
-  const { url } = JSON.parse(await readFile(`infra/.local/${environment}-endpoint.json`, 'utf8'));
+  const url = publicOrigins[environment];
   const { DEV_INFRA_TOKEN: token } = JSON.parse(await readFile(`infra/.local/web.${environment}.secrets.json`, 'utf8'));
   assert.match(token, /^[a-f0-9]{64}$/);
   const request = (path, authenticated = false) => fetch(url + path, { headers: authenticated ? { authorization: `Bearer ${token}` } : undefined, signal: AbortSignal.timeout(20000) });
@@ -161,6 +166,24 @@ async function smoke(api) {
   assert.equal(authorization.origin, 'https://api.workos.com');
   assert.equal(authorization.searchParams.get('redirect_uri'), url + '/auth/callback');
   assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256');
+  for (const origin of [url, legacyOrigins[environment]]) {
+    assert.equal((await fetch(origin + '/health', { signal: AbortSignal.timeout(20000) })).status, 200);
+    assert.equal((await fetch(origin + '/auth/session', { signal: AbortSignal.timeout(20000) })).status, 401);
+    const response = await fetch(origin + '/auth/login', { redirect: 'manual', signal: AbortSignal.timeout(20000) });
+    assert.equal(response.status, 302);
+    assert.equal(new URL(response.headers.get('location')).searchParams.get('redirect_uri'), origin + '/auth/callback');
+    assert.equal((await fetch(origin + '/api/docs/', { signal: AbortSignal.timeout(20000) })).status, 200);
+    const catalog = await fetch(origin + '/api/docs/catalog.json', { signal: AbortSignal.timeout(20000) });
+    assert.equal(catalog.status, 200);
+    const entries = await catalog.json();
+    assert.ok(Array.isArray(entries) && entries.length > 0);
+    for (const entry of entries) {
+      assert.match(entry.url, /^\/api\/docs\/v[1-9][0-9]*\/[a-z][a-z0-9-]*\.json$/);
+      const bundled = await fetch(origin + entry.url, { signal: AbortSignal.timeout(20000) });
+      assert.equal(bundled.status, 200);
+      assert.equal((await bundled.json()).servers[0].url, '/api/' + entry.url.split('/')[3]);
+    }
+  }
   assert.equal((await request('/internal/infra')).status, 401);
   assert.equal((await fetch(url + '/internal/infra', { headers: { authorization: 'Bearer invalid' }, signal: AbortSignal.timeout(20000) })).status, 401);
   // Deployment routing can briefly serve the previous version of web or a backend.
