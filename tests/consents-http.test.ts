@@ -56,6 +56,20 @@ const call = (http: Http, method: string, path: string, init: { as?: string | nu
 const grant = (http: Http, key = 'key-1', init: Parameters<typeof call>[3] = {}) =>
   call(http, 'POST', '/api/v1/consents', { ...init, headers: { 'idempotency-key': key, ...init.headers } });
 
+test('a consent write cannot spoof its target host through headers or use a sibling alias Origin', async () => {
+  const { http, deps } = app();
+  const canonical = 'https://dev.solventa.site';
+  deps.web.allowedOrigins.push(canonical);
+  for (const [target, source] of [[canonical, origin], [origin, canonical]]) {
+    const response = await http.request(target + '/api/v1/consents', { method: 'POST', headers: {
+      Cookie: cookie('ana'), Origin: source, 'X-Forwarded-Host': new URL(source).host, 'X-Request-Origin': source,
+      'Content-Type': 'application/json', 'Idempotency-Key': 'cross-host',
+    }, body: JSON.stringify({ textVersion: 2, locale: 'es-CO' }) }, env);
+    assert.equal(response.status, 403);
+  }
+  assert.equal((await (await call(http, 'GET', '/api/v1/consents')).json()).items.length, 0);
+});
+
 test('the terms endpoint serves the terms of the contract example', async () => {
   const { http } = app();
   const res = await call(http, 'GET', '/api/v1/consents/terms', { headers: { 'x-trace-id': TRACE } });
@@ -65,6 +79,29 @@ test('the terms endpoint serves the terms of the contract example', async () => 
   assert.deepEqual({ ...body, traceId: examples.terms.traceId }, examples.terms);
   assert.equal(res.headers.get('x-trace-id'), TRACE);
   assert.equal(res.headers.get('cache-control'), 'no-store');
+});
+
+test('revocation and authorization rejection cancel unused request bodies before responding', async () => {
+  for (const outcome of ['revoked', 'foreign', 'unauthorized']) {
+    const { http } = app();
+    const consent = await (await grant(http)).json();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{}')); },
+      cancel() { cancelled = true; }
+    });
+    const init: RequestInit & { duplex: 'half' } = {
+      method: 'POST', body, duplex: 'half',
+      headers: { origin, ...(outcome !== 'unauthorized' ? { cookie: cookie(outcome === 'foreign' ? 'luis' : 'ana') } : {}) }
+    };
+    const request = new Request(origin + `/api/v1/consents/${consent.consentId}/revoke`, init);
+    const response = await http.fetch(request, env);
+    assert.equal(response.status, outcome === 'revoked' ? 200 : outcome === 'foreign' ? 404 : 401);
+    assert.equal(cancelled, true, 'no unfinished upload may outlive the response');
+    const result = await response.json();
+    if (outcome === 'revoked') assert.equal(result.status, 'revoked');
+    else assert.equal(result.error, outcome === 'foreign' ? 'not_found' : 'unauthorized');
+  }
 });
 
 test('grant, replay, list and revoke answer with the contract shapes', async () => {
@@ -208,4 +245,20 @@ test('when persistence or the seal key fail the answer is 503 with no internal d
   const noKey = app('short');
   assert.equal((await grant(noKey.http)).status, 503);
   assert.equal(noKey.store.consents.length, 0);
+});
+
+test('unknown exception codes cannot carry personal data into consent logs or responses', async () => {
+  const logs: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
+  try {
+    const { http, store } = app();
+    store.grant = async () => { throw Object.assign(new Error('SyntheticPerson123 private detail'), { code: 'SyntheticPerson123' }); };
+    const res = await grant(http, 'failure', { headers: { 'x-trace-id': TRACE } });
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get('x-trace-id'), TRACE);
+    assert.deepEqual(await res.json(), { error: 'access_unavailable', traceId: TRACE });
+    assert.deepEqual(logs.map(line => JSON.parse(line)), [{ event: 'consent_failed', traceId: TRACE, code: 'unexpected_error' }]);
+    assert.equal(store.consents.length + store.audit.length + store.outbox.length, 0);
+  } finally { console.error = original; }
 });

@@ -2,6 +2,8 @@ import { CURRENT_TERMS, PURPOSE_RISK_PROFILING, WORDING_FINGERPRINT, expiryFor, 
 import type { Consent, ConsentStatus } from '../domain/consent';
 import type { Principal } from './authentication';
 import type { ConsentStore, Integrity, Platform } from './ports/consents';
+import { ConsentCursorNotOwned } from './ports/consents';
+import type { SecurityDecisions } from './security-decisions';
 
 export type ConsentView = {
   consentId: string;
@@ -20,7 +22,7 @@ export type ConsentView = {
   seal: string;
 };
 
-export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string };
+export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string; traceId?: string };
 export type ConsentDecision =
   | { allowed: true; consent: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
@@ -31,7 +33,7 @@ const SCOPES: readonly string[] = CURRENT_TERMS.sources.map(source => source.sco
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class Consents {
-  constructor(private readonly deps: { store: ConsentStore; platform: Platform; integrity: Integrity }) {}
+  constructor(private readonly deps: { store: ConsentStore; platform: Platform; integrity: Integrity; security?: Pick<SecurityDecisions, 'deny'> }) {}
 
   terms() { return CURRENT_TERMS; }
 
@@ -74,9 +76,15 @@ export class Consents {
     return { status: 'declined' } as const;
   }
 
-  async list(principal: Principal, after?: string) {
+  async list(principal: Principal, after?: string, traceId?: string) {
     const now = this.deps.platform.now();
-    const rows = await this.deps.store.list(principal, PAGE_SIZE + 1, now, after);
+    let rows: Consent[];
+    try { rows = await this.deps.store.list(principal, PAGE_SIZE + 1, now, after); }
+    catch (error) {
+      if (!(error instanceof ConsentCursorNotOwned)) throw error;
+      await this.deps.security?.deny({ category: 'api_access', channel: 'web', operation: 'consents:read', cause: 'forbidden' }, traceId);
+      return { items: [], nextCursor: null };
+    }
     const items = rows.slice(0, PAGE_SIZE).map(consent => this.view(consent, now));
     return { items, nextCursor: rows.length > PAGE_SIZE ? items[items.length - 1].consentId : null };
   }
@@ -85,13 +93,27 @@ export class Consents {
     if (!isConsentCode(input.consentCode)) return { status: 'invalid' } as const;
     const now = this.deps.platform.now();
     const result = await this.deps.store.revoke(input.principal, input.consentCode, now, input.traceId);
-    if (result.kind === 'not_found') return { status: 'not_found' } as const;
+    if (result.kind === 'not_found') {
+      await this.deps.security?.deny({ category: 'api_access', channel: 'web', operation: 'consents:write', cause: 'forbidden' }, input.traceId);
+      return { status: 'not_found' } as const;
+    }
     if (result.kind === 'not_active') return { status: 'not_active' } as const;
     return { status: 'revoked', consent: this.view(result.consent, now) } as const;
   }
 
   // Called on every use of a source, never cached: a revocation blocks the next call.
   async verify(input: ConsentCheck): Promise<ConsentDecision> {
+    const decision = await this.checkConsent(input);
+    if (!decision.allowed && decision.reason !== 'unavailable') {
+      try {
+        await this.deps.security?.deny({ category: 'consent_use', channel: 'internal', operation: 'consent:use',
+          cause: decision.reason === 'invalid_request' ? 'consent_request_invalid' : decision.reason }, input?.traceId);
+      } catch { return { allowed: false, reason: 'unavailable' }; }
+    }
+    return decision;
+  }
+
+  private async checkConsent(input: ConsentCheck): Promise<ConsentDecision> {
     if (!input || typeof input.subjectToken !== 'string' || !UUID.test(input.subjectToken) || input.purposeCode !== PURPOSE_RISK_PROFILING
       || typeof input.scope !== 'string' || !SCOPES.includes(input.scope)) return { allowed: false, reason: 'invalid_request' };
     try {

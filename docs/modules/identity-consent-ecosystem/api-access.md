@@ -7,11 +7,13 @@ Identity verifies authentication and the `quotes:create` permission for partners
 | Environment | Base URL |
 |---|---|
 | local | `http://localhost:8787` |
-| dev | `https://solventa-web-dev.ja-forerog1.workers.dev` |
-| staging | `https://solventa-web-staging.ja-forerog1.workers.dev` |
-| prod | `https://solventa-web-prod.ja-forerog1.workers.dev` |
+| dev | `https://dev.solventa.site` |
+| staging | `https://staging.solventa.site` |
+| prod | `https://solventa.site` |
 
 Each environment has its own configuration, credentials and records. Public requests enter through the web Worker; backends are private. Having the route in code does not provision an M2M application or its permissions in WorkOS.
+
+The table lists canonical URLs; deployment and DNS/certificate readiness require separate verification. The exact previous workers.dev alias for the same environment remains available during the [domain transition](authentication.md#custom-domain-transition).
 
 ## Choosing an identity
 
@@ -66,9 +68,9 @@ if (!access.ok) throw new Error(result.error);
 
 The web user identity comes only from the cryptographically verified sealed WorkOS cookie and the active local client and session that `/auth/callback` registered. The user must have a verified email; a missing, unknown, expired or revoked local session, an inactive client or a logout returns 401. The client never selects `clientId`, `subjectToken` or any partner identifier, and no partner registration, channel credential or server-selected reference participates in web access.
 
-The web user operation policy in `backend/identity-consent-ecosystem/src/application/api-access.ts` allows `quotes:create` and, for the user's own consent only, `consents:read` and `consents:write` (see [Consent](consent.md)). A partner credential is never allowed the consent operations. It is not a role system: it grants no access to other users' resources, and permission to manage consent is not consent to query a source. Each future operation must add its own explicit rule, resource authorization and consent checks in the owning use case. The web route rejects an Authorization header with 400 to prevent mixing credential types.
+The web user operation policy in `backend/identity-consent-ecosystem/src/application/api-access.ts` allows `quotes:create` and, for the user's own consent only, `consents:read` and `consents:write` (see [Consent](consent.md)). It also explicitly allows the owner-restricted web operations `offers:create`, `offers:create-flight`, `offers:read`, `offers:accept`, `policies:read` and `policies:issue`. Partners and native sessions cannot use the financial operations. This is not a role system: it grants no access to other users' resources, and permission to manage consent is not consent to query a source. The owner checks the persisted resource and its required consent. The web route rejects an Authorization header with 400 to prevent mixing credential types.
 
-The access check does not refresh the cookie and never registers a session: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require the configured Origin and otherwise return 403; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
+The access check does not refresh the cookie and never registers a session: if the session token has expired, use `/auth/session` and retry the probe once according to its result. Future web write adapters must send the actual method and Origin to the RPC: POST/PUT/PATCH/DELETE require Origin to match the actual allowed request origin and otherwise return 403; local also allows `http://localhost:5173`. The RPC accepts those methods and GET/HEAD; it does not accept OPTIONS. The probes in this guide only accept GET. There is no generic CORS API for third-party pages.
 
 ## Responses
 
@@ -114,21 +116,39 @@ The partner actor has no `principal`, and the user actor has no partner or crede
 
 Access errors include only the canonical code and correlation UUID, without provider data. If identity or permission cannot be verified, a protected operation must not proceed.
 
+An absent credential is rejected with 401 before provider configuration is required, including an absent web cookie. The rejection still requires its security audit/outbox and becomes 503 if that write fails. A supplied web cookie requires the configured provider; missing configuration returns 503 without claiming a credential denial. When provider configuration is available, web writes with a supplied cookie still require an allowed Origin.
+
+For a valid access-check input, a final 401 or 403 is recorded as a minimal Identity security decision with atomic audit/outbox before the denial returns. If that required record cannot be committed, the result is `503 access_unavailable`; no protected operation proceeds. Invalid input, unsupported HTTP methods and technical 503 results do not create these denial events. See [security recording and delivery boundaries](../../security.md#durable-rejection-records).
+
 ## Contract between backends
 
 Identity exposes `authorizeApiAccessV1` through a Service Binding. It is not a public HTTP route. Acquisition can use its existing Identity binding before invoking the quoting use case. The consumer adapter builds one of these inputs from the actual request:
 
 ```ts
-{ kind: 'partner', token, operation: 'quotes:create' }
-{ kind: 'web', cookie, origin, method, operation: 'quotes:create' }
-{ kind: 'mobile', token, operation: 'quotes:create' }
+{ kind: 'partner', token, operation: 'quotes:create', traceId }
+{ kind: 'web', cookie, origin, requestOrigin, method, operation: 'quotes:create', traceId }
+{ kind: 'mobile', token, operation: 'quotes:create', traceId }
 ```
 
 Identity's own [consent](consent.md) routes call the same function with `consents:read` or `consents:write`, for web users only: a partner credential is always forbidden those operations.
 
-`cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `method` is the actual method. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
+`cookie` contains the sealed cookie value, not the entire Cookie header. `origin` is the received Origin header; `requestOrigin` is parsed from the actual HTTP request URL by the trusted owner adapter, never from a custom header or body. `method` is the actual method. Identity validates the request origin against its exact environment allowlist; mutations require the two origins to match, including between sibling aliases. Local 8787 also accepts the existing Vite Origin 5173. Older private RPC callers omitting the optional `requestOrigin` retain only the exact workers.dev Origin of their environment for writes, even after `AUTH_ORIGIN` becomes canonical. This preserves the previous Acquisition version during Identity-first publication or a later Acquisition deployment failure; it does not grant old callers the new alias. New HTTP adapters always send the metadata. Local callers retain localhost behavior.
 
-A positive response applies to that check and must not be stored as permanent permission. Each use verifies the signature and current local state; the RPC does not renew cookies. Do not duplicate calls to Identity without reviewing the flow's limit of one internal remote dependency. Consent authorization for signals remains an additional pending capability.
+Optional `traceId` carries the initiating canonical UUID into the rejection record; a missing/invalid value receives a server-generated correlation. An unknown operation returns 400 before any credential or session lookup. The response is `{allowed:true,actor}`, where `actor` is the partner or user actor above, or `{allowed:false,error,status}`, with status 400, 401, 403 or 503. Await the call, apply the flow's deadline and treat RPC failure as unavailability; never continue with a partial actor or client-supplied IDs. Obtain actor context from Identity, branch on `actor.kind` and translate it into the consumer's own port; do not import another backend's repositories or entities.
+
+A positive response applies to that check and must not be stored as permanent permission. Each use verifies the signature and current local state; the RPC does not renew cookies. Do not duplicate calls to Identity without reviewing the flow's limit of one internal remote dependency. The combined financial check below adds fresh consent verification for the implemented synthetic mortgage-offer flow; it is not a general authorization for future signals.
+
+### Combined financial access check
+
+`authorizeFinancialAccessV1` is a private Service Binding RPC for the explicit financial operations above, with `{ kind: 'web', cookie, origin, method, operation, traceId }`. It authenticates through the same current session and Origin policy. The correlation UUID is generated or normalized at HTTP entry and propagated unchanged. One remote call encloses Identity's own local checks; it never delegates to Acquisition or Policy. Mortgage-offer creation additionally requires all four current `risk_profiling` scopes referring to the same sealed consent revision. A positive reply returns the authenticated user actor and, when applicable, `{ consentId, textVersion, expiresAt }`.
+
+Generic offer acceptance may refer to a flight product that reads no financial data. Therefore a missing, expired, revoked or invalid risk consent returns an authenticated actor without consent metadata for this operation. This authorizes no use of risk data: Acquisition reads the persisted product and requires fresh metadata before accepting a mortgage offer, including retries. The request cannot supply a product or consent bypass flag. A technical consent-verification failure remains 503 and never becomes a consent-free success. Current scope metadata is not persisted as permanent permission; future protected use requires a fresh check. This is not a transaction across Identity and the owner, and does not promise global atomicity against a concurrent revocation.
+
+Read operations, flight-offer creation and policy issuance do not query Open Finance. Their permission is distinct from risk-data consent. Both financial HTTP adapters send `requestOrigin` from the actual destination URL separately from the received `Origin` header, preserving destination-bound checks when an environment retains more than one hostname. All protected owners enforce their own resource ownership and financial invariants after Identity authentication. Tests in `tests/financial-access.test.ts` and `tests/financial-http.test.ts` cover the combined check and the public boundaries; independent owner/SQL suites verify that missing consent cannot bypass mortgage creation or acceptance.
+
+The private `denyResourceAccessV1` RPC accepts exactly `{ operation, traceId }`, with one of the six implemented financial operations and a valid correlation UUID. It accepts no actor, resource, credential or personal fields. A financial owner calls it only after rejecting an absent/foreign owned resource or a required mortgage consent check; normal successful paths add no RPC. Identity atomically stores its existing minimal `api_access`/`web`/`forbidden` security decision and alert outbox. The public resource response remains opaque 404 (or the applicable consent 403), while a required audit failure returns correlated 503. The same Identity dependency serves both authentication and exceptional denial recording; no owner reads another schema.
+
+Optional consent inspection for generic acceptance does not emit an alert when the authenticated flight product requires no risk data. A final mortgage rejection is recorded by Acquisition instead. Authentication/Origin denials and mortgage-creation consent denials still retain their original correlation UUID and trigger the canonical minimal alert projection. Do not include resource IDs, input values or account data in the alert. Tests in `tests/resource-access-denials.test.ts` exercise the exact RPC payload, all six operations, the existing outbox projector and failed append behavior.
 
 ## Registering and revoking partner access
 
@@ -163,7 +183,7 @@ Registration creates or reuses an active partner and records the credential with
 
 Identity owns `partners` and `partner_credentials`; each call checks their validity. Web users have no rows in these tables. The M2M reference is built as `JSON.stringify([issuer, organizationId, applicationId])` using verified claims. SQL stores identifiers and scopes, without JWTs, client secrets or cookies. Local revocation blocks subsequent use even while the JWT remains signed and unexpired. JWT verification does not establish immediate revocation in WorkOS: there is no per-request introspection.
 
-These probes do not perform quoting, consent, quotas, biometrics or implement a permission catalog for all future resources. The native authorization probe and session lifecycle are described in [native authentication](mobile-authentication.md); native business HTTP routes and UI remain separate work. Local registration and revocation have transactional auditing; probes do not yet produce durable rejection audit records or automatic alerts. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
+These probes do not perform quoting, consent, quotas, biometrics or implement a permission catalog for all future resources. The native authorization probe and session lifecycle are described in [native authentication](mobile-authentication.md); native business HTTP routes and UI remain separate work. Local registration/revocation and covered access denials have transactional auditing. Security outbox publication uses an optional, default-disabled email configuration; stored events or provider acceptance do not prove receiver delivery or a measured notification deadline. Each operation must implement its rules, resource authorization, persistence and tests. The web session reference remains in [authentication](authentication.md); public API evolution is described in [contracts](../../shared/contracts/README.md).
 
 ## Verification
 

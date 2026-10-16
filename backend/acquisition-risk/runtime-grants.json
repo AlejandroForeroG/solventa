@@ -43,5 +43,17 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "offer_contexts": [
+    "SELECT",
+    "INSERT"
+  ],
+  "offer_acceptances": [
+    "SELECT",
+    "INSERT"
+  ],
+  "offer_requests": [
+    "SELECT",
+    "INSERT"
   ]
 }

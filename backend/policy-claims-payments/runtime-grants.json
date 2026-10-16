@@ -36,5 +36,27 @@
   "audit_events": [
     "SELECT",
     "INSERT"
+  ],
+  "financial_payment_intents": [
+    "SELECT",
+    "INSERT"
+  ],
+  "financial_contracts": [
+    "SELECT",
+    "INSERT"
+  ],
+  "financial_commands": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "policy_signatures": [
+    "SELECT",
+    "INSERT"
+  ],
+  "mock_gateway_operations": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }

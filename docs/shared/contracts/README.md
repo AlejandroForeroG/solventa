@@ -8,11 +8,13 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+
 | Environment | API reference |
 |---|---|
-| Dev | [OpenAPI viewer](https://solventa-web-dev.ja-forerog1.workers.dev/api/docs/) |
-| Staging | [OpenAPI viewer](https://solventa-web-staging.ja-forerog1.workers.dev/api/docs/) |
-| Prod | [OpenAPI viewer](https://solventa-web-prod.ja-forerog1.workers.dev/api/docs/) |
+| Dev | [OpenAPI viewer](https://dev.solventa.site/api/docs/) |
+| Staging | [OpenAPI viewer](https://staging.solventa.site/api/docs/) |
+| Prod | [OpenAPI viewer](https://solventa.site/api/docs/) |
 | Local | [OpenAPI viewer](http://localhost:8787/api/docs/) after building web and starting the local Workers |
 
 Select a domain/version to inspect its operations, parameters, request/response schemas, examples and security requirements. The responsive reference includes sidebar navigation, search and request/response examples alongside operations. The `spec` query parameter preserves the selected domain/version when reloading or sharing operation links, for example `/api/docs/?spec=v1/quotes`. **OpenAPI JSON** opens the selected bundled specification; `/api/docs/catalog.json` lists available specifications. The viewer identifies its current environment. Relative `servers` URLs refer to that same environment.
@@ -53,6 +55,10 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
+| `openapi/v1/offers.yaml` | Owned definitive synthetic offers, explicit current risk consent for mortgage creation/acceptance, and asynchronous acceptance |
+| `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
+| `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
+| `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
@@ -123,6 +129,8 @@ A pact exists only for a consumer that is implemented. These public endpoints ar
 | `POST /api/v1/quotes` | A partner integration (bearer token) |
 | `GET /api/v1/access/partner` | A partner integration |
 | `GET /api/v1/access/web` | Any web or mobile client that probes access directly |
+| Offer creation/read/acceptance in `offers.yaml` | An implemented web consumer of the synthetic financial API |
+| Policy lookup/read/issue in `policies.yaml` | An implemented web consumer of the synthetic financial API |
 
 The change that adds the first real consumer of one of these endpoints, or of any new public route, must add its consumer pact and provider states in the same branch and PR. Do not write a pact from a hand-built request that no real client sends: it would approve a contract nobody depends on. The mobile app must register its own consumer when it calls the web Worker. Private RPC between Workers is outside Pact, which covers only HTTP.
 

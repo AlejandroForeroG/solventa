@@ -37,7 +37,7 @@ test('different issuer, organization or application cannot reuse a registration'
 test('unknown operations never reach repository or session storage', async () => {
   const fail = async (): Promise<PartnerCredential | null> => { throw Error('unexpected_lookup'); };
   const api = new ApiAccess({ find: fail }, { ...sessions, find: async () => { assert.fail('unexpected_session_lookup'); } });
-  for (const operation of ['', 'quotes:read', '*', 'QUOTES:CREATE', 'policies:issue']) {
+  for (const operation of ['', 'quotes:read', '*', 'QUOTES:CREATE', 'policies:delete']) {
     assert.deepEqual(await api.partner(identity, operation), { allowed: false, error: 'invalid_request', status: 400 });
     assert.deepEqual(await api.webUser(webIdentity, operation), { allowed: false, error: 'invalid_request', status: 400 });
   }

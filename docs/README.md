@@ -24,6 +24,7 @@ This directory contains the product's current technical documentation. Its organ
 - [UI style and its sources](channels/ui-style.md).
 - [Installation and development](development.md).
 - [Architecture and boundaries](architecture.md).
+- [Security controls, authorization matrix and data custody](security.md).
 - [Endpoints and business decisions](endpoint-standards.md).
 - [Purposeful testing](testing.md).
 - [Change review and acceptance criteria](change-review.md).

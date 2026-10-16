@@ -1,0 +1,600 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Offers
+  version: 1.0.0
+  description: Authenticated web-only academic financial flow. External data,
+    payment and signature providers are explicitly mocked; Solventa
+    authorization, owner transactions and idempotency remain real. Disabled in
+    production. Credentials, actor identifiers, approval and amounts cannot be
+    selected by clients. All responses are no-store and correlated.
+servers:
+  - url: /api/v1
+tags:
+  - name: Offers
+    description: Owner-authorized synthetic offers.
+paths:
+  /quotes/{quoteId}/offers:
+    post:
+      operationId: createMortgageOffer
+      summary: Create a definitive mortgage offer
+      tags:
+        - Offers
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: quoteId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^COT-[0-9]{4}-[0-9]{5}$
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: []
+              properties: {}
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "201":
+          description: Definitive offer created.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      description: Requires current risk_profiling consent covering all four
+        configured sources. Uses only the authenticated user's stored quote and
+        deterministic mock signals; a preliminary quote is never accepted as a
+        contract. Returns a versioned immutable synthetic offer.
+  /offers:
+    post:
+      operationId: createFlightOffer
+      summary: Create a synthetic flight-delay offer
+      tags:
+        - Offers
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlightOfferRequest"
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "201":
+          description: Synthetic flight offer created.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      description: Does not query financial data and requires no risk-data consent.
+        Flight reference is a synthetic UUID; premium, payout, threshold and
+        validity are fixed by the versioned academic rule.
+  /offers/{offerId}:
+    get:
+      operationId: getOwnOffer
+      summary: Read an owned definitive offer
+      tags:
+        - Offers
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /offers/{offerId}/accept:
+    post:
+      operationId: acceptOwnOffer
+      summary: Accept owned immutable offer terms
+      tags:
+        - Offers
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: []
+              properties: {}
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Acceptance"
+        "202":
+          description: Acceptance committed; policy issuance pending delivery.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Acceptance"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      description: Validates ownership, integrity and expiry from the stored offer.
+        Mortgage acceptance additionally requires current risk-data consent.
+        Commits acceptance, audit and signed outbox event in Acquisition. Policy
+        issuance is asynchronous; 202 does not mean issued or charged. Reuse the
+        same key and unchanged request after an uncertain outcome.
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+        traceId:
+          type: string
+          format: uuid
+    Offer:
+      type: object
+      additionalProperties: false
+      required:
+        - offerId
+        - offerVersion
+        - quoteId
+        - product
+        - premium
+        - currency
+        - coverage
+        - effectiveFrom
+        - effectiveUntil
+        - expiresAt
+        - ruleVersion
+        - synthetic
+        - status
+        - traceId
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        offerVersion:
+          type: integer
+          enum:
+            - 1
+        quoteId:
+          type: string
+          nullable: true
+          pattern: ^COT-[0-9]{4}-[0-9]{5}$
+        product:
+          type: string
+          enum:
+            - vida_hipotecario
+            - flight_delay
+        premium:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        currency:
+          type: string
+          enum:
+            - COP
+        coverage:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+                - sumInsured
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - mortgage_life
+                sumInsured:
+                  type: string
+                  pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+            - type: object
+              additionalProperties: false
+              required:
+                - kind
+                - flightReference
+                - thresholdMinutes
+                - payoutAmount
+              properties:
+                kind:
+                  type: string
+                  enum:
+                    - flight_delay
+                flightReference:
+                  type: string
+                  format: uuid
+                thresholdMinutes:
+                  type: integer
+                  enum:
+                    - 180
+                payoutAmount:
+                  type: string
+                  enum:
+                    - "100000.0000"
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveUntil:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        ruleVersion:
+          type: string
+          pattern: ^academic-[a-z0-9-]+$
+        synthetic:
+          type: boolean
+          enum:
+            - true
+        status:
+          type: string
+          enum:
+            - definitive
+        traceId:
+          type: string
+          format: uuid
+    Acceptance:
+      type: object
+      additionalProperties: false
+      required:
+        - acceptanceId
+        - offerId
+        - eventId
+        - acceptedAt
+        - status
+        - synthetic
+        - traceId
+      properties:
+        acceptanceId:
+          type: string
+          format: uuid
+        offerId:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        acceptedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending_issuance
+        synthetic:
+          type: boolean
+          enum:
+            - true
+        traceId:
+          type: string
+          format: uuid
+    FlightOfferRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - product
+        - flightReference
+      properties:
+        product:
+          type: string
+          enum:
+            - flight_delay
+        flightReference:
+          type: string
+          format: uuid
+  responses:
+    Invalid:
+      description: Invalid JSON, media type, resource identifier, unsupported field,
+        idempotency key or body exceeding 1024 bytes.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Invalid, expired or revoked user session.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Unauthorized Origin or missing consent/permission.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource is absent or owned by another user.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MethodNotAllowed:
+      description: Method not allowed.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Expired or altered resource, rejected decision or conflicting
+        idempotency payload.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Identity, storage or mock provider unavailable; no partial success
+        is declared.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
