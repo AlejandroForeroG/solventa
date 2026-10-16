@@ -40,21 +40,24 @@ function translate(scope: SignalScope, body: unknown): Signal {
     }
     case 'identity_validation':
       if (typeof result.cedula_vigente !== 'boolean') throw invalidResponse();
-      return signalOf(scope, capturedAt, { documentValid: result.cedula_vigente });
+      return signalOf(scope, capturedAt, { verified: result.cedula_vigente });
   }
 }
 
-// Synthetic answers for the same fictitious person as the direct simulation; no real source is reached.
+// Synthetic answers for the same fictitious person as the direct simulation, stamped with the query time;
+// no real source is reached.
 const RESULTS: Record<SignalScope, Record<string, unknown>> = {
   income_obligations_12m: { ingresos_promedio_mensual: 4500000, obligaciones_mensuales: 1200000 },
   payment_history_score: { score: 742, moras_ultimos_12_meses: 0 },
   affiliation_regime: { regimen_salud: 'C', afiliado_activo: true },
   identity_validation: { cedula_vigente: true }
 };
-export const simulatedAggregatorSource: ProviderSource = async scope => ({
-  status: 200,
-  body: { estado: 'OK', fuente: SOURCES[scope], fecha_corte: '2026-09-30T00:00:00-05:00', resultado: RESULTS[scope] }
-});
+export function simulatedAggregatorSource(now = () => new Date()): ProviderSource {
+  return async scope => ({
+    status: 200,
+    body: { estado: 'OK', fuente: SOURCES[scope], fecha_corte: now().toISOString(), resultado: RESULTS[scope] }
+  });
+}
 
 export class AggregatorSignalProvider implements SignalProvider {
   constructor(private readonly name: string, private readonly source: ProviderSource, private readonly deadlineMs = DEFAULT_DEADLINE_MS) {}
