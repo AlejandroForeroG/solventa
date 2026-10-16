@@ -4,7 +4,7 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the explicit financial mock mode described below. Signal providers are isolated behind their port with two interchangeable simulated adapters selected by `SIGNAL_PROVIDER`, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the separate explicit financial mock mode described below. Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
 
 ## Anonymous indicative calculator
 
@@ -94,6 +94,8 @@ After acceptance, resolve the policy through the [Policy flow](../policy-claims-
 
 ## External integrations
 
+The financial offer flow above retains its own `MockRiskSignals` and `MockFlightSchedule` fixtures. `SIGNAL_PROVIDER` does not select or replace those financial fixtures. Its direct/aggregator translators are separate adapters for the internal `ReadSignal` capability and configuration diagnostics; neither `ReadSignal` nor the ACORD translator is mounted on a public route. No adapter here connects to a real signal, payment, signature or oracle provider.
+
 Every external format is translated in an adapter; the domain, use cases and ports only see internal models. Replacing a provider changes an adapter and configuration, never `src/domain` or `src/application`. The shared rule and the integrations that are not implemented yet are in [architecture](../../architecture.md#external-integrations); the schemas and corpus are described in [contracts](../../shared/contracts/README.md#integration-schemas-and-corpus).
 
 ### Signal providers
@@ -107,9 +109,9 @@ Every external format is translated in an adapter; the domain, use cases and por
 
 Both are **simulated**: their source returns fixed synthetic answers for one fictitious person and never reaches a real provider. They exist to keep the core independent of any provider format; a real provider adds a source (HTTP client) and an entry in `src/adapters/outbound/signal-providers.ts`, and the configuration value selects it.
 
-**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. Simulated providers are the intended source in every environment, so the first use case that reads signals in a real flow, such as profiling, must make both simulated sources dynamic before relying on them. Each one then selects a deterministic synthetic persona from the subject token (for example good payer, late payer, no health affiliation, unknown subject, failing source), so the same subject always gets the same answer and different subjects get different profiles and failures. Only the simulated sources change; the translators, the port and the core stay as they are, and the corpus gains a case per persona.
+**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. Simulated providers are the intended source in every environment, so the first deployed flow that consumes either of these two adapters, such as profiling, must make both simulated sources dynamic before relying on them. The current synthetic financial flow uses its separate, explicitly versioned fixture adapters instead. Each one then selects a deterministic synthetic persona from the subject token (for example good payer, late payer, no health affiliation, unknown subject, failing source), so the same subject always gets the same answer and different subjects get different profiles and failures. Only the simulated sources change; the translators, the port and the core stay as they are, and the corpus gains a case per persona.
 
-Every adapter produces the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
+The direct and aggregator adapters produce the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
 
 | Scope | `data` |
 |---|---|

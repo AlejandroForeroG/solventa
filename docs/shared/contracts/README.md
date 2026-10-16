@@ -59,7 +59,7 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
 | `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
-| `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages exchanged with partners; see [integration schemas](#integration-schemas-and-corpus) |
+| `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
 | `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |
 | `examples/signal-providers.json` | Agreed corpus of answers from each simulated signal provider format, checked by `tests/signal-providers.test.ts` |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
@@ -101,9 +101,10 @@ npm run lint:openapi     # Redocly checks all .yaml files in openapi/
 npm run test:contracts   # Versioning, registry/spec agreement, capture schema and responses of quotes and access probes against their schemas
 npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
 npm run test:integrations # Provider and ACORD corpora through their adapters
+npm run test:financial   # Synthetic financial HTTP/event contracts and integrity boundaries
 ```
 
-All four run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+All five run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
 
 ## Consumer contracts (Pact)
 
@@ -160,6 +161,8 @@ External formats are boundary contracts too. Each one has a versioned schema or 
 | Direct signal sources and signal aggregator | Format version 1 of each provider | `backend/acquisition-risk/src/adapters/outbound/direct-signal-provider.ts`, `aggregator-signal-provider.ts` | Valid answers become the canonical signal; every other answer fails with its normalized code and one log line |
 
 The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
+
+The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Their external payment, signature and oracle protocols are explicit mocks; their owner SQL, event authentication and recovery checks do not establish a real provider integration. Neither a `ReadSignal` route nor an ACORD endpoint is enabled by publishing a schema or corpus.
 
 To change an integration contract:
 

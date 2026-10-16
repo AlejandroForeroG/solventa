@@ -33,9 +33,9 @@ Each external party is reached or received through an adapter that translates it
 | Authentication and partner tokens (WorkOS) | Solventa queries | Implemented in Identity adapters (`workos-*.ts`); see [authentication](modules/identity-consent-ecosystem/authentication.md) and [API access](modules/identity-consent-ecosystem/api-access.md) |
 | Identity verification (KYC) | Solventa queries | Partly covered: the `identity_validation` signal checks only that the document is valid. Biometric matching and AML/sanctions lists are not implemented; no separate port |
 | Public statistics (DANE) | Solventa queries | Not implemented; aggregated data outside the consent and outside the signal scopes |
-| Reinsurers, ACORD cession and portfolio reports | Solventa sends, reinsurer confirms | Not implemented |
-| Payment gateways | Solventa requests, gateway answers | Mock adapter in Policy for the academic financial flow (`mock-financial-providers.ts`, `FINANCIAL_PROVIDER_MODE=mock` outside prod); no real gateway; see [Policy](modules/policy-claims-payments/README.md) |
-| Electronic signature and notification | Solventa requests, provider answers | Mock signature in Policy's issuance flow, same adapter and mode; no legal signature provider; customer notification delivery not implemented |
-| Telemetry and parametric events | Provider sends events | Synthetic flight-delay events evaluated by Policy's internal consumer; no external telemetry provider |
+| Reinsurers, ACORD cession and portfolio reports | Solventa sends, reinsurer confirms | Not implemented; needs Policy's issued policies |
+| Payment gateways | Solventa requests, gateway notifies | Policy has a durable synthetic gateway adapter for premiums, refunds and indemnities; real provider callbacks/settlement are not implemented |
+| Electronic signature and notification | Solventa requests, provider notifies | Policy implements a deterministic synthetic signature adapter bound to the reviewed document; real signature and customer business-notification delivery are pending |
+| Telemetry and parametric events | Provider sends events | Versioned signed synthetic flight-delay envelopes reach Policy through its private Queue consumer; no real oracle integration or public event route |
 
 An integration that is not implemented has no port or adapter yet: create them with the first use case that needs it, in the module that owns that capability, following the same rule and adding its schema and corpus.
