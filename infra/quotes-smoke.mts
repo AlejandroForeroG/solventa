@@ -48,17 +48,29 @@ try {
     assert.match(first.quote.quoteId, /^COT-\d{4}-\d{5}$/);
     assert.equal(first.quote.premiumMonthly, 86400); // born 1992: band 31-40 until 2032
 
+    const counterBeforeRetry = await admin.query('SELECT last_value FROM acquisition.quote_counters WHERE year=$1', [Number(first.quote.quoteId.slice(4, 8))]);
+
     const replay = await call(credential, key);
     assert.equal(replay.status, 'replayed', label);
     if (replay.status === 'replayed') assert.equal(replay.quote.quoteId, first.quote.quoteId);
     assert.equal((await call(credential, key, { ...request, credit: { ...request.credit, amount: 1000000 } })).status, 'idempotency_conflict', label);
 
     assert.equal((await call(credential, key, { ...request, customer: { ...request.customer, documentNumber: '1099999999' } })).status, 'idempotency_conflict', `${label}: same key, other customer`);
+    const counterAfterRetry = await admin.query('SELECT last_value FROM acquisition.quote_counters WHERE year=$1', [Number(first.quote.quoteId.slice(4, 8))]);
+    assert.equal(counterAfterRetry.rows[0].last_value, counterBeforeRetry.rows[0].last_value, `${label}: replay and conflicts allocate no code`);
 
     const racing = `race-${label}-${randomUUID()}`;
     const results = await Promise.all(Array.from({ length: 6 }, () => call(credential, racing)));
     assert.equal(results.filter(r => r.status === 'created').length, 1, `${label}: ${JSON.stringify(results.map(r => r.status))}`);
     assert.equal(results.filter(r => r.status === 'replayed').length, 5, label);
+
+    const conflicting = `conflicting-race-${label}-${randomUUID()}`;
+    const competing = await Promise.all([
+      call(credential, conflicting),
+      call(credential, conflicting, { ...request, credit: { ...request.credit, amount: 1000000 } })
+    ]);
+    assert.equal(competing.filter(r => r.status === 'created').length, 1, `${label}: conflicting race has one winner`);
+    assert.equal(competing.filter(r => r.status === 'idempotency_conflict').length, 1, `${label}: conflicting race refuses the other payload`);
   }
 
   // The same key for another user is another quote: idempotency is scoped to the actor.
@@ -75,9 +87,9 @@ try {
   assert.ok(rows.rows.every(r => r.request_hash.length === 64));
   const partnerRows = rows.rows.filter(r => r.partner_id === partnerId);
   const userRows = rows.rows.filter(r => r.partner_id === null);
-  assert.equal(partnerRows.length, 2, 'partner: one quote for the base key and one for the race key');
+  assert.equal(partnerRows.length, 3, 'partner: base key and both race keys each create one quote');
   assert.ok(partnerRows.every(r => r.client_id === null));
-  assert.equal(userRows.length, 4, 'web user: base key, race key, and the shared key for two users');
+  assert.equal(userRows.length, 5, 'web user: base key, both race keys, and the shared key for two users');
   assert.ok(userRows.every(r => users.some(u => u.clientId === r.client_id && u.subjectToken === r.subject_token)), 'web quotes hang from the session user');
 
   const ids = rows.rows.map(r => r.id);
@@ -97,7 +109,7 @@ try {
     await probe.query('BEGIN'); await assert.rejects(insert(randomUUID(), randomUUID()), /CHECK constraint/); await probe.query('ROLLBACK');
     await assert.rejects(probe.query('DELETE FROM acquisition.quotes'), /privilege|permission|denied/i);
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote+audit+outbox in one transaction, for partner and web user', 'idempotent replay and key reuse conflict per actor, also with another customer', 'concurrent retries create one quote', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote+audit+outbox in one transaction, for partner and web user', 'idempotent replay and key reuse conflict per actor, also with another customer', 'replays and conflicts do not advance the counter', 'concurrent retries create one quote', 'concurrent different payloads create one quote and one conflict', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
 } finally {
   const ids = (await admin.query('SELECT id FROM acquisition.quotes WHERE correlation_id = ANY($1::UUID[])', [traces])).rows.map(r => r.id);
   await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id = ANY($1::UUID[])', [ids]);
