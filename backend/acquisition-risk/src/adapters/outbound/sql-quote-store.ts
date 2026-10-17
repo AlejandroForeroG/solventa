@@ -5,7 +5,6 @@ const RETENTION = '5 years'; // Provisional audit retention until the policy own
 const SERIALIZATION_FAILURE = '40001';
 
 type Row = { quote_code: string; request_hash: string; result: Omit<StoredQuote, 'quoteId'> & { currency: string; basis: string } };
-type Allocation = { quote_code: null; request_hash: null; result: null; last_value: string };
 const fromRow = (row: Row): StoredQuote => ({ quoteId: row.quote_code, premiumMonthly: row.result.premiumMonthly, sumInsured: row.result.sumInsured, termMonths: row.result.termMonths, validUntil: row.result.validUntil, ruleVersion: row.result.ruleVersion });
 
 function ownerOf(q: NewQuote) {
@@ -39,62 +38,52 @@ export class SqlQuoteStore implements QuoteStore {
     client.on('error', () => {});
     try {
       await timed('connect', () => client.connect());
-      const year = q.year;
       const owner = ownerOf(q);
-      // Keep the counter's transaction short, separate from the quote/audit/outbox write.
-      // Combining its allocation with the fresh actor-scoped lookup saves one SQL round trip.
-      const prepared = await timed('lookupAndCounter', () => client.query<(Row & { last_value: null }) | Allocation>(
+      const storedFields = { premiumMonthly: q.premiumMonthly, sumInsured: q.amount, termMonths: q.termMonths,
+        validUntil: q.validUntil, ruleVersion: q.ruleVersion, currency: 'COP', basis: 'minimum_data' };
+      // One implicit transaction releases the counter with the business commit, without a network
+      // round trip while its row is locked. Existing keys allocate no code and write no effects.
+      const saved = await timed('save', () => client.query<Row & { created: boolean }>(
         `WITH existing AS (
            SELECT quote_code, request_hash, result FROM acquisition.quotes
-           WHERE ${owner.column} = $1 AND idempotency_key = $2
+           WHERE ${owner.column} = $12 AND idempotency_key = $3
          ), allocated AS (
            INSERT INTO acquisition.quote_counters (year, last_value)
-           SELECT $3::INT4, 1 WHERE NOT EXISTS (SELECT 1 FROM existing)
+           SELECT $13::INT8, 1 WHERE NOT EXISTS (SELECT 1 FROM existing)
            ON CONFLICT (year) DO UPDATE SET last_value = acquisition.quote_counters.last_value + 1
            RETURNING last_value
-         )
-         SELECT quote_code, request_hash, result, NULL::INT8 AS last_value FROM existing
-         UNION ALL
-         SELECT NULL::STRING, NULL::STRING, NULL::JSONB, last_value FROM allocated`,
-        [owner.actorId, q.idempotencyKey, year]));
-      const row = prepared.rows[0];
-      if (!row) throw new Error('quote_allocation_missing');
-      if (row.quote_code !== null) {
-        outcome = row.request_hash === q.requestFingerprint ? 'replayed' : 'conflict';
-        return row.request_hash === q.requestFingerprint ? { kind: 'replayed', quote: fromRow(row) } : { kind: 'conflict' };
-      }
-      // A failed write or a concurrent retry may leave a numbering gap, never a duplicate code.
-      const code = `COT-${year}-${String(row.last_value).padStart(5, '0')}`;
-      const stored: StoredQuote = { quoteId: code, premiumMonthly: q.premiumMonthly, sumInsured: q.amount, termMonths: q.termMonths, validUntil: q.validUntil, ruleVersion: q.ruleVersion };
-      // A single implicit transaction commits the quote, audit and outbox together, avoiding
-      // separate BEGIN/INSERT/INSERT/INSERT/COMMIT network round trips.
-      const inserted = await timed('write', () => client.query<{ id: string }>(
-        `WITH inserted AS (
+         ), numbered AS (
+           SELECT 'COT-' || $13::INT8::STRING || '-' || lpad(last_value::STRING, 5, '0') AS quote_code FROM allocated
+         ), inserted AS (
            INSERT INTO acquisition.quotes (subject_token, partner_id, idempotency_key, request_hash, normalized_request, rule_version, result, status, correlation_id, quote_code, client_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10)
-           ON CONFLICT DO NOTHING RETURNING id
+           SELECT $1, $2, $3, $4, $5, $6, $7::JSONB || jsonb_build_object('quoteId', numbered.quote_code), 'completed', $8, numbered.quote_code, $9 FROM numbered
+           ON CONFLICT DO NOTHING RETURNING id, quote_code, request_hash, result
          ), audit AS (
            INSERT INTO acquisition.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
-           SELECT $11, 'quote.create', 'quote', inserted.id, 'success', $8, now() + interval '${RETENTION}' FROM inserted
+           SELECT $10, 'quote.create', 'quote', inserted.id, 'success', $8, now() + interval '${RETENTION}' FROM inserted
            RETURNING id
          ), outbox AS (
            INSERT INTO acquisition.outbox_events (event_id, aggregate_type, aggregate_id, event_type, event_version, payload, correlation_id)
-           SELECT gen_random_uuid(), 'quote', inserted.id, 'quote.created', 1, $12, $8 FROM inserted
+           SELECT gen_random_uuid(), 'quote', inserted.id, 'quote.created', 1, $11::JSONB || jsonb_build_object('quoteId', inserted.quote_code), $8 FROM inserted
            RETURNING event_id
          )
-         SELECT inserted.id FROM inserted JOIN audit ON true JOIN outbox ON true`,
+         SELECT inserted.quote_code, inserted.request_hash, inserted.result, true AS created FROM inserted JOIN audit ON true JOIN outbox ON true
+         UNION ALL
+         SELECT quote_code, request_hash, result, false AS created FROM existing`,
         [q.subjectToken, owner.partnerId, q.idempotencyKey, q.requestFingerprint,
           JSON.stringify(q.capture), q.ruleVersion,
-          JSON.stringify({ ...stored, currency: 'COP', basis: 'minimum_data' }), q.traceId, code, owner.clientId,
-          owner.actorId, JSON.stringify({ quoteId: code, premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion })]));
-      if (!inserted.rows[0]) {
-        // A concurrent retry won the race: the implicit transaction wrote nothing.
+          JSON.stringify(storedFields), q.traceId, owner.clientId,
+          owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year]));
+      const row = saved.rows[0];
+      if (!row) {
+        // A concurrent retry won the unique-key race; read it in a new snapshot.
         const winner = await timed('raceLookup', () => this.find(client, q));
         if (winner) { outcome = winner.kind; return winner; }
         throw Object.assign(new Error('quote_race_unresolved'), { code: SERIALIZATION_FAILURE });
       }
-      outcome = 'created';
-      return { kind: 'created', quote: stored };
+      if (!row.created && row.request_hash !== q.requestFingerprint) { outcome = 'conflict'; return { kind: 'conflict' }; }
+      outcome = row.created ? 'created' : 'replayed';
+      return { kind: row.created ? 'created' : 'replayed', quote: fromRow(row) };
     } finally {
       await timed('close', () => client.end().catch(() => {}));
       const totalMs = Math.round((performance.now() - started) * 10) / 10;

@@ -71,6 +71,17 @@ try {
     ]);
     assert.equal(competing.filter(r => r.status === 'created').length, 1, `${label}: conflicting race has one winner`);
     assert.equal(competing.filter(r => r.status === 'idempotency_conflict').length, 1, `${label}: conflicting race refuses the other payload`);
+
+    const failedTrace = randomUUID(); traces.push(failedTrace);
+    const beforeFailure = await admin.query('SELECT year, last_value FROM acquisition.quote_counters ORDER BY year');
+    const failingStore = new SqlQuoteStore(runtime.toString());
+    const failureCase = new CreateQuote({ access, store: { save: quote => failingStore.save({ ...quote, requestFingerprint: 'invalid' }) }, clock: { now: () => new Date() }, protector });
+    await assert.rejects(failureCase.execute({ credential, idempotencyKey: `rollback-${randomUUID()}`, body: request, traceId: failedTrace }),
+      (error: { code?: string }) => error.code === '23514', `${label}: quote constraint failure`);
+    assert.deepEqual((await admin.query('SELECT year, last_value FROM acquisition.quote_counters ORDER BY year')).rows, beforeFailure.rows, `${label}: counter rolls back with the failed quote`);
+    for (const table of ['quotes', 'audit_events', 'outbox_events']) {
+      assert.equal((await admin.query(`SELECT count(*)::INT4 AS n FROM acquisition.${table} WHERE correlation_id=$1`, [failedTrace])).rows[0].n, 0, `${label}: failed quote leaves no ${table}`);
+    }
   }
 
   // The same key for another user is another quote: idempotency is scoped to the actor.
@@ -98,6 +109,11 @@ try {
   assert.equal(audits.rows[0].n, ids.length);
   assert.equal(outbox.rows[0].n, ids.length);
   assert.equal(outbox.rows[0].clean, true);
+  const payloads = await admin.query(`SELECT bool_and(o.payload = jsonb_build_object(
+    'quoteId', q.quote_code, 'premiumMonthly', q.result->'premiumMonthly', 'currency', 'COP', 'ruleVersion', q.rule_version)) AS unchanged
+    FROM acquisition.quotes q JOIN acquisition.outbox_events o ON o.aggregate_id=q.id
+    WHERE q.id = ANY($1::UUID[])`, [ids]);
+  assert.equal(payloads.rows[0].unchanged, true, 'published quote event retains its exact fields and values');
 
   const probe = clientFor(runtime, { ca: (config.ssl as { ca?: string }).ca, rejectUnauthorized: true });
   await probe.connect();
@@ -109,7 +125,7 @@ try {
     await probe.query('BEGIN'); await assert.rejects(insert(randomUUID(), randomUUID()), /CHECK constraint/); await probe.query('ROLLBACK');
     await assert.rejects(probe.query('DELETE FROM acquisition.quotes'), /privilege|permission|denied/i);
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote+audit+outbox in one transaction, for partner and web user', 'idempotent replay and key reuse conflict per actor, also with another customer', 'replays and conflicts do not advance the counter', 'concurrent retries create one quote', 'concurrent different payloads create one quote and one conflict', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['counter+quote+audit+outbox in one statement, for partner and web user', 'failed quote rolls back the counter and every business effect', 'idempotent replay and key reuse conflict per actor, also with another customer', 'replays and conflicts do not advance the counter', 'concurrent retries create one quote', 'concurrent different payloads create one quote and one conflict', 'idempotency scoped to the actor', 'web quotes hang from the session user', 'no personal data stored', 'exactly one actor per quote', 'runtime role cannot delete'] }));
 } finally {
   const ids = (await admin.query('SELECT id FROM acquisition.quotes WHERE correlation_id = ANY($1::UUID[])', [traces])).rows.map(r => r.id);
   await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id = ANY($1::UUID[])', [ids]);
