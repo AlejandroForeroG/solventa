@@ -5,6 +5,7 @@ const RETENTION = '5 years'; // Provisional audit retention until the policy own
 const SERIALIZATION_FAILURE = '40001';
 
 type Row = { quote_code: string; request_hash: string; result: Omit<StoredQuote, 'quoteId'> & { currency: string; basis: string } };
+type Allocation = { quote_code: null; request_hash: null; result: null; last_value: string };
 const fromRow = (row: Row): StoredQuote => ({ quoteId: row.quote_code, premiumMonthly: row.result.premiumMonthly, sumInsured: row.result.sumInsured, termMonths: row.result.termMonths, validUntil: row.result.validUntil, ruleVersion: row.result.ruleVersion });
 
 function ownerOf(q: NewQuote) {
@@ -38,16 +39,32 @@ export class SqlQuoteStore implements QuoteStore {
     client.on('error', () => {});
     try {
       await timed('connect', () => client.connect());
-      const found = await timed('lookup', () => this.find(client, q));
-      if (found) { outcome = found.kind; return found; }
-
-      // Allocated before the transaction: inside it the counter row stays locked until COMMIT and
-      // serializes every quote. A failed transaction leaves a gap in the numbering, never a repeat.
       const year = q.year;
-      const counter = await timed('counter', () => client.query<{ last_value: string }>(
-        'INSERT INTO acquisition.quote_counters (year, last_value) VALUES ($1, 1) ON CONFLICT (year) DO UPDATE SET last_value = acquisition.quote_counters.last_value + 1 RETURNING last_value', [year]));
-      const code = `COT-${year}-${String(counter.rows[0].last_value).padStart(5, '0')}`;
       const owner = ownerOf(q);
+      // Keep the counter's transaction short, separate from the quote/audit/outbox write.
+      // Combining its allocation with the fresh actor-scoped lookup saves one SQL round trip.
+      const prepared = await timed('lookupAndCounter', () => client.query<(Row & { last_value: null }) | Allocation>(
+        `WITH existing AS (
+           SELECT quote_code, request_hash, result FROM acquisition.quotes
+           WHERE ${owner.column} = $1 AND idempotency_key = $2
+         ), allocated AS (
+           INSERT INTO acquisition.quote_counters (year, last_value)
+           SELECT $3::INT4, 1 WHERE NOT EXISTS (SELECT 1 FROM existing)
+           ON CONFLICT (year) DO UPDATE SET last_value = acquisition.quote_counters.last_value + 1
+           RETURNING last_value
+         )
+         SELECT quote_code, request_hash, result, NULL::INT8 AS last_value FROM existing
+         UNION ALL
+         SELECT NULL::STRING, NULL::STRING, NULL::JSONB, last_value FROM allocated`,
+        [owner.actorId, q.idempotencyKey, year]));
+      const row = prepared.rows[0];
+      if (!row) throw new Error('quote_allocation_missing');
+      if (row.quote_code !== null) {
+        outcome = row.request_hash === q.requestFingerprint ? 'replayed' : 'conflict';
+        return row.request_hash === q.requestFingerprint ? { kind: 'replayed', quote: fromRow(row) } : { kind: 'conflict' };
+      }
+      // A failed write or a concurrent retry may leave a numbering gap, never a duplicate code.
+      const code = `COT-${year}-${String(row.last_value).padStart(5, '0')}`;
       const stored: StoredQuote = { quoteId: code, premiumMonthly: q.premiumMonthly, sumInsured: q.amount, termMonths: q.termMonths, validUntil: q.validUntil, ruleVersion: q.ruleVersion };
       // A single implicit transaction commits the quote, audit and outbox together, avoiding
       // separate BEGIN/INSERT/INSERT/INSERT/COMMIT network round trips.

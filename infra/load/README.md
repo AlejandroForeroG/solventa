@@ -29,7 +29,7 @@ TOKEN=<partner access token> sh infra/load/run.sh 30 60s    # POST /api/v1/quote
 
 The scenario warms up for 10 s at a low rate, then measures at a constant arrival rate. Each request uses a new `Idempotency-Key`, and one in ten repeats the previous request to exercise idempotency (it must answer 200 with the same quote). Checks cover the status, the `COT-YYYY-NNNNN` code, the COP currency and the `X-Trace-Id` header. k6 thresholds fail when p95 ≥ 250 ms, p99 ≥ 500 ms or more than 1 % of requests fail.
 
-For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, idempotency lookup, counter allocation, the atomic quote/audit/outbox write and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
+For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, the combined idempotency lookup/counter allocation (`lookupAndCounter`), the atomic quote/audit/outbox write, a race lookup when needed, and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
 
 ## Baseline before the Identity access call (local, 60 s per load)
 
@@ -48,6 +48,8 @@ On this machine the service sustains about 100 requests per second within the th
 The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) showed that this row was the cause: the quote transaction held it locked until `COMMIT`, so every quote queued behind it. The number is now allocated in a short statement before the transaction (`src/adapters/outbound/sql-quote-store.ts`), which raised the ceiling to about 190/s.
 
 Consequence: if a transaction fails after the number is allocated, the numbering has a gap. Codes stay unique and readable but are not contiguous.
+
+The actor-scoped idempotency lookup and conditional counter allocation now share one short SQL statement. An existing key returns its stored quote or conflict without advancing the counter. The quote, audit and outbox still commit together in a separate implicit transaction, so the counter is not held through those writes. Concurrent first attempts can allocate unused numbers before the unique actor/key constraint selects one winner; the loser reads that winner and compares the request fingerprint. This removes one sequential SQL round trip for a new quote without caching authorization or changing the published identifier. It needs repeated remote measurements; fewer queries alone do not establish the latency objective.
 
 ## To improve
 
