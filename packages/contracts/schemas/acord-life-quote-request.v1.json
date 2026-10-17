@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "acord-life-quote-request.v1",
+  "title": "ACORD Life inspired quote request v1",
+  "description": "Mortgage life quote request a partner sends in Solventa's ACORD Life inspired format. A synthetic subset, not the licensed ACORD standard. Unknown properties are ignored, so later minor revisions may add optional fields; incompatible changes create a v2 schema.",
+  "type": "object",
+  "required": ["schemaVersion", "TXLifeRequest"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "TXLifeRequest": {
+      "type": "object",
+      "required": ["TransType", "Party", "Holding"],
+      "properties": {
+        "TransType": { "const": "QuoteRequest" },
+        "Party": {
+          "type": "object",
+          "description": "The insured person, who is the borrower of the loan.",
+          "required": ["FullName", "GovtIDTC", "GovtID", "BirthDate", "City"],
+          "properties": {
+            "FullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "GovtIDTC": { "enum": ["CC"], "description": "Government ID type code; CC is the Colombian citizenship card." },
+            "GovtID": { "type": "string", "pattern": "^[0-9]{6,10}$" },
+            "BirthDate": { "type": "string", "format": "date" },
+            "City": { "type": "string", "minLength": 1, "maxLength": 80 }
+          }
+        },
+        "Holding": {
+          "type": "object",
+          "required": ["Policy", "Loan"],
+          "properties": {
+            "Policy": {
+              "type": "object",
+              "required": ["ProductCode"],
+              "properties": { "ProductCode": { "enum": ["MORTGAGE_LIFE"] } }
+            },
+            "Loan": {
+              "type": "object",
+              "required": ["LoanNumber", "LoanAmt", "LoanTermMonths", "CurrencyTypeCode"],
+              "properties": {
+                "LoanNumber": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The partner's own loan identifier." },
+                "LoanAmt": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Whole Colombian pesos, at most the largest exact integer the service accepts." },
+                "LoanTermMonths": { "type": "integer", "minimum": 12, "maximum": 240 },
+                "CurrencyTypeCode": { "const": "COP" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

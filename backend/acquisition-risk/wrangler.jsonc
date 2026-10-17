@@ -25,7 +25,8 @@
   "account_id": "803fd559877aae8f638140610f106857",
   "vars": {
     "APP_ENV": "local",
-    "FINANCIAL_PROVIDER_MODE": "mock"
+    "FINANCIAL_PROVIDER_MODE": "mock",
+    "SIGNAL_PROVIDER": "direct_simulated"
   },
   "queues": { "producers": [{ "binding": "FINANCIAL_EVENTS", "queue": "solventa-financial-events-local" }] },
   "triggers": { "crons": ["* * * * *"] },
@@ -42,7 +43,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "dev",
-        "FINANCIAL_PROVIDER_MODE": "mock"
+        "FINANCIAL_PROVIDER_MODE": "mock",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "queues": { "producers": [{ "binding": "FINANCIAL_EVENTS", "queue": "solventa-financial-events-dev" }] },
       "triggers": { "crons": ["* * * * *"] },
@@ -65,7 +67,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "staging",
-        "FINANCIAL_PROVIDER_MODE": "mock"
+        "FINANCIAL_PROVIDER_MODE": "mock",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "queues": { "producers": [{ "binding": "FINANCIAL_EVENTS", "queue": "solventa-financial-events-staging" }] },
       "triggers": { "crons": ["* * * * *"] },
@@ -88,7 +91,8 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "prod",
-        "FINANCIAL_PROVIDER_MODE": "disabled"
+        "FINANCIAL_PROVIDER_MODE": "disabled",
+        "SIGNAL_PROVIDER": "direct_simulated"
       },
       "queues": { "producers": [] },
       "triggers": { "crons": [] },
