@@ -2,7 +2,7 @@ import type { IdentitySessions, Principal, VerifiedIdentity } from './authentica
 
 export interface MobileSessionStore extends Pick<IdentitySessions, 'find'> {
   register(identity: VerifiedIdentity): Promise<Principal | null>;
-  revokeOrBlock(identity: VerifiedIdentity): Promise<void>;
+  revokeOrBlock(identity: VerifiedIdentity, correlationId: string): Promise<void>;
 }
 
 export class MobileSessions {
@@ -15,7 +15,7 @@ export class MobileSessions {
     if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) return null;
     return this.store.find(identity);
   }
-  async revoke(identity: VerifiedIdentity): Promise<void> {
-    await this.store.revokeOrBlock(identity);
+  async revoke(identity: VerifiedIdentity, correlationId: string): Promise<void> {
+    await this.store.revokeOrBlock(identity, correlationId);
   }
 }

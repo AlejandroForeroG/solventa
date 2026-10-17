@@ -1,8 +1,15 @@
 openapi: 3.0.3
 info:
   title: Solventa mobile authentication
-  version: 1.1.0
-  description: Native WorkOS PKCE configuration, local session registration, inspection and revocation. No biometrics, device attestation or business writes are performed.
+  version: 1.3.1
+  description: >
+    Native WorkOS PKCE, session lifecycle and session-bound installation registration/revocation.
+    Biometrics protect credentials on the device; the server does not attest biometric execution
+    or store biometric templates. Protected endpoint authorization denials commit their minimal
+    security audit and outbox before returning 401 or 403; failed required persistence returns
+    503 access_unavailable instead. Existing installation-registration policy decisions retain
+    their own atomic audit/outbox without a duplicate security decision. Security notifications
+    are asynchronous; these responses confirm neither email delivery nor a notification deadline.
 servers:
   - url: /api/v1
 tags:
@@ -122,6 +129,45 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /mobile/devices/{installationId}:
+    parameters:
+      - name: installationId
+        in: path
+        required: true
+        description: Random UUID v4 held by this installation. Hexadecimal case is ignored; registration, replay, inspection and revocation use its canonical lowercase value, including legacy uppercase binding references. Not a credential or hardware identifier.
+        schema: { type: string, format: uuid, pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' }
+      - $ref: './common.yaml#/components/parameters/TraceId'
+    post:
+      operationId: registerMobileDevice
+      summary: Bind an installation to the verified native session
+      description: Requires an active local session. First registration requires local session creation or signed WorkOS auth_time within ten minutes. Replacing a lost installation additionally requires auth_time strictly newer than every prior binding registration; token issuance or refresh is not sufficient. The owner transaction revokes prior active bindings and registers the new UUID, leaving one active binding per provider session with audit/outbox/capture. Active same-binding retries are idempotent; revoked UUIDs cannot reactivate. An old replaced binding cannot revoke its replacement through DELETE. Policy rejections persist their decision capture, audit and outbox atomically before returning opaque 401; unavailable persistence returns 503 instead. No request body or additional scope. Biometric confirmation and credential protection are enforced locally, not attested by this route.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: &deviceResponses
+        '200':
+          description: Session-owned installation binding.
+          headers: *headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      operationId: inspectMobileDevice
+      summary: Check the session-owned installation is active
+      description: Requires both the installation binding and its active verified session. Does not register, refresh or extend either. Unknown, foreign and revoked bindings return 401.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: *deviceResponses
+    delete:
+      operationId: revokeMobileDevice
+      summary: Revoke the installation binding and its session
+      description: Revokes device and local session with audit/outbox in one owner transaction, then revokes WorkOS. A provider failure returns 503 without reopening local access. Same-owner retries can finish provider revocation; no request body.
+      tags: [Mobile]
+      security: [{ MobileBearer: [] }]
+      responses: *deviceResponses
 components:
   securitySchemes:
     MobileBearer:
@@ -131,12 +177,26 @@ components:
       description: WorkOS AuthKit USER access token obtained through native code+PKCE. Never a server API key, Connect M2M token, refresh token or web cookie.
   headers:
     TraceId:
-      description: Valid supplied UUID or a generated UUID, also present in the body.
+      description: Valid supplied UUID normalized to lowercase or a generated UUID, also present in the body and the security denial correlation.
       schema: { type: string, format: uuid }
     NoStore:
       description: Session responses must not be cached.
       schema: { type: string, enum: [no-store] }
   schemas:
+    Device:
+      type: object
+      additionalProperties: false
+      required: [device, traceId]
+      properties:
+        device:
+          type: object
+          additionalProperties: false
+          required: [id, installationId, status]
+          properties:
+            id: { type: string, format: uuid }
+            installationId: { type: string, format: uuid, description: Canonical lowercase installation UUID. }
+            status: { type: string, enum: [active, revoked] }
+        traceId: { type: string, format: uuid }
     Configuration:
       type: object
       additionalProperties: false
@@ -209,7 +269,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing, invalid, foreign or expired token; unverified/deleted user; absent, expired, suspended or revoked local session.
+      description: Missing, invalid, foreign or expired token; unverified/deleted user; absent, expired, suspended or revoked local session, or an unavailable installation binding. The required minimal security decision or existing installation-registration policy audit/outbox has committed; the public error remains opaque unauthorized.
       headers:
         <<: *headers
         WWW-Authenticate:
@@ -217,7 +277,7 @@ components:
           schema: { type: string, example: 'Bearer realm="solventa"' }
       content: *errorContent
     Forbidden:
-      description: Operation is outside the native user's current permission policy.
+      description: Operation is outside the native user's current permission policy. The minimal security denial audit and outbox have committed; the public error is forbidden.
       headers: *headers
       content: *errorContent
     MethodNotAllowed:
@@ -229,6 +289,6 @@ components:
           schema: { type: string }
       content: *errorContent
     Unavailable:
-      description: Configuration, provider verification, SQL registration/lookup or revocation is unavailable. A failed provider logout does not undo local revocation.
+      description: Configuration, provider verification, SQL registration/lookup, revocation or required security-denial persistence is unavailable. The response confirms no successful protected operation or durable denial record. A failed provider logout does not undo committed local revocation.
       headers: *headers
       content: *errorContent

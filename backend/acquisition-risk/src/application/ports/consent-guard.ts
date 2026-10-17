@@ -8,5 +8,5 @@ export type ConsentCheck =
 
 // Identity owns consent. The answer is valid only for the call that asked: it is never stored or reused.
 export interface ConsentGuard {
-  verify(subjectToken: string, scope: SignalScope): Promise<ConsentCheck>;
+  verify(subjectToken: string, scope: SignalScope, traceId?: string): Promise<ConsentCheck>;
 }

@@ -22,11 +22,11 @@ test('WorkOS environment credentials accept documented keys and reject mismatche
     try {
       const secret = 'a'.repeat(64);
       const auth = { environment: taggedEnvironment, secrets: { WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: apiKey, AUTH_COOKIE_PASSWORD: secret } };
-      const env = { ...process.env, DATABASE_HOST: 'database.example.com', DATABASE_CA_PEM: rootCertificates[0], RUNTIME_STATE_JSON: JSON.stringify({ database: `solventa_${environment}`, passwords: { acquisition: secret, identity: secret, policy: secret } }), WEB_INFRA_TOKEN: secret, IDENTITY_AUTH_JSON: JSON.stringify(auth) };
+      const env = { ...process.env, DATABASE_HOST: 'database.example.com', DATABASE_CA_PEM: rootCertificates[0], RUNTIME_STATE_JSON: JSON.stringify({ database: `solventa_${environment}`, passwords: { acquisition: secret, identity: secret, policy: secret } }), WEB_INFRA_TOKEN: secret, IDENTITY_AUTH_JSON: JSON.stringify(auth), SECURITY_ALERT_EMAIL_CONFIG: '' };
       const result = spawnSync(process.execPath, [script, 'prepare', environment], { cwd: directory, env, encoding: 'utf8', windowsHide: true });
       assert.equal(result.status === 0, accepted, `${environment}/${taggedEnvironment}`);
       assert.ok(!result.stdout.includes(apiKey) && !result.stderr.includes(apiKey));
-      if (accepted) assert.deepEqual(JSON.parse(await readFile(join(directory, `infra/.local/identity.${environment}.secrets.json`), 'utf8')), auth.secrets);
+      if (accepted) assert.deepEqual(JSON.parse(await readFile(join(directory, `infra/.local/identity.${environment}.secrets.json`), 'utf8')), { ...auth.secrets, SECURITY_ALERT_EMAIL_CONFIG: '' });
       else await assert.rejects(access(join(directory, 'infra/.local')), { code: 'ENOENT' });
     } finally { await rm(directory, { recursive: true }); }
   }
@@ -42,6 +42,37 @@ test('restoring development credentials into production fails before writing fil
     assert.ok(!result.stderr.includes(secret));
     await assert.rejects(access(join(directory, 'infra/.local')), { code: 'ENOENT' });
   } finally { await rm(directory, { recursive: true }); }
+});
+
+test('optional email custody restores only matching configuration and absence disables publication', async () => {
+  const email = { environment: 'dev', from: 'security@sender.example', to: 'operator@example.test' };
+  const values = [
+    ['', true], [JSON.stringify(email), true],
+    [JSON.stringify({ ...email, environment: 'prod' }), false],
+    [JSON.stringify({ ...email, extra: 'unexpected' }), false],
+    [JSON.stringify({ ...email, to: 'operator@example.test\r\nBcc: someone@example.test' }), false],
+    [JSON.stringify({ ...email, from: null }), false], ['null', false], ['{invalid', false],
+  ];
+  for (const [value, accepted] of values) {
+    const directory = await mkdtemp(join(tmpdir(), 'solventa-email-ci-'));
+    try {
+      const secret = 'a'.repeat(64);
+      const auth = { environment: 'dev', secrets: { WORKOS_CLIENT_ID: 'client_synthetic', WORKOS_API_KEY: 'sk_' + 'b'.repeat(75), AUTH_COOKIE_PASSWORD: secret } };
+      const env = { ...process.env, DATABASE_HOST: 'database.example.com', DATABASE_CA_PEM: rootCertificates[0],
+        RUNTIME_STATE_JSON: JSON.stringify({ database: 'solventa_dev', passwords: { acquisition: secret, identity: secret, policy: secret } }),
+        WEB_INFRA_TOKEN: secret, IDENTITY_AUTH_JSON: JSON.stringify(auth), SECURITY_ALERT_EMAIL_CONFIG: value };
+      const result = spawnSync(process.execPath, [script, 'prepare', 'dev'], { cwd: directory, env, encoding: 'utf8', windowsHide: true });
+      assert.equal(result.status === 0, accepted);
+      for (const privateValue of [email.from, email.to, secret]) assert.ok(!result.stdout.includes(privateValue) && !result.stderr.includes(privateValue));
+      if (accepted) {
+        const restored = JSON.parse(await readFile(join(directory, 'infra/.local/identity.dev.secrets.json'), 'utf8'));
+        assert.deepEqual(restored, { ...auth.secrets, SECURITY_ALERT_EMAIL_CONFIG: value });
+        const cleanup = spawnSync(process.execPath, [script, 'cleanup', 'dev'], { cwd: directory, encoding: 'utf8', windowsHide: true });
+        assert.equal(cleanup.status, 0);
+        await assert.rejects(access(join(directory, 'infra/.local/identity.dev.secrets.json')), { code: 'ENOENT' });
+      } else await assert.rejects(access(join(directory, 'infra/.local')), { code: 'ENOENT' });
+    } finally { await rm(directory, { recursive: true }); }
+  }
 });
 
 test('cleanup preserves credentials belonging to another environment', async () => {

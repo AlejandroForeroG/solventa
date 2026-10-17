@@ -8,11 +8,13 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+
 | Environment | API reference |
 |---|---|
-| Dev | [OpenAPI viewer](https://solventa-web-dev.ja-forerog1.workers.dev/api/docs/) |
-| Staging | [OpenAPI viewer](https://solventa-web-staging.ja-forerog1.workers.dev/api/docs/) |
-| Prod | [OpenAPI viewer](https://solventa-web-prod.ja-forerog1.workers.dev/api/docs/) |
+| Dev | [OpenAPI viewer](https://dev.solventa.site/api/docs/) |
+| Staging | [OpenAPI viewer](https://staging.solventa.site/api/docs/) |
+| Prod | [OpenAPI viewer](https://solventa.site/api/docs/) |
 | Local | [OpenAPI viewer](http://localhost:8787/api/docs/) after building web and starting the local Workers |
 
 Select a domain/version to inspect its operations, parameters, request/response schemas, examples and security requirements. The responsive reference includes sidebar navigation, search and request/response examples alongside operations. The `spec` query parameter preserves the selected domain/version when reloading or sharing operation links, for example `/api/docs/?spec=v1/quotes`. **OpenAPI JSON** opens the selected bundled specification; `/api/docs/catalog.json` lists available specifications. The viewer identifies its current environment. Relative `servers` URLs refer to that same environment.
@@ -53,6 +55,13 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
+| `openapi/v1/offers.yaml` | Owned definitive synthetic offers, explicit current risk consent for mortgage creation/acceptance, and asynchronous acceptance |
+| `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
+| `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
+| `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
+| `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
+| `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |
+| `examples/signal-providers.json` | Agreed corpus of answers from each simulated signal provider format, checked by `tests/signal-providers.test.ts` |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
 | `redocly.yaml` | OpenAPI lint rules |
 
@@ -91,11 +100,15 @@ Set its `deprecatedAt` and `sunset` in `apiVersions`; in **every** spec in its d
 npm run lint:openapi     # Redocly checks all .yaml files in openapi/
 npm run test:contracts   # Versioning, registry/spec agreement, capture schema and responses of quotes and access probes against their schemas
 npm run test:pact        # Consumer pacts, provider verification and the break-detection guard
+npm run test:integrations # Provider and ACORD corpora through their adapters
+npm run test:financial   # Synthetic financial HTTP/event contracts and integrity boundaries
 ```
 
-All three run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
+All five run in `npm run check` (CI and deployment). `pre-commit` runs lint for changes in `openapi/` or `redocly.yaml`; `pre-push` always runs it. Hooks can be bypassed, so CI is the blocking control. `no-unused-components` is disabled while no endpoint references common components; reenable it with the first endpoints. Each operation must declare `operationId`, `summary`, `security` (`security: []` if public) and at least one 4xx response.
 
 ## Consumer contracts (Pact)
+
+Quotes revision 1.2.0 adds the public `POST /api/v1/quote-estimates` calculator without changing either saved-quote entry. Its SPA client is `apps/web/src/quote/estimate-api.ts`; the consumer pact and real Acquisition provider cover an anonymous calculation, invalid age and service outage. `EstimateRequest`, `Estimate` and `EstimateValidationError` describe the bounded integer-only request and nonpersistent response. The example embedded in `quotes.yaml` is checked against the schema and actual rating result by `tests/quote-estimates.test.ts`. See the [owning module](../../modules/acquisition-risk/README.md#anonymous-indicative-calculator) for the absence of a stored quote or business decision.
 
 Pact records what a consumer actually uses from a provider and checks that the provider still satisfies it. OpenAPI describes what a provider offers; a pact describes what a consumer depends on, so a change that breaks a consumer fails CI before it is promoted. Pacts live in the repository; there is no Pact Broker, so `can-i-deploy` is not available and `npm run check` is the control.
 
@@ -110,6 +123,8 @@ Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-w
 
 Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` also runs the real Identity routes, with only the WorkOS adapter and the session store replaced through the `authentication` argument of `createHttp`, which only `src/index.ts` fills with the real adapters, because a valid session needs credentials and a database; the behavior of those two is covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
 
+The native consumer (`solventa-mobile`) now uses `apps/mobile/src/features/authentication/adapters/solventa-session.ts`. Its generation/comparison test covers configuration, session registration/inspection/logout, access probing and device registration/inspection/revocation against `solventa-web`. Provider states execute real Identity routes and device decisions with synthetic WorkOS/storage collaborators. Native secure storage, browser return and biometric prompts require separate device validation.
+
 ### Pending coverage
 
 A pact exists only for a consumer that is implemented. These public endpoints are documented in OpenAPI but have no pact yet, because no client code in the repository calls them:
@@ -119,6 +134,8 @@ A pact exists only for a consumer that is implemented. These public endpoints ar
 | `POST /api/v1/quotes` | A partner integration (bearer token) |
 | `GET /api/v1/access/partner` | A partner integration |
 | `GET /api/v1/access/web` | Any web or mobile client that probes access directly |
+| Offer creation/read/acceptance in `offers.yaml` | An implemented web consumer of the synthetic financial API |
+| Policy lookup/read/issue in `policies.yaml` | An implemented web consumer of the synthetic financial API |
 
 The change that adds the first real consumer of one of these endpoints, or of any new public route, must add its consumer pact and provider states in the same branch and PR. Do not write a pact from a hand-built request that no real client sends: it would approve a contract nobody depends on. The mobile app must register its own consumer when it calls the web Worker. Private RPC between Workers is outside Pact, which covers only HTTP.
 
@@ -133,6 +150,27 @@ Run `npm run pact:update` only for an intentional contract change, never to make
 Pact protects only what a consumer test declares. A new API call in the SPA without its consumer test is not detected, so add the test in the same change as the call.
 
 To add a consumer of the web Worker, create `tests/pact/<consumer>.consumer.test.ts` using the helpers in `tests/pact/support/` and add any new provider state to `support/provider.ts`. A provider other than the web Worker needs its own provider test and its name in `verifiedProviders` (`tests/pact/support/pact-files.ts`); the guard test fails for a pact whose provider is not listed there. Specify only the fields the consumer reads and use matchers for values that vary.
+
+## Integration schemas and corpus
+
+External formats are boundary contracts too. Each one has a versioned schema or a documented format version, and an agreed corpus that runs in `npm run test:integrations` (part of `npm run check`) through the real adapter. A corpus case states the input and its exact expected result: the internal model, or the normalized errors.
+
+| Contract | Version | Adapter | What the corpus checks |
+|---|---|---|---|
+| ACORD Life inspired quote request and response | Schemas `v1`; message field `schemaVersion: "1"` | `backend/acquisition-risk/src/adapters/inbound/acord-life-quote.ts` | The schema verdict, the translated `QuoteRequest` or the errors with ACORD paths, and responses that validate against the response schema |
+| Direct signal sources and signal aggregator | Format version 1 of each provider | `backend/acquisition-risk/src/adapters/outbound/direct-signal-provider.ts`, `aggregator-signal-provider.ts` | Valid answers become the canonical signal; every other answer fails with its normalized code and one log line |
+
+The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
+
+The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Their external payment, signature and oracle protocols are explicit mocks; their owner SQL, event authentication and recovery checks do not establish a real provider integration. Neither a `ReadSignal` route nor an ACORD endpoint is enabled by publishing a schema or corpus.
+
+To change an integration contract:
+
+1. Update the schema (or the provider format version) and its adapter in the same change.
+2. Add corpus cases for the new behavior, valid and negative. Never delete or weaken a case to make the suite pass; a case only changes with an intentional contract change.
+3. Run `npm run test:integrations` and `npm run check`.
+
+To add a provider, add its adapter and corpus section, and register its `SIGNAL_PROVIDER` value; the core and the port do not change. Integrations that are not implemented yet are listed in [architecture](../../architecture.md#external-integrations).
 
 ## Historical capture
 

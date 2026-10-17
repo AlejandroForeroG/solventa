@@ -171,7 +171,7 @@ test('a descendant deployment that reverted or overwrote the trial does not vali
   }
 });
 
-test('a deployed integration merge cannot replace or revert the candidate files', t => {
+test('a successful integration deployment may change candidate files', t => {
   for (const change of ['revert', 'overwrite']) {
     const f = fixture(t);
     f.git('switch', 'feat/quote-dev');
@@ -182,9 +182,30 @@ test('a deployed integration merge cannot replace or revert the candidate files'
     const laterDeployment = f.git('rev-parse', 'HEAD');
     assert.equal(f.checks.isAncestor(f.promotion.sourceSha, laterDeployment), true);
     assert.equal(f.checks.sameTree(f.checks.deploymentTrial(laterDeployment), laterDeployment), true);
-    assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] }), /tested integration tree/);
+    verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment] });
     verifyPromotion({ ...f.promotion, deployedShas: [laterDeployment, f.deployed] });
   }
+});
+
+test('unavailable deployment commits cannot establish proof or prevent a later match', t => {
+  const f = fixture(t);
+  const missing = 'f'.repeat(40);
+  assert.equal(f.checks.deploymentTrial(missing), undefined);
+  assert.equal(f.checks.deploymentTrial(f.git('rev-parse', 'HEAD:quote')), undefined);
+  assert.equal(f.checks.deploymentTrial('invalid'), undefined);
+  assert.throws(() => verifyPromotion({ ...f.promotion, deployedShas: [missing] }), /no successful dev deployment/);
+  verifyPromotion({ ...f.promotion, deployedShas: [missing, f.deployed] });
+  const found = findDeployedSha(page => ({ count: page === 1 ? 100 : 1, candidates: [page === 1 ? missing : f.deployed] }), sha => {
+    const trial = f.checks.deploymentTrial(sha);
+    return trial !== undefined && f.checks.isAncestor(f.promotion.sourceSha, trial) && f.checks.sameTree(trial, sha);
+  });
+  assert.equal(found, f.deployed);
+});
+
+test('Git repository errors still fail the deployment lookup', t => {
+  const f = fixture(t);
+  f.git('config', 'core.repositoryformatversion', '999');
+  assert.throws(() => f.checks.deploymentTrial(f.deployed), /Command failed/);
 });
 
 test('a release requires a successful deployment of the exact staging candidate', t => {

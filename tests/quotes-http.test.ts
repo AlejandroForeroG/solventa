@@ -7,6 +7,7 @@ import { parse } from 'yaml';
 import { createHttp } from '../backend/acquisition-risk/src/adapters/inbound/http';
 import { HmacProtector } from '../backend/acquisition-risk/src/adapters/outbound/hmac-protector';
 import { CreateQuote } from '../backend/acquisition-risk/src/application/create-quote';
+import { EstimateQuote } from '../backend/acquisition-risk/src/application/estimate-quote';
 import { InMemoryAccess, MemoryStore, protector } from './support/quote-fakes';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -24,18 +25,18 @@ const schema = (name: string) => {
 const base = examples.cases[0].request;
 const now = new Date('2026-10-06T15:00:00Z');
 const TRACE = '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47';
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function app() {
   const store = new MemoryStore();
   const access = new InMemoryAccess();
   const useCase = new CreateQuote({ access, store, clock: { now: () => now }, protector });
-  return { store, access, http: createHttp({ quotes: useCase }) };
+  return { store, access, http: createHttp({ quotes: useCase, estimates: new EstimateQuote() }) };
 }
 type Http = ReturnType<typeof createHttp>;
 type Init = { headers?: Record<string, string>; body?: unknown; raw?: string; stream?: ReadableStream<Uint8Array>; env?: string };
 const send = (http: Http, path: string, headers: Record<string, string>, init: Init) =>
-  http.request(path, {
+  http.request('https://web.example' + path, {
     method: 'POST',
     headers: { 'idempotency-key': 'key-1', 'content-type': 'application/json', ...headers, ...init.headers },
     body: init.stream ?? init.raw ?? JSON.stringify(init.body ?? base),
@@ -62,9 +63,11 @@ for (const [name, call] of [['partner', partner], ['web user', web]] as const) {
 
   test(`${name}: a missing or malformed trace id is replaced by a generated UUID`, async () => {
     const { http } = app();
-    for (const supplied of [undefined, 'short', 'a'.repeat(32), 'zz'.repeat(16)]) {
+    for (const supplied of [undefined, 'short', 'a'.repeat(32), 'zz'.repeat(16),
+      '50000000-0000-0000-8000-000000000001', '50000000-0000-9000-8000-000000000001', '50000000-0000-4000-7000-000000000001']) {
       const res = await call(http, { headers: supplied ? { 'x-trace-id': supplied } : {} });
       assert.match(res.headers.get('x-trace-id') ?? '', UUID);
+      assert.notEqual(res.headers.get('x-trace-id'), supplied);
     }
   });
 
@@ -148,7 +151,7 @@ for (const [name, call] of [['partner', partner], ['web user', web]] as const) {
   });
 }
 
-test('partner: the Bearer token is what Identity receives, and a malformed header never reaches it', async () => {
+test('partner: valid Bearer values reach Identity while missing or malformed credentials become empty authorization attempts', async () => {
   const { http, access } = app();
   await partner(http);
   assert.deepEqual(access.calls[0], { kind: 'partner', token: 'partner-token' });
@@ -158,13 +161,13 @@ test('partner: the Bearer token is what Identity receives, and a malformed heade
     assert.equal(res.status, 401, authorization);
   }
   assert.equal((await send(http, '/api/v1/quotes', {}, {})).status, 401);
-  assert.equal(access.calls.length, 0);
+  assert.deepEqual(access.calls, Array.from({ length: 5 }, () => ({ kind: 'partner', token: '' })));
 });
 
 test('web user: the sealed cookie value, the Origin and the real method are what Identity receives', async () => {
   const { http, access } = app();
   await web(http);
-  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', method: 'POST' });
+  assert.deepEqual(access.calls[0], { kind: 'web', cookie: 'sealed-cookie', origin: 'https://web.example', requestOrigin: 'https://web.example', method: 'POST' });
 });
 
 test('web user: the cookie name follows Identity (no prefix locally, __Host- elsewhere)', async () => {
@@ -172,7 +175,9 @@ test('web user: the cookie name follows Identity (no prefix locally, __Host- els
   assert.equal((await send(http, '/api/v1/me/quotes', { cookie: 'solventa-session=sealed-cookie' }, { env: 'local' })).status, 201);
   assert.equal((await send(http, '/api/v1/me/quotes', { cookie: '__Host-solventa-session=sealed-cookie' }, { env: 'local', headers: { 'idempotency-key': 'k2' } })).status, 401, 'the prefixed name is not accepted locally');
   assert.equal((await send(http, '/api/v1/me/quotes', { cookie: 'solventa-session=sealed-cookie' }, { env: 'prod', headers: { 'idempotency-key': 'k3' } })).status, 401, 'the unprefixed name is not accepted in prod');
-  assert.equal(access.calls.length, 1, 'only the accepted cookie reached Identity');
+  assert.equal(access.calls.length, 3, 'missing channel cookies still reach Identity as empty authorization attempts');
+  assert.equal((access.calls[1] as { cookie: string }).cookie, '');
+  assert.equal((access.calls[2] as { cookie: string }).cookie, '');
 });
 
 test('web user: an Authorization header is rejected before anything else, so credential types never mix', async () => {
@@ -184,11 +189,11 @@ test('web user: an Authorization header is rejected before anything else, so cre
   assert.equal(store.saved.length, 0);
 });
 
-test('web user: no cookie is a 401 without asking Identity, and a partner token is not a session', async () => {
+test('web user: missing session cookies reach Identity as empty authorization attempts', async () => {
   const { http, access } = app();
   assert.equal((await send(http, '/api/v1/me/quotes', {}, {})).status, 401);
   assert.equal((await send(http, '/api/v1/me/quotes', { cookie: 'other=1' }, {})).status, 401);
-  assert.equal(access.calls.length, 0);
+  assert.deepEqual(access.calls, Array.from({ length: 2 }, () => ({ kind: 'web', cookie: '', origin: '', requestOrigin: 'https://web.example', method: 'POST' })));
 });
 
 test('access errors keep their difference and match the contract: 401, 403 and 503 with only the canonical code', async () => {
@@ -226,7 +231,7 @@ test('an unexpected failure returns a generic 500 and logs without personal data
   console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
   try {
     const failing = { execute: async () => { throw new Error('boom 1020884771 Laura Catalina'); } } as unknown as CreateQuote;
-    const res = await partner(createHttp({ quotes: failing }));
+    const res = await partner(createHttp({ quotes: failing, estimates: new EstimateQuote() }));
     assert.equal(res.status, 500);
     assert.deepEqual(Object.keys(await res.json()).sort(), ['error', 'message', 'traceId']);
   } finally { console.error = original; }
@@ -238,9 +243,25 @@ test('an unexpected failure returns a generic 500 and logs without personal data
 test('a missing HMAC secret is a generic 500 and writes nothing, not a silent fallback', async () => {
   const store = new MemoryStore();
   const useCase = new CreateQuote({ access: new InMemoryAccess(), store, clock: { now: () => now }, protector: new HmacProtector('') });
-  const res = await partner(createHttp({ quotes: useCase }));
+  const res = await partner(createHttp({ quotes: useCase, estimates: new EstimateQuote() }));
   assert.equal(res.status, 500);
   assert.equal(store.saved.length, 0);
+});
+
+test('unknown exception codes cannot carry personal data into quote logs or responses', async () => {
+  const logs: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
+  try {
+    const { http, store } = app();
+    store.save = async () => { throw Object.assign(new Error('SyntheticPerson123 private detail'), { code: 'SyntheticPerson123' }); };
+    const res = await partner(http, { headers: { 'x-trace-id': TRACE } });
+    assert.equal(res.status, 500);
+    assert.equal(res.headers.get('x-trace-id'), TRACE);
+    assert.deepEqual(await res.json(), { error: 'internal_error', message: 'Error interno.', traceId: TRACE });
+    assert.deepEqual(logs.map(line => JSON.parse(line)), [{ event: 'quote_failed', traceId: TRACE, code: 'unexpected_error' }]);
+    assert.equal(store.saved.length, 0);
+  } finally { console.error = original; }
 });
 
 test('the existing health route and 404 behaviour are unchanged', async () => {

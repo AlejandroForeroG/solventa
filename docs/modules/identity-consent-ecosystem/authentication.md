@@ -13,9 +13,23 @@ Responses are not cached. Tokens/refresh tokens remain in a sealed cookie with `
 
 Registration commits client, identity link, session, audit and creation event in the owner's transaction. A registration race fails safely and allows login to restart. Logout revokes in SQL first, then attempts provider logout. External WorkOS revocation is reflected when the token expires/refreshes: no provider revocation-event consumer exists yet.
 
+A supplied invalid session cookie, a verified identity without an active local principal, an unauthenticated logout and a forbidden logout Origin create a minimal Identity security audit/outbox record before returning the denial. Valid supplied correlation UUIDs are canonicalized; otherwise the server generates one. No cookie, token or provider subject is copied into that generic record. If required persistence fails, the route returns `503 authentication_unavailable`. Normal anonymous `GET /auth/session` without a cookie remains 401 without a security event; OAuth login/callback redirects and malformed/unsupported requests retain their existing contracts. See [recording scope and optional alerts](../../security.md#durable-rejection-records).
+
 ## Configuration and running
 
+Logout also revokes native installation bindings owned by that same provider session, including when a web cookie and native bearer refer to one WorkOS session. Session/device changes, audit and device outbox/capture commit together; persistence failure returns 503 before provider logout or cookie clearing. Both local logout paths repair leftover active bindings on already-revoked sessions without duplicating completed effects. `/auth/logout` keeps its body, cookie and Origin contract; its supplied or generated `X-Trace-Id` correlates the session/device records. See [native installation bindings](mobile-authentication.md#installation-bindings).
+
 Each environment needs its own WorkOS application, exact Redirect URI, Initiate login URI and Sign-out URI. `AUTH_ORIGIN` and `AUTH_REDIRECT_URI` are in Wrangler. Secrets: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` and `AUTH_COOKIE_PASSWORD` (64 random hexadecimal characters, held separately per environment). Do not share keys. Production requires enabling its WorkOS environment before configuring credentials.
+
+### Custom Domain transition
+
+The canonical origins are `https://dev.solventa.site`, `https://staging.solventa.site` and `https://solventa.site`. Each environment also accepts its exact previous `https://solventa-web-<environment>.ja-forerog1.workers.dev` origin during transition. Arbitrary subdomains, suffixes, HTTP origins, non-default ports and other environments' hosts are rejected. Configuration must use an allowed environment origin and its exact `/auth/callback`; invalid configuration fails closed with 503.
+
+Before publication, register the new exact `https://<host>/auth/callback` Redirect URI, `https://<host>/auth/login` Initiate login URI and `https://<host>/` Sign-out URI in the corresponding WorkOS application. Preserve the previous callback/sign-out URI and native `solventa://auth/callback`; change the default web callback and Initiate login URI to the canonical host after verifying deployment. Follow [WorkOS AuthKit configuration](https://workos.com/docs/authkit/vanilla/nodejs). The AuthKit issuer, audience, client ID, keys and native scheme do not change.
+
+Login, code exchange, OAuth transaction encryption and provider logout use the validated request's own origin. No automatic redirect moves an in-flight callback between aliases. Logout requires that exact Origin, including between aliases in one environment. Cookies remain host-only with the `__Host-` prefix; a workers.dev session does not sign a user into solventa.site. Start a new login on the chosen host. Never broaden cookie Domain or CSRF to all subdomains. The [API authorization guide](api-access.md) describes the corresponding business-write check.
+
+See [public domains](../../infrastructure/README.md#public-domains) for routing and rollout. Configured routes and local builds do not establish DNS, certificate or live OAuth readiness.
 
 In Authentication, enable email/password and Magic Auth; keep social providers disabled until an approved integration exists. The operator's Outlook account does not imply enabling Microsoft as a product provider.
 
@@ -33,6 +47,6 @@ Tests: `npm run test:authentication` and, with local SQL running, `npm run test:
 
 The [API access foundation](api-access.md) reuses this session to authorize `quotes:create` probes and private RPC calls. `subjectToken` is an internal pseudonymous identifier, not a Bearer credential. Web access depends on the verified session, its local record and the explicit user operation policy, never on a partner credential. Business authorization neither refreshes cookies nor registers sessions; refresh remains in `/auth/session`.
 
-A session grants neither consent, operational permissions nor access to other owners. The [native connection](mobile-authentication.md) accepts user access tokens after mobile PKCE login; its channel implementation needs native secure storage and callback validation. Do not reuse web cookies or server keys. Device tables exist, but biometrics, device registration/revocation and native validation require implementation. A row does not establish biometrics.
+A session grants neither consent, operational permissions nor access to other owners. The [native connection](mobile-authentication.md) accepts user access tokens after mobile PKCE login and implements session-bound installation registration/revocation. Native secure custody and callback validation remain channel responsibilities. Do not reuse web cookies or server keys. Device rows do not establish biometrics; native credential protection and real platform validation remain separate from server session authorization.
 
 See [SQL model](../../infrastructure/data-model.md), [boundaries](../../architecture.md) and [operations](../../infrastructure/README.md).

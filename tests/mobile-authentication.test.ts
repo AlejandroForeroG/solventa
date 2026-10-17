@@ -29,6 +29,13 @@ function adapter(getUser = async () => user) {
 test('native user verification derives identity from a signed environment-bound token and a verified provider account', async () => {
   assert.deepEqual(await adapter().authenticate(await token()), identity);
 });
+test('only a valid signed auth_time supplies primary authentication freshness, never token issuance', async () => {
+  assert.deepEqual(await adapter().authenticate(await token({ auth_time: now - 100 })), { ...identity, authenticatedAt: (now - 100) * 1000 });
+  assert.deepEqual(await adapter().authenticate(await token()), identity);
+  for (const auth_time of [null, '123', -1, now + 1, now - 0.5]) {
+    assert.equal(await adapter().authenticate(await token({ auth_time })), null);
+  }
+});
 const invalidClaims = [
   { iss: 'https://foreign.authkit.app' }, { client_id: 'client_foreign' }, { aud: 'client_foreign' },
   { sub: 'connect_app_synthetic', sid: undefined }, { sub: 'client_partner' }, { sid: 'foreign' },
@@ -77,12 +84,13 @@ test('mobile session registration requires a verified identity and permission lo
 
 test('native logout delegates one atomic blocking operation without active registration', async () => {
   const calls: string[] = [];
+  const correlationId = crypto.randomUUID();
   const sessions = new MobileSessions({
     register: async () => { throw new Error('logout_must_not_register'); },
     find: async () => null,
-    revokeOrBlock: async verified => { assert.deepEqual(verified, identity); calls.push('block'); },
+    revokeOrBlock: async (verified, correlation) => { assert.deepEqual(verified, identity); assert.equal(correlation, correlationId); calls.push('block'); },
   });
-  await sessions.revoke(identity);
+  await sessions.revoke(identity, correlationId);
   assert.deepEqual(calls, ['block']);
 });
 test('unregistered or revoked local mobile sessions cannot authorize; database outages fail closed', async () => {

@@ -21,12 +21,13 @@ const headers = { Authorization: 'Bearer synthetic.jwt.token', 'X-Trace-Id': cry
 const env = { APP_ENV: 'dev' } as IdentityEnv;
 function setup(options: { verified?: boolean; registered?: boolean; unavailable?: boolean; revokeUnavailable?: boolean; localRevokeUnavailable?: boolean } = {}) {
   const calls: string[] = [];
+  const correlations: string[] = [];
   let active = options.registered ?? false;
   let revoked = false;
   const app = createHttp({ authentication: unexpectedAuthentication,
     authorizeApiAccess: async input => {
       calls.push('authorize');
-      assert.deepEqual(input, { kind: 'mobile', token: 'synthetic.jwt.token', operation: 'quotes:create' });
+      assert.deepEqual(input, { kind: 'mobile', token: 'synthetic.jwt.token', operation: 'quotes:create', traceId: headers['X-Trace-Id'] });
       return active ? { allowed: true, actor } : { allowed: false, error: 'unauthorized', status: 401 };
     },
     mobile: {
@@ -38,11 +39,11 @@ function setup(options: { verified?: boolean; registered?: boolean; unavailable?
       sessions: new MobileSessions({
         register: async () => { calls.push('register'); if (revoked) return null; active = true; return principal; },
         find: async () => { calls.push('find'); return active ? principal : null; },
-        revokeOrBlock: async () => { calls.push('local_revoke'); if (options.localRevokeUnavailable) throw new Error('sql_offline'); active = false; revoked = true; },
+        revokeOrBlock: async (verified, correlationId) => { assert.deepEqual(verified, identity); correlations.push(correlationId); calls.push('local_revoke'); if (options.localRevokeUnavailable) throw new Error('sql_offline'); active = false; revoked = true; },
       }),
     },
   });
-  return { calls, request: (path: string, method = 'GET', supplied = headers) => app.request(origin + '/api/v1' + path, { method, headers: supplied }, env) };
+  return { calls, correlations, request: (path: string, method = 'GET', supplied = headers) => app.request(origin + '/api/v1' + path, { method, headers: supplied }, env) };
 }
 async function contract(path: string, method: string, response: Response, name: string, status: number) {
   assert.equal(response.status, status);
@@ -71,6 +72,7 @@ test('native bootstrap, active retry, inspection, permission probe and logout fo
   await contract('/mobile/session', 'GET', await flow.request('/mobile/session'), 'Session', 200);
   await contract('/access/mobile', 'GET', await flow.request('/access/mobile'), 'Access', 200);
   await contract('/mobile/session', 'DELETE', await flow.request('/mobile/session', 'DELETE'), 'Logout', 200);
+  assert.deepEqual(flow.correlations, [headers['X-Trace-Id']]);
   assert.deepEqual(flow.calls.slice(-3), ['verify', 'local_revoke', 'provider_revoke']);
   await contract('/mobile/session', 'GET', await flow.request('/mobile/session'), 'Error', 401);
   await contract('/mobile/session', 'POST', await flow.request('/mobile/session', 'POST'), 'Error', 401);
@@ -84,6 +86,23 @@ test('native endpoints reject missing credentials, malformed headers and web coo
       assert.deepEqual(flow.calls, []);
     }
   }
+});
+test('logout persists the response correlation when the request trace is missing or invalid', async () => {
+  for (const trace of ['', 'invalid']) {
+    const flow = setup({ registered: true });
+    const response = await flow.request('/mobile/session', 'DELETE', { ...headers, 'X-Trace-Id': trace });
+    const body = await contract('/mobile/session', 'DELETE', response, 'Logout', 200);
+    assert.deepEqual(flow.correlations, [body.traceId]);
+    assert.notEqual(body.traceId, trace);
+  }
+});
+test('native logout canonicalizes a supplied UUID trace before forwarding it to persistence', async () => {
+  const flow = setup({ registered: true });
+  const trace = 'ABCDEF12-3456-4789-8ABC-DEF012345678';
+  const response = await flow.request('/mobile/session', 'DELETE', { ...headers, 'X-Trace-Id': trace });
+  const body = await contract('/mobile/session', 'DELETE', response, 'Logout', 200);
+  assert.equal(body.traceId, trace.toLowerCase());
+  assert.deepEqual(flow.correlations, [trace.toLowerCase()]);
 });
 test('unverified user and provider outages return documented denials without registration', async () => {
   for (const [options, status] of [[{ verified: false }, 401], [{ unavailable: true }, 503]] as const) {

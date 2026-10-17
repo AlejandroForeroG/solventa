@@ -27,7 +27,7 @@ export class WorkosMobileAuthentication {
   }
   async authenticate(token: string): Promise<VerifiedIdentity | null> {
     if (token.length > 8192 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return null;
-    let identity: { providerSubject: string; sessionReference: string };
+    let identity: { providerSubject: string; sessionReference: string; authenticatedAt?: number };
     try {
       const { payload, protectedHeader } = await jwtVerify(token, this.keys, {
         algorithms: ['RS256'], issuer: `https://api.workos.com/user_management/${this.config.clientId}`, clockTolerance: 0,
@@ -42,7 +42,10 @@ export class WorkosMobileAuthentication {
         || payload.iat < 0 || payload.iat > Math.floor(Date.now() / 1000) || payload.exp <= payload.iat
         || Object.hasOwn(payload, 'act')
         || (protectedHeader.typ !== undefined && !['jwt', 'at+jwt'].includes(protectedHeader.typ.toLowerCase()))) return null;
-      identity = { providerSubject: payload.sub, sessionReference: payload.sid };
+      if (payload.auth_time !== undefined && (typeof payload.auth_time !== 'number'
+        || !Number.isSafeInteger(payload.auth_time) || payload.auth_time < 0 || payload.auth_time > payload.iat)) return null;
+      identity = { providerSubject: payload.sub, sessionReference: payload.sid,
+        ...(typeof payload.auth_time === 'number' ? { authenticatedAt: payload.auth_time * 1000 } : {}) };
     } catch (error) {
       if (error instanceof errors.JWTExpired || error instanceof errors.JWTClaimValidationFailed
         || error instanceof errors.JWSInvalid || error instanceof errors.JWTInvalid
