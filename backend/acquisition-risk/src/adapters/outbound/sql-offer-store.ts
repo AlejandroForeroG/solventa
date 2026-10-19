@@ -61,19 +61,31 @@ export class SqlOfferStore implements OfferStore {
       const t = input.offer.terms;
       await c.query('BEGIN');
       try {
-        const decision = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1','accepted',$3,$3,$4) RETURNING id`, [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId]);
-        await c.query(`INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
-          VALUES ($1,1,$2,$3,'COP',$4,'definitive',$5,$6)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.effectiveFrom, t.expiresAt]);
-        await c.query(`INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
-          VALUES ($1,1,$2,$3,'COP',$4,$5,$6)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.effectiveFrom, t.expiresAt]);
-        await c.query(`INSERT INTO acquisition.offer_contexts (offer_id,quote_id,client_id,subject_token,idempotency_key,source_reference,terms,terms_seal,consent_reference,consent_version)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [t.offerId, input.quote?.id ?? null, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference, JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion]);
-        await this.audit(c, input.actor.clientId, 'offer.create', t.offerId, 'success', input.traceId);
-        await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-          VALUES (gen_random_uuid(),'offer',$1,'offer.created',1,$2,$3)`, [t.offerId, JSON.stringify({ offerId: t.offerId, synthetic: true }), input.traceId]);
-        await c.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
-          VALUES ($1,$2,$3,$4,'accepted',$5,$6)`, [input.actor.clientId, input.actor.subjectToken, input.key, input.requestIdentity, decision.rows[0].id, t.offerId]);
+        const created = await c.query(`WITH decision AS (
+          INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
+          VALUES ($1,$2,'v1','accepted',$3,$3,$4) RETURNING id
+        ), offered AS (
+          INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
+          SELECT $5,1,id,$6,'COP',$7,'definitive',$8,$9 FROM decision RETURNING id,decision_id
+        ), revision AS (
+          INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
+          SELECT id,1,decision_id,$6,'COP',$7,$8,$9 FROM offered RETURNING offer_id
+        ), context AS (
+          INSERT INTO acquisition.offer_contexts (offer_id,quote_id,client_id,subject_token,idempotency_key,source_reference,terms,terms_seal,consent_reference,consent_version)
+          SELECT id,$1,$10::UUID,$11::UUID,$12,$13,$14,$15,$16,$17 FROM offered RETURNING offer_id
+        ), audited AS (
+          INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+          SELECT $10::STRING,'offer.create','offer',id,'success',$4,now()+interval '5 years' FROM offered RETURNING correlation_id
+        ), evented AS (
+          INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+          SELECT gen_random_uuid(),'offer',id,'offer.created',1,$19,$4 FROM offered RETURNING event_id
+        ) INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
+          SELECT $10::UUID,$11::UUID,$12,$18,'accepted',decision_id,id FROM offered`,
+        [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId, t.offerId, t.premium, JSON.stringify(t.coverage),
+          t.effectiveFrom, t.expiresAt, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference,
+          JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion, input.requestIdentity,
+          JSON.stringify({ offerId: t.offerId, synthetic: true })]);
+        if (created.rowCount !== 1) throw new Error('offer_creation_incomplete');
         await c.query('COMMIT');
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
@@ -139,9 +151,13 @@ export class SqlOfferStore implements OfferStore {
           const value = existing.rows[0]?.result;
           return value?.offerId === input.acceptance.offerId ? { status: 'replayed' as const, acceptance: value } : { status: 'conflict' as const };
         }
-        await this.audit(c, input.actor.clientId, 'offer.accept', input.offer.terms.offerId, 'success', input.traceId);
-        await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-          VALUES ($1,'offer',$2,'offer.accepted',1,$3,$4)`, [input.event.eventId, input.offer.terms.offerId, JSON.stringify(input.event), input.traceId]);
+        const evidenced = await c.query(`WITH audited AS (
+          INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+          VALUES ($1,'offer.accept','offer',$2,'success',$3,now()+interval '5 years') RETURNING correlation_id
+        ) INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+          SELECT $4,'offer',$2,'offer.accepted',1,$5,correlation_id FROM audited`,
+        [input.actor.clientId, input.offer.terms.offerId, input.traceId, input.event.eventId, JSON.stringify(input.event)]);
+        if (evidenced.rowCount !== 1) throw new Error('offer_acceptance_evidence_incomplete');
         await c.query('COMMIT');
         return { status: 'created' as const, acceptance: input.acceptance };
       } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }

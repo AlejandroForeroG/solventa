@@ -52,6 +52,8 @@ Another module that wants to query a source asks Identity, through the Service B
 
 The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
 
+The financial access RPC authenticates first, then checks the four mortgage scopes concurrently within Identity. All results must finish and name the same sealed consent, text version and expiry before risk-data access is authorized. Every request repeats these reads; no result is cached across requests. A technical failure remains unavailable, and the existing final denial audit is required. No-signals products and policy reads/issuance retain their operation-specific consent rules. `tests/financial-access.test.ts` covers incomplete checks, mismatched grants and revocation on the next request. The HTTP and RPC contract shapes are unchanged.
+
 ```ts
 { subjectToken, purposeCode: 'risk_profiling', scope, traceId }
 // { allowed: true, consent: { consentId, textVersion, expiresAt } }

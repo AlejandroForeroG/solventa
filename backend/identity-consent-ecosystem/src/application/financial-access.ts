@@ -26,9 +26,18 @@ export async function authorizeFinancialAccess(deps: {
     // positive actor here is an inconsistent dependency response, never a business authorization.
     if (input.kind !== 'web' || access.actor.kind !== 'user' || access.actor.channel !== 'web') return { allowed: false, error: 'access_unavailable', status: 503 };
     if (input.operation !== 'offers:create' && input.operation !== 'offers:accept') return { allowed: true, actor: access.actor };
+    const subjectToken = access.actor.principal.subjectToken;
+    // Independent, fresh reads run together; no authorization is reused between requests.
+    const checks = await Promise.allSettled(scopes.map(async scope => deps.verifyConsent({
+      subjectToken, purposeCode: 'risk_profiling', scope,
+    })));
+    const decisions: ConsentDecision[] = [];
+    for (const check of checks) {
+      if (check.status === 'rejected') return { allowed: false, error: 'access_unavailable', status: 503 };
+      decisions.push(check.value);
+    }
     let authorized: { consentId: string; textVersion: number; expiresAt: string } | undefined;
-    for (const scope of scopes) {
-      const decision = await deps.verifyConsent({ subjectToken: access.actor.principal.subjectToken, purposeCode: 'risk_profiling', scope });
+    for (const decision of decisions) {
       if (!decision.allowed) {
         if (decision.reason === 'unavailable') return { allowed: false, error: 'access_unavailable', status: 503 };
         // Acceptance of a no-signals product needs no risk-data consent. The owner still requires

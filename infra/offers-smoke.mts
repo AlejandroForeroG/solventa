@@ -56,6 +56,7 @@ const now = new Date(), integrity = new HmacOfferIntegrity('local-synthetic-fina
 const store = new SqlOfferStore(runtime.toString());
 const service = new OfferService({ store, provider: new MockRiskSignals(), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
 const authorization = { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: new Date(now.getTime() + 3600000).toISOString() };
+let testFailure: unknown;
 try {
   const quote = await new CreateQuote({ access: { async authorize() { return { allowed: true, actor: { kind: 'user', ...actor } }; } }, store: new SqlQuoteStore(runtime.toString()), protector: new HmacProtector('local-synthetic-quote-key-'.padEnd(40, 'x')), clock: { now: () => now } }).execute({
     credential: { kind: 'web', cookie: 'synthetic', origin: 'http://localhost:8787', method: 'POST' }, idempotencyKey: randomUUID(), traceId: trace(),
@@ -160,6 +161,35 @@ try {
     capture: { synthetic: true }, traceId: badTrace }), /constraint|check/i);
   assert.equal((await admin.query('SELECT count(*)::INT4 AS n FROM acquisition.offers WHERE id=$1', [badOfferId])).rows[0].n, 0);
   assert.equal((await admin.query('SELECT count(*)::INT4 AS n FROM acquisition.underwriting_decisions WHERE correlation_id=$1', [badTrace])).rows[0].n, 0);
+  // Required evidence failures must roll back the whole compound write, including the request ledger.
+  for (const table of ['audit_events', 'outbox_events']) {
+    const withheldOfferId = randomUUID(), withheldTrace = trace(), withheldKey = randomUUID();
+    const pendingAcceptance = await service.create({ ...command, idempotencyKey: randomUUID(), traceId: trace() });
+    assert.equal(pendingAcceptance.status, 'created');
+    if (pendingAcceptance.status !== 'created') throw Error('rollback fixture missing');
+    await admin.query(`REVOKE INSERT ON acquisition.${table} FROM solventa_local_acquisition`);
+    try {
+      await assert.rejects(store.create({ actor, quote: storedQuote, sourceReference: quote.quote.quoteId,
+        requestIdentity: JSON.stringify(['vida_hipotecario', quote.quote.quoteId]), key: withheldKey,
+        offer: { ...existing, terms: { ...existing.terms, offerId: withheldOfferId } }, capture: { synthetic: true }, traceId: withheldTrace }), /privilege|permission|denied/i);
+      await assert.rejects(service.accept({ actor, authorization, offerId: pendingAcceptance.offer.offerId,
+        idempotencyKey: randomUUID(), traceId: trace() }), /privilege|permission|denied/i);
+    } finally { await admin.query(`GRANT INSERT ON acquisition.${table} TO solventa_local_acquisition`); }
+    const rolledBack = (await admin.query(`SELECT
+      (SELECT count(*)::INT4 FROM acquisition.offers WHERE id=$1) AS offers,
+      (SELECT count(*)::INT4 FROM acquisition.underwriting_decisions WHERE correlation_id=$2) AS decisions,
+      (SELECT count(*)::INT4 FROM acquisition.offer_contexts WHERE offer_id=$1) AS contexts,
+      (SELECT count(*)::INT4 FROM acquisition.offer_revisions WHERE offer_id=$1) AS revisions,
+      (SELECT count(*)::INT4 FROM acquisition.offer_requests WHERE client_id=$3 AND idempotency_key=$4) AS requests,
+      (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE correlation_id=$2) AS audit,
+      (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE correlation_id=$2) AS outbox,
+      (SELECT count(*)::INT4 FROM acquisition.offer_acceptances WHERE offer_id=$5) AS acceptances,
+      (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$5 AND action='offer.accept') AS acceptance_audit,
+      (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$5 AND event_type='offer.accepted') AS acceptance_outbox`,
+    [withheldOfferId, withheldTrace, actor.clientId, withheldKey, pendingAcceptance.offer.offerId])).rows[0];
+    assert.deepEqual(rolledBack, { offers: 0, decisions: 0, contexts: 0, revisions: 0, requests: 0, audit: 0, outbox: 0,
+      acceptances: 0, acceptance_audit: 0, acceptance_outbox: 0 });
+  }
   // Admin-only tamper fixture proves acceptance fails closed without another financial event.
   await admin.query("UPDATE acquisition.offer_contexts SET terms=jsonb_set(terms,'{premium}','\"1.0000\"'::JSONB) WHERE offer_id=$1", [flight.offer.offerId]);
   assert.equal((await service.accept({ actor, offerId: flight.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() })).status, 'integrity_invalid');
@@ -229,26 +259,34 @@ try {
       await assert.rejects(probe.query(`UPDATE acquisition.${table} SET ${table === 'offer_contexts' ? 'terms_seal=terms_seal' : table === 'offer_acceptances' ? 'result=result' : table === 'offer_requests' ? 'outcome=outcome' : 'premium=premium'}`), /privilege|permission|denied/i);
     }
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'actor ownership and payload/key conflicts', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'stored term tamper rejected', 'authorization expiring under the offer row lock leaves no acceptance', 'targeted publication of a committed acceptance', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'actor ownership and payload/key conflicts', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'required audit/outbox failure rolls back complete offer graph and acceptance', 'stored term tamper rejected', 'authorization expiring under the offer row lock leaves no acceptance', 'targeted publication of a committed acceptance', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
+} catch (error) {
+  testFailure = error;
+  throw error;
 } finally {
   try {
-    const offers = (await admin.query('SELECT offer_id FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId])).rows.map(r => r.offer_id);
-    const decisions = (await admin.query('SELECT id FROM acquisition.underwriting_decisions WHERE correlation_id=ANY($1::UUID[])', [traces])).rows.map(r => r.id);
-    const quotes = (await admin.query('SELECT id FROM acquisition.quotes WHERE client_id=$1', [actor.clientId])).rows.map(r => r.id);
-    await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id=ANY($1::UUID[]) OR correlation_id=ANY($2::UUID[])', [[...offers, ...quotes, ...decisions], traces]);
-    await admin.query('DELETE FROM acquisition.audit_events WHERE actor_reference=$1 OR correlation_id=ANY($2::UUID[])', [actor.clientId, traces]);
-    await admin.query('DELETE FROM acquisition.offer_requests WHERE client_id=$1', [actor.clientId]);
-    await admin.query('DELETE FROM acquisition.offer_acceptances WHERE client_id=$1', [actor.clientId]);
-    await admin.query('DELETE FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId]);
-    await admin.query('DELETE FROM acquisition.offer_revisions WHERE offer_id=ANY($1::UUID[])', [offers]);
-    await admin.query('DELETE FROM acquisition.offers WHERE id=ANY($1::UUID[])', [offers]);
-    await admin.query('DELETE FROM acquisition.underwriting_decisions WHERE id=ANY($1::UUID[])', [decisions]);
-    await admin.query('DELETE FROM acquisition.quotes WHERE client_id=$1', [actor.clientId]);
-  } finally {
-    await admin.end();
-    if (provisioner) {
-      try { await provisioner.query(`DROP DATABASE ${isolatedDatabase} CASCADE`); }
-      finally { await provisioner.end(); }
+    try {
+      const offers = (await admin.query('SELECT offer_id FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId])).rows.map(r => r.offer_id);
+      const decisions = (await admin.query('SELECT id FROM acquisition.underwriting_decisions WHERE correlation_id=ANY($1::UUID[])', [traces])).rows.map(r => r.id);
+      const quotes = (await admin.query('SELECT id FROM acquisition.quotes WHERE client_id=$1', [actor.clientId])).rows.map(r => r.id);
+      await admin.query('DELETE FROM acquisition.outbox_events WHERE aggregate_id=ANY($1::UUID[]) OR correlation_id=ANY($2::UUID[])', [[...offers, ...quotes, ...decisions], traces]);
+      await admin.query('DELETE FROM acquisition.audit_events WHERE actor_reference=$1 OR correlation_id=ANY($2::UUID[])', [actor.clientId, traces]);
+      await admin.query('DELETE FROM acquisition.offer_requests WHERE client_id=$1', [actor.clientId]);
+      await admin.query('DELETE FROM acquisition.offer_acceptances WHERE client_id=$1', [actor.clientId]);
+      await admin.query('DELETE FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId]);
+      await admin.query('DELETE FROM acquisition.offer_revisions WHERE offer_id=ANY($1::UUID[])', [offers]);
+      await admin.query('DELETE FROM acquisition.offers WHERE id=ANY($1::UUID[])', [offers]);
+      await admin.query('DELETE FROM acquisition.underwriting_decisions WHERE id=ANY($1::UUID[])', [decisions]);
+      await admin.query('DELETE FROM acquisition.quotes WHERE client_id=$1', [actor.clientId]);
+    } finally {
+      await admin.end();
+      if (provisioner) {
+        try { await provisioner.query(`DROP DATABASE ${isolatedDatabase} CASCADE`); }
+        finally { await provisioner.end(); }
+      }
     }
+  } catch (cleanupError) {
+    if (!testFailure) throw cleanupError;
+    console.error(JSON.stringify({ event: 'offers_sql_cleanup_failed', preservedGeneratedDatabaseForReconciliation: isolatedDatabase }));
   }
 }

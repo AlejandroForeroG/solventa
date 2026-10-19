@@ -85,6 +85,10 @@ try {
   const originalCounts = await counts(['policies', 'inbox_events', 'audit_events', 'outbox_events']);
   assert.equal(ok(await finance.acceptOffer(offer, randomUUID())).replayed, true);
   assert.deepEqual(await counts(['policies', 'inbox_events', 'audit_events', 'outbox_events']), originalCounts);
+  await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+  await denied(traceId => finance.acceptOffer(offer, traceId), 'integrity_violation');
+  await db.query('UPDATE policy.policies SET premium=$2 WHERE id=$1', [policy.policyId, offer.payload.premium]);
+  assert.equal(ok(await finance.acceptOffer(offer, randomUUID())).replayed, true);
   const duplicateOffer = { ...offer, eventId: randomUUID(), payload: { ...offer.payload, acceptanceId: randomUUID() } };
   duplicateOffer.signature = await financialIntegrity.digest(eventContent(duplicateOffer));
   await denied(traceId => finance.acceptOffer(duplicateOffer, traceId), 'event_conflict');
@@ -102,19 +106,53 @@ try {
   const importRollback = await acceptedOffer();
   const importTables = ['policies', 'financial_contracts', 'inbox_events', 'audit_events', 'outbox_events'];
   const beforeImportFailure = await counts(importTables);
-  for (const table of ['financial_contracts', 'audit_events', 'outbox_events']) {
+  for (const table of ['policies', 'financial_contracts', 'inbox_events', 'audit_events', 'outbox_events']) {
     await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
     try { assert.equal((await finance.acceptOffer(importRollback, randomUUID())).status, 'unavailable'); }
     finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
     assert.deepEqual(await counts(importTables), beforeImportFailure,
-      'a failed contract/audit/outbox insert must roll back policy, contract, inbox and audit together');
+      `a failed ${table} insert must roll back policy, contract, inbox, audit and outbox together`);
   }
   assert.equal((await importOffer(importRollback)).status, 'pending');
+
+  const offerEvidence = async (event: SignedOfferAcceptanceV1) => (await db!.query(`SELECT
+    (SELECT count(*)::INT4 FROM policy.financial_contracts WHERE terms->>'offerId'=$1) AS contracts,
+    (SELECT count(*)::INT4 FROM policy.policies WHERE offer_id=$2) AS policies,
+    (SELECT count(*)::INT4 FROM policy.inbox_events i JOIN policy.policies p ON p.id=i.policy_id WHERE p.offer_id=$2) AS inbox,
+    (SELECT count(*)::INT4 FROM policy.audit_events a JOIN policy.policies p ON p.id=a.resource_id WHERE p.offer_id=$2 AND a.action='offer.accepted') AS audits,
+    (SELECT count(*)::INT4 FROM policy.outbox_events o JOIN policy.policies p ON p.id=o.aggregate_id WHERE p.offer_id=$2 AND o.event_type='policy.offer.accepted') AS outbox`,
+  [event.payload.offerId, event.payload.offerId])).rows[0];
+  const redelivered = await acceptedOffer();
+  const deliveries = (await Promise.all(Array.from({ length: 3 }, () => finance.acceptOffer(redelivered, randomUUID())))).map(ok);
+  assert.equal(deliveries.filter(result => !result.replayed).length, 1, 'concurrent redelivery must create exactly one policy');
+  assert.equal(new Set(deliveries.map(result => result.policy.policyId)).size, 1);
+  assert.deepEqual(await offerEvidence(redelivered), { contracts: 1, policies: 1, inbox: 1, audits: 1, outbox: 1 });
+  const contested = await acceptedOffer();
+  const rival = { ...contested, eventId: randomUUID(), payload: { ...contested.payload, acceptanceId: randomUUID() } };
+  rival.signature = await financialIntegrity.digest(eventContent(rival));
+  const rivalTraces = [randomUUID(), randomUUID()];
+  const contest = await Promise.all([finance.acceptOffer(contested, rivalTraces[0]), finance.acceptOffer(rival, rivalTraces[1])]);
+  assert.equal(contest.filter(result => result.status === 'ok').length, 1, JSON.stringify(contest));
+  const loser = contest.findIndex(result => result.status !== 'ok'), lost = contest[loser];
+  assert.ok(lost.status === 'denied' && lost.error === 'event_conflict', JSON.stringify(contest));
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1 AND action='financial.denied' AND outcome='event_conflict'",
+    [rivalTraces[loser]])).rows[0].n, 1, 'the losing envelope must be an audited conflict');
+  assert.deepEqual(await offerEvidence(contested), { contracts: 1, policies: 1, inbox: 1, audits: 1, outbox: 1 });
 
   const orphanOffer = await acceptedOffer(); const orphanPolicy = await importOffer(orphanOffer);
   await db.query(`INSERT INTO policy.payments(id,policy_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
     VALUES($1,$2,'premium','initial-premium',$3,$4,'COP','pending',$5)`,
   [randomUUID(), orphanPolicy.policyId, '0'.repeat(64), orphanOffer.payload.premium, randomUUID()]);
+  // Ownership is resolved before the joined evidence is decoded, even if the foreign record is malformed.
+  for (const foreignActor of [{ clientId: randomUUID(), subjectToken: randomUUID() },
+    { clientId: randomUUID(), subjectToken: orphanOffer.payload.subjectToken },
+    { clientId: orphanOffer.payload.clientId, subjectToken: randomUUID() }]) {
+    await denied(traceId => finance.get({ actor: foreignActor, policyId: orphanPolicy.policyId, traceId }), 'not_found');
+    await denied(traceId => finance.issue({ actor: foreignActor, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
+      idempotencyKey: randomUUID(), traceId }), 'not_found');
+    const pending = await finance.getByAcceptance({ actor: foreignActor, acceptanceId: orphanOffer.payload.acceptanceId, traceId: randomUUID() });
+    assert.ok(pending.status === 'denied' && pending.error === 'policy_pending');
+  }
   await denied(traceId => finance.issue({ actor: orphanOffer.payload, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
     idempotencyKey: randomUUID(), traceId }), 'integrity_violation');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.financial_payment_intents WHERE policy_id=$1', [orphanPolicy.policyId])).rows[0].n, 0,
@@ -395,7 +433,8 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
-      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
+      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque',
+      'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {

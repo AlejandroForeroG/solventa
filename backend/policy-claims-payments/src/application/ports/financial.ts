@@ -1,4 +1,4 @@
-import type { AcceptedOffer, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
+import type { AcceptedOffer, FinancialActor, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
 import type { FinancialAction, FinancialDecisionCapture } from '../financial-decision';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
@@ -8,11 +8,16 @@ export type Payment = { id: string; policyId: string; operation: 'premium' | 'in
   key: string; hash: string; status: 'pending' | 'confirmed' | 'refunded' | 'declined'; providerReference: string | null };
 export type Command = { policyId: string; requestHash: string; result: PolicyView | null };
 export type Inbox = { hash: string | null; policyId: string | null; outcome: string };
+export type Signature = { documentHash: string; receipt: string; signedAt: string; timeSeal: string | null };
+// A locked policy with the premium and signature evidence read in the same statement; it is valid only inside its transaction.
+export type PolicyRecord = { policy: StoredPolicy; premium: Payment | null; signature: Signature | null };
+export type AcceptanceSnapshot = { inbox: Inbox | null; conflict: boolean };
+export type ImportedEvent = { eventId: string; consumer: string; eventType: string; hash: string };
 export interface FinancialTransaction {
-  policy(id: string): Promise<StoredPolicy | null>;
-  acceptedPolicy(acceptanceId: string): Promise<StoredPolicy | null>;
-  offeredPolicy(offerId: string, offerVersion: number): Promise<StoredPolicy | null>;
-  createPolicy(policy: StoredPolicy, eventId: string, traceId: string, capture: FinancialDecisionCapture): Promise<void>;
+  policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
+  acceptedPolicy(acceptanceId: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
+  acceptanceSnapshot(event: { eventId: string; consumer: string }, offer: { acceptanceId: string; offerId: string; offerVersion: number }): Promise<AcceptanceSnapshot>;
+  importPolicy(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<void>;
   setPolicyStatus(id: string, status: PolicyStatus): Promise<void>;
   command(actorId: string, key: string): Promise<Command | null>;
   createCommand(actorId: string, key: string, policyId: string, requestHash: string): Promise<void>;
@@ -22,8 +27,7 @@ export interface FinancialTransaction {
   setPaymentStatus(id: string, status: Payment['status'], reference: string | null): Promise<void>;
   inbox(eventId: string, consumer: string): Promise<Inbox | null>;
   recordInbox(eventId: string, consumer: string, hash: string, policyId: string, eventType: string, traceId: string): Promise<void>;
-  signature(policyId: string): Promise<{ documentHash: string; receipt: string; signedAt: string; timeSeal: string | null } | null>;
-  recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<void>;
+  recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<Signature>;
   audit(action: FinancialAction, resourceId: string, traceId: string, outcome: string, actorReference: string, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialStore {
