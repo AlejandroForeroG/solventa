@@ -106,10 +106,15 @@ export class PolicyFinance {
   }
 
   getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult> {
-    return this.run(input.traceId, async () => {
+    return this.run(input.traceId, async traceId => {
       if (!validActor(input.actor) || !UUID.test(input.acceptanceId)) return reject('invalid_request', 400);
-      return this.deps.store.transaction(async tx => ({ status: 'ok', replayed: false,
-        policy: view(await this.checked(tx, await tx.acceptedPolicy(input.acceptanceId), input.actor)) }));
+      return this.deps.store.transaction(async tx => {
+        const stored = await tx.acceptedPolicy(input.acceptanceId);
+        // Delivery is asynchronous: before import, an owned pending acceptance and an unknown identifier look the same.
+        // Waiting is not a rejection, so it records neither a financial rejection nor a security denial.
+        if (!stored) return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
+        return { status: 'ok', replayed: false, policy: view(await this.checked(tx, stored, input.actor)) };
+      });
     });
   }
 

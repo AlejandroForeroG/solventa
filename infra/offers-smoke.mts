@@ -67,6 +67,24 @@ try {
   assert.equal((await service.create(command)).status, 'replayed');
   assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
   assert.equal((await service.get({ actor: other, offerId: created.offer.offerId, traceId: trace() })).status, 'not_found');
+  // An authorization that expires while acceptance waits for the offer row lock must not commit an acceptance.
+  const lockedOffer = await service.create({ ...command, idempotencyKey: randomUUID(), traceId: trace() });
+  assert.equal(lockedOffer.status, 'created');
+  if (lockedOffer.status !== 'created') throw Error('locked expiry fixture missing');
+  const blocker = clientFor(url, config.ssl); await blocker.connect();
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM acquisition.offers WHERE id=$1 FOR UPDATE', [lockedOffer.offer.offerId]);
+    const shortAuthorization = { ...authorization, expiresAt: new Date(Date.now() + 700).toISOString() };
+    const attempt = service.accept({ actor, authorization: shortAuthorization, offerId: lockedOffer.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() });
+    await new Promise(resolve => setTimeout(resolve, 1400));
+    await blocker.query('COMMIT');
+    assert.equal((await attempt).status, 'expired', 'authorization expiry is checked after acquiring the row lock');
+  } finally { await blocker.query('ROLLBACK').catch(() => {}); await blocker.end(); }
+  const lockedEffects = await admin.query(`SELECT (SELECT count(*)::INT4 FROM acquisition.offer_acceptances WHERE offer_id=$1) AS acceptances,
+    (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.accepted') AS outbox,
+    (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.accept' AND outcome='success') AS audit`, [lockedOffer.offer.offerId]);
+  assert.deepEqual(lockedEffects.rows[0], { acceptances: 0, outbox: 0, audit: 0 });
   const race = { ...command, idempotencyKey: randomUUID(), traceId: trace() };
   const raced = await Promise.all(Array.from({ length: 3 }, () => service.create(race)));
   assert.equal(raced.filter(x => x.status === 'created').length, 1);
@@ -150,7 +168,12 @@ try {
   assert.equal((await admin.query("SELECT count(*)::INT4 AS n FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.read' AND outcome='integrity_invalid' AND correlation_id=$2", [flight.offer.offerId, readTrace])).rows[0].n, 1);
   const published: AcceptanceEvent[] = [];
   const publisher = new FinancialOutboxPublisher({ connectionString: runtime.toString(), environment: 'local', integrity, queue: { async send(e) { published.push(e); } } });
-  const publication = await publisher.publish(); assert.equal(publication.published, 2); assert.equal(published.length, 2);
+  const ready = (await admin.query("SELECT event_id FROM acquisition.outbox_events WHERE event_type='offer.accepted' AND status='pending' ORDER BY created_at")).rows.map(row => row.event_id);
+  assert.equal(ready.length, 2);
+  // The post-acceptance trigger names its own committed event, so an older ready row cannot delay it.
+  const targeted = await publisher.publish(ready[1]); assert.equal(targeted.published, 1); assert.deepEqual(published.map(e => e.eventId), [ready[1]]);
+  assert.equal((await admin.query('SELECT status FROM acquisition.outbox_events WHERE event_id=$1', [ready[0]])).rows[0].status, 'pending', 'a targeted run leaves other rows to the scheduled publisher');
+  const publication = await publisher.publish(); assert.equal(publication.published, 1); assert.equal(published.length, 2);
   assert.equal((await publisher.publish()).claimed, 0, 'confirmed records are not republished');
   const eventId = published[0].eventId;
   await admin.query("UPDATE acquisition.outbox_events SET status='pending',published_at=NULL,attempts=0,available_at=now()-interval '1 minute' WHERE event_id=$1", [eventId]);
@@ -206,7 +229,7 @@ try {
       await assert.rejects(probe.query(`UPDATE acquisition.${table} SET ${table === 'offer_contexts' ? 'terms_seal=terms_seal' : table === 'offer_acceptances' ? 'result=result' : table === 'offer_requests' ? 'outcome=outcome' : 'premium=premium'}`), /privilege|permission|denied/i);
     }
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'actor ownership and payload/key conflicts', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'stored term tamper rejected', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'actor ownership and payload/key conflicts', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'stored term tamper rejected', 'authorization expiring under the offer row lock leaves no acceptance', 'targeted publication of a committed acceptance', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
 } finally {
   try {
     const offers = (await admin.query('SELECT offer_id FROM acquisition.offer_contexts WHERE client_id=$1', [actor.clientId])).rows.map(r => r.offer_id);

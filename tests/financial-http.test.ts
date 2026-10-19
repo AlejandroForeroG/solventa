@@ -216,3 +216,33 @@ test('offer reads pass the original trace to core integrity auditing and map an 
     assert.deepEqual(calls.find(c => c.operation === 'get')?.input, { actor, offerId: id, traceId });
   }
 });
+
+test('a pending acceptance read returns the opaque 404 without a security denial, while a foreign policy still records one', async () => {
+  const { calls, run, finance } = setup();
+  finance.getByAcceptance = async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId }; };
+  const pending = await run(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), true);
+  assert.equal(pending.status, 404);
+  assert.deepEqual(await contractual(pending, 'policies', 'Error'), { error: 'not_found', traceId });
+  assert.deepEqual(calls.map(c => c.operation), ['authorize', 'policyGetByAcceptance']);
+  finance.getByAcceptance = async () => ({ status: 'denied', error: 'not_found', httpStatus: 404, traceId });
+  const foreign = await run(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), true);
+  assert.equal(foreign.status, 404);
+  assert.deepEqual(await foreign.json(), { error: 'not_found', traceId });
+  assert.equal(calls.filter(c => c.operation === 'securityDenial').length, 1);
+});
+
+test('only a newly committed acceptance starts publication of its own event, without changing the response', async () => {
+  for (const [status, expected, published] of [['created', 202, [id]], ['replayed', 200, []]] as const) {
+    const started: string[] = [];
+    const app = new Hono<{ Bindings: AcquisitionEnv }>();
+    mountOffers(app, { authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
+      denyResourceAccess: async () => ({ recorded: true }),
+      offers: { create: async () => ({ status: 'created', offer: terms }), createFlight: async () => ({ status: 'created', offer: terms }), get: async () => ({ status: 'found', offer: terms }),
+        accept: async () => ({ status, acceptance }) },
+      acceptanceCommitted: eventId => { started.push(eventId); throw new Error('scheduling failure must not change the committed answer'); } });
+    const response = await app.fetch(request(`/offers/${id}/accept`), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, expected);
+    await contractual(response, 'offers', 'Acceptance');
+    assert.deepEqual(started, published);
+  }
+});

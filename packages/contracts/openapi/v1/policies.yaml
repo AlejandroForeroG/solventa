@@ -131,6 +131,11 @@ paths:
         uncertain outcome is unavailable and must be reconciled, never blindly
         charged again. Mock issuance is not legal insurance or real money
         movement.
+        A signature_failed response can occur during a concurrent refund;
+        read the owned policy and require status refunded before confirming
+        compensation. Retry an uncertain operation with its original key.
+        After document_mismatch, reread and review the document before
+        submitting its current server-provided fingerprint.
   /policies/by-acceptance/{acceptanceId}/policy:
     get:
       operationId: getOwnPolicyByAcceptance
@@ -181,7 +186,10 @@ paths:
           $ref: "#/components/responses/Unavailable"
       description: Returns 404 until the signed acceptance event has been consumed, or
         if the acceptance belongs to another user. No policy is created by this
-        query. Retry this read while issuance remains pending.
+        query. Retry this read while issuance remains pending. An absent
+        pre-import row does not generate a financial rejection or a security
+        denial notification; existing foreign policies still produce audited
+        denials. The public not_found response remains indistinguishable.
 components:
   securitySchemes:
     WebSession:
