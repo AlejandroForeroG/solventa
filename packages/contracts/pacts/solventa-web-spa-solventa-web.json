@@ -355,6 +355,227 @@
       }
     },
     {
+      "description": "a definitive offer request",
+      "providerStates": [
+        {
+          "name": "a customer with a current consent and a saved quote"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/quotes/COT-2026-00001/offers"
+      },
+      "response": {
+        "body": {
+          "coverage": {
+            "kind": "mortgage_life",
+            "sumInsured": "320000000.0000"
+          },
+          "currency": "COP",
+          "effectiveFrom": "2026-10-15T00:00:00.000Z",
+          "effectiveUntil": "2027-10-15T00:00:00.000Z",
+          "expiresAt": "2026-10-15T00:15:00.000Z",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "offerVersion": 1,
+          "premium": "77760.0000",
+          "product": "vida_hipotecario",
+          "quoteId": "COT-2026-00001",
+          "ruleVersion": "academic-mortgage-1",
+          "status": "definitive",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.coverage.kind": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.coverage.sumInsured": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.effectiveFrom": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.effectiveUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.offerVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.premium": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.product": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.quoteId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.ruleVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^academic-[a-z0-9-]+$"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a definitive offer request without current consent",
+      "providerStates": [
+        {
+          "name": "a customer without a current consent"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/quotes/COT-2026-00001/offers"
+      },
+      "response": {
+        "body": {
+          "error": "consent_required",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
       "description": "a logout with an active session",
       "providerStates": [
         {
@@ -401,6 +622,204 @@
       },
       "response": {
         "status": 401
+      }
+    },
+    {
+      "description": "a policy lookup after import",
+      "providerStates": [
+        {
+          "name": "the accepted offer was imported"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/policies/by-acceptance/20000000-0000-4000-8000-000000000002/policy"
+      },
+      "response": {
+        "body": {
+          "currency": "COP",
+          "document": "{\"synthetic\":true}",
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "effectiveFrom": "2026-10-15T00:00:00.000Z",
+          "effectiveUntil": "2027-10-15T00:00:00.000Z",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "offerVersion": 1,
+          "policyId": "30000000-0000-4000-8000-000000000003",
+          "premium": "77760.0000",
+          "providerMode": "mock",
+          "replayed": false,
+          "status": "pending",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.document": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\{.+\\}$"
+                }
+              ]
+            },
+            "$.documentHash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.effectiveFrom": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.effectiveUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.offerVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.policyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.premium": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.providerMode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.replayed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a policy lookup before import",
+      "providerStates": [
+        {
+          "name": "the accepted offer is not imported yet"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/policies/by-acceptance/20000000-0000-4000-8000-000000000002/policy"
+      },
+      "response": {
+        "body": {
+          "error": "not_found",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
       }
     },
     {
@@ -1130,6 +1549,54 @@
       }
     },
     {
+      "description": "an acceptance of an expired offer",
+      "providerStates": [
+        {
+          "name": "the definitive offer expired"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/offers/10000000-0000-4000-8000-000000000001/accept"
+      },
+      "response": {
+        "body": {
+          "error": "expired",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
       "description": "an anonymous calculation while Acquisition is unavailable",
       "providerStates": [
         {
@@ -1301,6 +1768,285 @@
           }
         },
         "status": 200
+      }
+    },
+    {
+      "description": "an issuance of the reviewed document",
+      "providerStates": [
+        {
+          "name": "the accepted offer was imported"
+        }
+      ],
+      "request": {
+        "body": {
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/issue"
+      },
+      "response": {
+        "body": {
+          "currency": "COP",
+          "document": "{\"synthetic\":true}",
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "effectiveFrom": "2026-10-15T00:00:00.000Z",
+          "effectiveUntil": "2027-10-15T00:00:00.000Z",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "offerVersion": 1,
+          "policyId": "30000000-0000-4000-8000-000000000003",
+          "premium": "77760.0000",
+          "providerMode": "mock",
+          "replayed": false,
+          "status": "issued",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.document": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\{.+\\}$"
+                }
+              ]
+            },
+            "$.documentHash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.effectiveFrom": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.effectiveUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.offerVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.policyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.premium": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.providerMode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.replayed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "an issuance while Policy is unavailable",
+      "providerStates": [
+        {
+          "name": "the policy service is down"
+        }
+      ],
+      "request": {
+        "body": {
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/issue"
+      },
+      "response": {
+        "status": 503
+      }
+    },
+    {
+      "description": "an offer acceptance",
+      "providerStates": [
+        {
+          "name": "a customer with a current definitive offer"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/offers/10000000-0000-4000-8000-000000000001/accept"
+      },
+      "response": {
+        "body": {
+          "acceptanceId": "20000000-0000-4000-8000-000000000002",
+          "acceptedAt": "2026-10-15T00:01:00.000Z",
+          "eventId": "40000000-0000-4000-8000-000000000004",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "status": "pending_issuance",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.acceptanceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.acceptedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.eventId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 202
       }
     },
     {

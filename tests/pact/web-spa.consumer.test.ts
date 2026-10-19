@@ -7,6 +7,7 @@ import { SUPPORTED_TERMS } from '../../apps/web/src/consent/wording';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
 import { requestEstimate } from '../../apps/web/src/quote/estimate-api';
+import { acceptOffer, createOffer, issuePolicy, policyForAcceptance } from '../../apps/web/src/offer/api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
 
 const consumerName = 'solventa-web-spa';
@@ -332,5 +333,99 @@ describe('SPA privacy panel', () => {
       .withRequest({ ...consentPost, path: '/api/v1/consents/CNS-2026-99999/revoke', body: {} })
       .willRespondWith({ status: 404 });
     await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => revokeConsent('CNS-2026-99999')), { kind: 'notFound' }));
+  });
+});
+
+describe('SPA definitive offer and policy issuance', () => {
+  const offerId = '10000000-0000-4000-8000-000000000001';
+  const acceptanceId = '20000000-0000-4000-8000-000000000002';
+  const policyId = '30000000-0000-4000-8000-000000000003';
+  const documentHash = 'a'.repeat(64);
+  const offerKey = '22222222-2222-4222-8222-222222222222';
+  const post = (path: string, idempotencyKey: string, body: unknown) => ({ method: 'POST', path, headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body });
+  const money = (example: string) => MatchersV3.regex('^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$', example);
+  const instant = (example: string) => MatchersV3.iso8601DateTimeWithMillis(example);
+  const offerBody = {
+    offerId: MatchersV3.equal(offerId), offerVersion: MatchersV3.equal(1), quoteId: MatchersV3.equal('COT-2026-00001'), product: MatchersV3.equal('vida_hipotecario'),
+    premium: money('77760.0000'), currency: MatchersV3.equal('COP'), coverage: { kind: MatchersV3.equal('mortgage_life'), sumInsured: money('320000000.0000') },
+    effectiveFrom: instant('2026-10-15T00:00:00.000Z'), effectiveUntil: instant('2027-10-15T00:00:00.000Z'), expiresAt: instant('2026-10-15T00:15:00.000Z'),
+    ruleVersion: MatchersV3.regex('^academic-[a-z0-9-]+$', 'academic-mortgage-1'), synthetic: MatchersV3.equal(true), status: MatchersV3.equal('definitive'), traceId,
+  };
+  const policyBody = (status: string) => ({
+    policyId: MatchersV3.equal(policyId), offerId: MatchersV3.equal(offerId), offerVersion: MatchersV3.integer(1), status: MatchersV3.equal(status), premium: money('77760.0000'),
+    currency: MatchersV3.equal('COP'), effectiveFrom: instant('2026-10-15T00:00:00.000Z'), effectiveUntil: instant('2027-10-15T00:00:00.000Z'),
+    document: MatchersV3.regex('^\\{.+\\}$', '{"synthetic":true}'), documentHash: MatchersV3.equal(documentHash), synthetic: MatchersV3.equal(true),
+    providerMode: MatchersV3.equal('mock'), replayed: MatchersV3.boolean(false), traceId,
+  });
+  const acceptance = { acceptanceId, offerId, acceptedAt: '2026-10-15T00:01:00.000Z', traceId: '7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47' };
+
+  test('creates a definitive offer from the saved quote', async () => {
+    pact.given('a customer with a current consent and a saved quote').uponReceiving('a definitive offer request')
+      .withRequest(post('/api/v1/quotes/COT-2026-00001/offers', offerKey, {}))
+      .willRespondWith({ status: 201, headers: jsonResponse, body: offerBody });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => createOffer('COT-2026-00001', offerKey));
+      assert.ok(outcome.kind === 'ok' && outcome.value.offerId === offerId && outcome.value.premium === '77760.0000');
+    });
+  });
+
+  test('is sent back to consent without a current authorization', async () => {
+    pact.given('a customer without a current consent').uponReceiving('a definitive offer request without current consent')
+      .withRequest(post('/api/v1/quotes/COT-2026-00001/offers', offerKey, {}))
+      .willRespondWith({ status: 403, headers: jsonResponse, body: { error: MatchersV3.equal('consent_required'), traceId } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => createOffer('COT-2026-00001', offerKey)), { kind: 'consentRequired' }));
+  });
+
+  test('records the acceptance as pending issuance', async () => {
+    pact.given('a customer with a current definitive offer').uponReceiving('an offer acceptance')
+      .withRequest(post(`/api/v1/offers/${offerId}/accept`, offerKey, {}))
+      .willRespondWith({ status: 202, headers: jsonResponse, body: {
+        acceptanceId: MatchersV3.equal(acceptanceId), offerId: MatchersV3.equal(offerId), eventId: MatchersV3.uuid('40000000-0000-4000-8000-000000000004'),
+        acceptedAt: instant('2026-10-15T00:01:00.000Z'), status: MatchersV3.equal('pending_issuance'), synthetic: MatchersV3.equal(true), traceId } });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => acceptOffer(offerId, offerKey));
+      assert.ok(outcome.kind === 'ok' && outcome.value.acceptanceId === acceptanceId);
+    });
+  });
+
+  test('reports an expired offer', async () => {
+    pact.given('the definitive offer expired').uponReceiving('an acceptance of an expired offer')
+      .withRequest(post(`/api/v1/offers/${offerId}/accept`, offerKey, {}))
+      .willRespondWith({ status: 409, headers: jsonResponse, body: { error: MatchersV3.equal('expired'), traceId } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => acceptOffer(offerId, offerKey)), { kind: 'rejected', code: 'expired' }));
+  });
+
+  test('waits while the accepted offer is not imported yet', async () => {
+    pact.given('the accepted offer is not imported yet').uponReceiving('a policy lookup before import')
+      .withRequest({ method: 'GET', path: `/api/v1/policies/by-acceptance/${acceptanceId}/policy` })
+      .willRespondWith({ status: 404, headers: jsonResponse, body: { error: MatchersV3.equal('not_found'), traceId } });
+    await pact.executeTest(async server => assert.deepEqual(await withServer(server.url, () => policyForAcceptance(acceptance)), { kind: 'notFound' }));
+  });
+
+  test('receives the policy document to review', async () => {
+    pact.given('the accepted offer was imported').uponReceiving('a policy lookup after import')
+      .withRequest({ method: 'GET', path: `/api/v1/policies/by-acceptance/${acceptanceId}/policy` })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: policyBody('pending') });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => policyForAcceptance(acceptance));
+      assert.ok(outcome.kind === 'ok' && outcome.value.status === 'pending' && outcome.value.documentHash === documentHash);
+    });
+  });
+
+  test('issues the reviewed document', async () => {
+    pact.given('the accepted offer was imported').uponReceiving('an issuance of the reviewed document')
+      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash }))
+      .willRespondWith({ status: 200, headers: jsonResponse, body: policyBody('issued') });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey));
+      assert.ok(outcome.kind === 'ok' && outcome.value.status === 'issued');
+    });
+  });
+
+  test('reports an uncertain issuance as unavailable', async () => {
+    pact.given('the policy service is down').uponReceiving('an issuance while Policy is unavailable')
+      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash }))
+      .willRespondWith({ status: 503 });
+    await pact.executeTest(async server => assert.equal((await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey))).kind, 'unavailable'));
   });
 });
