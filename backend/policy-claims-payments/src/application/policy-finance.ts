@@ -74,22 +74,21 @@ export class PolicyFinance {
       const document = policyDocument(id, input.payload);
       const documentHash = await this.deps.integrity.digest(document);
       const source = financialEventSource(input, this.deps.now().toISOString());
+      const offer = input.payload;
+      const policy: StoredPolicy = { id, clientId: offer.clientId, subjectToken: offer.subjectToken, status: 'pending',
+        offer, termsHash, document, documentHash, premium: offer.premium, currency: offer.currency,
+        offerId: offer.offerId, offerVersion: offer.offerVersion, effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, coverageSnapshot: offer.coverage };
+      const capture = this.decision('offer.accepted', traceId, policy, 'accepted', { sources: [source],
+        event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt } });
+      const imported = await this.deps.store.importAcceptance(policy,
+        { eventId: input.eventId, consumer: 'policy.offer-accepted.v1', eventType: input.eventType, hash }, traceId, capture);
+      if (imported.status === 'created') return { status: 'ok', replayed: false, policy: view(policy) };
+      const { inbox } = imported.snapshot;
+      if (!inbox || inbox.hash !== hash || !inbox.policyId || inbox.outcome !== 'accepted') return reject('event_conflict');
+      const replayPolicyId = inbox.policyId;
       return this.deps.store.transaction(async tx => {
-        const offer = input.payload;
-        const { inbox, conflict } = await tx.acceptanceSnapshot({ eventId: input.eventId, consumer: 'policy.offer-accepted.v1' }, offer);
-        if (inbox) {
-          if (inbox.hash !== hash || !inbox.policyId) return reject('event_conflict');
-          const { policy } = await this.checked(await tx.policy(inbox.policyId));
-          return { status: 'ok', replayed: true, policy: view(policy) };
-        }
-        if (conflict) return reject('event_conflict');
-        const policy: StoredPolicy = { id, clientId: offer.clientId, subjectToken: offer.subjectToken, status: 'pending',
-          offer, termsHash, document, documentHash, premium: offer.premium, currency: offer.currency,
-          offerId: offer.offerId, offerVersion: offer.offerVersion, effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, coverageSnapshot: offer.coverage };
-        const capture = this.decision('offer.accepted', traceId, policy, 'accepted', { sources: [source],
-          event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt } });
-        await tx.importPolicy(policy, { eventId: input.eventId, consumer: 'policy.offer-accepted.v1', eventType: input.eventType, hash }, traceId, capture);
-        return { status: 'ok', replayed: false, policy: view(policy) };
+        const { policy: existing } = await this.checked(await tx.policy(replayPolicyId));
+        return { status: 'ok', replayed: true, policy: view(existing) };
       });
     });
   }
@@ -97,21 +96,19 @@ export class PolicyFinance {
   get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult> {
     return this.run(input.traceId, async () => {
       if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
-      return this.deps.store.transaction(async tx => ({ status: 'ok', replayed: false,
-        policy: view((await this.checked(await tx.policy(input.policyId, input.actor), input.actor)).policy) }));
+      return { status: 'ok', replayed: false,
+        policy: view((await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor)).policy) };
     });
   }
 
   getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult> {
     return this.run(input.traceId, async traceId => {
       if (!validActor(input.actor) || !UUID.test(input.acceptanceId)) return reject('invalid_request', 400);
-      return this.deps.store.transaction(async tx => {
-        const stored = await tx.acceptedPolicy(input.acceptanceId, input.actor);
-        // Delivery is asynchronous: before import, an owned pending acceptance and an unknown identifier look the same.
-        // Waiting is not a rejection, so it records neither a financial rejection nor a security denial.
-        if (!stored) return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
-        return { status: 'ok', replayed: false, policy: view((await this.checked(stored, input.actor)).policy) };
-      });
+      const stored = await this.deps.store.readAcceptedPolicy(input.acceptanceId, input.actor);
+      // Delivery is asynchronous: before import, an owned pending acceptance and an unknown identifier look the same.
+      // Waiting is not a rejection, so it records neither a financial rejection nor a security denial.
+      if (!stored) return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
+      return { status: 'ok', replayed: false, policy: view((await this.checked(stored, input.actor)).policy) };
     });
   }
 
@@ -122,17 +119,18 @@ export class PolicyFinance {
       const requestHash = await this.deps.integrity.digest(JSON.stringify(['issue.v1', input.actor.clientId, input.policyId, input.documentHash]));
       const commandKey = await this.deps.integrity.digest(JSON.stringify(['command-key.v1', input.actor.clientId, input.idempotencyKey]));
       const plan = await this.deps.store.transaction(async tx => {
-        const { policy, premium } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
+        const snapshot = await tx.issuanceSnapshot(input.policyId, input.actor, commandKey);
+        const { policy, premium } = await this.checked(snapshot.record, input.actor);
         if (policy.documentHash !== input.documentHash) return reject('document_mismatch');
-        const previous = await tx.command(input.actor.clientId, commandKey);
+        const previous = snapshot.command;
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if (policy.status !== 'issued' || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
           return { policy, payment: null, replayed: true, completed: view(policy) };
         }
         if (policy.status === 'refunded') return reject('signature_failed');
-        if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
         if (policy.status === 'issued') {
+          if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
           const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result);
           return { policy, payment: null, replayed: !!previous, completed: result };
         }
@@ -142,10 +140,9 @@ export class PolicyFinance {
           payment = { id: this.deps.newId(), policyId: policy.id, operation: 'premium', amount: policy.premium,
             currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
           payment.hash = await this.deps.integrity.digest(paymentContent(payment));
-          await tx.createPayment(payment, traceId);
-          await tx.audit('premium.requested', policy.id, traceId, 'pending', policy.clientId,
-            this.decision('premium.requested', traceId, policy, 'pending', { payment }));
-        }
+          await tx.beginPremium({ policy, payment, command: previous ? null : { key: commandKey, requestHash }, traceId,
+            capture: this.decision('premium.requested', traceId, policy, 'pending', { payment }) });
+        } else if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
         await this.checkPayment(payment, policy);
         if (payment.status === 'declined') return reject('payment_declined');
         return { policy, payment, replayed: !!previous, completed: null };
@@ -318,7 +315,7 @@ export class PolicyFinance {
           await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', 'synthetic-oracle-v1',
             this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
               issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-              event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
+            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
         }
         await this.checkPayment(payment, policy);
         return { policy, payment, replayed: !!previous };
@@ -337,7 +334,7 @@ export class PolicyFinance {
           await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', 'synthetic-oracle-v1',
             this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...payment, status: 'confirmed', providerReference: settled.reference }, sources: [source, ...settled.sources],
               issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-              event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
+            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
         }
       });
       return { status: 'ok', replayed: plan.replayed, policy: view(plan.policy) };

@@ -1,8 +1,13 @@
 import { Client } from 'pg';
-import type { AcceptedOffer, OfferStore, StoredOffer, StoredOfferRequest } from '../../application/ports/offer-store';
+import type { AcceptedOffer, OfferAcceptanceSnapshot, OfferCreationSnapshot, OfferStore, StoredOffer, StoredOfferRequest } from '../../application/ports/offer-store';
 import { offerRequestIdentity, type OfferActor, type OfferQuote } from '../../domain/offer';
 
 type OfferRow = { terms: StoredOffer['terms']; terms_seal: string; consent_reference: string; consent_version: string };
+type QuoteSnapshot = { id: string; quoteCode: string; result: { sumInsured: number; termMonths: number; validUntil: string }; request: { inputs: { ageYears: number } } };
+type SnapshotRow =
+  | (Omit<OfferRow, 'terms'> & { kind: 'request'; terms: OfferRow['terms'] | null; client_id: string; subject_token: string; request_identity: string; outcome: 'accepted' | 'declined' })
+  | (OfferRow & { kind: 'legacy' })
+  | { kind: 'quote'; quote: QuoteSnapshot };
 const fromRow = (r: OfferRow): StoredOffer => ({ terms: r.terms, seal: r.terms_seal, consentId: r.consent_reference, consentVersion: Number(r.consent_version) });
 const SERIALIZATION_FAILURE = '40001';
 export class SqlOfferStore implements OfferStore {
@@ -17,38 +22,48 @@ export class SqlOfferStore implements OfferStore {
       try { return await action(); } catch (e) { if ((e as { code?: string }).code !== SERIALIZATION_FAILURE || attempt >= 2) throw e; }
     }
   }
-  async quote(actor: OfferActor, quoteId: string): Promise<OfferQuote | null> {
-    return this.connection(async c => {
-      const r = await c.query<{ id: string; quote_code: string; result: { sumInsured: number; termMonths: number; validUntil: string }; normalized_request: { inputs: { ageYears: number } } }>(
-        "SELECT id, quote_code, result, normalized_request FROM acquisition.quotes WHERE quote_code=$1 AND client_id=$2 AND subject_token=$3 AND status='completed'", [quoteId, actor.clientId, actor.subjectToken]);
-      const q = r.rows[0];
-      return q ? { id: q.id, quoteId: q.quote_code, amount: q.result.sumInsured, termMonths: q.result.termMonths, validUntil: q.result.validUntil, ageYears: q.normalized_request.inputs.ageYears } : null;
-    });
-  }
-  async request(actor: OfferActor, key: string): Promise<StoredOfferRequest | null> {
-    return this.connection(async c => {
-      const result = await c.query<OfferRow & { client_id: string; subject_token: string; request_identity: string; outcome: 'accepted' | 'declined' }>(`SELECT r.client_id,r.subject_token,r.request_identity,r.outcome,ctx.terms,ctx.terms_seal,ctx.consent_reference,ctx.consent_version
+  private async snapshot(c: Client, actor: OfferActor, key: string, quoteId: string | null): Promise<OfferCreationSnapshot> {
+    const result = await c.query<SnapshotRow>(`SELECT 'request' AS kind, r.client_id::STRING AS client_id, r.subject_token, r.request_identity, r.outcome,
+          ctx.terms, ctx.terms_seal, ctx.consent_reference, ctx.consent_version, NULL::JSONB AS quote
         FROM acquisition.offer_requests r LEFT JOIN acquisition.offer_contexts ctx ON ctx.offer_id=r.offer_id
-        WHERE r.client_id=$1 AND r.subject_token=$2 AND r.idempotency_key=$3`, [actor.clientId, actor.subjectToken, key]);
-      const row = result.rows[0]; if (!row) return null;
-      const common = { actor: { clientId: row.client_id, subjectToken: row.subject_token }, requestIdentity: row.request_identity };
-      if (row.outcome === 'declined') return { ...common, outcome: 'declined' };
-      if (!row.terms) throw new Error('offer_request_context_missing');
-      return { ...common, outcome: 'accepted', offer: fromRow(row) };
-    });
+        WHERE r.client_id=$1::UUID AND r.subject_token=$2::STRING AND r.idempotency_key=$3::STRING
+      UNION ALL
+      SELECT 'legacy', NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, ctx.terms, ctx.terms_seal, ctx.consent_reference, ctx.consent_version, NULL::JSONB
+        FROM acquisition.offer_contexts ctx
+        WHERE ctx.client_id=$1::UUID AND ctx.subject_token=$2::STRING AND ctx.idempotency_key=$3::STRING
+      UNION ALL
+      SELECT 'quote', NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, NULL::JSONB, NULL::STRING, NULL::STRING, NULL::INT8,
+          jsonb_build_object('id', q.id, 'quoteCode', q.quote_code, 'result', q.result, 'request', q.normalized_request)
+        FROM acquisition.quotes q
+        WHERE $4::STRING IS NOT NULL AND q.quote_code=$4::STRING AND q.client_id=$1::UUID AND q.subject_token=$2::STRING AND q.status='completed'
+          AND NOT EXISTS(SELECT 1 FROM acquisition.offer_requests existing WHERE existing.client_id=$1::UUID AND existing.subject_token=$2::STRING AND existing.idempotency_key=$3::STRING)
+          AND NOT EXISTS(SELECT 1 FROM acquisition.offer_contexts keyed WHERE keyed.client_id=$1::UUID AND keyed.subject_token=$2::STRING AND keyed.idempotency_key=$3::STRING)`,
+    [actor.clientId, actor.subjectToken, key, quoteId]);
+    let request: StoredOfferRequest | null = null, legacy: StoredOffer | null = null, quote: OfferQuote | null = null;
+    for (const row of result.rows) {
+      if (row.kind === 'legacy') legacy = fromRow(row);
+      else if (row.kind === 'quote') {
+        const q = row.quote;
+        quote = { id: q.id, quoteId: q.quoteCode, amount: q.result.sumInsured, termMonths: q.result.termMonths, validUntil: q.result.validUntil, ageYears: q.request.inputs.ageYears };
+      } else {
+        const common = { actor: { clientId: row.client_id, subjectToken: row.subject_token }, requestIdentity: row.request_identity };
+        if (row.outcome === 'declined') request = { ...common, outcome: 'declined' };
+        else if (!row.terms) throw new Error('offer_request_context_missing');
+        else request = { ...common, outcome: 'accepted', offer: fromRow({ ...row, terms: row.terms }) };
+      }
+    }
+    return { request, legacy, quote };
   }
-  private async winner(actor: OfferActor, key: string): Promise<StoredOfferRequest | null> {
-    const request = await this.request(actor, key); if (request) return request;
-    const offer = await this.byKey(actor, key); if (!offer) return null;
+  async creationSnapshot(actor: OfferActor, key: string, quoteId: string | null) {
+    return this.connection(c => this.snapshot(c, actor, key, quoteId));
+  }
+  private async winner(c: Client, actor: OfferActor, key: string): Promise<StoredOfferRequest | null> {
+    const { request, legacy: offer } = await this.snapshot(c, actor, key, null);
+    if (request) return request;
+    if (!offer) return null;
     const source = offer.terms.coverage.kind === 'flight_delay' ? offer.terms.coverage.flightReference : offer.terms.quoteId;
     if (!source) throw new Error('offer_request_source_missing');
     return { actor, requestIdentity: offerRequestIdentity(offer.terms.product, source), outcome: 'accepted', offer };
-  }
-  async byKey(actor: OfferActor, key: string) {
-    return this.connection(async c => {
-      const result = await c.query<OfferRow>('SELECT terms, terms_seal, consent_reference, consent_version FROM acquisition.offer_contexts WHERE client_id=$1 AND subject_token=$2 AND idempotency_key=$3', [actor.clientId, actor.subjectToken, key]);
-      return result.rows[0] ? fromRow(result.rows[0]) : null;
-    });
   }
   async get(actor: OfferActor, offerId: string) {
     return this.connection(async c => {
@@ -88,23 +103,26 @@ export class SqlOfferStore implements OfferStore {
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
         if ((e as { code?: string }).code === '23505') {
-          const winner = await this.winner(input.actor, input.key);
+          const winner = await this.winner(c, input.actor, input.key);
           if (winner) return { created: false, request: winner };
         }
         throw e;
       }
     }));
   }
-  async acceptance(actor: OfferActor, key: string) {
+  async acceptanceSnapshot(actor: OfferActor, offerId: string, key: string): Promise<OfferAcceptanceSnapshot> {
     return this.connection(async c => {
-      const r = await c.query<{ result: AcceptedOffer }>('SELECT result FROM acquisition.offer_acceptances WHERE client_id=$1 AND subject_token=$2 AND idempotency_key=$3', [actor.clientId, actor.subjectToken, key]);
-      return r.rows[0]?.result ?? null;
+      const r = await c.query<OfferRow & { acceptance: AcceptedOffer | null }>(`SELECT ctx.terms, ctx.terms_seal, ctx.consent_reference, ctx.consent_version,
+          (SELECT a.result FROM acquisition.offer_acceptances a WHERE a.client_id=$2 AND a.subject_token=$3 AND a.idempotency_key=$4) AS acceptance
+        FROM acquisition.offer_contexts ctx WHERE ctx.offer_id=$1 AND ctx.client_id=$2 AND ctx.subject_token=$3`, [offerId, actor.clientId, actor.subjectToken, key]);
+      const row = r.rows[0];
+      return row ? { offer: fromRow(row), acceptance: row.acceptance } : { offer: null, acceptance: null };
     });
   }
   async decline(input: Parameters<OfferStore['decline']>[0]) {
-    const existing = await this.winner(input.actor, input.key);
-    if (existing) return { created: false, request: existing };
     return this.retry(() => this.connection(async c => {
+      const existing = await this.winner(c, input.actor, input.key);
+      if (existing) return { created: false, request: existing };
       await c.query('BEGIN');
       try {
         const d = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
@@ -119,7 +137,7 @@ export class SqlOfferStore implements OfferStore {
       } catch (error) {
         await c.query('ROLLBACK').catch(() => {});
         if ((error as { code?: string }).code === '23505') {
-          const winner = await this.winner(input.actor, input.key);
+          const winner = await this.winner(c, input.actor, input.key);
           if (winner) return { created: false, request: winner };
         }
         throw error;
@@ -140,21 +158,27 @@ export class SqlOfferStore implements OfferStore {
         const late = await c.query<{ expired: boolean }>(`SELECT clock_timestamp() >= least(o.expires_at, $2::TIMESTAMPTZ, $3::TIMESTAMPTZ) AS expired
           FROM acquisition.offers o WHERE o.id=$1`, [input.offer.terms.offerId, input.offer.terms.expiresAt, input.authorizedUntil]);
         if (late.rows[0]?.expired !== false) { await c.query('ROLLBACK'); return { status: 'expired' as const }; }
-        const inserted = await c.query<{ id: string }>(`INSERT INTO acquisition.offer_acceptances (id,offer_id,client_id,subject_token,idempotency_key,event_id,accepted_at,result)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id`, [input.acceptance.acceptanceId, input.acceptance.offerId, input.actor.clientId, input.actor.subjectToken, input.key, input.event.eventId, input.now, JSON.stringify(input.acceptance)]);
-        if (!inserted.rows[0]) {
+        // Audit and outbox select from the inserted acceptance, so an ON CONFLICT no-op cannot produce either.
+        const written = await c.query<{ acceptances: number; audits: number; events: number }>(`WITH accepted AS (
+          INSERT INTO acquisition.offer_acceptances (id,offer_id,client_id,subject_token,idempotency_key,event_id,accepted_at,result)
+          VALUES ($1,$2,$3::UUID,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id
+        ), audited AS (
+          INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+          SELECT $3::STRING,'offer.accept','offer',$11,'success',$9,now()+interval '5 years' FROM accepted RETURNING correlation_id
+        ), evented AS (
+          INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+          SELECT $6,'offer',$11,'offer.accepted',1,$10,correlation_id FROM audited RETURNING event_id
+        ) SELECT (SELECT count(*) FROM accepted)::INT4 AS acceptances, (SELECT count(*) FROM audited)::INT4 AS audits, (SELECT count(*) FROM evented)::INT4 AS events`,
+        [input.acceptance.acceptanceId, input.acceptance.offerId, input.actor.clientId, input.actor.subjectToken, input.key, input.event.eventId, input.now,
+          JSON.stringify(input.acceptance), input.traceId, JSON.stringify(input.event), input.offer.terms.offerId]);
+        const effects = written.rows[0];
+        if (effects?.acceptances === 0 && effects.audits === 0 && effects.events === 0) {
           const existing = await c.query<{ result: AcceptedOffer }>('SELECT result FROM acquisition.offer_acceptances WHERE client_id=$1 AND subject_token=$2 AND idempotency_key=$3', [input.actor.clientId, input.actor.subjectToken, input.key]);
           await c.query('ROLLBACK');
           const value = existing.rows[0]?.result;
           return value?.offerId === input.acceptance.offerId ? { status: 'replayed' as const, acceptance: value } : { status: 'conflict' as const };
         }
-        const evidenced = await c.query(`WITH audited AS (
-          INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-          VALUES ($1,'offer.accept','offer',$2,'success',$3,now()+interval '5 years') RETURNING correlation_id
-        ) INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-          SELECT $4,'offer',$2,'offer.accepted',1,$5,correlation_id FROM audited`,
-        [input.actor.clientId, input.offer.terms.offerId, input.traceId, input.event.eventId, JSON.stringify(input.event)]);
-        if (evidenced.rowCount !== 1) throw new Error('offer_acceptance_evidence_incomplete');
+        if (effects?.acceptances !== 1 || effects.audits !== 1 || effects.events !== 1) throw new Error('offer_acceptance_evidence_incomplete');
         await c.query('COMMIT');
         return { status: 'created' as const, acceptance: input.acceptance };
       } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
