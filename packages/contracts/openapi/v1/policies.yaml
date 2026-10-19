@@ -188,8 +188,10 @@ paths:
         if the acceptance belongs to another user. No policy is created by this
         query. Retry this read while issuance remains pending. An absent
         pre-import row does not generate a financial rejection or a security
-        denial notification; existing foreign policies still produce audited
-        denials. The public not_found response remains indistinguishable.
+        denial notification. An existing acceptance owned by another client or
+        subject produces the required financial and minimal security denial
+        audits without exposing its record. The public not_found response
+        remains indistinguishable; unavailable required auditing returns 503.
 components:
   securitySchemes:
     WebSession:

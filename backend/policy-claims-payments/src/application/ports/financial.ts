@@ -11,6 +11,8 @@ export type Inbox = { hash: string | null; policyId: string | null; outcome: str
 export type Signature = { documentHash: string; receipt: string; signedAt: string; timeSeal: string | null };
 // Policy, premium and signature evidence from one database snapshot; writes must reread under their transaction lock.
 export type PolicyRecord = { policy: StoredPolicy; premium: Payment | null; signature: Signature | null };
+// A foreign acceptance carries no record: its evidence is never selected or decoded.
+export type AcceptedPolicyLookup = { status: 'absent' } | { status: 'foreign' } | { status: 'owned'; record: PolicyRecord };
 export type IssuanceCommit = { policy: StoredPolicy; signature: Signature & { timeSeal: string }; commandKey: string;
   result: PolicyView; capture: FinancialDecisionCapture; traceId: string };
 export type AcceptanceSnapshot = { inbox: Inbox | null; conflict: boolean };
@@ -36,7 +38,7 @@ export interface FinancialTransaction {
 }
 export interface FinancialStore {
   readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null>;
-  readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<PolicyRecord | null>;
+  readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<AcceptedPolicyLookup>;
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport>;
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
   rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void>;
