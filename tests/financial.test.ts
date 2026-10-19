@@ -5,10 +5,21 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
-import type { AcceptanceSnapshot, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
+import type { AcceptanceSnapshot, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
+
+const unusedStoreReads: Pick<FinancialStore, 'readPolicy' | 'readAcceptedPolicy' | 'importAcceptance'> = {
+  async readPolicy() { throw new Error('unexpected_policy_read'); },
+  async readAcceptedPolicy() { throw new Error('unexpected_acceptance_read'); },
+  async importAcceptance() { throw new Error('unexpected_import'); }
+};
+const readStore = (tx: Pick<FinancialTransaction, 'policy'>) => ({
+  ...unusedStoreReads,
+  readPolicy: (id: string, actor: Parameters<FinancialStore['readPolicy']>[1]) => tx.policy(id, actor),
+  readAcceptedPolicy: unusedStoreReads.readAcceptedPolicy
+});
 
 test('financial amounts preserve DECIMAL(19,4) exactly without accepting floats, exponent or overflow', () => {
   for (const value of ['0.0001', '999999999999999.9999', '86400.0000']) assert.equal(money(value), true);
@@ -68,7 +79,7 @@ test('a verified event cannot insure an occurrence before issuance even when off
 test('disabled configuration and failure to persist a required rejection both fail closed', async () => {
   let calls = 0;
   const deps = { enabled: false, environment: 'local' as const, integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { async transaction<T>(): Promise<T> { throw new Error('not_expected'); }, async rejection() { calls++; throw new Error('sql_unavailable'); } },
+    store: { ...unusedStoreReads, async transaction<T>(): Promise<T> { throw new Error('not_expected'); }, async rejection() { calls++; throw new Error('sql_unavailable'); } },
     payments: { async settle() { throw new Error('not_expected'); }, async lookup() { throw new Error('not_expected'); }, async refund() { throw new Error('not_expected'); } },
     signatures: { async sign() { throw new Error('not_expected'); } } };
   assert.equal((await new PolicyFinance(deps).acceptOffer({}, randomUUID())).status, 'unavailable');
@@ -99,9 +110,10 @@ async function stateFixture(policyStatus: StoredPolicy['status'], paymentStatus:
   let settled = 0, rejected = 0;
   // Deliberately narrow unit fixture: SQL persistence and rollback are exercised by financial-smoke.mts.
   const tx = { async policy() { return { policy, premium: payment, signature: null }; },
-    async command() { return null; }, async createCommand() {} } as unknown as FinancialTransaction;
+    async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
+    async createCommand() {} } as unknown as FinancialTransaction;
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } },
+    store: { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection() { rejected++; } },
     payments: { async lookup() { return { ...known, reference: known.reference === 'MOCK-confirmed' ? payment.providerReference : known.reference }; }, async settle() { settled++; return { status: 'uncertain', reference: null }; }, async refund() { throw new Error('unexpected_refund'); } },
     signatures: { async sign() { throw new Error('unexpected_signature'); } } });
   return { finance, policy, payment, actor: offer, counts: () => ({ settled, rejected }) };
@@ -138,7 +150,8 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
     const tx = { async policy() {
       if (scenario === 'expired_after_final_lock' && transactions === 3) clock = new Date(policy.offer.expiresAt);
       return { policy: { ...policy }, premium: { ...payment }, signature: null };
-    }, async command() { return null; }, async createCommand() {},
+    }, async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
+    async createCommand() {},
     async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
     async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
     async audit(action: string, _id: string, _trace: string, _outcome: string, _actor: string, capture: FinancialDecisionCapture) {
@@ -148,7 +161,7 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
       actions.push('premium.confirmed'); captures.push(capture);
     }, async completeIssuance() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: () => clock, newId: randomUUID,
-      store: { async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
+      store: { ...readStore(tx), async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
       payments: { async lookup() { return { status: externalStatus, reference: externalStatus === 'unknown' ? null : 'MOCK-' + payment.id }; },
         async settle() { externalStatus = 'confirmed'; return { status: 'confirmed', reference: 'MOCK-' + payment.id }; },
         async refund(input) { assert.equal(input.status, 'confirmed'); assert.equal(input.providerReference, 'MOCK-' + payment.id);
@@ -195,7 +208,8 @@ test('issuance requires the exact stored signature evidence before committing it
     let completed = 0;
     const tx = {
       async policy() { return { policy: { ...policy }, premium: { ...payment }, signature: null }; },
-      async command() { return null; }, async createCommand() {},
+      async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
+    async createCommand() {},
       async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
       async audit(action: string) { actions.push(action); },
       async finishCommand() { completed++; },
@@ -211,7 +225,7 @@ test('issuance requires the exact stored signature evidence before committing it
     } as unknown as FinancialTransaction;
     const never = async (): Promise<never> => { throw new Error('unexpected_new_payment'); };
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-      store: { async transaction(work) {
+      store: { ...readStore(tx), async transaction(work) {
         const before = { status: policy.status, actions: actions.length, completed };
         try { return await work(tx); }
         catch (error) { policy.status = before.status; actions.length = before.actions; completed = before.completed; throw error; }
@@ -235,7 +249,7 @@ test('a persisted issuance timestamp at the offer deadline is rejected even with
     timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) } }; } } as unknown as FinancialTransaction;
   const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+    store: { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
   const result = await finance.get({ actor: fixture.actor, policyId: policy.id, traceId: randomUUID() });
   assert.ok(result.status === 'denied' && result.error === 'integrity_violation'); assert.equal(rejected, 1);
 });
@@ -245,7 +259,7 @@ test('reading an acceptance that Policy has not imported yet is a pending result
   const tx = { async acceptedPolicy() { return null; } } as unknown as FinancialTransaction;
   const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+    store: { ...readStore(tx), async readAcceptedPolicy() { return null; }, async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
   const traceId = randomUUID();
   const result = await finance.getByAcceptance({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, acceptanceId: randomUUID(), traceId });
   assert.deepEqual(result, { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId });
@@ -258,22 +272,21 @@ async function importFixture(snapshot: (event: Awaited<ReturnType<typeof accepte
   const imports: { policy: StoredPolicy; event: ImportedEvent; capture: FinancialDecisionCapture }[] = [];
   const rejections: string[] = [];
   const tx = {
-    async acceptanceSnapshot(target: { eventId: string; consumer: string }, offer: { acceptanceId: string; offerId: string; offerVersion: number }) {
-      assert.deepEqual([target.eventId, target.consumer, offer.acceptanceId, offer.offerId, offer.offerVersion],
-        [event.eventId, 'policy.offer-accepted.v1', event.payload.acceptanceId, event.payload.offerId, event.payload.offerVersion]);
-      return snapshot(event);
-    },
     async policy(id: string) {
       return stored ? { policy: await stored(event, id), premium: null, signature: null } : null;
     },
-    async importPolicy(policy: StoredPolicy, imported: ImportedEvent, _trace: string, capture: FinancialDecisionCapture) {
-      if (failWrite) throw new Error('sql_unavailable');
-      imports.push({ policy, event: imported, capture });
-    }
   } as unknown as FinancialTransaction;
   const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { async transaction(work) { return work(tx); }, async rejection(_id, _trace, code) { rejections.push(code); } },
+    store: { ...readStore(tx), async transaction(work) { return work(tx); },
+      async importAcceptance(policy, imported, _trace, capture) {
+        assert.deepEqual([imported.eventId, imported.consumer, policy.offer.acceptanceId, policy.offerId, policy.offerVersion],
+          [event.eventId, 'policy.offer-accepted.v1', event.payload.acceptanceId, event.payload.offerId, event.payload.offerVersion]);
+        const existing = await snapshot(event);
+        if (existing.inbox || existing.conflict) return { status: 'existing', snapshot: existing };
+        if (failWrite) throw new Error('sql_unavailable');
+        imports.push({ policy, event: imported, capture }); return { status: 'created' };
+      }, async rejection(_id, _trace, code) { rejections.push(code); } },
     payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
   return { event, imports, rejections, result: await finance.acceptOffer(event, randomUUID()) };
 }
@@ -330,4 +343,29 @@ test('a failed atomic import write is a technical failure, not a durable result 
   const fixture = await importFixture(async () => ({ inbox: null, conflict: false }), undefined, true);
   assert.equal(fixture.result.status, 'unavailable');
   assert.deepEqual(fixture.rejections, []);
+});
+
+
+test('a failed initial premium bundle never reaches a provider or creates an apparent successful issuance', async () => {
+  const event = await acceptedOffer(), policy = await storedFrom(event, randomUUID());
+  let attempted = false, providers = 0;
+  const tx = { async issuanceSnapshot() { return { record: { policy, premium: null, signature: null }, command: null }; },
+    async beginPremium(input: Parameters<FinancialTransaction['beginPremium']>[0]) {
+      attempted = true;
+      assert.equal(input.policy.id, policy.id);
+      assert.equal(input.payment.policyId, policy.id);
+      assert.equal(input.payment.status, 'pending');
+      assert.ok(input.command);
+      assert.equal(input.capture.rule.id, 'premium.requested');
+      throw new Error('required_outbox_unavailable');
+    } } as unknown as FinancialTransaction;
+  const never = async (): Promise<never> => { providers++; throw new Error('unexpected_provider_call'); };
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection() { throw new Error('unexpected_business_denial'); } },
+    payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+  const result = await finance.issue({ actor: event.payload, policyId: policy.id, documentHash: policy.documentHash,
+    idempotencyKey: randomUUID(), traceId: randomUUID() });
+  assert.equal(result.status, 'unavailable');
+  assert.equal(attempted, true);
+  assert.equal(providers, 0);
 });

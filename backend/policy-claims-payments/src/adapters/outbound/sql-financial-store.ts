@@ -2,7 +2,7 @@ import { Client } from 'pg';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceSnapshot, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCommit, Payment, PolicyRecord, Signature, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -36,15 +36,15 @@ const paymentFrom = (row: PaymentRow, policyId: string, operation: Payment['oper
 type RecordRow = PolicyRow & PaymentRow & { signature_policy_id: string | null; signature_document_hash: string | null;
   signature_receipt: string | null; signature_signed_at: Date | null; signature_time_seal: string | null };
 // The (policy_id, operation) intent key and the policy_id signature key keep this join to one row per policy.
-const selectRecord = `SELECT p.id,p.subject_token,p.status,p.premium::STRING AS premium,p.currency,p.offer_id,p.offer_version::STRING AS offer_version,
+const selectRecord = (extraColumns = '', extraJoins = '') => `SELECT p.id,p.subject_token,p.status,p.premium::STRING AS premium,p.currency,p.offer_id,p.offer_version::STRING AS offer_version,
   p.effective_from,p.effective_until,p.coverage_snapshot,f.client_id,f.terms,f.terms_hash,f.document,f.document_hash,
   ${paymentColumns('i', 'pay', 'p.id')},
   s.policy_id AS signature_policy_id,s.document_hash AS signature_document_hash,s.receipt AS signature_receipt,
-  s.signed_at AS signature_signed_at,s.time_seal AS signature_time_seal
+  s.signed_at AS signature_signed_at,s.time_seal AS signature_time_seal ${extraColumns}
   FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id
   LEFT JOIN policy.financial_payment_intents i ON i.policy_id=p.id AND i.operation='premium'
   LEFT JOIN policy.payments pay ON pay.id=i.payment_id
-  LEFT JOIN policy.policy_signatures s ON s.policy_id=p.id`;
+  LEFT JOIN policy.policy_signatures s ON s.policy_id=p.id ${extraJoins}`;
 const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
   if (rows.length > 1) throw new InvalidFinancialRecord();
   const row = rows[0];
@@ -60,52 +60,42 @@ class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
   async policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null> {
     const owned = actor ? ' AND f.client_id=$2 AND p.subject_token=$3' : '';
-    return recordFrom((await this.db.query<RecordRow>(selectRecord + ' WHERE p.id=$1' + owned + ' FOR UPDATE OF p',
+    return recordFrom((await this.db.query<RecordRow>(selectRecord() + ' WHERE p.id=$1' + owned + ' FOR UPDATE OF p',
       actor ? [id, actor.clientId, actor.subjectToken] : [id])).rows);
   }
-  async acceptedPolicy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null> {
-    const owned = actor ? ' AND f.client_id=$2 AND p.subject_token=$3' : '';
-    return recordFrom((await this.db.query<RecordRow>(selectRecord + ' WHERE f.acceptance_id=$1' + owned + ' FOR UPDATE OF p',
-      actor ? [id, actor.clientId, actor.subjectToken] : [id])).rows);
+  async issuanceSnapshot(id: string, actor: FinancialActor, commandKey: string): Promise<{ record: PolicyRecord | null; command: Command | null }> {
+    const rows = (await this.db.query<RecordRow & { command_policy_id: string | null; command_hash: string | null; command_result: PolicyView | null }>(
+      selectRecord(',cmd.policy_id AS command_policy_id,cmd.request_hash AS command_hash,cmd.result AS command_result',
+        'LEFT JOIN policy.financial_commands cmd ON cmd.actor_id=$2 AND cmd.idempotency_key=$4')
+      + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3 FOR UPDATE OF p', [id, actor.clientId, actor.subjectToken, commandKey])).rows;
+    const record = recordFrom(rows), row = rows[0];
+    if (!record || !row || row.command_policy_id === null) return { record, command: null };
+    if (typeof row.command_hash !== 'string') throw new InvalidFinancialRecord();
+    return { record, command: { policyId: row.command_policy_id, requestHash: row.command_hash, result: row.command_result } };
   }
-  async acceptanceSnapshot(event: { eventId: string; consumer: string }, offer: { acceptanceId: string; offerId: string; offerVersion: number }): Promise<AcceptanceSnapshot> {
-    const rows = (await this.db.query<{ payload_hash: string | null; policy_id: string | null; outcome: string | null; conflict: boolean }>(`SELECT
-      i.payload_hash,i.policy_id,i.outcome,
-      (EXISTS(SELECT 1 FROM policy.financial_contracts f WHERE f.acceptance_id=$3::UUID)
-        OR EXISTS(SELECT 1 FROM policy.financial_contracts f WHERE f.terms->>'offerId'=$4 AND f.terms->>'offerVersion'=$5)) AS conflict
-      FROM (SELECT 1) anchor LEFT JOIN policy.inbox_events i ON i.event_id=$1 AND i.consumer=$2`,
-    [event.eventId, event.consumer, offer.acceptanceId, offer.offerId, String(offer.offerVersion)])).rows;
-    if (rows.length !== 1 || typeof rows[0].conflict !== 'boolean') throw new InvalidFinancialRecord();
-    const [snapshot] = rows;
-    return { inbox: snapshot.outcome === null ? null : { hash: snapshot.payload_hash, policyId: snapshot.policy_id, outcome: snapshot.outcome }, conflict: snapshot.conflict };
-  }
-  async importPolicy(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<void> {
-    const offer = policy.offer;
-    const result = await this.db.query(`WITH created AS (
-      INSERT INTO policy.policies(id,subject_token,offer_id,offer_version,idempotency_key,request_hash,status,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
-      VALUES($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11,$12) RETURNING id
-    ), contracted AS (
-      INSERT INTO policy.financial_contracts(policy_id,client_id,acceptance_id,acceptance_event_id,terms,terms_hash,document,document_hash,decision_capture)
-      SELECT id,$13,$5::UUID,$14,$15,$6,$16,$17,$18 FROM created RETURNING policy_id
-    ), received AS (
-      INSERT INTO policy.inbox_events(event_id,consumer,event_type,event_version,outcome,correlation_id,payload_hash,policy_id)
-      SELECT $14,$19,$20,1,'accepted',$12,$21,policy_id FROM contracted RETURNING policy_id
+  async beginPremium(input: PremiumStart): Promise<void> {
+    const { policy, payment, command, traceId, capture } = input;
+    if (policy.status !== 'pending' || payment.policyId !== policy.id || payment.operation !== 'premium' || payment.status !== 'pending') throw new InvalidFinancialRecord();
+    const result = await this.db.query(`WITH commanded AS (
+      INSERT INTO policy.financial_commands(actor_id,idempotency_key,policy_id,request_hash)
+      SELECT $9::UUID,$10,$2,$11 WHERE $12 RETURNING policy_id
+    ), created AS (
+      INSERT INTO policy.payments(id,policy_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
+      SELECT $1,$2,'premium',$3,$4,$5,$6,'pending',$7 WHERE NOT $12 OR EXISTS(SELECT 1 FROM commanded) RETURNING id
+    ), intended AS (
+      INSERT INTO policy.financial_payment_intents(policy_id,operation,payment_id,payment_key,request_hash)
+      SELECT $2,'premium',id,$3,$4 FROM created RETURNING policy_id
     ), audited AS (
       INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-      SELECT $22,'offer.accepted','financial_decision',policy_id,'accepted',$12,now()+interval '90 days' FROM received RETURNING resource_id,correlation_id
+      SELECT $9::STRING,'premium.requested','financial_decision',policy_id,'pending',$7,now()+interval '90 days' FROM intended RETURNING resource_id,correlation_id
     ) INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-      SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.offer.accepted',1,$18,correlation_id FROM audited`,
-    [policy.id, policy.subjectToken, policy.offerId, policy.offerVersion, offer.acceptanceId, policy.termsHash, policy.premium, policy.currency,
-      JSON.stringify(offer.coverage), policy.effectiveFrom, policy.effectiveUntil, traceId, policy.clientId, event.eventId, JSON.stringify(offer),
-      policy.document, policy.documentHash, JSON.stringify(capture), event.consumer, event.eventType, event.hash, policy.clientId]);
-    if (result.rowCount !== 1) throw new Error('financial_import_incomplete');
+      SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.premium.requested',1,$8,correlation_id FROM audited`,
+    [payment.id, policy.id, payment.key, payment.hash, payment.amount, payment.currency, traceId, JSON.stringify(capture),
+      policy.clientId, command?.key ?? '', command?.requestHash ?? '', command !== null]);
+    if (result.rowCount !== 1) throw new Error('financial_premium_intent_incomplete');
   }
   async setPolicyStatus(id: string, status: PolicyStatus): Promise<void> {
     await this.db.query('UPDATE policy.policies SET status=$2,version=version+1,updated_at=now() WHERE id=$1', [id, status]);
-  }
-  async command(actorId: string, key: string): Promise<Command | null> {
-    const row = (await this.db.query<{ policy_id: string; request_hash: string; result: PolicyView | null }>('SELECT policy_id,request_hash,result FROM policy.financial_commands WHERE actor_id=$1 AND idempotency_key=$2', [actorId, key])).rows[0];
-    return row ? { policyId: row.policy_id, requestHash: row.request_hash, result: row.result } : null;
   }
   async createCommand(actorId: string, key: string, policyId: string, requestHash: string): Promise<void> {
     await this.db.query('INSERT INTO policy.financial_commands(actor_id,idempotency_key,policy_id,request_hash) VALUES($1,$2,$3,$4)', [actorId, key, policyId, requestHash]);
@@ -210,19 +200,69 @@ class SqlFinancialTransaction implements FinancialTransaction {
 
 export class SqlFinancialStore implements FinancialStore {
   constructor(private readonly connectionString: string) {}
-  async transaction<T>(work: (tx: FinancialTransaction) => Promise<T>): Promise<T> {
+  private async connection<T>(work: (db: Client) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
       db.on('error', () => {});
       try {
-        await db.connect(); await db.query('BEGIN');
-        try { const result = await work(new SqlFinancialTransaction(db)); await db.query('COMMIT'); return result; }
-        catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+        await db.connect(); return await work(db);
       } catch (error) {
         const code = error && typeof error === 'object' && Object.hasOwn(error, 'code') ? Object.getOwnPropertyDescriptor(error, 'code')?.value : null;
         if (!['40001', '23505'].includes(code) || attempt >= 2) throw error;
       } finally { await db.end().catch(() => {}); }
     }
+  }
+  async transaction<T>(work: (tx: FinancialTransaction) => Promise<T>): Promise<T> {
+    return this.connection(async db => {
+      await db.query('BEGIN');
+      try { const result = await work(new SqlFinancialTransaction(db)); await db.query('COMMIT'); return result; }
+      catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
+    });
+  }
+  readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null> {
+    return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
+      + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
+  }
+  readAcceptedPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null> {
+    return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
+      + ' WHERE f.acceptance_id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
+  }
+  importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport> {
+    return this.connection(async db => {
+      const offer = policy.offer;
+      const result = await db.query<{ payload_hash: string | null; policy_id: string | null; outcome: string | null; conflict: boolean; imported: string | null }>(`WITH prior AS (
+        SELECT payload_hash,policy_id,outcome FROM policy.inbox_events WHERE event_id=$14 AND consumer=$19
+      ), rival AS (
+        SELECT EXISTS(SELECT 1 FROM policy.financial_contracts WHERE acceptance_id=$5::STRING::UUID
+          OR (terms->>'offerId'=$23 AND terms->>'offerVersion'=$24)) AS conflict
+      ), created AS (
+        INSERT INTO policy.policies(id,subject_token,offer_id,offer_version,idempotency_key,request_hash,status,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
+        SELECT $1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11,$12
+        WHERE NOT EXISTS(SELECT 1 FROM prior) AND NOT (SELECT conflict FROM rival) RETURNING id
+      ), contracted AS (
+        INSERT INTO policy.financial_contracts(policy_id,client_id,acceptance_id,acceptance_event_id,terms,terms_hash,document,document_hash,decision_capture)
+        SELECT id,$13,$5::UUID,$14,$15,$6,$16,$17,$18 FROM created RETURNING policy_id
+      ), received AS (
+        INSERT INTO policy.inbox_events(event_id,consumer,event_type,event_version,outcome,correlation_id,payload_hash,policy_id)
+        SELECT $14,$19,$20,1,'accepted',$12,$21,policy_id FROM contracted RETURNING policy_id
+      ), audited AS (
+        INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+        SELECT $22,'offer.accepted','financial_decision',policy_id,'accepted',$12,now()+interval '90 days' FROM received RETURNING resource_id,correlation_id
+      ), evented AS (
+        INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+        SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.offer.accepted',1,$18,correlation_id FROM audited RETURNING aggregate_id
+      ) SELECT prior.payload_hash,prior.policy_id,prior.outcome,rival.conflict,evented.aggregate_id AS imported
+        FROM rival LEFT JOIN prior ON true LEFT JOIN evented ON true`,
+      [policy.id, policy.subjectToken, policy.offerId, policy.offerVersion, offer.acceptanceId, policy.termsHash, policy.premium, policy.currency,
+        JSON.stringify(offer.coverage), policy.effectiveFrom, policy.effectiveUntil, traceId, policy.clientId, event.eventId, JSON.stringify(offer),
+        policy.document, policy.documentHash, JSON.stringify(capture), event.consumer, event.eventType, event.hash, policy.clientId, policy.offerId, String(policy.offerVersion)]);
+      const row = result.rows[0];
+      if (result.rowCount !== 1 || !row || typeof row.conflict !== 'boolean') throw new InvalidFinancialRecord();
+      if (row.imported === policy.id) return { status: 'created' };
+      if (row.imported !== null || (row.outcome === null && !row.conflict)) throw new Error('financial_import_incomplete');
+      return { status: 'existing', snapshot: { conflict: row.conflict,
+        inbox: row.outcome === null ? null : { hash: row.payload_hash, policyId: row.policy_id, outcome: row.outcome } } };
+    });
   }
   async rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void> {
     await this.transaction(tx => tx.audit('financial.denied', id, traceId, cause, 'unattributed', capture));

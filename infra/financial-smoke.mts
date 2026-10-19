@@ -93,6 +93,24 @@ try {
   duplicateOffer.signature = await financialIntegrity.digest(eventContent(duplicateOffer));
   await denied(traceId => finance.acceptOffer(duplicateOffer, traceId), 'event_conflict');
   assert.equal(ok(await finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() })).policy.policyId, policy.policyId);
+  const snapshotReads: Promise<FinancialResult>[] = [];
+  await db.query('BEGIN');
+  try {
+    await db.query('SELECT id FROM policy.policies WHERE id=$1 FOR UPDATE', [policy.policyId]);
+    await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+    snapshotReads.push(finance.get({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() }),
+      finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() }));
+    // Serializable reads may wait on the writer. Release within the normal query deadline;
+    // either schedule must expose a committed, coherent snapshot, never the uncommitted tamper.
+    await new Promise(resolve => setTimeout(resolve, 250));
+  } finally { await db.query('ROLLBACK'); }
+  for (const result of await Promise.all(snapshotReads)) {
+    const read = ok(result).policy;
+    assert.equal(read.policyId, policy.policyId);
+    assert.equal(read.premium, policy.premium);
+    assert.equal(read.documentHash, policy.documentHash);
+  }
+
   await denied(traceId => finance.get({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, policyId: policy.policyId, traceId }), 'not_found');
   await denied(traceId => finance.issue({ actor: offer.payload, policyId: policy.policyId, documentHash: '0'.repeat(64), idempotencyKey: randomUUID(), traceId }), 'document_mismatch');
   const altered = { ...offer, payload: { ...offer.payload, premium: '1.0000' } };
@@ -160,12 +178,15 @@ try {
 
   const key = randomUUID();
   const intentRollback = await acceptedOffer(); const intentRollbackPolicy = await importOffer(intentRollback); const intentRollbackKey = randomUUID();
-  const beforeIntentFailure = await counts(['payments', 'financial_commands', 'mock_gateway_operations']);
-  await db.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy');
-  try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
-  finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
-  assert.deepEqual(await counts(['payments', 'financial_commands', 'mock_gateway_operations']), beforeIntentFailure,
-    'the first premium intent, command and provider effect must not survive a failed atomic outbox write');
+  const intentTables = ['payments', 'financial_payment_intents', 'financial_commands', 'audit_events', 'outbox_events', 'mock_gateway_operations'];
+  const beforeIntentFailure = await counts(intentTables);
+  for (const table of ['financial_commands', 'payments', 'financial_payment_intents', 'audit_events', 'outbox_events']) {
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.deepEqual(await counts(intentTables), beforeIntentFailure,
+      `a failed ${table} insert must roll back initial command, premium, immutable intent, audit and outbox before provider use`);
+  }
   assert.equal(ok(await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).policy.status, 'issued');
   const noProofOffer = await acceptedOffer(); const noProofPolicy = await importOffer(noProofOffer); const noProofKey = randomUUID();
   const noProofGateway: PaymentGateway = { lookup: payment => gateway.lookup(payment), refund: payment => gateway.refund(payment),
@@ -306,7 +327,9 @@ try {
   assert.deepEqual(expiredCapture.sources, [], 'expiry before sign must not invent a signature consultation');
   const finalLockOffer = await acceptedOffer(); const finalLockPolicy = await importOffer(finalLockOffer);
   let finalLockClock = financialNow(), finalTransactions = 0;
-  const finalLockStore: FinancialStore = { rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
+  const finalLockStore: FinancialStore = {
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
     transaction: work => store.transaction(tx => {
       const transactionNumber = ++finalTransactions;
       return work(new Proxy(tx, { get(target, key) {
@@ -427,7 +450,9 @@ try {
   try { assert.equal((await finance.acceptOffer(rollbackOffer, randomUUID())).status, 'unavailable'); }
   finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
   assert.equal(await count('policies'), beforeRollback, 'business effect must roll back when its outbox insert fails');
-  const brokenStore: FinancialStore = { transaction: work => store.transaction(work), async rejection() { throw new Error('sql_unavailable'); } };
+  const brokenStore: FinancialStore = {
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), transaction: work => store.transaction(work), async rejection() { throw new Error('sql_unavailable'); } };
   assert.equal((await new PolicyFinance({ ...base, store: brokenStore }).acceptOffer({}, randomUUID())).status, 'unavailable');
   const auditRole = clientFor(runtime, config.ssl); await auditRole.connect();
   try {
@@ -476,10 +501,10 @@ try {
   }
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
-    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
+    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {
   await db?.end();
