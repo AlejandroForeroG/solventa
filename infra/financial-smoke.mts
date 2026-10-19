@@ -93,13 +93,23 @@ try {
   duplicateOffer.signature = await financialIntegrity.digest(eventContent(duplicateOffer));
   await denied(traceId => finance.acceptOffer(duplicateOffer, traceId), 'event_conflict');
   assert.equal(ok(await finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() })).policy.policyId, policy.policyId);
+  const snapshotReads: Promise<FinancialResult>[] = [];
   await db.query('BEGIN');
   try {
     await db.query('SELECT id FROM policy.policies WHERE id=$1 FOR UPDATE', [policy.policyId]);
-    assert.equal(ok(await finance.get({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() })).policy.policyId, policy.policyId,
-      'an integrity-checked read uses one committed snapshot without waiting for an unrelated row lock');
-    assert.equal(ok(await finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() })).policy.policyId, policy.policyId);
+    await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+    snapshotReads.push(finance.get({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() }),
+      finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() }));
+    // Serializable reads may wait on the writer. Release within the normal query deadline;
+    // either schedule must expose a committed, coherent snapshot, never the uncommitted tamper.
+    await new Promise(resolve => setTimeout(resolve, 250));
   } finally { await db.query('ROLLBACK'); }
+  for (const result of await Promise.all(snapshotReads)) {
+    const read = ok(result).policy;
+    assert.equal(read.policyId, policy.policyId);
+    assert.equal(read.premium, policy.premium);
+    assert.equal(read.documentHash, policy.documentHash);
+  }
 
   await denied(traceId => finance.get({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, policyId: policy.policyId, traceId }), 'not_found');
   await denied(traceId => finance.issue({ actor: offer.payload, policyId: policy.policyId, documentHash: '0'.repeat(64), idempotencyKey: randomUUID(), traceId }), 'document_mismatch');
@@ -491,7 +501,7 @@ try {
   }
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
-    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'nonblocking_owned_snapshot_reads', 'document_binding',
+    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
