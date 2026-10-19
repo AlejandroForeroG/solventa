@@ -81,6 +81,71 @@ test('technical consent verification failure never becomes a consent-free author
   }
 });
 
+test('all consent scopes must finish before authorization and a later revocation is checked again', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let revoked = false;
+  let calls = 0;
+  const deps = {
+    authorize: async (): Promise<AccessDecision> => ({ allowed: true, actor }),
+    verifyConsent: async (input: { scope: string }): Promise<ConsentDecision> => {
+      calls++;
+      if (input.scope === 'identity_validation') await pending;
+      return revoked ? { allowed: false, reason: 'consent_revoked' } : { allowed: true, consent };
+    },
+  };
+  let completed = false;
+  const first = authorizeFinancialAccess(deps, request).then(result => { completed = true; return result; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(calls, 4);
+  assert.equal(completed, false);
+  release();
+  assert.deepEqual(await first, { allowed: true, actor, consent });
+  revoked = true;
+  assert.deepEqual(await authorizeFinancialAccess(deps, request), { allowed: false, error: 'consent_required', status: 403 });
+  assert.equal(calls, 8);
+});
+
+test('a single failed or mismatched concurrent scope never authorizes mortgage data', async () => {
+  for (const failedScope of ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation']) {
+    for (const failure of [
+      { allowed: false, reason: 'consent_revoked' },
+      { allowed: false, reason: 'unavailable' },
+      { allowed: true, consent: { ...consent, consentId: 'CNS-2026-00002' } },
+      { allowed: true, consent: { ...consent, expiresAt: '2027-01-02T00:00:00.000Z' } },
+    ] satisfies ConsentDecision[]) {
+      const result = await authorizeFinancialAccess({
+        authorize: async () => ({ allowed: true, actor }),
+        verifyConsent: async input => input.scope === failedScope ? failure : { allowed: true, consent },
+      }, request);
+      assert.deepEqual(result, !failure.allowed && failure.reason === 'unavailable'
+        ? { allowed: false, error: 'access_unavailable', status: 503 }
+        : { allowed: false, error: 'consent_required', status: 403 });
+    }
+  }
+});
+
+test('a throwing consent check waits for the remaining reads and fails closed', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let finished = false;
+  let calls = 0;
+  const result = authorizeFinancialAccess({
+    authorize: async () => ({ allowed: true, actor }),
+    verifyConsent: async input => {
+      calls++;
+      if (input.scope === 'income_obligations_12m') throw new Error('synthetic_read_failure');
+      if (input.scope === 'identity_validation') await pending;
+      return { allowed: true, consent };
+    },
+  }, request).then(value => { finished = true; return value; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(calls, 4);
+  assert.equal(finished, false);
+  release();
+  assert.deepEqual(await result, { allowed: false, error: 'access_unavailable', status: 503 });
+});
+
 test('no-signals product creation and policy operations never query risk-data consent', async () => {
   for (const operation of ['offers:create-flight', 'offers:read', 'policies:read', 'policies:issue']) {
     assert.deepEqual(await authorizeFinancialAccess({ authorize: async () => ({ allowed: true, actor }), verifyConsent: async () => { throw Error('not applicable'); } }, { ...request, operation }), { allowed: true, actor });
