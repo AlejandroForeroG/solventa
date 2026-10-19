@@ -57,8 +57,9 @@ export function validateEnvironments(configs, provisionedEnvironment) {
             assert.equal(consumers[0].queue, `solventa-financial-events-${environment}`);
             assert.equal(consumers[0].dead_letter_queue, `solventa-financial-events-dlq-${environment}`);
             assert.equal(consumers[0].max_retries, 5);
-            assert.equal(consumers[0].max_batch_size, 10);
+            assert.equal(consumers[0].max_batch_size, 1);
             assert.equal(consumers[0].max_batch_timeout, 0);
+            assert.deepEqual(target.placement, { region: 'aws:us-east-1' });
           }
         }
       }

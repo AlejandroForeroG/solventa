@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { I18n, useLocale } from '../i18n/I18n';
@@ -44,6 +44,47 @@ function journey(api = stubs(), locale: Locale = 'es-CO', strict = false) {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('definitive offer journey', () => {
+  it('backs off unavailable reads and stops at the budget without repeating acceptance or declaring issuance', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue({ kind: 'unavailable' }) });
+      const view = render(wrap('es-CO', <OfferJourney quote={quote} api={api} poll={{ firstDelayMs: 100, maxDelayMs: 250, budgetMs: 2500 }} onRequote={vi.fn()} onConsentRequired={vi.fn()} onBack={vi.fn()} />));
+      await act(async () => {});
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Aceptar oferta' })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(399); });
+      expect(api.policyForAcceptance).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(599); });
+      expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(api.policyForAcceptance).toHaveBeenCalledTimes(3);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+      expect(api.policyForAcceptance).toHaveBeenCalledTimes(4);
+      expect(screen.getByRole('button', { name: 'Actualizar estado' })).toBeEnabled();
+      expect(api.acceptOffer).toHaveBeenCalledTimes(1);
+      expect(api.issuePolicy).not.toHaveBeenCalled();
+      expect(screen.queryByRole('heading', { name: 'Póliza emitida' })).toBeNull();
+      view.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('discovers an available document within 250 ms with the default polling schedule without repeating acceptance', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubs();
+      const view = render(wrap('es-CO', <OfferJourney quote={quote} api={api} onRequote={vi.fn()} onConsentRequired={vi.fn()} onBack={vi.fn()} />));
+      await act(async () => {});
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Aceptar oferta' })); });
+      expect(screen.queryByRole('heading', { name: 'Póliza emitida' })).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      expect(screen.getByRole('heading', { name: 'Revisa tu póliza antes de confirmar' })).toBeInTheDocument();
+      expect(api.acceptOffer).toHaveBeenCalledTimes(1);
+      expect(api.issuePolicy).not.toHaveBeenCalled();
+      view.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('completes offer, acceptance, document review and mock issuance with stable operation keys', async () => {
     const { api, user, container } = journey();
     expect(await screen.findByText(/77\.760/, { selector: '.offer-premium' })).toHaveTextContent('COP / mes');

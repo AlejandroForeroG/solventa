@@ -23,7 +23,7 @@ type Phase =
 
 export type PollSchedule = { firstDelayMs: number; maxDelayMs: number; budgetMs: number };
 // Accepted-offer delivery is asynchronous (outbox, Queue, Policy inbox); the read is retried within a bounded budget.
-const DEFAULT_POLL: PollSchedule = { firstDelayMs: 400, maxDelayMs: 3000, budgetMs: 60000 };
+const DEFAULT_POLL: PollSchedule = { firstDelayMs: 100, maxDelayMs: 250, budgetMs: 60000 };
 
 function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
@@ -118,8 +118,10 @@ export function OfferJourney(props: {
     const { firstDelayMs, maxDelayMs, budgetMs } = latest.current.props.poll ?? DEFAULT_POLL;
     const started = Date.now();
     let delay = firstDelayMs;
+    let outageDelay = 400;
     try {
       for (;;) {
+        if (Date.now() - started >= budgetMs) { setPhase({ name: 'preparing', acceptance, slow: true }); say('live.policySlow'); return; }
         const outcome = await api().policyForAcceptance(acceptance, current);
         if (current.aborted) return;
         if (outcome.kind === 'ok') {
@@ -135,9 +137,13 @@ export function OfferJourney(props: {
         if (outcome.kind === 'unauthenticated' || outcome.kind === 'consentRequired') { common(outcome, () => {}, 5); return; }
         // 404 means the signed acceptance has not been imported yet; a transient outage is retried within the same budget.
         if (outcome.kind !== 'notFound' && outcome.kind !== 'unavailable') { fail('generic', 5); return; }
-        if (Date.now() - started >= budgetMs) { setPhase({ name: 'preparing', acceptance, slow: true }); say('live.policySlow'); return; }
-        await pause(delay, current);
-        delay = Math.min(Math.ceil(delay * 1.5), maxDelayMs);
+        const elapsed = Date.now() - started;
+        if (elapsed >= budgetMs) { setPhase({ name: 'preparing', acceptance, slow: true }); say('live.policySlow'); return; }
+        // A brief pending import needs quick discovery; outages and sustained delay need less load, not faster polling.
+        const waiting = outcome.kind === 'unavailable' ? outageDelay : elapsed < 3000 ? delay : Math.max(1000, delay);
+        await pause(Math.min(waiting, budgetMs - elapsed), current);
+        if (outcome.kind === 'unavailable') outageDelay = Math.min(Math.ceil(outageDelay * 1.5), 3000);
+        else delay = Math.min(Math.ceil(waiting * 1.5), elapsed < 3000 ? maxDelayMs : 3000);
       }
     } catch { /* aborted: the user left the screen */ }
   }
