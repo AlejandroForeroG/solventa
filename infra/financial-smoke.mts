@@ -237,6 +237,50 @@ try {
   assert.equal(ok(await issue(new PolicyFinance(base), afterCharge, afterChargePolicy, afterChargeKey)).policy.status, 'issued');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [afterChargePolicy.policyId])).rows[0].n), 1);
 
+  for (const permission of [{ table: 'payments', privilege: 'UPDATE' }, { table: 'policies', privilege: 'UPDATE' },
+    { table: 'audit_events', privilege: 'INSERT' }, { table: 'outbox_events', privilege: 'INSERT' }]) {
+    const event = await acceptedOffer(), candidate = await importOffer(event), key = randomUUID();
+    const interrupted: PaymentGateway = { lookup: input => gateway.lookup(input), refund: input => gateway.refund(input),
+      async settle(input) {
+        const result = await gateway.settle(input);
+        await db!.query(`REVOKE ${permission.privilege} ON policy.${permission.table} FROM solventa_local_policy`);
+        return result;
+      } };
+    try { assert.equal((await issue(new PolicyFinance({ ...base, payments: interrupted }), event, candidate, key)).status, 'unavailable'); }
+    finally { await db.query(`GRANT ${permission.privilege} ON policy.${permission.table} TO solventa_local_policy`); }
+    const rolledBack = (await db.query(`SELECT p.status,
+      (SELECT status FROM policy.payments WHERE policy_id=p.id AND operation='premium') AS premium,
+      (SELECT count(*)::INT4 FROM policy.audit_events WHERE resource_id=p.id AND action='premium.confirmed') AS audit,
+      (SELECT count(*)::INT4 FROM policy.outbox_events WHERE aggregate_id=p.id AND event_type='policy.premium.confirmed') AS outbox,
+      (SELECT count(*)::INT4 FROM policy.financial_commands WHERE policy_id=p.id AND result IS NOT NULL) AS completed
+      FROM policy.policies p WHERE p.id=$1`, [candidate.policyId])).rows[0];
+    assert.deepEqual(rolledBack, { status: 'pending', premium: 'pending', audit: 0, outbox: 0, completed: 0 }, permission.table);
+    assert.equal(ok(await issue(new PolicyFinance(base), event, candidate, key)).policy.status, 'issued');
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)',
+      [candidate.policyId])).rows[0].n, 1, 'confirmation recovery reconciles the existing provider effect');
+  }
+  for (const permission of [{ table: 'policy_signatures', privilege: 'INSERT' }, { table: 'policies', privilege: 'UPDATE' },
+    { table: 'audit_events', privilege: 'INSERT' }, { table: 'outbox_events', privilege: 'INSERT' }, { table: 'financial_commands', privilege: 'UPDATE' }]) {
+    const event = await acceptedOffer(), candidate = await importOffer(event), key = randomUUID();
+    const interrupted: SignatureProvider = { async sign(id, hash) {
+      const signed = await signatureProvider.sign(id, hash);
+      await db!.query(`REVOKE ${permission.privilege} ON policy.${permission.table} FROM solventa_local_policy`);
+      return signed;
+    } };
+    try { assert.equal((await issue(new PolicyFinance({ ...base, signatures: interrupted }), event, candidate, key)).status, 'unavailable'); }
+    finally { await db.query(`GRANT ${permission.privilege} ON policy.${permission.table} TO solventa_local_policy`); }
+    const rolledBack = (await db.query(`SELECT p.status,
+      (SELECT count(*)::INT4 FROM policy.policy_signatures WHERE policy_id=p.id) AS signatures,
+      (SELECT count(*)::INT4 FROM policy.audit_events WHERE resource_id=p.id AND action='policy.issued') AS audit,
+      (SELECT count(*)::INT4 FROM policy.outbox_events WHERE aggregate_id=p.id AND event_type='policy.policy.issued') AS outbox,
+      (SELECT count(*)::INT4 FROM policy.financial_commands WHERE policy_id=p.id AND result IS NOT NULL) AS completed
+      FROM policy.policies p WHERE p.id=$1`, [candidate.policyId])).rows[0];
+    assert.deepEqual(rolledBack, { status: 'charged', signatures: 0, audit: 0, outbox: 0, completed: 0 }, permission.table);
+    assert.equal(ok(await issue(new PolicyFinance(base), event, candidate, key)).policy.status, 'issued');
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)',
+      [candidate.policyId])).rows[0].n, 1, 'final recovery reuses the confirmed premium');
+  }
+
   const failedSignature: SignatureProvider = { async sign() { return { status: 'failed' }; } };
   const refused = await acceptedOffer(); const refusedPolicy = await importOffer(refused);
   const refusal = await issue(new PolicyFinance({ ...base, signatures: failedSignature }), refused, refusedPolicy);
@@ -435,7 +479,7 @@ try {
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {
   await db?.end();

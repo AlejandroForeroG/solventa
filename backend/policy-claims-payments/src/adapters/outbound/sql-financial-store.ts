@@ -2,7 +2,7 @@ import { Client } from 'pg';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceSnapshot, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, Payment, PolicyRecord, Signature, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceSnapshot, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCommit, Payment, PolicyRecord, Signature, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -153,11 +153,47 @@ class SqlFinancialTransaction implements FinancialTransaction {
     await this.db.query(`INSERT INTO policy.inbox_events(event_id,consumer,event_type,event_version,outcome,correlation_id,payload_hash,policy_id)
       VALUES($1,$2,$3,1,'accepted',$4,$5,$6)`, [eventId, consumer, eventType, traceId, hash, policyId]);
   }
-  async recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<Signature> {
+  async confirmPremium(policy: StoredPolicy, payment: Payment, traceId: string, capture: FinancialDecisionCapture): Promise<void> {
+    if (policy.status !== 'pending' || payment.policyId !== policy.id || payment.operation !== 'premium'
+      || payment.status !== 'confirmed' || !payment.providerReference) throw new InvalidFinancialRecord();
+    const result = await this.db.query(`WITH confirmed AS (
+      UPDATE policy.payments SET status='confirmed',provider='synthetic-gateway-v1',provider_reference=$3,version=version+1,updated_at=now()
+      WHERE id=$1 AND policy_id=$2 AND operation='premium' AND status='pending'
+        AND EXISTS(SELECT 1 FROM policy.financial_payment_intents i WHERE i.policy_id=$2 AND i.operation='premium' AND i.payment_id=$1)
+      RETURNING policy_id
+    ), charged AS (
+      UPDATE policy.policies SET status='charged',version=version+1,updated_at=now()
+      WHERE id IN (SELECT policy_id FROM confirmed) AND status='pending' RETURNING id
+    ), audited AS (
+      INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+      SELECT $5,'premium.confirmed','financial_decision',id,'confirmed',$4,now()+interval '90 days' FROM charged RETURNING resource_id,correlation_id
+    ) INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+      SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.premium.confirmed',1,$6,correlation_id FROM audited`,
+    [payment.id, policy.id, payment.providerReference, traceId, policy.clientId, JSON.stringify(capture)]);
+    if (result.rowCount !== 1) throw new Error('financial_confirmation_incomplete');
+  }
+  async completeIssuance(input: IssuanceCommit): Promise<Signature> {
+    const { policy, signature, commandKey, result: response, capture, traceId } = input;
+    if (policy.status !== 'charged') throw new InvalidFinancialRecord();
     const result = await this.db.query<{ document_hash: string; receipt: string; signed_at: Date; time_seal: string }>(
-      `INSERT INTO policy.policy_signatures(policy_id,document_hash,provider,receipt,signed_at,time_seal)
-       VALUES($1,$2,'synthetic-signature-v1',$3,$4,$5) RETURNING document_hash,receipt,signed_at,time_seal`,
-      [policyId, documentHash, receipt, signedAt, timeSeal]);
+      `WITH signed AS (
+        INSERT INTO policy.policy_signatures(policy_id,document_hash,provider,receipt,signed_at,time_seal)
+        VALUES($1,$2,'synthetic-signature-v1',$3,$4,$5) RETURNING policy_id,document_hash,receipt,signed_at,time_seal
+      ), issued AS (
+        UPDATE policy.policies SET status='issued',version=version+1,updated_at=now()
+        WHERE id IN (SELECT policy_id FROM signed) AND status='charged' RETURNING id
+      ), audited AS (
+        INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+        SELECT $7,'policy.issued','financial_decision',id,'issued',$6,now()+interval '90 days' FROM issued RETURNING resource_id,correlation_id
+      ), evented AS (
+        INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+        SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.policy.issued',1,$8,correlation_id FROM audited RETURNING aggregate_id
+      ), completed AS (
+        UPDATE policy.financial_commands SET result=$11
+        WHERE actor_id=$9 AND idempotency_key=$10 AND policy_id IN (SELECT aggregate_id FROM evented) RETURNING policy_id
+      ) SELECT s.document_hash,s.receipt,s.signed_at,s.time_seal FROM signed s JOIN completed c ON c.policy_id=s.policy_id`,
+    [policy.id, signature.documentHash, signature.receipt, signature.signedAt, signature.timeSeal, traceId,
+      policy.clientId, JSON.stringify(capture), policy.clientId, commandKey, JSON.stringify(response)]);
     const row = result.rows[0];
     if (result.rowCount !== 1 || !row) throw new Error('financial_issuance_evidence_missing');
     return { documentHash: row.document_hash, receipt: row.receipt, signedAt: row.signed_at.toISOString(), timeSeal: row.time_seal };

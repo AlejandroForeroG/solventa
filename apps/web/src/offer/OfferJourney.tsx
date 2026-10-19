@@ -23,7 +23,7 @@ type Phase =
 
 export type PollSchedule = { firstDelayMs: number; maxDelayMs: number; budgetMs: number };
 // Accepted-offer delivery is asynchronous (outbox, Queue, Policy inbox); the read is retried within a bounded budget.
-const DEFAULT_POLL: PollSchedule = { firstDelayMs: 100, maxDelayMs: 250, budgetMs: 60000 };
+const DEFAULT_POLL: PollSchedule = { firstDelayMs: 50, maxDelayMs: 100, budgetMs: 60000 };
 
 function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;

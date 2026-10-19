@@ -69,7 +69,7 @@ describe('definitive offer journey', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('discovers an available document within 250 ms with the default polling schedule without repeating acceptance', async () => {
+  it('discovers an available document within 100 ms with the default polling schedule without repeating acceptance', async () => {
     vi.useFakeTimers();
     try {
       const api = stubs();
@@ -77,7 +77,26 @@ describe('definitive offer journey', () => {
       await act(async () => {});
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Aceptar oferta' })); });
       expect(screen.queryByRole('heading', { name: 'Póliza emitida' })).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(screen.getByRole('heading', { name: 'Revisa tu póliza antes de confirmar' })).toBeInTheDocument();
+      expect(api.acceptOffer).toHaveBeenCalledTimes(1);
+      expect(api.issuePolicy).not.toHaveBeenCalled();
+      view.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('discovers a document ready after several pending reads within 100 ms without issuing automatically', async () => {
+    vi.useFakeTimers();
+    try {
+      let ready = false;
+      const api = stubs({ policyForAcceptance: vi.fn().mockImplementation(async () => ready ? ok(pending) : { kind: 'notFound' }) });
+      const view = render(wrap('es-CO', <OfferJourney quote={quote} api={api} onRequote={vi.fn()} onConsentRequired={vi.fn()} onBack={vi.fn()} />));
+      await act(async () => {});
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Aceptar oferta' })); });
       await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      expect(screen.queryByRole('heading', { name: 'Revisa tu póliza antes de confirmar' })).toBeNull();
+      ready = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
       expect(screen.getByRole('heading', { name: 'Revisa tu póliza antes de confirmar' })).toBeInTheDocument();
       expect(api.acceptOffer).toHaveBeenCalledTimes(1);
       expect(api.issuePolicy).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
-import type { AcceptanceSnapshot, FinancialTransaction, ImportedEvent, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
+import type { AcceptanceSnapshot, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
@@ -143,7 +143,10 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
     async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
     async audit(action: string, _id: string, _trace: string, _outcome: string, _actor: string, capture: FinancialDecisionCapture) {
       actions.push(action); captures.push(capture);
-    }, async recordSignature() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
+    }, async confirmPremium(_policy: StoredPolicy, confirmed: Payment, _trace: string, capture: FinancialDecisionCapture) {
+      payment.status = 'confirmed'; payment.providerReference = confirmed.providerReference; policy.status = 'charged';
+      actions.push('premium.confirmed'); captures.push(capture);
+    }, async completeIssuance() { signatures++; }, async finishCommand() {} } as unknown as FinancialTransaction;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: () => clock, newId: randomUUID,
       store: { async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
       payments: { async lookup() { return { status: externalStatus, reference: externalStatus === 'unknown' ? null : 'MOCK-' + payment.id }; },
@@ -185,7 +188,7 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
   }
 });
 
-test('issuance requires the exact stored signature evidence before its issued audit or completion', async () => {
+test('issuance requires the exact stored signature evidence before committing its issued audit or completion', async () => {
   for (const mode of ['stored', 'missing', 'wrong_document', 'wrong_receipt', 'wrong_timestamp', 'wrong_seal']) {
     const { policy, payment, actor } = await stateFixture('charged', 'confirmed', { status: 'confirmed', reference: 'MOCK-confirmed' });
     const actions: string[] = [];
@@ -196,8 +199,10 @@ test('issuance requires the exact stored signature evidence before its issued au
       async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
       async audit(action: string) { actions.push(action); },
       async finishCommand() { completed++; },
-      async recordSignature(_id: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string) {
+      async completeIssuance(input: IssuanceCommit) {
+        const { documentHash, receipt, signedAt, timeSeal } = input.signature;
         if (mode === 'missing') throw new Error('signature_insert_incomplete');
+        policy.status = 'issued'; actions.push('policy.issued'); completed++;
         return { documentHash: mode === 'wrong_document' ? '0'.repeat(64) : documentHash,
           receipt: mode === 'wrong_receipt' ? '0'.repeat(64) : receipt,
           signedAt: mode === 'wrong_timestamp' ? '2026-10-16T00:00:00.000Z' : signedAt,
@@ -206,7 +211,11 @@ test('issuance requires the exact stored signature evidence before its issued au
     } as unknown as FinancialTransaction;
     const never = async (): Promise<never> => { throw new Error('unexpected_new_payment'); };
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-      store: { async transaction(work) { return work(tx); }, async rejection() { actions.push('denied'); } },
+      store: { async transaction(work) {
+        const before = { status: policy.status, actions: actions.length, completed };
+        try { return await work(tx); }
+        catch (error) { policy.status = before.status; actions.length = before.actions; completed = before.completed; throw error; }
+      }, async rejection() { actions.push('denied'); } },
       payments: { async lookup() { return { status: 'confirmed', reference: payment.providerReference }; }, settle: never, refund: never },
       signatures: { async sign(id, hash) { return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
     const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });

@@ -1,5 +1,5 @@
 import { CURRENT_TERMS, PURPOSE_RISK_PROFILING, WORDING_FINGERPRINT, expiryFor, isConsentCode, parseGrantRequest, parseTermsRequest, sealContent, statusOf } from '../domain/consent';
-import type { Consent, ConsentStatus } from '../domain/consent';
+import type { Consent, ConsentStatus, ScopeCode } from '../domain/consent';
 import type { Principal } from './authentication';
 import type { ConsentStore, Integrity, Platform } from './ports/consents';
 import { ConsentCursorNotOwned } from './ports/consents';
@@ -23,6 +23,7 @@ export type ConsentView = {
 };
 
 export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string; traceId?: string };
+export type ConsentScopesCheck = { subjectToken: string; purposeCode: string; scopes: readonly string[]; traceId?: string };
 export type ConsentDecision =
   | { allowed: true; consent: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
@@ -31,6 +32,11 @@ const MAX_KEY = 128;
 const PAGE_SIZE = 50;
 const SCOPES: readonly string[] = CURRENT_TERMS.sources.map(source => source.scope);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INVALID: ConsentDecision = { allowed: false, reason: 'invalid_request' };
+const UNAVAILABLE: ConsentDecision = { allowed: false, reason: 'unavailable' };
+const isScope = (value: unknown): value is ScopeCode => typeof value === 'string' && SCOPES.includes(value);
+const validSubject = (input: { subjectToken?: unknown; purposeCode?: unknown } | null | undefined) =>
+  !!input && typeof input.subjectToken === 'string' && UUID.test(input.subjectToken) && input.purposeCode === PURPOSE_RISK_PROFILING;
 
 export class Consents {
   constructor(private readonly deps: { store: ConsentStore; platform: Platform; integrity: Integrity; security?: Pick<SecurityDecisions, 'deny'> }) {}
@@ -104,35 +110,62 @@ export class Consents {
   // Called on every use of a source, never cached: a revocation blocks the next call.
   async verify(input: ConsentCheck): Promise<ConsentDecision> {
     const decision = await this.checkConsent(input);
-    if (!decision.allowed && decision.reason !== 'unavailable') {
-      try {
-        await this.deps.security?.deny({ category: 'consent_use', channel: 'internal', operation: 'consent:use',
-          cause: decision.reason === 'invalid_request' ? 'consent_request_invalid' : decision.reason }, input?.traceId);
-      } catch { return { allowed: false, reason: 'unavailable' }; }
-    }
-    return decision;
+    return await this.recordDenial(decision, input?.traceId) ? decision : UNAVAILABLE;
+  }
+
+  // One fresh read decides several scopes of a single use, with one decision per requested scope in
+  // request order. Any technical failure makes every scope unavailable, and one use records one denial.
+  async verifyScopes(input: ConsentScopesCheck): Promise<ConsentDecision[]> {
+    const decisions = await this.checkScopes(input);
+    const denial = decisions.find(decision => !decision.allowed);
+    return denial && !await this.recordDenial(denial, input?.traceId) ? decisions.map(() => UNAVAILABLE) : decisions;
+  }
+
+  private async recordDenial(decision: ConsentDecision, traceId: unknown): Promise<boolean> {
+    if (decision.allowed || decision.reason === 'unavailable') return true;
+    try {
+      await this.deps.security?.deny({ category: 'consent_use', channel: 'internal', operation: 'consent:use',
+        cause: decision.reason === 'invalid_request' ? 'consent_request_invalid' : decision.reason }, traceId);
+      return true;
+    } catch { return false; }
   }
 
   private async checkConsent(input: ConsentCheck): Promise<ConsentDecision> {
-    if (!input || typeof input.subjectToken !== 'string' || !UUID.test(input.subjectToken) || input.purposeCode !== PURPOSE_RISK_PROFILING
-      || typeof input.scope !== 'string' || !SCOPES.includes(input.scope)) return { allowed: false, reason: 'invalid_request' };
+    if (!validSubject(input) || !isScope(input.scope)) return INVALID;
     try {
       const now = this.deps.platform.now();
-      const consents = await this.deps.store.forSubject(input.subjectToken, input.purposeCode, input.scope, now);
-      if (!consents.length) return { allowed: false, reason: 'consent_missing' };
-      let tampered = false;
-      for (const consent of consents) {
-        if (statusOf(consent, now) !== 'active') continue;
-        if (await this.deps.integrity.seal(sealContent(consent)) === consent.seal) {
-          return { allowed: true, consent: { consentId: consent.consentCode, textVersion: consent.textVersion, expiresAt: consent.expiresAt.toISOString() } };
-        }
-        tampered = true;
-      }
-      if (tampered) return { allowed: false, reason: 'consent_invalid' };
-      return { allowed: false, reason: statusOf(consents[0], now) === 'revoked' ? 'consent_revoked' : 'consent_expired' };
+      return await this.decide(await this.deps.store.forSubject(input.subjectToken, input.purposeCode, input.scope, now), now);
     } catch {
-      return { allowed: false, reason: 'unavailable' };
+      return UNAVAILABLE;
     }
+  }
+
+  private async checkScopes(input: ConsentScopesCheck): Promise<ConsentDecision[]> {
+    const requested: unknown = input?.scopes;
+    if (!Array.isArray(requested) || !requested.length || requested.length > SCOPES.length) return [INVALID];
+    const scopes = requested.filter(isScope);
+    if (!validSubject(input) || scopes.length !== requested.length || new Set(scopes).size !== scopes.length) return requested.map(() => INVALID);
+    try {
+      const now = this.deps.platform.now();
+      const found = await this.deps.store.forSubjectScopes(input.subjectToken, input.purposeCode, scopes, now);
+      return await Promise.all(scopes.map(scope => this.decide(found.get(scope) ?? [], now)));
+    } catch {
+      return scopes.map(() => UNAVAILABLE);
+    }
+  }
+
+  private async decide(consents: Consent[], now: Date): Promise<ConsentDecision> {
+    if (!consents.length) return { allowed: false, reason: 'consent_missing' };
+    let tampered = false;
+    for (const consent of consents) {
+      if (statusOf(consent, now) !== 'active') continue;
+      if (await this.deps.integrity.seal(sealContent(consent)) === consent.seal) {
+        return { allowed: true, consent: { consentId: consent.consentCode, textVersion: consent.textVersion, expiresAt: consent.expiresAt.toISOString() } };
+      }
+      tampered = true;
+    }
+    if (tampered) return { allowed: false, reason: 'consent_invalid' };
+    return { allowed: false, reason: statusOf(consents[0], now) === 'revoked' ? 'consent_revoked' : 'consent_expired' };
   }
 
   private view(consent: Consent, now: Date): ConsentView {
