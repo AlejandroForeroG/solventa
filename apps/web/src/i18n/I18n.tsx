@@ -25,8 +25,14 @@ export function I18n({ children, initial }: { children: ReactNode; initial?: Loc
 // Amounts are always Colombian pesos; the locale only changes the separators.
 export function useFormatters() {
   const intl = useIntl();
-  // Owner amounts arrive as four-decimal strings; cents are shown only when present so no peso is rounded away.
-  const copDecimalAmount = (value: string) => intl.formatNumber(Number(value), { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const copDecimalAmount = (value: string) => {
+    if (!/^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(value)) throw new RangeError('Invalid owner decimal amount');
+    const fraction = value.slice(-4).replace(/0+$/, '');
+    // Intl groups the exact integer; replacing its zero fraction preserves the owner's decimal digits.
+    return new Intl.NumberFormat(intl.locale, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: fraction.length, maximumFractionDigits: fraction.length })
+      .formatToParts(BigInt(value.slice(0, -5))).map(part => part.type === 'fraction' ? fraction : part.value).join('');
+  };
   return {
     copAmount: (value: number) => intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }),
     cop: (value: number) => `${intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })} COP`,
