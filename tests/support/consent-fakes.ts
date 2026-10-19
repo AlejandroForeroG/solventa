@@ -1,7 +1,7 @@
 import type { Principal } from '../../backend/identity-consent-ecosystem/src/application/authentication';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../backend/identity-consent-ecosystem/src/application/ports/consents';
 import { ConsentCursorNotOwned } from '../../backend/identity-consent-ecosystem/src/application/ports/consents';
-import type { Consent } from '../../backend/identity-consent-ecosystem/src/domain/consent';
+import type { Consent, ScopeCode } from '../../backend/identity-consent-ecosystem/src/domain/consent';
 import { statusOf } from '../../backend/identity-consent-ecosystem/src/domain/consent';
 
 export const SEAL_KEY = 'synthetic-seal-key-for-tests-only-0123456789';
@@ -14,6 +14,7 @@ export class MemoryConsents implements ConsentStore {
   readonly audit: { action: string; subjectToken: string }[] = [];
   readonly outbox: string[] = [];
   failing = false;
+  scopeReads = 0;
   private counter = 0;
 
   private check() { if (this.failing) throw new Error('store_down'); }
@@ -66,6 +67,20 @@ export class MemoryConsents implements ConsentStore {
     this.check();
     return this.consents.filter(c => c.subjectToken === subjectToken && c.purposeCode === purposeCode && (c.scopes as string[]).includes(scope))
       .sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime());
+  }
+
+  // Mirrors the SQL selection: up to 20 newest usable consents per scope, else only the newest record.
+  async forSubjectScopes(subjectToken: string, purposeCode: string, scopes: readonly ScopeCode[], now: Date): Promise<ReadonlyMap<ScopeCode, Consent[]>> {
+    this.check();
+    this.scopeReads++;
+    const found = new Map<ScopeCode, Consent[]>();
+    for (const scope of scopes) {
+      const matching = this.consents.filter(c => c.subjectToken === subjectToken && c.purposeCode === purposeCode && c.scopes.includes(scope))
+        .sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime() || a.id.localeCompare(b.id));
+      const usable = matching.filter(c => statusOf(c, now) === 'active').slice(0, 20);
+      found.set(scope, usable.length ? usable : matching.slice(0, 1));
+    }
+    return found;
   }
 }
 

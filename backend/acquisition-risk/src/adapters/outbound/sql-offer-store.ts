@@ -59,7 +59,6 @@ export class SqlOfferStore implements OfferStore {
   async create(input: Parameters<OfferStore['create']>[0]) {
     return this.retry(() => this.connection(async c => {
       const t = input.offer.terms;
-      await c.query('BEGIN');
       try {
         const created = await c.query(`WITH decision AS (
           INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
@@ -86,10 +85,8 @@ export class SqlOfferStore implements OfferStore {
           JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion, input.requestIdentity,
           JSON.stringify({ offerId: t.offerId, synthetic: true })]);
         if (created.rowCount !== 1) throw new Error('offer_creation_incomplete');
-        await c.query('COMMIT');
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
-        await c.query('ROLLBACK').catch(() => {});
         if ((e as { code?: string }).code === '23505') {
           const winner = await this.winner(input.actor, input.key);
           if (winner) return { created: false, request: winner };

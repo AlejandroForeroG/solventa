@@ -11,6 +11,8 @@ export type Inbox = { hash: string | null; policyId: string | null; outcome: str
 export type Signature = { documentHash: string; receipt: string; signedAt: string; timeSeal: string | null };
 // A locked policy with the premium and signature evidence read in the same statement; it is valid only inside its transaction.
 export type PolicyRecord = { policy: StoredPolicy; premium: Payment | null; signature: Signature | null };
+export type IssuanceCommit = { policy: StoredPolicy; signature: Signature & { timeSeal: string }; commandKey: string;
+  result: PolicyView; capture: FinancialDecisionCapture; traceId: string };
 export type AcceptanceSnapshot = { inbox: Inbox | null; conflict: boolean };
 export type ImportedEvent = { eventId: string; consumer: string; eventType: string; hash: string };
 export interface FinancialTransaction {
@@ -27,7 +29,8 @@ export interface FinancialTransaction {
   setPaymentStatus(id: string, status: Payment['status'], reference: string | null): Promise<void>;
   inbox(eventId: string, consumer: string): Promise<Inbox | null>;
   recordInbox(eventId: string, consumer: string, hash: string, policyId: string, eventType: string, traceId: string): Promise<void>;
-  recordSignature(policyId: string, documentHash: string, receipt: string, signedAt: string, timeSeal: string): Promise<Signature>;
+  confirmPremium(policy: StoredPolicy, payment: Payment, traceId: string, capture: FinancialDecisionCapture): Promise<void>;
+  completeIssuance(input: IssuanceCommit): Promise<Signature>;
   audit(action: FinancialAction, resourceId: string, traceId: string, outcome: string, actorReference: string, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialStore {

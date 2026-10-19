@@ -1,5 +1,5 @@
 import type { AccessDecision, UserActor } from './api-access';
-import type { ConsentCheck, ConsentDecision } from './consents';
+import type { ConsentDecision, ConsentScopesCheck } from './consents';
 import type { SecurityDecisions } from './security-decisions';
 
 export type FinancialAccessDecision =
@@ -12,7 +12,7 @@ const scopes = ['income_obligations_12m', 'payment_history_score', 'affiliation_
 // One RPC encloses Identity's own authentication and fresh consent checks; no remote fan-out is needed.
 export async function authorizeFinancialAccess(deps: {
   authorize(input: unknown): Promise<AccessDecision>;
-  verifyConsent(input: ConsentCheck): Promise<ConsentDecision>;
+  verifyConsents(input: ConsentScopesCheck): Promise<ConsentDecision[]>;
   security?: Pick<SecurityDecisions, 'deny'>;
 }, input: unknown): Promise<FinancialAccessDecision> {
   if (!input || typeof input !== 'object' || !('operation' in input) || typeof input.operation !== 'string' || !operations.includes(input.operation)) {
@@ -26,20 +26,15 @@ export async function authorizeFinancialAccess(deps: {
     // positive actor here is an inconsistent dependency response, never a business authorization.
     if (input.kind !== 'web' || access.actor.kind !== 'user' || access.actor.channel !== 'web') return { allowed: false, error: 'access_unavailable', status: 503 };
     if (input.operation !== 'offers:create' && input.operation !== 'offers:accept') return { allowed: true, actor: access.actor };
-    const subjectToken = access.actor.principal.subjectToken;
-    // Independent, fresh reads run together; no authorization is reused between requests.
-    const checks = await Promise.allSettled(scopes.map(async scope => deps.verifyConsent({
-      subjectToken, purposeCode: 'risk_profiling', scope,
-    })));
-    const decisions: ConsentDecision[] = [];
-    for (const check of checks) {
-      if (check.status === 'rejected') return { allowed: false, error: 'access_unavailable', status: 503 };
-      decisions.push(check.value);
+    // One fresh read covers every scope; no authorization is reused between requests.
+    const decisions = await deps.verifyConsents({ subjectToken: access.actor.principal.subjectToken, purposeCode: 'risk_profiling', scopes });
+    // A technical failure in any scope blocks the request before a business denial can relax it.
+    if (decisions.length !== scopes.length || decisions.some(decision => !decision.allowed && decision.reason === 'unavailable')) {
+      return { allowed: false, error: 'access_unavailable', status: 503 };
     }
     let authorized: { consentId: string; textVersion: number; expiresAt: string } | undefined;
     for (const decision of decisions) {
       if (!decision.allowed) {
-        if (decision.reason === 'unavailable') return { allowed: false, error: 'access_unavailable', status: 503 };
         // Acceptance of a no-signals product needs no risk-data consent. The owner still requires
         // a current authorization for mortgage acceptance, and receives none on this branch.
         if (input.operation === 'offers:accept') return { allowed: true, actor: access.actor };
