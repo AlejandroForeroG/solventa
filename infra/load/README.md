@@ -29,7 +29,7 @@ TOKEN=<partner access token> sh infra/load/run.sh 30 60s    # POST /api/v1/quote
 
 The scenario warms up for 10 s at a low rate, then measures at a constant arrival rate. Each request uses a new `Idempotency-Key`, and one in ten repeats the previous request to exercise idempotency (it must answer 200 with the same quote). Checks cover the status, the `COT-YYYY-NNNNN` code, the COP currency and the `X-Trace-Id` header. k6 thresholds fail when p95 ≥ 250 ms, p99 ≥ 500 ms or more than 1 % of requests fail.
 
-For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, idempotency lookup, counter allocation, the atomic quote/audit/outbox write and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
+For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, the combined atomic lookup/counter/quote/audit/outbox statement (`save`), a race lookup when needed, and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
 
 ## Baseline before the Identity access call (local, 60 s per load)
 
@@ -45,9 +45,13 @@ On this machine the service sustains about 100 requests per second within the th
 
 ## Finding that changed the code
 
-The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) showed that this row was the cause: the quote transaction held it locked until `COMMIT`, so every quote queued behind it. The number is now allocated in a short statement before the transaction (`src/adapters/outbound/sql-quote-store.ts`), which raised the ceiling to about 190/s.
+The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) implicated that row: the transaction held it locked through multiple sequential client queries before `COMMIT`. Moving the allocation to a short separate statement raised the observed local ceiling to about 190/s. These are historical measurements of earlier implementations.
 
-Consequence: if a transaction fails after the number is allocated, the numbering has a gap. Codes stay unique and readable but are not contiguous.
+That intermediate implementation could leave a gap when the later transaction failed. Existing gaps remain valid: codes are unique and readable, not necessarily contiguous.
+
+The current store combines the actor/key lookup, conditional counter allocation and quote/audit/outbox write in one SQL statement. An existing key returns its stored quote or conflict without advancing the counter. A failed statement rolls back the counter along with all business effects. Concurrent first attempts may still allocate an unused number if another attempt wins the actor/key uniqueness constraint; the loser reads that winner in a new snapshot and compares the request fingerprint. The counter is held until this statement commits, but there are no client round trips while it is locked. This is different from the earlier multi-query transaction: capacity and latency must be measured again rather than inferred from historical throughput. The published code, price, fresh authorization and idempotency contract remain unchanged.
+
+`npm run test:quotes:sql` checks both actors, unchanged result/event payloads, identical and conflicting concurrent requests, no counter advancement on replay/conflict, and rollback of the counter/quote/audit/outbox after an injected quote-constraint failure.
 
 ## To improve
 
