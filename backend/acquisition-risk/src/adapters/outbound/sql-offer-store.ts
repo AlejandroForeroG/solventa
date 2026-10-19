@@ -126,6 +126,11 @@ export class SqlOfferStore implements OfferStore {
         const current = offer.rows[0];
         if (!current || current.status !== 'definitive' || current.terms_seal !== input.offer.seal) { await c.query('ROLLBACK'); return { status: 'conflict' as const }; }
         if (current.expired) { await c.query('ROLLBACK'); return { status: 'expired' as const }; }
+        // now() is fixed at transaction start, so it cannot see time spent waiting for the row lock.
+        // Recheck the current offer, its sealed terms and the authorization with the wall clock before writing.
+        const late = await c.query<{ expired: boolean }>(`SELECT clock_timestamp() >= least(o.expires_at, $2::TIMESTAMPTZ, $3::TIMESTAMPTZ) AS expired
+          FROM acquisition.offers o WHERE o.id=$1`, [input.offer.terms.offerId, input.offer.terms.expiresAt, input.authorizedUntil]);
+        if (late.rows[0]?.expired !== false) { await c.query('ROLLBACK'); return { status: 'expired' as const }; }
         const inserted = await c.query<{ id: string }>(`INSERT INTO acquisition.offer_acceptances (id,offer_id,client_id,subject_token,idempotency_key,event_id,accepted_at,result)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id`, [input.acceptance.acceptanceId, input.acceptance.offerId, input.actor.clientId, input.actor.subjectToken, input.key, input.event.eventId, input.now, JSON.stringify(input.acceptance)]);
         if (!inserted.rows[0]) {

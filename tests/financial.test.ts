@@ -198,3 +198,15 @@ test('a persisted issuance timestamp at the offer deadline is rejected even with
   const result = await finance.get({ actor: fixture.actor, policyId: policy.id, traceId: randomUUID() });
   assert.ok(result.status === 'denied' && result.error === 'integrity_violation'); assert.equal(rejected, 1);
 });
+
+test('reading an acceptance that Policy has not imported yet is a pending result, not an audited rejection', async () => {
+  let rejected = 0;
+  const tx = { async acceptedPolicy() { return null; } } as unknown as FinancialTransaction;
+  const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+  const traceId = randomUUID();
+  const result = await finance.getByAcceptance({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, acceptanceId: randomUUID(), traceId });
+  assert.deepEqual(result, { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId });
+  assert.equal(rejected, 0);
+});
