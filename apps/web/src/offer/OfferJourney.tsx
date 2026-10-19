@@ -27,7 +27,7 @@ const DEFAULT_POLL: PollSchedule = { firstDelayMs: 400, maxDelayMs: 3000, budget
 
 function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
-  return phase.name === 'preparing' || phase.name === 'review' ? 5 : phase.name === 'issued' ? 8 : phase.name === 'recovering' || phase.name === 'refunded' ? 6 : 4;
+  return phase.name === 'preparing' || phase.name === 'review' ? 5 : phase.name === 'issued' ? 7 : phase.name === 'recovering' || phase.name === 'refunded' ? 6 : 4;
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {

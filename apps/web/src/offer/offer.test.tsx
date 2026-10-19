@@ -65,6 +65,7 @@ describe('definitive offer journey', () => {
     await user.click(screen.getByRole('checkbox'));
     await user.click(confirm);
     expect(await screen.findByRole('heading', { level: 1, name: 'Póliza emitida' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 7: Firma');
     expect(screen.getByText(/Emitida · cobrada y firmada/)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(issued.traceId))).toBeInTheDocument();
     expect(screen.getByText(/cobro y firma simulados/)).toBeInTheDocument();
