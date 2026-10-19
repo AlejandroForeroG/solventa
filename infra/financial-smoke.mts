@@ -168,9 +168,15 @@ try {
     await denied(traceId => finance.get({ actor: foreignActor, policyId: orphanPolicy.policyId, traceId }), 'not_found');
     await denied(traceId => finance.issue({ actor: foreignActor, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
       idempotencyKey: randomUUID(), traceId }), 'not_found');
-    const pending = await finance.getByAcceptance({ actor: foreignActor, acceptanceId: orphanOffer.payload.acceptanceId, traceId: randomUUID() });
-    assert.ok(pending.status === 'denied' && pending.error === 'policy_pending');
+    await denied(traceId => finance.getByAcceptance({ actor: foreignActor, acceptanceId: orphanOffer.payload.acceptanceId, traceId }), 'not_found');
   }
+  const pendingTrace = randomUUID();
+  assert.deepEqual(await finance.getByAcceptance({ actor: orphanOffer.payload, acceptanceId: randomUUID(), traceId: pendingTrace }),
+    { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: pendingTrace });
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1', [pendingTrace])).rows[0].n, 0,
+    'polling an acceptance that is not imported yet must not record a rejection');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE correlation_id=$1', [pendingTrace])).rows[0].n, 0,
+    'polling an unimported acceptance must not publish a rejection');
   await denied(traceId => finance.issue({ actor: orphanOffer.payload, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
     idempotencyKey: randomUUID(), traceId }), 'integrity_violation');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.financial_payment_intents WHERE policy_id=$1', [orphanPolicy.policyId])).rows[0].n, 0,
@@ -502,7 +508,7 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
-      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque',
+      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }

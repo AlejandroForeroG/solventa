@@ -7,6 +7,8 @@ import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
 import type { PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
 import gateway from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
+import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
+import { financialIntegrity, financialNow } from './financial-fixtures';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
@@ -29,6 +31,7 @@ const consent = { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-
 const terms: OfferTerms = { ...actor, offerId: id, offerVersion: 1, quoteId: 'COT-2026-00001', product: 'vida_hipotecario', premium: '77760.0000', currency: 'COP', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' }, effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', synthetic: true, status: 'definitive' };
 const policy: PolicyView = { policyId: id, offerId: id, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
 const acceptance = { acceptanceId: id, offerId: id, eventId: id, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance' as const, synthetic: true as const };
+const unexpected = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
 const request = (path: string, body: string | undefined = '{}', headers: Record<string, string> = {}, method = 'POST') => new Request('https://web.example/api/v1' + path, { method, ...(body !== undefined && method !== 'GET' ? { body } : {}), headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic-sealed', origin: 'https://web.example', 'idempotency-key': 'synthetic-operation-1', 'x-trace-id': traceId, ...headers } });
 
 function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
@@ -229,6 +232,45 @@ test('a pending acceptance read returns the opaque 404 without a security denial
   assert.equal(foreign.status, 404);
   assert.deepEqual(await foreign.json(), { error: 'not_found', traceId });
   assert.equal(calls.filter(c => c.operation === 'securityDenial').length, 1);
+});
+
+test('composed acceptance reads keep one opaque 404 but record a security denial only for an existing foreign acceptance', async () => {
+  const bodies: unknown[] = [];
+  for (const [lookup, rejections, denials] of [[{ status: 'absent' }, 0, 0], [{ status: 'foreign' }, 1, 1]] as const) {
+    const { calls } = setup();
+    let rejected = 0;
+    const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
+      store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return lookup; },
+        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); }, async rejection() { rejected++; } },
+      payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
+    const app = createPolicyHttp({ finance,
+      authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
+      denyResourceAccess: async input => { calls.push({ operation: 'securityDenial', input }); return { recorded: true }; } });
+    const response = await app.fetch(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, 404);
+    bodies.push(await contractual(response, 'policies', 'Error'));
+    assert.equal(rejected, rejections);
+    assert.deepEqual(calls.filter(c => c.operation === 'securityDenial').map(c => c.input), denials ? [{ operation: 'policies:read', traceId }] : []);
+  }
+  assert.deepEqual(bodies, [{ error: 'not_found', traceId }, { error: 'not_found', traceId }]);
+});
+
+test('foreign acceptance discovery fails closed when either required denial audit is unavailable', async () => {
+  for (const failedOwner of ['policy', 'identity']) {
+    let securityCalls = 0;
+    const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
+      store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return { status: 'foreign' }; },
+        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async rejection() { if (failedOwner === 'policy') throw new Error('synthetic_audit_failure'); } },
+      payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
+    const app = createPolicyHttp({ finance,
+      authorizeFinancialAccess: async () => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: ['policies:read'] } }),
+      denyResourceAccess: async () => { securityCalls++; return { recorded: false, error: 'access_unavailable' }; } });
+    const response = await app.fetch(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await contractual(response, 'policies', 'Error'), { error: failedOwner === 'policy' ? 'financial_unavailable' : 'access_unavailable', traceId });
+    assert.equal(securityCalls, failedOwner === 'policy' ? 0 : 1);
+  }
 });
 
 test('only a newly committed acceptance starts publication of its own event, without changing the response', async () => {

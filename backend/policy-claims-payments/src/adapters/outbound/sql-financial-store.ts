@@ -2,7 +2,7 @@ import { Client } from 'pg';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceImport, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -223,9 +223,24 @@ export class SqlFinancialStore implements FinancialStore {
     return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
       + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
   }
-  readAcceptedPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null> {
-    return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
-      + ' WHERE f.acceptance_id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
+  readAcceptedPolicy(id: string, actor: FinancialActor): Promise<AcceptedPolicyLookup> {
+    return this.connection(async db => {
+      // Only owned evidence is selected; existence of a foreign acceptance comes from the same statement snapshot.
+      const rows = (await db.query<(RecordRow | { [K in keyof RecordRow]: null }) & { accepted: boolean }>(`WITH owned AS (${selectRecord()}
+        WHERE f.acceptance_id=$1 AND f.client_id=$2 AND p.subject_token=$3)
+        SELECT owned.*,EXISTS(SELECT 1 FROM policy.financial_contracts WHERE acceptance_id=$1) AS accepted
+        FROM (SELECT 1) anchor LEFT JOIN owned ON true`, [id, actor.clientId, actor.subjectToken])).rows;
+      const first = rows[0];
+      if (!first || typeof first.accepted !== 'boolean') throw new Error('financial_acceptance_lookup_incomplete');
+      if (first.id === null) {
+        if (rows.length !== 1) throw new InvalidFinancialRecord();
+        return first.accepted ? { status: 'foreign' } : { status: 'absent' };
+      }
+      const owned = rows.filter((row): row is RecordRow & { accepted: boolean } => row.id !== null);
+      const record = owned.length === rows.length ? recordFrom(owned) : null;
+      if (!record || !first.accepted) throw new InvalidFinancialRecord();
+      return { status: 'owned', record };
+    });
   }
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport> {
     return this.connection(async db => {

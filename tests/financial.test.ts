@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
+import type { FinancialActor } from '../backend/policy-claims-payments/src/domain/financial';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
-import type { AcceptanceSnapshot, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
+import type { AcceptanceSnapshot, AcceptedPolicyLookup, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
@@ -254,16 +255,28 @@ test('a persisted issuance timestamp at the offer deadline is rejected even with
   assert.ok(result.status === 'denied' && result.error === 'integrity_violation'); assert.equal(rejected, 1);
 });
 
-test('reading an acceptance that Policy has not imported yet is a pending result, not an audited rejection', async () => {
-  let rejected = 0;
-  const tx = { async acceptedPolicy() { return null; } } as unknown as FinancialTransaction;
+test('an unimported acceptance is an unaudited pending result, while an existing foreign one is an audited not_found', async () => {
+  const { policy, payment } = await stateFixture('pending', 'pending', { status: 'unknown', reference: null });
+  const owner = { clientId: policy.clientId, subjectToken: policy.subjectToken };
   const never = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
-  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { ...readStore(tx), async readAcceptedPolicy() { return null; }, async transaction(work) { return work(tx); }, async rejection() { rejected++; } }, payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
-  const traceId = randomUUID();
-  const result = await finance.getByAcceptance({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, acceptanceId: randomUUID(), traceId });
-  assert.deepEqual(result, { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId });
-  assert.equal(rejected, 0);
+  const cases: [AcceptedPolicyLookup, FinancialActor, string | null][] = [
+    [{ status: 'absent' }, owner, null],
+    [{ status: 'foreign' }, { clientId: randomUUID(), subjectToken: randomUUID() }, 'not_found'],
+    [{ status: 'foreign' }, { clientId: owner.clientId, subjectToken: randomUUID() }, 'not_found'],
+    [{ status: 'owned', record: { policy, premium: payment, signature: null } }, { clientId: randomUUID(), subjectToken: owner.subjectToken }, 'not_found'],
+    [{ status: 'owned', record: { policy, premium: payment, signature: null } }, owner, 'ok']];
+  for (const [lookup, actor, expected] of cases) {
+    const rejections: string[] = [];
+    const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+      store: { ...unusedStoreReads, async readAcceptedPolicy(acceptanceId, read) { assert.equal(acceptanceId, policy.offer.acceptanceId); assert.deepEqual(read, actor); return lookup; },
+        async transaction() { throw new Error('unexpected_transaction'); }, async rejection(_id, _trace, cause) { rejections.push(cause); } },
+      payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+    const traceId = randomUUID();
+    const result = await finance.getByAcceptance({ actor, acceptanceId: policy.offer.acceptanceId, traceId });
+    if (expected === 'ok') { assert.ok(result.status === 'ok' && result.policy.policyId === policy.id); assert.deepEqual(rejections, []); }
+    else if (expected === null) { assert.deepEqual(result, { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId }); assert.deepEqual(rejections, []); }
+    else { assert.deepEqual(result, { status: 'denied', error: expected, httpStatus: 404, traceId }); assert.deepEqual(rejections, [expected]); }
+  }
 });
 
 async function importFixture(snapshot: (event: Awaited<ReturnType<typeof acceptedOffer>>) => Promise<AcceptanceSnapshot>,
