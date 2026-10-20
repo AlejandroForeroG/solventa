@@ -5,9 +5,10 @@ import { OfferService } from '../backend/acquisition-risk/src/application/offer-
 import type { AcceptedOffer, AcceptanceEvent, OfferStore, StoredOffer, StoredOfferRequest } from '../backend/acquisition-risk/src/application/ports/offer-store';
 import { offerRequestIdentity, type OfferActor, type OfferQuote } from '../backend/acquisition-risk/src/domain/offer';
 import { HmacOfferIntegrity, acceptanceContent } from '../backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
-import { MockRiskSignals, MockFlightSchedule } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
+import { MockFlightSchedule } from '../backend/acquisition-risk/src/adapters/outbound/mock-flight-schedule';
 import { eventContent, isOfferEnvelope } from '../backend/policy-claims-payments/src/domain/financial';
 import { createOffers } from '../backend/acquisition-risk/src/adapters/outbound/offer-composition';
+import { signalProviderFor } from '../backend/acquisition-risk/src/adapters/outbound/signal-providers';
 import { sendWithinDeadline } from '../backend/acquisition-risk/src/adapters/outbound/financial-outbox-publisher';
 
 const actor = { clientId: '11111111-1111-4111-8111-111111111111', subjectToken: '22222222-2222-4222-8222-222222222222' };
@@ -44,7 +45,8 @@ class MemoryOffers implements OfferStore {
 function fixture() {
   let now = new Date('2026-10-16T10:00:00.000Z');
   const store = new MemoryOffers(), integrity = new HmacOfferIntegrity('synthetic-unit-financial-key-'.padEnd(40, 'x'));
-  const provider = new MockRiskSignals(() => now), flights = new MockFlightSchedule(() => now);
+  const provider = signalProviderFor('direct_simulated', () => now), flights = new MockFlightSchedule(() => now);
+  if (!provider) throw Error('direct_simulated must be a known signal provider');
   const deps = { store, integrity, provider, flights, clock: { now: () => now }, environment: 'local', enabled: true };
   const service = new OfferService(deps);
   const command = { actor, authorization, idempotencyKey: 'create-1', quoteId: quote.quoteId, traceId: randomUUID() };
@@ -124,6 +126,23 @@ test('deployed composition refuses production or any mode other than explicit mo
     const service = createOffers({ APP_ENV, FINANCIAL_PROVIDER_MODE, FINANCIAL_EVENT_KEY, ACQUISITION_DB: { connectionString: 'must-not-connect' } });
     assert.equal((await service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: 'test', traceId: randomUUID() })).status, 'unavailable');
   }
+});
+test('an unknown SIGNAL_PROVIDER leaves offers unavailable instead of using another source', async () => {
+  const env = { APP_ENV: 'dev', FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: 'a'.repeat(64), ACQUISITION_DB: { connectionString: 'must-not-connect' } };
+  for (const SIGNAL_PROVIDER of [undefined, '', 'direct', 'DIRECT_SIMULATED']) {
+    const service = createOffers({ ...env, SIGNAL_PROVIDER });
+    assert.equal((await service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: 'test', traceId: randomUUID() })).status, 'unavailable', String(SIGNAL_PROVIDER));
+  }
+});
+test('either configured signal provider issues the same offer', async () => {
+  const direct = fixture(), expected = await direct.service.create(direct.command);
+  assert.equal(expected.status, 'created'); if (expected.status !== 'created') throw Error('unreachable');
+  const aggregator = fixture(), provider = signalProviderFor('aggregator_simulated', aggregator.deps.clock.now);
+  assert.ok(provider); aggregator.deps.provider = provider;
+  const result = await aggregator.service.create(aggregator.command);
+  assert.equal(result.status, 'created'); if (result.status !== 'created') throw Error('unreachable');
+  const { offerId: _expectedId, ...expectedTerms } = expected.offer, { offerId: _id, ...terms } = result.offer;
+  assert.deepEqual(terms, expectedTerms);
 });
 test('a late Queue acknowledgment cannot turn a timed-out publishing attempt into success', async () => {
   let acknowledge!: () => void;

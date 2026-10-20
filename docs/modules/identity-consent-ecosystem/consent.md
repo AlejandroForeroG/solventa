@@ -66,7 +66,7 @@ SQL rejection-record failures emit `security_denial_persistence_failed` with a f
 
 ### Guard in Acquisition
 
-Acquisition reaches a source or a stored copy of its data only through `ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`). On every call it asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. A grant must carry a positive integer text version and an expiry strictly after Acquisition's clock when the reply is received; a consent that expired in transit reaches neither a provider nor a stored copy. This local check adds no remote call. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
+`ReadSignal` (`backend/acquisition-risk/src/application/read-signal.ts`) reaches a source or a stored copy of its data only after asking the guard. The financial offer flow does not use it: it checks consent through its own access decision and reads the same `SignalProvider` directly. On every call `ReadSignal` asks `ConsentGuard`, whose adapter `IdentityConsentGuard` calls `verifyConsentV1` with a 2 s deadline and a fixed purpose, and validates the reply. A grant must carry a positive integer text version and an expiry strictly after Acquisition's clock when the reply is received; a consent that expired in transit reaches neither a provider nor a stored copy. This local check adds no remote call. Any reply it cannot verify, a timeout or an error counts as `unavailable`.
 
 `ReadSignal` forwards its initiating `traceId` through the guard and RPC into Identity's required security rejection record. The optional RPC field remains compatible with older callers. The outbound adapter accepts RFC-variant UUID versions 1 through 8, normalizes them to lowercase and omits invalid or missing values; Identity then supplies its safe fallback. Failure to append a required rejection record returns `unavailable` and reaches neither a provider nor a stored copy.
 
@@ -76,7 +76,7 @@ Acquisition reaches a source or a stored copy of its data only through `ReadSign
 | Allowed, provider answers | Called | Not read | `available` |
 | Allowed, provider fails | Called | Read | `degraded` if the copy was captured under this same valid consent, otherwise `unavailable` |
 
-The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
+The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet. A flow that needs the per-source consent check or the stored-copy fallback must use it instead of reading the provider directly. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
 
 ## Operation
 
