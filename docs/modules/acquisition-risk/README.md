@@ -4,7 +4,7 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the separate explicit financial mock mode described below. Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the separate explicit financial mock mode described below. `ReadSignal` replaces a failing source with a stored copy or a conservative default, but no flow calls it yet; see [signal degradation](#signal-degradation). Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
 
 ## Anonymous indicative calculator
 
@@ -145,9 +145,48 @@ The direct and aggregator adapters produce the same signal for each scope (`Sign
 | `not_found` | 404 or a provider state reporting no data for the subject |
 | `invalid_response` | Any other status, or a body that does not match the provider format |
 
-Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` does not use the code: any failure falls back to a stored copy (`degraded`) or `unavailable`, as documented in the consent guide.
+Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` keeps the code in the degradation it reports; see [signal degradation](#signal-degradation).
 
 **Configuration.** `SIGNAL_PROVIDER` is a variable in `backend/acquisition-risk/wrangler.jsonc`, read only in `src/index.ts`. Every environment, prod included, uses `direct_simulated`, so signal data is synthetic everywhere. `ReadSignal` has no route yet; meanwhile `infraStatus` reports the configured `signalProvider` and is not ready when the value is unknown, so a misconfigured deployment fails its verification. Changing provider is a one-line change of this value.
+
+### Signal degradation
+
+`ReadSignal` keeps a read useful when an external source fails. For each scope it checks the consent first, then reads the provider with a hard limit of 700 ms (`SIGNAL_DEADLINE_MS`, shared with the adapters; the use case repeats the limit so a provider that ignores it cannot hold the read). When the read fails it replaces the source, in this order:
+
+1. A stored copy, only if it was captured under the same valid consent and its `validUntil` has not passed. Looking it up has its own 700 ms limit: a store that does not answer in time counts as no copy, so the default is never held back.
+2. A conservative default for that scope.
+
+The result is `degraded` and carries `degradation: { scope, failure, substitute, confidence }`. `failure` is the `ProviderFailure` code; any other error counts as `unavailable`. A consent denial never reaches a copy or a default: it stays `denied`. `executeAll` reads the four scopes in parallel, so one failing source does not delay or block the others, and returns the four results with an overall `confidence`.
+
+| Origin of the signal | Confidence |
+|---|---|
+| Live read | 100 |
+| Stored copy | 60 |
+| Default | 0 |
+
+The overall confidence is the rounded average of the four levels, and a denied source counts as 0. If Datacrédito fails and there is no copy, the other three stay live and the overall confidence is 75; with a valid copy it is 90.
+
+A default never favors the customer. Each one makes the mortgage underwriting rule reject, and a test replaces every live source by its default to prove it:
+
+| Scope | Default `data` | Why the rule rejects it |
+|---|---|---|
+| `income_obligations_12m` | `monthlyIncomeCop` 1, `monthlyObligationsCop` 1 | Obligations are 100 % of income, over the 50 % limit |
+| `payment_history_score` | `score` 0, `latePayments12m` 12 | Score under 600 |
+| `affiliation_regime` | `regime` `contributory`, `active` false | Not an active affiliation (`regime` is mandatory in the shape and means nothing when `active` is false) |
+| `identity_validation` | `verified` false | Identity not verified |
+
+The values, the confidence levels and the order above are versioned as `degradation-1` (`DEGRADATION_VERSION`). Every substitution writes one line that names the version and carries no subject token, provider message or payload:
+
+```json
+{"event":"signal_degraded","traceId":"…","rule":"degradation-1","scope":"payment_history_score","failure":"timeout","substitute":"default","confidence":0}
+```
+
+**Limits.**
+- No flow calls this capability yet. The offer flow reads the provider directly, so the behavior is verified by tests (`npm run test:consents`) and does not change any deployed environment.
+- `SignalSnapshots` has no adapter. The `risk_profiles` table (`captured_at`, `expires_at`, `consent_id`, `signals`) exists and no code reads or writes it, so a real degradation would use the default today. An SQL adapter over that table and saving the signal after each successful read are pending.
+- A degraded signal must never sustain a definitive offer. When the offer flow adopts this capability it must issue a preliminary offer, record `degraded: true` for the replaced sources in the decision capture and refuse to accept it; offers are definitive only today.
+- The consent is verified once per scope, so `executeAll` makes four Identity calls in parallel, and that check keeps its own 2 s deadline, above the profiling latency budget. Budgeting and measuring the whole path belongs to the latency budget work, not to this rule.
+- The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
 
 ### ACORD Life inspired quote messages
 

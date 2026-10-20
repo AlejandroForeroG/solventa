@@ -103,7 +103,7 @@ test('ReadSignal behaves the same whichever provider the configuration selects',
   for (const name of ['direct_simulated', 'aggregator_simulated']) {
     const provider = signalProviderFor(name, clock);
     assert.ok(provider);
-    const read = new ReadSignal({ guard, provider, snapshots });
+    const read = new ReadSignal({ guard, provider, snapshots, clock: { now: clock }, timer: { after: () => new Promise<void>(() => {}) }, trace: { record: () => {} } });
     results.push(await Promise.all(SIGNAL_SCOPES.map(scope => read.execute({ subjectToken: SUBJECT, scope, traceId: TRACE }))));
   }
   assert.ok(results[0].every(result => result.status === 'available'));
