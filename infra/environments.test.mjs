@@ -72,6 +72,8 @@ test('financial consumers and signatures stay within the selected environment', 
     configs => { configs['policy-claims-payments'].env.staging.queues.consumers[0].dead_letter_queue = 'solventa-financial-events-dlq-dev'; },
     configs => { configs['policy-claims-payments'].env.prod.vars.FINANCIAL_PROVIDER_MODE = 'mock'; },
     configs => { configs['policy-claims-payments'].env.dev.queues.consumers[0].max_batch_timeout = 5; },
+    configs => { configs['policy-claims-payments'].env.dev.queues.consumers[0].max_batch_size = 10; },
+    configs => { delete configs['policy-claims-payments'].env.staging.placement; },
   ]) {
     const configs = await configurations();
     mutate(configs);

@@ -20,6 +20,7 @@ assert.match(name, /^solventa_financial_test_[a-f0-9]{32}$/);
 const admin = clientFor(config.url, config.ssl);
 let created = false;
 let migrationsComplete = false;
+let testFailure: unknown;
 let db: ReturnType<typeof clientFor> | undefined;
 const auditTimingsMs: number[] = [];
 try {
@@ -84,10 +85,32 @@ try {
   const originalCounts = await counts(['policies', 'inbox_events', 'audit_events', 'outbox_events']);
   assert.equal(ok(await finance.acceptOffer(offer, randomUUID())).replayed, true);
   assert.deepEqual(await counts(['policies', 'inbox_events', 'audit_events', 'outbox_events']), originalCounts);
+  await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+  await denied(traceId => finance.acceptOffer(offer, traceId), 'integrity_violation');
+  await db.query('UPDATE policy.policies SET premium=$2 WHERE id=$1', [policy.policyId, offer.payload.premium]);
+  assert.equal(ok(await finance.acceptOffer(offer, randomUUID())).replayed, true);
   const duplicateOffer = { ...offer, eventId: randomUUID(), payload: { ...offer.payload, acceptanceId: randomUUID() } };
   duplicateOffer.signature = await financialIntegrity.digest(eventContent(duplicateOffer));
   await denied(traceId => finance.acceptOffer(duplicateOffer, traceId), 'event_conflict');
   assert.equal(ok(await finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() })).policy.policyId, policy.policyId);
+  const snapshotReads: Promise<FinancialResult>[] = [];
+  await db.query('BEGIN');
+  try {
+    await db.query('SELECT id FROM policy.policies WHERE id=$1 FOR UPDATE', [policy.policyId]);
+    await db.query('UPDATE policy.policies SET premium=1 WHERE id=$1', [policy.policyId]);
+    snapshotReads.push(finance.get({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() }),
+      finance.getByAcceptance({ actor: offer.payload, acceptanceId: offer.payload.acceptanceId, traceId: randomUUID() }));
+    // Serializable reads may wait on the writer. Release within the normal query deadline;
+    // either schedule must expose a committed, coherent snapshot, never the uncommitted tamper.
+    await new Promise(resolve => setTimeout(resolve, 250));
+  } finally { await db.query('ROLLBACK'); }
+  for (const result of await Promise.all(snapshotReads)) {
+    const read = ok(result).policy;
+    assert.equal(read.policyId, policy.policyId);
+    assert.equal(read.premium, policy.premium);
+    assert.equal(read.documentHash, policy.documentHash);
+  }
+
   await denied(traceId => finance.get({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, policyId: policy.policyId, traceId }), 'not_found');
   await denied(traceId => finance.issue({ actor: offer.payload, policyId: policy.policyId, documentHash: '0'.repeat(64), idempotencyKey: randomUUID(), traceId }), 'document_mismatch');
   const altered = { ...offer, payload: { ...offer.payload, premium: '1.0000' } };
@@ -98,14 +121,78 @@ try {
   expired.signature = await financialIntegrity.digest(eventContent(expired));
   await denied(traceId => finance.acceptOffer(expired, traceId), 'invalid_event');
 
+  const importRollback = await acceptedOffer();
+  const importTables = ['policies', 'financial_contracts', 'inbox_events', 'audit_events', 'outbox_events'];
+  const beforeImportFailure = await counts(importTables);
+  for (const table of ['policies', 'financial_contracts', 'inbox_events', 'audit_events', 'outbox_events']) {
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { assert.equal((await finance.acceptOffer(importRollback, randomUUID())).status, 'unavailable'); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.deepEqual(await counts(importTables), beforeImportFailure,
+      `a failed ${table} insert must roll back policy, contract, inbox, audit and outbox together`);
+  }
+  assert.equal((await importOffer(importRollback)).status, 'pending');
+
+  const offerEvidence = async (event: SignedOfferAcceptanceV1) => (await db!.query(`SELECT
+    (SELECT count(*)::INT4 FROM policy.financial_contracts WHERE terms->>'offerId'=$1) AS contracts,
+    (SELECT count(*)::INT4 FROM policy.policies WHERE offer_id=$2) AS policies,
+    (SELECT count(*)::INT4 FROM policy.inbox_events i JOIN policy.policies p ON p.id=i.policy_id WHERE p.offer_id=$2) AS inbox,
+    (SELECT count(*)::INT4 FROM policy.audit_events a JOIN policy.policies p ON p.id=a.resource_id WHERE p.offer_id=$2 AND a.action='offer.accepted') AS audits,
+    (SELECT count(*)::INT4 FROM policy.outbox_events o JOIN policy.policies p ON p.id=o.aggregate_id WHERE p.offer_id=$2 AND o.event_type='policy.offer.accepted') AS outbox`,
+  [event.payload.offerId, event.payload.offerId])).rows[0];
+  const redelivered = await acceptedOffer();
+  const deliveries = (await Promise.all(Array.from({ length: 3 }, () => finance.acceptOffer(redelivered, randomUUID())))).map(ok);
+  assert.equal(deliveries.filter(result => !result.replayed).length, 1, 'concurrent redelivery must create exactly one policy');
+  assert.equal(new Set(deliveries.map(result => result.policy.policyId)).size, 1);
+  assert.deepEqual(await offerEvidence(redelivered), { contracts: 1, policies: 1, inbox: 1, audits: 1, outbox: 1 });
+  const contested = await acceptedOffer();
+  const rival = { ...contested, eventId: randomUUID(), payload: { ...contested.payload, acceptanceId: randomUUID() } };
+  rival.signature = await financialIntegrity.digest(eventContent(rival));
+  const rivalTraces = [randomUUID(), randomUUID()];
+  const contest = await Promise.all([finance.acceptOffer(contested, rivalTraces[0]), finance.acceptOffer(rival, rivalTraces[1])]);
+  assert.equal(contest.filter(result => result.status === 'ok').length, 1, JSON.stringify(contest));
+  const loser = contest.findIndex(result => result.status !== 'ok'), lost = contest[loser];
+  assert.ok(lost.status === 'denied' && lost.error === 'event_conflict', JSON.stringify(contest));
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1 AND action='financial.denied' AND outcome='event_conflict'",
+    [rivalTraces[loser]])).rows[0].n, 1, 'the losing envelope must be an audited conflict');
+  assert.deepEqual(await offerEvidence(contested), { contracts: 1, policies: 1, inbox: 1, audits: 1, outbox: 1 });
+
+  const orphanOffer = await acceptedOffer(); const orphanPolicy = await importOffer(orphanOffer);
+  await db.query(`INSERT INTO policy.payments(id,policy_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
+    VALUES($1,$2,'premium','initial-premium',$3,$4,'COP','pending',$5)`,
+  [randomUUID(), orphanPolicy.policyId, '0'.repeat(64), orphanOffer.payload.premium, randomUUID()]);
+  // Ownership is resolved before the joined evidence is decoded, even if the foreign record is malformed.
+  for (const foreignActor of [{ clientId: randomUUID(), subjectToken: randomUUID() },
+    { clientId: randomUUID(), subjectToken: orphanOffer.payload.subjectToken },
+    { clientId: orphanOffer.payload.clientId, subjectToken: randomUUID() }]) {
+    await denied(traceId => finance.get({ actor: foreignActor, policyId: orphanPolicy.policyId, traceId }), 'not_found');
+    await denied(traceId => finance.issue({ actor: foreignActor, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
+      idempotencyKey: randomUUID(), traceId }), 'not_found');
+    await denied(traceId => finance.getByAcceptance({ actor: foreignActor, acceptanceId: orphanOffer.payload.acceptanceId, traceId }), 'not_found');
+  }
+  const pendingTrace = randomUUID();
+  assert.deepEqual(await finance.getByAcceptance({ actor: orphanOffer.payload, acceptanceId: randomUUID(), traceId: pendingTrace }),
+    { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: pendingTrace });
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1', [pendingTrace])).rows[0].n, 0,
+    'polling an acceptance that is not imported yet must not record a rejection');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE correlation_id=$1', [pendingTrace])).rows[0].n, 0,
+    'polling an unimported acceptance must not publish a rejection');
+  await denied(traceId => finance.issue({ actor: orphanOffer.payload, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
+    idempotencyKey: randomUUID(), traceId }), 'integrity_violation');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.financial_payment_intents WHERE policy_id=$1', [orphanPolicy.policyId])).rows[0].n, 0,
+    'an orphan payment must not be hidden by the absent intent or replaced by a new premium');
+
   const key = randomUUID();
   const intentRollback = await acceptedOffer(); const intentRollbackPolicy = await importOffer(intentRollback); const intentRollbackKey = randomUUID();
-  const beforeIntentFailure = await counts(['payments', 'financial_commands', 'mock_gateway_operations']);
-  await db.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy');
-  try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
-  finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
-  assert.deepEqual(await counts(['payments', 'financial_commands', 'mock_gateway_operations']), beforeIntentFailure,
-    'the first premium intent, command and provider effect must not survive a failed atomic outbox write');
+  const intentTables = ['payments', 'financial_payment_intents', 'financial_commands', 'audit_events', 'outbox_events', 'mock_gateway_operations'];
+  const beforeIntentFailure = await counts(intentTables);
+  for (const table of ['financial_commands', 'payments', 'financial_payment_intents', 'audit_events', 'outbox_events']) {
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.deepEqual(await counts(intentTables), beforeIntentFailure,
+      `a failed ${table} insert must roll back initial command, premium, immutable intent, audit and outbox before provider use`);
+  }
   assert.equal(ok(await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).policy.status, 'issued');
   const noProofOffer = await acceptedOffer(); const noProofPolicy = await importOffer(noProofOffer); const noProofKey = randomUUID();
   const noProofGateway: PaymentGateway = { lookup: payment => gateway.lookup(payment), refund: payment => gateway.refund(payment),
@@ -177,6 +264,50 @@ try {
   assert.equal(ok(await issue(new PolicyFinance(base), afterCharge, afterChargePolicy, afterChargeKey)).policy.status, 'issued');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [afterChargePolicy.policyId])).rows[0].n), 1);
 
+  for (const permission of [{ table: 'payments', privilege: 'UPDATE' }, { table: 'policies', privilege: 'UPDATE' },
+    { table: 'audit_events', privilege: 'INSERT' }, { table: 'outbox_events', privilege: 'INSERT' }]) {
+    const event = await acceptedOffer(), candidate = await importOffer(event), key = randomUUID();
+    const interrupted: PaymentGateway = { lookup: input => gateway.lookup(input), refund: input => gateway.refund(input),
+      async settle(input) {
+        const result = await gateway.settle(input);
+        await db!.query(`REVOKE ${permission.privilege} ON policy.${permission.table} FROM solventa_local_policy`);
+        return result;
+      } };
+    try { assert.equal((await issue(new PolicyFinance({ ...base, payments: interrupted }), event, candidate, key)).status, 'unavailable'); }
+    finally { await db.query(`GRANT ${permission.privilege} ON policy.${permission.table} TO solventa_local_policy`); }
+    const rolledBack = (await db.query(`SELECT p.status,
+      (SELECT status FROM policy.payments WHERE policy_id=p.id AND operation='premium') AS premium,
+      (SELECT count(*)::INT4 FROM policy.audit_events WHERE resource_id=p.id AND action='premium.confirmed') AS audit,
+      (SELECT count(*)::INT4 FROM policy.outbox_events WHERE aggregate_id=p.id AND event_type='policy.premium.confirmed') AS outbox,
+      (SELECT count(*)::INT4 FROM policy.financial_commands WHERE policy_id=p.id AND result IS NOT NULL) AS completed
+      FROM policy.policies p WHERE p.id=$1`, [candidate.policyId])).rows[0];
+    assert.deepEqual(rolledBack, { status: 'pending', premium: 'pending', audit: 0, outbox: 0, completed: 0 }, permission.table);
+    assert.equal(ok(await issue(new PolicyFinance(base), event, candidate, key)).policy.status, 'issued');
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)',
+      [candidate.policyId])).rows[0].n, 1, 'confirmation recovery reconciles the existing provider effect');
+  }
+  for (const permission of [{ table: 'policy_signatures', privilege: 'INSERT' }, { table: 'policies', privilege: 'UPDATE' },
+    { table: 'audit_events', privilege: 'INSERT' }, { table: 'outbox_events', privilege: 'INSERT' }, { table: 'financial_commands', privilege: 'UPDATE' }]) {
+    const event = await acceptedOffer(), candidate = await importOffer(event), key = randomUUID();
+    const interrupted: SignatureProvider = { async sign(id, hash) {
+      const signed = await signatureProvider.sign(id, hash);
+      await db!.query(`REVOKE ${permission.privilege} ON policy.${permission.table} FROM solventa_local_policy`);
+      return signed;
+    } };
+    try { assert.equal((await issue(new PolicyFinance({ ...base, signatures: interrupted }), event, candidate, key)).status, 'unavailable'); }
+    finally { await db.query(`GRANT ${permission.privilege} ON policy.${permission.table} TO solventa_local_policy`); }
+    const rolledBack = (await db.query(`SELECT p.status,
+      (SELECT count(*)::INT4 FROM policy.policy_signatures WHERE policy_id=p.id) AS signatures,
+      (SELECT count(*)::INT4 FROM policy.audit_events WHERE resource_id=p.id AND action='policy.issued') AS audit,
+      (SELECT count(*)::INT4 FROM policy.outbox_events WHERE aggregate_id=p.id AND event_type='policy.policy.issued') AS outbox,
+      (SELECT count(*)::INT4 FROM policy.financial_commands WHERE policy_id=p.id AND result IS NOT NULL) AS completed
+      FROM policy.policies p WHERE p.id=$1`, [candidate.policyId])).rows[0];
+    assert.deepEqual(rolledBack, { status: 'charged', signatures: 0, audit: 0, outbox: 0, completed: 0 }, permission.table);
+    assert.equal(ok(await issue(new PolicyFinance(base), event, candidate, key)).policy.status, 'issued');
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)',
+      [candidate.policyId])).rows[0].n, 1, 'final recovery reuses the confirmed premium');
+  }
+
   const failedSignature: SignatureProvider = { async sign() { return { status: 'failed' }; } };
   const refused = await acceptedOffer(); const refusedPolicy = await importOffer(refused);
   const refusal = await issue(new PolicyFinance({ ...base, signatures: failedSignature }), refused, refusedPolicy);
@@ -202,7 +333,9 @@ try {
   assert.deepEqual(expiredCapture.sources, [], 'expiry before sign must not invent a signature consultation');
   const finalLockOffer = await acceptedOffer(); const finalLockPolicy = await importOffer(finalLockOffer);
   let finalLockClock = financialNow(), finalTransactions = 0;
-  const finalLockStore: FinancialStore = { rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
+  const finalLockStore: FinancialStore = {
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
     transaction: work => store.transaction(tx => {
       const transactionNumber = ++finalTransactions;
       return work(new Proxy(tx, { get(target, key) {
@@ -242,7 +375,18 @@ try {
   const event = await flightEvent(flightPolicy.policyId, flight.payload.coverage.flightReference);
   const changed = { ...event, payload: { ...event.payload, delayMinutes: 181 } };
   await denied(traceId => finance.consumeParametricEvent(changed, traceId), 'invalid_event');
+  const indemnityTables = ['claims', 'indemnities', 'payments', 'financial_payment_intents', 'inbox_events', 'audit_events', 'outbox_events', 'mock_gateway_operations'];
+  const beforeIndemnityFailure = await counts(indemnityTables);
+  await db.query('REVOKE INSERT ON policy.financial_payment_intents FROM solventa_local_policy');
+  try { assert.equal((await finance.consumeParametricEvent(event, randomUUID())).status, 'unavailable'); }
+  finally { await db.query('GRANT INSERT ON policy.financial_payment_intents TO solventa_local_policy'); }
+  assert.deepEqual(await counts(indemnityTables), beforeIndemnityFailure,
+    'a failed immutable intent insert must roll back the claim, indemnity, payment, inbox and audit before any provider call');
   assert.equal(ok(await finance.consumeParametricEvent(event, randomUUID())).replayed, false);
+  const paidClaim = (await db.query('SELECT id,status,version FROM policy.claims WHERE policy_id=$1', [flightPolicy.policyId])).rows[0];
+  assert.equal(paidClaim.status, 'paid');
+  assert.equal(Number(paidClaim.version), 2);
+  assert.equal((await db.query('SELECT status FROM policy.indemnities WHERE policy_id=$1', [flightPolicy.policyId])).rows[0].status, 'paid');
   assert.equal(ok(await new PolicyFinance(base).consumeParametricEvent(event, randomUUID())).replayed, true);
   changed.signature = await financialIntegrity.digest(eventContent(changed));
   await denied(traceId => finance.consumeParametricEvent(changed, traceId), 'event_conflict');
@@ -262,6 +406,26 @@ try {
   const issuedAt = '2026-10-16T02:01:00.000Z';
   const laterService = new PolicyFinance({ ...base, now: () => new Date(issuedAt) });
   assert.equal(ok(await issue(laterService, laterFlight, laterPolicy)).policy.status, 'issued');
+  assert.deepEqual((await db.query('SELECT id,status,version FROM policy.claims WHERE policy_id=$1', [flightPolicy.policyId])).rows[0], paidClaim,
+    'confirming an unrelated premium must not change a paid indemnity claim or its version');
+  const orphanIndemnityOffer = await acceptedOffer('flight_delay'); const orphanIndemnityPolicy = await importOffer(orphanIndemnityOffer);
+  assert.equal(ok(await issue(finance, orphanIndemnityOffer, orphanIndemnityPolicy)).policy.status, 'issued');
+  if (orphanIndemnityOffer.payload.coverage.kind !== 'flight_delay') throw new Error('unexpected_fixture');
+  const orphanClaimId = randomUUID(), orphanIndemnityId = randomUUID(), orphanTrace = randomUUID();
+  await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
+    VALUES($1,$2,'parametric-once',$3,'approved',$4,$5)`,
+  [orphanClaimId, orphanIndemnityPolicy.policyId, '0'.repeat(64), financialNow().toISOString(), orphanTrace]);
+  await db.query(`INSERT INTO policy.indemnities(id,claim_id,policy_id,amount,currency,status,correlation_id)
+    VALUES($1,$2,$3,$4,'COP','pending',$5)`,
+  [orphanIndemnityId, orphanClaimId, orphanIndemnityPolicy.policyId, orphanIndemnityOffer.payload.coverage.payoutAmount, orphanTrace]);
+  await db.query(`INSERT INTO policy.payments(id,policy_id,indemnity_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
+    VALUES($1,$2,$3,'indemnity','parametric-once',$4,$5,'COP','pending',$6)`,
+  [randomUUID(), orphanIndemnityPolicy.policyId, orphanIndemnityId, '0'.repeat(64), orphanIndemnityOffer.payload.coverage.payoutAmount, orphanTrace]);
+  const orphanEvent = await flightEvent(orphanIndemnityPolicy.policyId, orphanIndemnityOffer.payload.coverage.flightReference);
+  const orphanCounts = await counts(['claims', 'indemnities', 'payments']);
+  await denied(traceId => finance.consumeParametricEvent(orphanEvent, traceId), 'integrity_violation');
+  assert.deepEqual(await counts(['claims', 'indemnities', 'payments']), orphanCounts,
+    'an orphan indemnity must be detected even when the issued policy already has a valid premium intent');
   if (laterFlight.payload.coverage.kind !== 'flight_delay') throw new Error('unexpected_fixture');
   const beforeIssuance = await flightEvent(laterPolicy.policyId, laterFlight.payload.coverage.flightReference);
   await denied(traceId => laterService.consumeParametricEvent(beforeIssuance, traceId), 'event_not_covered');
@@ -292,7 +456,9 @@ try {
   try { assert.equal((await finance.acceptOffer(rollbackOffer, randomUUID())).status, 'unavailable'); }
   finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
   assert.equal(await count('policies'), beforeRollback, 'business effect must roll back when its outbox insert fails');
-  const brokenStore: FinancialStore = { transaction: work => store.transaction(work), async rejection() { throw new Error('sql_unavailable'); } };
+  const brokenStore: FinancialStore = {
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), transaction: work => store.transaction(work), async rejection() { throw new Error('sql_unavailable'); } };
   assert.equal((await new PolicyFinance({ ...base, store: brokenStore }).acceptOffer({}, randomUUID())).status, 'unavailable');
   const auditRole = clientFor(runtime, config.ssl); await auditRole.connect();
   try {
@@ -341,12 +507,19 @@ try {
   }
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
-    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'document_binding',
-      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
-} finally {
+    rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
+      'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
+      'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+} catch (error) { testFailure = error; throw error; }
+finally {
   await db?.end();
-  if (created && migrationsComplete) await admin.query(`DROP DATABASE ${name} CASCADE`);
-  else if (created) console.log(JSON.stringify({ financialSQL: 'migration_failed', preservedDatabase: name, reconciliationRequired: true }));
-  await admin.end();
+  try {
+    if (created && migrationsComplete) await admin.query(`DROP DATABASE ${name} CASCADE`);
+    else if (created) console.log(JSON.stringify({ financialSQL: 'migration_failed', preservedDatabase: name, reconciliationRequired: true }));
+  } catch (error) {
+    console.error(JSON.stringify({ financialSQL: 'cleanup_failed', preservedDatabase: name, reconciliationRequired: true }));
+    // Preserve the assertion/SQL error that caused the test failure rather than masking it with cleanup.
+    if (testFailure === undefined) throw error;
+  } finally { await admin.end(); }
 }

@@ -175,6 +175,42 @@ export class SqlConsents implements ConsentStore {
     }
   }
 
+  // forSubject's two reads for every scope in one statement, so all scopes come from the same snapshot.
+  // Per scope it keeps the 20 newest usable consents and the newest matching record, which is used only
+  // to explain a denial when that scope has no usable consent.
+  async forSubjectScopes(subjectToken: string, purposeCode: string, scopes: readonly ScopeCode[], now: Date): Promise<ReadonlyMap<ScopeCode, Consent[]>> {
+    const client = await this.connect();
+    try {
+      const usable = 'c.revoked_at IS NULL AND c.expires_at > $4';
+      const result = await client.query<Row & { scope: ScopeCode; usable: boolean; latest: boolean }>(
+        `SELECT scope, usable, latest_rank = 1 AS latest, ${plain} FROM (
+           SELECT requested.scope, ${prefixed}, ${usable} AS usable,
+             row_number() OVER (PARTITION BY requested.scope, ${usable} ORDER BY c.granted_at DESC, c.id) AS usable_rank,
+             row_number() OVER (PARTITION BY requested.scope ORDER BY c.granted_at DESC, c.id) AS latest_rank
+           FROM unnest($3::STRING[]) AS requested (scope)
+           JOIN identity.consents c ON requested.scope = ANY(c.scopes)
+           JOIN identity.clients owner ON owner.id = c.client_id
+           WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND c.consent_code IS NOT NULL
+         ) ranked
+         WHERE (usable AND usable_rank <= 20) OR latest_rank = 1
+         ORDER BY scope, granted_at DESC, id`,
+        [subjectToken, purposeCode, scopes, now]);
+      const found = new Map<ScopeCode, Consent[]>();
+      const selected = new Map<string, Row>();
+      for (const scope of scopes) {
+        const matching = result.rows.filter(row => row.scope === scope);
+        const usableRows = matching.filter(row => row.usable);
+        const rows = usableRows.length ? usableRows : matching.filter(row => row.latest);
+        for (const row of rows) selected.set(row.id, row);
+        found.set(scope, rows.map(fromRow));
+      }
+      await this.auditExpired(client, subjectToken, [...selected.values()], now);
+      return found;
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+
   private async audit(client: Client, actor: string, action: string, resourceType: string, resourceId: string, traceId: string) {
     await client.query(
       `INSERT INTO identity.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
