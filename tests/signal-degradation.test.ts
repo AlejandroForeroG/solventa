@@ -139,6 +139,19 @@ test('an unreadable copy is the same as no copy', async () => {
   assert.ok(result.status === 'degraded' && result.degradation.substitute === 'default');
 });
 
+test('a copy store that never answers does not hold the default or the other sources', async () => {
+  const r = rig();
+  r.failOn('payment_history_score');
+  r.snapshots.find = () => new Promise<SignalSnapshot | null>(() => {});
+  const pending = r.read.executeAll({ subjectToken: SUBJECT, traceId: TRACE });
+  await flush();
+  r.timer.fire();
+  const all = await pending;
+  assert.deepEqual(all.results.map(result => result.status), ['available', 'degraded', 'available', 'available']);
+  assert.equal(all.confidence, 75);
+  assert.equal(r.degradations[0].degradation.substitute, 'default');
+});
+
 test('without consent nothing is read, replaced or traced', async () => {
   const r = rig(false);
   r.failOn('payment_history_score');

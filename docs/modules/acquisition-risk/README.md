@@ -141,7 +141,7 @@ Before rejecting, the adapter logs one line, for example `{"event":"signal_provi
 
 `ReadSignal` keeps a read useful when an external source fails. For each scope it checks the consent first, then reads the provider with a hard limit of 700 ms (`SIGNAL_DEADLINE_MS`, shared with the adapters; the use case repeats the limit so a provider that ignores it cannot hold the read). When the read fails it replaces the source, in this order:
 
-1. A stored copy, only if it was captured under the same valid consent and its `validUntil` has not passed.
+1. A stored copy, only if it was captured under the same valid consent and its `validUntil` has not passed. Looking it up has its own 700 ms limit: a store that does not answer in time counts as no copy, so the default is never held back.
 2. A conservative default for that scope.
 
 The result is `degraded` and carries `degradation: { scope, failure, substitute, confidence }`. `failure` is the `ProviderFailure` code; any other error counts as `unavailable`. A consent denial never reaches a copy or a default: it stays `denied`. `executeAll` reads the four scopes in parallel, so one failing source does not delay or block the others, and returns the four results with an overall `confidence`.

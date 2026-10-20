@@ -35,8 +35,12 @@ export class ReadSignal {
 
   // The adapter already enforces this limit; repeating it here keeps a provider that ignores it from holding the read.
   private readWithinDeadline(input: SignalRequest): Promise<Signal> {
+    return this.withinDeadline(this.deps.provider.read(input.subjectToken, input.scope, input.traceId));
+  }
+
+  private withinDeadline<T>(work: Promise<T>): Promise<T> {
     const expired = this.deps.timer.after(SIGNAL_DEADLINE_MS).then((): never => { throw new ProviderFailure('timeout'); });
-    return Promise.race([this.deps.provider.read(input.subjectToken, input.scope, input.traceId), expired]);
+    return Promise.race([work, expired]);
   }
 
   private async substitute(input: SignalRequest, consentId: string, failure: SignalDegradation['failure']): Promise<SignalResult> {
@@ -49,10 +53,10 @@ export class ReadSignal {
   // A provider failure may fall back to a copy, but only one captured under this same, still valid consent and not expired.
   private async validCopy(input: SignalRequest, consentId: string): Promise<Signal | null> {
     try {
-      const copy = await this.deps.snapshots.find(input.subjectToken, input.scope);
+      const copy = await this.withinDeadline(this.deps.snapshots.find(input.subjectToken, input.scope));
       return copy && copy.consentId === consentId && Date.parse(copy.validUntil) > this.deps.clock.now().getTime() ? copy.signal : null;
     } catch {
-      return null; // an unreadable copy is the same as no copy
+      return null; // a copy that cannot be read in time is the same as no copy
     }
   }
 }
