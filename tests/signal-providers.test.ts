@@ -243,13 +243,20 @@ test('a late answer after the deadline does not replace the timeout failure', as
   }
 });
 
-test('the default deadline is 700 ms: a source cancelled by it never answers sooner than that', async t => {
+test('the default deadline is 700 ms: the call is still pending just before it and times out at it', async t => {
   capturingLogs(t);
-  const started = Date.now();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const silent: ProviderSource = () => new Promise(() => undefined);
-  assert.equal(await failureOf(new DirectSignalProvider('direct_test', silent).read(SUBJECT, 'identity_validation', TRACE)), 'timeout');
-  const elapsed = Date.now() - started;
-  assert.ok(elapsed >= 690 && elapsed < 1500, `timed out after ${elapsed} ms`);
+  let settled = false;
+  const outcome = failureOf(new DirectSignalProvider('direct_test', silent).read(SUBJECT, 'identity_validation', TRACE)).then(code => { settled = true; return code; });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(699);
+  await flush();
+  assert.equal(settled, false);
+  t.mock.timers.tick(1);
+  await flush();
+  assert.equal(settled, true);
+  assert.equal(await outcome, 'timeout');
 });
 
 test('no failure log carries the subject token, the provider message or the provider body', async t => {
