@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { apiVersions } from '../packages/contracts/src/versions';
 import type { ApiVersion } from '../packages/contracts/src/versions';
-import { gateApiVersion } from '../apps/web/worker/api-versions';
+import { gateApiVersion, withHeaders } from '../apps/web/worker/api-versions';
 import worker from '../apps/web/worker/index';
 
 const retiring: ApiVersion[] = [{ id: 'v1', deprecatedAt: '2026-10-01', sunset: '2027-06-06' }, { id: 'v2' }];
@@ -82,6 +82,37 @@ test('retiring the last version omits the successor link', () => {
   const gate = gateApiVersion('/api/v1/quotes', new Date(sunsetInstant - 1), [retiring[0]]);
   assert.equal(gate.headers.Link, undefined);
   assert.ok(gate.headers.Sunset);
+});
+
+test('a sunset without a deprecation date still announces Sunset but not Deprecation', () => {
+  const gate = gateApiVersion('/api/v1/quotes', new Date(sunsetInstant - 1), [{ id: 'v1', sunset: '2027-06-06' }, { id: 'v2' }]);
+  assert.equal(gate.response, undefined);
+  assert.equal(gate.headers.Deprecation, undefined);
+  assert.equal(gate.headers.Sunset, 'Sun, 06 Jun 2027 05:00:00 GMT');
+});
+
+test('a retired version without a successor answers 410 with no Link', async () => {
+  const gate = gateApiVersion('/api/v1/quotes', new Date(sunsetInstant), [retiring[0]]);
+  assert.equal(gate.response?.status, 410);
+  assert.equal(gate.response?.headers.get('cache-control'), 'no-store');
+  assert.equal(gate.response?.headers.get('link'), null);
+  assert.deepEqual(gate.headers, {});
+});
+
+test('a retired version root path links to the successor root', () => {
+  const gate = gateApiVersion('/api/v1', new Date(sunsetInstant), retiring);
+  assert.equal(gate.response?.status, 410);
+  assert.equal(gate.headers.Link, '</api/v2>; rel="successor-version"');
+});
+
+test('withHeaders overrides existing headers and preserves status and body', async () => {
+  const original = new Response('payload', { status: 201, headers: { 'x-keep': 'kept', 'x-over': 'old' } });
+  const copy = withHeaders(original, { 'x-over': 'new', 'x-added': 'added' });
+  assert.equal(copy.status, 201);
+  assert.equal(await copy.text(), 'payload');
+  assert.equal(copy.headers.get('x-keep'), 'kept');
+  assert.equal(copy.headers.get('x-over'), 'new');
+  assert.equal(copy.headers.get('x-added'), 'added');
 });
 
 test('paths outside a registered version are ignored', () => {
