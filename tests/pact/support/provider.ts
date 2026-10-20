@@ -4,6 +4,9 @@ import worker from '../../../apps/web/worker/index';
 import { createHttp as createAcquisitionHttp } from '../../../backend/acquisition-risk/src/adapters/inbound/http';
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
 import { EstimateQuote } from '../../../backend/acquisition-risk/src/application/estimate-quote';
+import type { OfferTerms } from '../../../backend/acquisition-risk/src/domain/offer';
+import { createHttp as createPolicyHttp } from '../../../backend/policy-claims-payments/src/adapters/inbound/http';
+import type { PolicyView } from '../../../backend/policy-claims-payments/src/domain/financial';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
@@ -32,7 +35,7 @@ const identityEnv = {
 } as IdentityEnv;
 
 type Binding = { fetch: (request: Request) => Promise<Response> };
-type World = { identity: Binding; acquisition: Binding; sessionCookie?: string };
+type World = { identity: Binding; acquisition: Binding; policy?: Binding; sessionCookie?: string };
 
 // Only the session cookie value decides who the customer is; any other value is an anonymous visitor.
 const consentCookie = 'consent-session';
@@ -138,6 +141,44 @@ function nativeWorld(): Partial<World> {
   return { identity: { fetch: request => Promise.resolve(app.request(new Request(origin + new URL(request.url).pathname, request), undefined, identityEnv)) } };
 }
 
+// The financial states run the real offer and policy HTTP adapters. Identity's combined financial decision is simulated by the
+// cookie value; the owners' use cases return fixed synthetic results whose rules and SQL are covered by the financial suites.
+const financialCookie = 'financial-session';
+const financialActor = { clientId: '00000000-0000-4000-8000-000000000011', subjectToken: '00000000-0000-4000-8000-000000000012' };
+const financialIds = { offerId: '10000000-0000-4000-8000-000000000001', acceptanceId: '20000000-0000-4000-8000-000000000002', policyId: '30000000-0000-4000-8000-000000000003', eventId: '40000000-0000-4000-8000-000000000004' };
+const financialTerms: OfferTerms = { ...financialActor, offerId: financialIds.offerId, offerVersion: 1, quoteId: 'COT-2026-00001', product: 'vida_hipotecario', premium: '77760.0000', currency: 'COP',
+  coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' }, effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z',
+  expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', synthetic: true, status: 'definitive' };
+const financialPolicy: PolicyView = { policyId: financialIds.policyId, offerId: financialIds.offerId, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP',
+  effectiveFrom: financialTerms.effectiveFrom, effectiveUntil: financialTerms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
+type FinancialState = { consent: boolean; acceptance: 'created' | 'expired'; imported: boolean };
+
+function financialWorld(state: FinancialState): Partial<World> {
+  const authorizeFinancialAccess = async (input: unknown) => {
+    const request = input as { cookie: string; origin: string; method: string; operation: string };
+    if (request.cookie !== financialCookie) return { allowed: false, status: 401, error: 'unauthorized' };
+    if (request.method === 'POST' && request.origin !== origin) return { allowed: false, status: 403, error: 'forbidden' };
+    if (request.operation === 'offers:create' && !state.consent) return { allowed: false, status: 403, error: 'consent_required' };
+    return { allowed: true, actor: { kind: 'user', channel: 'web', principal: financialActor, operations: [request.operation] },
+      ...(state.consent ? { consent: { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-06T15:00:00.000Z' } } : {}) };
+  };
+  const denyResourceAccess = async () => ({ recorded: true });
+  const offers = createAcquisitionHttp({ quotes: new CreateQuote({ access: new InMemoryAccess(), store: new MemoryStore(), clock: { now: () => new Date('2026-10-06T15:00:00Z') }, protector }),
+    estimates: new EstimateQuote(), offers: { authorizeFinancialAccess, denyResourceAccess, offers: {
+      create: async () => ({ status: 'created', offer: financialTerms }),
+      createFlight: async () => ({ status: 'unavailable' }),
+      get: async () => ({ status: 'found', offer: financialTerms }),
+      accept: async () => state.acceptance === 'expired' ? { status: 'expired' } : { status: 'created', acceptance: { acceptanceId: financialIds.acceptanceId, offerId: financialIds.offerId,
+        eventId: financialIds.eventId, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance', synthetic: true } } } } });
+  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance: {
+    get: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
+    getByAcceptance: async input => state.imported ? { status: 'ok', replayed: false, policy: financialPolicy } : { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: input.traceId },
+    issue: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }) } });
+  const binding = (app: { request: (request: Request, init: undefined, env: unknown) => Response | Promise<Response> }, env: unknown): Binding =>
+    ({ fetch: request => { const { pathname, search } = new URL(request.url); return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, env)); } });
+  return { acquisition: binding(offers, { APP_ENV: 'dev' }), policy: binding(policy, { APP_ENV: 'dev' }), sessionCookie: financialCookie };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   'a native session with its installation binding': nativeWorld,
@@ -160,6 +201,13 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'the consent was already granted with the idempotency key': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', consentRequestSeed)),
   'the idempotency key was used for another consent request': parameters => consentWorld(world => world.grant(parameters?.idempotencyKey ?? '', { ...consentRequestSeed, locale: 'en-US' })),
   'the consent service is down': () => ({ sessionCookie: consentCookie, identity: unavailableService }),
+  'a customer with a current consent and a saved quote': () => financialWorld({ consent: true, acceptance: 'created', imported: false }),
+  'a customer without a current consent': () => financialWorld({ consent: false, acceptance: 'created', imported: false }),
+  'a customer with a current definitive offer': () => financialWorld({ consent: true, acceptance: 'created', imported: false }),
+  'the definitive offer expired': () => financialWorld({ consent: true, acceptance: 'expired', imported: false }),
+  'the accepted offer is not imported yet': () => financialWorld({ consent: true, acceptance: 'created', imported: false }),
+  'the accepted offer was imported': () => financialWorld({ consent: true, acceptance: 'created', imported: true }),
+  'the policy service is down': () => ({ ...financialWorld({ consent: true, acceptance: 'created', imported: true }), policy: unavailableService }),
 };
 
 const defaultWorld = (): World => ({ identity: realIdentity(identityEnv), acquisition: realAcquisition() });
@@ -172,6 +220,7 @@ export async function verifyPact(pactFile: string): Promise<void> {
     APP_ENV: 'dev',
     get IDENTITY() { return world.identity; },
     get ACQUISITION() { return world.acquisition; },
+    get POLICY() { return world.policy ?? unavailableService; },
   } as unknown as WebEnv));
   try {
     await new Verifier({

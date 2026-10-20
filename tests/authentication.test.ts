@@ -5,10 +5,57 @@ import { configuration, sealAttempt, unsealAttempt } from '../backend/identity-c
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
 import { WorkosAuthentication } from '../backend/identity-consent-ecosystem/src/adapters/outbound/workos-authentication';
 import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
+import { WorkOS } from '@workos-inc/node';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 const password = 'a'.repeat(64);
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin+'/auth/callback', WORKOS_CLIENT_ID: 'client_test', WORKOS_API_KEY: 'sk_test_synthetic', AUTH_COOKIE_PASSWORD: password, IDENTITY_DB: {connectionString:'postgresql://synthetic.invalid/unused'} } as IdentityEnv;
+
+test('separate web authenticators reuse public keys while verifying each sealed user and JWT', async t => {
+  const clientId = 'client_synthetic_cache';
+  const issuer = `https://api.workos.com/user_management/${clientId}`;
+  const config = { apiKey: 'sk_synthetic_cache', clientId, cookiePassword: password, origin, redirectUri: origin + '/auth/callback', local: false };
+  const keys = await generateKeyPair('RS256', { extractable: true });
+  const foreignKeys = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(keys.publicKey), kid: 'synthetic-key', alg: 'RS256', use: 'sig' };
+  let keyRequests = 0;
+  const now = Math.floor(Date.now() / 1000);
+  const fixtures = new Map<string, { token: string; id: string }>();
+  for (const [id, tokenIssuer, expiresAt] of [['first', issuer, now + 3600], ['second', issuer, now + 3600], ['expired', issuer, now - 60], ['foreign', issuer + '-foreign', now + 3600], ['forged', issuer, now + 3600]] as const) {
+    const token = await new SignJWT({ sid: 'session_' + id }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid })
+      .setSubject('user_' + id).setIssuer(tokenIssuer).setIssuedAt(now - 120).setExpirationTime(expiresAt).sign(id === 'forged' ? foreignKeys.privateKey : keys.privateKey);
+    fixtures.set(`${id}@synthetic.invalid`, { token, id });
+  }
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if ([`/sso/jwks/${clientId}`, '/sso/jwks/client_other'].includes(url.pathname)) { keyRequests++; return Response.json({ keys: [jwk] }); }
+    assert.equal(url.pathname, '/user_management/authenticate');
+    const fixture = fixtures.get(JSON.parse(String(init?.body)).email);
+    assert.ok(fixture);
+    return Response.json({ access_token: fixture.token, refresh_token: 'synthetic_refresh', authentication_method: 'Password',
+      user: { object: 'user', id: 'user_' + fixture.id, email: fixture.id + '@synthetic.invalid', email_verified: true,
+        first_name: 'Synthetic', last_name: fixture.id, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } });
+  });
+  const issuingClient = new WorkOS(config.apiKey, { clientId, maxRetries: 0 });
+  async function cookieFor(id: string) {
+    const result = await issuingClient.userManagement.authenticateWithPassword({ email: `${id}@synthetic.invalid`, password: 'synthetic_password',
+      session: { sealSession: true, cookiePassword: password } });
+    assert.ok(result.sealedSession);
+    return result.sealedSession;
+  }
+  for (const id of ['first', 'second']) {
+    const adapter = new WorkosAuthentication(config);
+    const result = await adapter.authenticate(await cookieFor(id), false);
+    assert.deepEqual(result?.identity, { providerSubject: 'user_' + id, sessionReference: 'session_' + id, emailVerified: true });
+  }
+  assert.equal(keyRequests, 1, 'public keys survive construction of another request adapter');
+  for (const id of ['expired', 'foreign', 'forged']) assert.equal(await new WorkosAuthentication(config).authenticate(await cookieFor(id), false), null);
+  assert.equal(await new WorkosAuthentication({ ...config, cookiePassword: 'b'.repeat(64) }).authenticate(await cookieFor('first'), false), null);
+  assert.equal(keyRequests, 1, 'cached keys do not skip cookie, issuer or expiry verification');
+  assert.equal(await new WorkosAuthentication({ ...config, clientId: 'client_other' }).authenticate(await cookieFor('first'), false), null);
+  assert.equal(keyRequests, 2, 'another configured client uses its own issuer and key endpoint');
+});
 
 test('each environment accepts exactly its canonical and legacy hosts and rejects foreign configuration', async () => {
   for (const [environment, canonical] of [['dev', 'https://dev.solventa.site'], ['staging', 'https://staging.solventa.site'], ['prod', 'https://solventa.site']] as const) {
