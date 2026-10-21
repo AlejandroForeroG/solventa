@@ -62,6 +62,8 @@ The `identity-verification` capability has its own DTOs, `VerificationApi` port,
 
 Onboarding mounts only for an authenticated principal; owner/locale changes remount its coordinator. Unmount/background clears local progress while SQL retains the attempt. Uncertain requests retain their key/body in memory; persisted evaluation intents can recover from the owned server response after restart. See [identity verification](../../modules/identity-consent-ecosystem/identity-verification.md) for consent, evidence, lifecycle and SQL rules.
 
+The verification composition adapter injects Expo Crypto's native `randomUUID` for command keys. It does not assume the minimal global PKCE WebCrypto polyfill supplies that API. Keys are generated on explicit actions, not during screen rendering, and stay stable throughout an uncertain request.
+
 | Port | Implementation | External boundary |
 |---|---|---|
 | `IdentityProvider` | `adapters/workos.ts` | Public-client WorkOS PKCE, code exchange and refresh; no server API key |
