@@ -103,6 +103,11 @@ try {
   finally { await db.query('GRANT INSERT ON identity.audit_events TO solventa_local_identity'); }
   assert.deepEqual(await counts(), beforeCommitFailure);
   assert.equal((await saved(view.id)).evidence.document?.reference, 'document-unreadable');
+  await db.query('REVOKE INSERT ON identity.outbox_events FROM solventa_local_identity');
+  try { await assert.rejects(app.saveStep(context(view.id), 'document', fixture('document-readable'), view.version), { code: '42501' }); }
+  finally { await db.query('GRANT INSERT ON identity.outbox_events TO solventa_local_identity'); }
+  assert.deepEqual(await counts(), beforeCommitFailure, 'outbox failure rolls back the already-inserted audit and state/command writes');
+  assert.equal((await saved(view.id)).evidence.document?.reference, 'document-unreadable');
   const evaluation = context(view.id);
   const results = await Promise.all([app.evaluate(evaluation, view.version), app.evaluate(evaluation, view.version)]);
   assert.deepEqual(results[0], results[1]); view = results[0];
