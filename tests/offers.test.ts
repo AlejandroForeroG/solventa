@@ -7,6 +7,8 @@ import { offerRequestIdentity, type OfferActor, type OfferQuote } from '../backe
 import { HmacOfferIntegrity, acceptanceContent } from '../backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
 import { MockRiskSignals, MockFlightSchedule } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
 import { eventContent, isOfferEnvelope } from '../backend/policy-claims-payments/src/domain/financial';
+import { PROVIDER_FAILURES, ProviderFailure } from '../backend/acquisition-risk/src/application/ports/signal-sources';
+import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { createOffers } from '../backend/acquisition-risk/src/adapters/outbound/offer-composition';
 import { sendWithinDeadline } from '../backend/acquisition-risk/src/adapters/outbound/financial-outbox-publisher';
 
@@ -70,6 +72,14 @@ test('missing, stale or failed signals cannot create a definitive offer', async 
     f.deps.provider.read = async (s, scope, t) => { const signal = await original(s, scope, t); if (scope !== 'payment_history_score') return signal;
       if (bad === 'error') throw Error('provider down'); return { ...signal, capturedAt: bad === 'stale' ? '2026-10-15T10:00:00.000Z' : signal.capturedAt, data: bad === 'missing' ? {} : signal.data }; };
     assert.equal((await f.service.create(f.command)).status, 'unavailable'); assert.equal(f.store.rows.size, 0);
+  }
+});
+test('every normalized provider failure on any scope leaves no definitive offer and no stored copy', async () => {
+  for (const code of PROVIDER_FAILURES) for (const failing of SIGNAL_SCOPES) {
+    const f = fixture(); const original = f.deps.provider.read.bind(f.deps.provider);
+    f.deps.provider.read = async (s, scope, t) => { if (scope === failing) throw new ProviderFailure(code); return original(s, scope, t); };
+    assert.equal((await f.service.create(f.command)).status, 'unavailable', `${code} on ${failing}`);
+    assert.equal(f.store.rows.size, 0); assert.equal(f.store.declines, 0);
   }
 });
 test('underwriting declines excessive obligations and records the actual decision', async () => {
