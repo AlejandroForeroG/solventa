@@ -1,0 +1,1196 @@
+openapi: 3.0.3
+info:
+  title: Solventa native identity verification
+  version: 1.0.0
+  description: Identity-owned onboarding with a synthetic KYC/AML provider and versioned PNG/JPG test corpus.
+    Authentication, authorization, owner SQL, sealed state, audit, outbox and idempotency remain real. There
+    is no camera capture, personal image custody, legal identity certificate, operator resolution or automatic
+    contracting grant. Cookie requests and partner identities are not supported.
+servers:
+  - url: /api/v1
+tags:
+  - name: Identity verification
+    description: Native onboarding state separate from authentication and business permissions.
+paths:
+  /mobile/identity-verifications:
+    get:
+      operationId: getIdentityVerification
+      summary: Resume the current owned verification
+      description: Resume the current owned verification
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Current"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+    post:
+      operationId: grantIdentityVerificationConsent
+      summary: Start an attempt with explicit KYC consent
+      description: Consent and reusable progress last 24 hours. A current active case conflicts; an expired or
+        revoked case requires a new explicit consent. Grant, command, audit and outbox commit together.
+        Identical grant retries retain the original reference.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable per logical mutation, scoped to the verified owner. Identical retries reconcile the
+            original effect; another payload conflicts.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+      responses:
+        "201":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      requestBody:
+        required: true
+        description: Strict JSON, at most 4096 UTF-8 bytes. No image data or caller identity fields.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Grant"
+  /mobile/identity-verifications/terms:
+    get:
+      operationId: getIdentityVerificationTerms
+      summary: Read the exact versioned KYC consent wording
+      description: Read the exact versioned KYC consent wording
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: locale
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - es-CO
+              - en-US
+            default: es-CO
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TermsEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+  /mobile/identity-verifications/fixtures:
+    get:
+      operationId: getIdentityVerificationFixtures
+      summary: Read the versioned synthetic file catalog
+      description: Only catalog references, exact hashes and the declared corpus version can be submitted. These are
+        synthetic files, not uploaded personal images or live captures.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixturesEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+  /mobile/identity-verifications/{verificationId}/steps/{step}:
+    put:
+      operationId: saveIdentityVerificationStep
+      summary: Save one owned synthetic evidence step
+      description: The server checks the reference, step, hash, corpus, current owner/consent and expected version.
+        Updating a failed step retains other valid steps. The public payload cannot select a verdict.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: verificationId
+          in: path
+          required: true
+          description: Owned case UUID; never establishes identity.
+          schema:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+        - name: step
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - document
+              - selfie
+              - liveness
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable per logical mutation, scoped to the verified owner. Identical retries reconcile the
+            original effect; another payload conflicts.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      requestBody:
+        required: true
+        description: Strict JSON, at most 4096 UTF-8 bytes. No image data or caller identity fields.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveStep"
+  /mobile/identity-verifications/{verificationId}/evaluate:
+    post:
+      operationId: evaluateIdentityVerification
+      summary: Evaluate the stored steps through the mock KYC provider
+      description: A durable intent precedes the provider call outside SQL. Same-key retries reconcile the stable
+        evaluation. Applying a result rechecks the fresh session, owner, consent, expiry and still-current
+        intent. Revoked, expired or superseded results are discarded. Failures retain valid progress;
+        technical errors never become identity rejection. Manual retries have no business maximum during the
+        24-hour attempt.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: verificationId
+          in: path
+          required: true
+          description: Owned case UUID; never establishes identity.
+          schema:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable per logical mutation, scoped to the verified owner. Identical retries reconcile the
+            original effect; another payload conflicts.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      requestBody:
+        required: true
+        description: Strict JSON, at most 4096 UTF-8 bytes. No image data or caller identity fields.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpectedVersion"
+  /mobile/identity-verifications/{verificationId}/assistance:
+    post:
+      operationId: requestIdentityVerificationAssistance
+      summary: Persist an optional assisted-verification request
+      description: Available after the first verification or technical failure. Returns one stable reference and
+        pending status; no operator resolution is implemented.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: verificationId
+          in: path
+          required: true
+          description: Owned case UUID; never establishes identity.
+          schema:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable per logical mutation, scoped to the verified owner. Identical retries reconcile the
+            original effect; another payload conflicts.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      requestBody:
+        required: true
+        description: Strict JSON, at most 4096 UTF-8 bytes. No image data or caller identity fields.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpectedVersion"
+  /mobile/identity-verifications/{verificationId}/revoke:
+    post:
+      operationId: revokeIdentityVerificationConsent
+      summary: Revoke KYC consent and discard reusable progress
+      description: Revocation does not need an expected version and wins against an in-flight evaluation. It clears
+        reusable steps, pending evaluation and result, retaining minimal historical audit. It does not revoke
+        the login session or modify business permissions.
+      tags:
+        - Identity verification
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: verificationId
+          in: path
+          required: true
+          description: Owned case UUID; never establishes identity.
+          schema:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable per logical mutation, scoped to the verified owner. Identical retries reconcile the
+            original effect; another payload conflicts.
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+      responses:
+        "200":
+          description: Authoritative owner-scoped result. Simulation grants no session or contracting permission.
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation UUID.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Protected responses are never cached.
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Content-Type-Options:
+              description: Prevents content sniffing.
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      requestBody:
+        required: true
+        description: Strict JSON, at most 4096 UTF-8 bytes. No image data or caller identity fields.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Empty"
+components:
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Verified WorkOS user token for the environment and an active locally registered session; native
+        bearer policy applies.
+  schemas:
+    Evidence:
+      type: object
+      additionalProperties: false
+      required:
+        - reference
+        - sha256
+        - corpusVersion
+      properties:
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 64
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        corpusVersion:
+          type: string
+          enum:
+            - synthetic-identity.v1
+    Step:
+      type: object
+      additionalProperties: false
+      required:
+        - step
+        - reference
+        - sha256
+        - corpusVersion
+      properties:
+        step:
+          type: string
+          enum:
+            - document
+            - selfie
+            - liveness
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 64
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        corpusVersion:
+          type: string
+          enum:
+            - synthetic-identity.v1
+    Fixture:
+      type: object
+      additionalProperties: false
+      required:
+        - step
+        - reference
+        - sha256
+        - corpusVersion
+        - labels
+        - assetPath
+      properties:
+        step:
+          type: string
+          enum:
+            - document
+            - selfie
+            - liveness
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 64
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        corpusVersion:
+          type: string
+          enum:
+            - synthetic-identity.v1
+        labels:
+          type: object
+          additionalProperties: false
+          required:
+            - es-CO
+            - en-US
+          properties:
+            es-CO:
+              type: string
+            en-US:
+              type: string
+        assetPath:
+          type: string
+          pattern: ^fixtures/identity/[a-z-]+\.png$
+    Consent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - purpose
+        - textVersion
+        - locale
+        - grantedAt
+        - expiresAt
+        - revokedAt
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        purpose:
+          type: string
+          enum:
+            - identity_verification
+        textVersion:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        locale:
+          type: string
+          enum:
+            - es-CO
+            - en-US
+        grantedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - revoked
+            - expired
+    Result:
+      type: object
+      additionalProperties: false
+      required:
+        - outcome
+        - simulated
+        - providerVersion
+        - completedAt
+        - failedSteps
+      properties:
+        outcome:
+          type: string
+          enum:
+            - approved
+            - not_verified
+            - review
+        simulated:
+          type: boolean
+          enum:
+            - true
+        providerVersion:
+          type: string
+          enum:
+            - synthetic-kyc.v1
+        completedAt:
+          type: string
+          format: date-time
+        failedSteps:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - document
+              - selfie
+              - liveness
+      nullable: true
+    Assistance:
+      type: object
+      additionalProperties: false
+      required:
+        - reference
+        - status
+        - requestedAt
+      properties:
+        reference:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+        requestedAt:
+          type: string
+          format: date-time
+      nullable: true
+    Terms:
+      type: object
+      additionalProperties: false
+      required:
+        - purpose
+        - textVersion
+        - locale
+        - wording
+        - wordingHash
+        - validityHours
+        - corpusVersion
+        - simulated
+      properties:
+        purpose:
+          type: string
+          enum:
+            - identity_verification
+        textVersion:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        locale:
+          type: string
+          enum:
+            - es-CO
+            - en-US
+        wording:
+          type: string
+          minLength: 1
+        wordingHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        validityHours:
+          type: integer
+          enum:
+            - 24
+        corpusVersion:
+          type: string
+          enum:
+            - synthetic-identity.v1
+        simulated:
+          type: boolean
+          enum:
+            - true
+    Grant:
+      type: object
+      additionalProperties: false
+      required:
+        - textVersion
+        - locale
+      properties:
+        textVersion:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        locale:
+          type: string
+          enum:
+            - es-CO
+            - en-US
+    SaveStep:
+      type: object
+      additionalProperties: false
+      required:
+        - reference
+        - sha256
+        - corpusVersion
+        - expectedVersion
+      properties:
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 64
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        corpusVersion:
+          type: string
+          enum:
+            - synthetic-identity.v1
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    ExpectedVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    Empty:
+      type: object
+      additionalProperties: false
+      required: []
+      properties: {}
+    Verification:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+        - status
+        - createdAt
+        - expiresAt
+        - consent
+        - steps
+        - result
+        - assistance
+        - retryAllowed
+        - pendingEvaluation
+        - assistanceAllowed
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        status:
+          type: string
+          enum:
+            - draft
+            - processing
+            - approved
+            - not_verified
+            - review
+            - unavailable
+            - revoked
+            - expired
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        consent:
+          $ref: "#/components/schemas/Consent"
+        steps:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Step"
+        result:
+          $ref: "#/components/schemas/Result"
+        assistance:
+          $ref: "#/components/schemas/Assistance"
+        retryAllowed:
+          type: boolean
+        pendingEvaluation:
+          type: object
+          nullable: true
+          additionalProperties: false
+          description: Owner-authenticated recovery reference after app restart. Reuse this key and expectedVersion to
+            reconcile the same evaluation; these values are not credentials.
+          required:
+            - reference
+            - idempotencyKey
+            - expectedVersion
+          properties:
+            reference:
+              type: string
+              format: uuid
+            idempotencyKey:
+              type: string
+              pattern: ^[A-Za-z0-9._:-]{1,128}$
+            expectedVersion:
+              type: integer
+              minimum: 1
+              maximum: 9007199254740991
+        assistanceAllowed:
+          type: boolean
+          description: True after the first failed evaluation while consent is active, no evaluation is pending and no
+            assisted request exists; retained when valid steps are edited.
+    Envelope:
+      type: object
+      additionalProperties: false
+      required:
+        - verification
+        - traceId
+      properties:
+        verification:
+          $ref: "#/components/schemas/Verification"
+        traceId:
+          type: string
+          format: uuid
+    Current:
+      type: object
+      additionalProperties: false
+      required:
+        - verification
+        - traceId
+      properties:
+        verification:
+          oneOf:
+            - $ref: "#/components/schemas/Verification"
+            - type: object
+              nullable: true
+              enum:
+                - null
+        traceId:
+          type: string
+          format: uuid
+    TermsEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - terms
+        - traceId
+      properties:
+        terms:
+          $ref: "#/components/schemas/Terms"
+        traceId:
+          type: string
+          format: uuid
+    FixturesEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - fixtures
+        - traceId
+      properties:
+        fixtures:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Fixture"
+        traceId:
+          type: string
+          format: uuid
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - not_found
+            - method_not_allowed
+            - conflict
+            - terms_outdated
+            - consent_inactive
+            - verification_in_progress
+            - steps_incomplete
+            - evidence_invalid
+            - assistance_unavailable
+            - verification_unavailable
+            - access_unavailable
+        traceId:
+          type: string
+          format: uuid
+        verification:
+          $ref: "#/components/schemas/Verification"
+  responses:
+    Error400:
+      description: Malformed or mixed-cookie request, invalid query/body/fixture, missing idempotency key, or a body
+        larger than 4096 bytes.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error401:
+      description: Invalid user token or absent, revoked, expired or suspended local session. The required security
+        denial is durable; otherwise 503.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+        WWW-Authenticate:
+          description: Native bearer challenge.
+          schema:
+            type: string
+            example: Bearer realm="solventa"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error403:
+      description: The current policy does not permit native onboarding; web and partner actors are refused.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error404:
+      description: Absent and foreign cases are indistinguishable. A resource denial is durably recorded before the
+        response.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error405:
+      description: Unsupported method.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+        Allow:
+          description: Allowed methods.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error409:
+      description: Changed idempotent payload, stale version, active case conflict, inactive consent, incomplete
+        steps, concurrent evaluation or unavailable assistance transition.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error503:
+      description: Required authentication, persistence, denial audit or provider evaluation is unavailable. A
+        provider failure includes its saved unavailable verification and retains valid steps; it is never an
+        identity rejection or approval.
+      headers:
+        X-Trace-Id:
+          description: Canonical correlation UUID.
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          description: Protected responses are never cached.
+          schema:
+            type: string
+            enum:
+              - no-store
+        X-Content-Type-Options:
+          description: Prevents content sniffing.
+          schema:
+            type: string
+            enum:
+              - nosniff
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
