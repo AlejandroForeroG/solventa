@@ -63,6 +63,8 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |
 | `examples/signal-providers.json` | Agreed corpus of answers from each simulated signal provider format, checked by `tests/signal-providers.test.ts` |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
+| `openapi/v1/identity-verifications.yaml`, `examples/identity-verifications.json` | Native onboarding, explicit 24-hour KYC consent, synthetic fixture selection, evaluation, retained progress, pending assistance, revocation and restart recovery; checked against real handlers and the mobile consumer adapter |
+| `src/identity-fixtures.ts`, `fixtures/identity/*.png` | Versioned synthetic corpus metadata and actual image files; server allowlist and mobile bundled previews, with file/hash verification |
 | `redocly.yaml` | OpenAPI lint rules |
 
 ## API versioning
@@ -123,7 +125,7 @@ Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-w
 
 Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` also runs the real Identity routes, with only the WorkOS adapter and the session store replaced through the `authentication` argument of `createHttp`, which only `src/index.ts` fills with the real adapters, because a valid session needs credentials and a database; the behavior of those two is covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
 
-The native consumer (`solventa-mobile`) now uses `apps/mobile/src/features/authentication/adapters/solventa-session.ts`. Its generation/comparison test covers configuration, session registration/inspection/logout, access probing and device registration/inspection/revocation against `solventa-web`. Provider states execute real Identity routes and device decisions with synthetic WorkOS/storage collaborators. Native secure storage, browser return and biometric prompts require separate device validation.
+The native consumer (`solventa-mobile`) uses the actual session adapter and `features/identity-verification/adapters/verification-api.ts`. Generation/comparison covers configuration, session/device lifecycle, access probing, onboarding terms/corpus/current states, explicit grant, step saving, evaluation, assisted request and revocation against `solventa-web`. Provider states execute real gateway/Identity routes with synthetic WorkOS/storage collaborators. SQL integrity and native secure storage, browser return, onboarding UI and biometric prompts require their separate validations.
 
 ### Pending coverage
 

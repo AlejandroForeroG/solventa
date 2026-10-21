@@ -28,6 +28,10 @@ import { publishSecurityAlerts } from './application/security-alerts';
 import { SqlSecurityAlertOutbox } from './adapters/outbound/security-alert-outbox';
 import { CloudflareEmailDelivery } from './adapters/outbound/cloudflare-security-alerts';
 import { securityEmailConfiguration } from './adapters/outbound/security-alert-configuration';
+import { IdentityVerifications } from './application/identity-verifications';
+import { SqlIdentityVerifications } from './adapters/outbound/sql-identity-verifications';
+import { SyntheticVerificationCorpus, syntheticKycSource } from './adapters/outbound/synthetic-identity-verification';
+import { KycProvider } from './adapters/outbound/kyc-provider';
 
 function securityFor(env: IdentityEnv) {
   return new SecurityDecisions(new SqlSecurityDecisions(env.IDENTITY_DB.connectionString), () => crypto.randomUUID());
@@ -99,6 +103,13 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
       },
       consents: consentsFor(this.env),
       devices: new RegisteredDevices(new SqlRegisteredDevices(this.env.IDENTITY_DB.connectionString), securityFor(this.env)),
+      verifications: new IdentityVerifications({
+        store: new SqlIdentityVerifications(this.env.IDENTITY_DB.connectionString, new HmacIntegrity(this.env.CONSENT_SEAL_KEY ?? '')),
+        provider: new KycProvider(syntheticKycSource, 2500), corpus: new SyntheticVerificationCorpus(),
+        integrity: new HmacIntegrity(this.env.CONSENT_SEAL_KEY ?? ''), platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
+      }),
+      verificationAccess: (identity, operation) => new ApiAccess(new SqlPartnerAccess(this.env.IDENTITY_DB.connectionString),
+        new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)).mobileUser(identity, operation),
       mobile: config ? {
         configuration: { clientId: config.clientId, redirectUri: 'solventa://auth/callback' },
         provider: new WorkosMobileAuthentication({ clientId: config.clientId, apiKey: config.apiKey }),

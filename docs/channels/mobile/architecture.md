@@ -1,6 +1,6 @@
 # Mobile architecture
 
-This document describes the implemented architecture of `apps/mobile`, not a target-state scaffold. Solventa is an insurance application; the current native channel implements account authentication, biometric device access and a welcome/session screen. Native policy consultation, claims reporting, payments and quote journeys are not implemented by this increment.
+This document describes the implemented architecture of `apps/mobile`, not a target-state scaffold. The native channel implements account authentication, biometric device access, a welcome/session screen and synthetic identity onboarding. Native policy consultation, claims reporting, payments and quote journeys are not implemented by this increment.
 
 The [mobile guide](README.md) owns setup, environment values, operational commands and detailed authentication behavior. The [system architecture](../../architecture.md) owns backend boundaries; the [native authentication guide](../../modules/identity-consent-ecosystem/mobile-authentication.md) and its [OpenAPI specification](../../../packages/contracts/openapi/v1/mobile-authentication.yaml) own the server contract. This document maps mobile responsibilities and dependencies without replacing those sources.
 
@@ -57,6 +57,10 @@ The application consumes the ports in [`application/ports.ts`](../../../apps/mob
 The snapshot may contain server-verified principal metadata and a display-only email after access succeeds. It never contains credentials. The email is not an authorization or biometric-ownership key.
 
 ## Ports and adapters
+
+The `identity-verification` capability has its own DTOs, `VerificationApi` port, observable application coordinator, HTTP/validation adapters and presentation. Its thin `/identity-verification` route mounts the screen. Screen composition injects an authenticated-session execution port; it never receives raw credentials. `Authentication.withSession` serializes feature requests with refresh/logout and checks foreground, owner and lifecycle generation before credential release and before returning results. `useAuthentication` remains the UI-safe snapshot interface. Local KYC approval cannot alter session or business permissions.
+
+Onboarding mounts only for an authenticated principal; owner/locale changes remount its coordinator. Unmount/background clears local progress while SQL retains the attempt. Uncertain requests retain their key/body in memory; persisted evaluation intents can recover from the owned server response after restart. See [identity verification](../../modules/identity-consent-ecosystem/identity-verification.md) for consent, evidence, lifecycle and SQL rules.
 
 | Port | Implementation | External boundary |
 |---|---|---|

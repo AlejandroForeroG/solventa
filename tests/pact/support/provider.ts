@@ -18,6 +18,8 @@ import { ANA, MemoryConsents, SEAL_KEY, TRACE, clock } from '../../support/conse
 import { InMemoryAccess, MemoryStore, protector } from '../../support/quote-fakes';
 import { providerName } from './pact-files';
 import { serve } from './serve';
+import { verificationPactWorld } from './identity-verification';
+import type { VerificationStage } from './identity-verification';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -140,6 +142,12 @@ function nativeWorld(): Partial<World> {
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  ...Object.fromEntries((['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as VerificationStage[]).map(stage => [
+    `a native identity verification in ${stage} state`, async () => {
+      const world = await verificationPactWorld(stage);
+      return { identity: { fetch: (request: Request) => Promise.resolve(world.app.request(request, undefined, identityEnv)) } };
+    },
+  ])),
   'a native session with its installation binding': nativeWorld,
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),

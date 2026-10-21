@@ -6,7 +6,7 @@ Code: `backend/identity-consent-ecosystem`. This module is the authority for ide
 
 - [Web authentication: routes, session, configuration and tests](authentication.md).
 - [Native authentication: user tokens, registration, revocation and connection](mobile-authentication.md).
-- [Identity verification: synthetic provider boundary and integration limits](identity-verification.md).
+- [Identity verification: native consent, synthetic evaluation, persisted progress and assisted requests](identity-verification.md).
 - [API access: M2M partners, web users, contract and Bruno](api-access.md).
 - [Identity, consent and device data](data.md).
 - [Consent: terms, rules, fresh access check and failures](consent.md).
