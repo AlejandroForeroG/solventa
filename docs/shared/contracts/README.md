@@ -159,6 +159,7 @@ External formats are boundary contracts too. Each one has a versioned schema or 
 |---|---|---|---|
 | ACORD Life inspired quote request and response | Schemas `v1`; message field `schemaVersion: "1"` | `backend/acquisition-risk/src/adapters/inbound/acord-life-quote.ts` | The schema verdict, the translated `QuoteRequest` or the errors with ACORD paths, and responses that validate against the response schema |
 | Direct signal sources and signal aggregator | Format version 1 of each provider | `backend/acquisition-risk/src/adapters/outbound/direct-signal-provider.ts`, `aggregator-signal-provider.ts` | Valid answers become the canonical signal; every other answer fails with its normalized code and one log line |
+| Synthetic identity verification | `synthetic-kyc.v1`, `identity-verification-provider.v1.json` | `backend/identity-consent-ecosystem/src/adapters/outbound/kyc-provider.ts` | Strict simulation marker, attempt binding, complete checks, valid dates, canonical outcomes and failures; not mounted on a route |
 
 The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
 
