@@ -80,6 +80,8 @@ export function createHttp(deps?: PolicyHttpDependencies) {
           result = await deps.finance.issue({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash, traceId });
         }
         if (result.status === 'ok') return reply({ ...result.policy, replayed: result.replayed }, 200);
+        // Same opaque response as an absent resource; only a missing import skips the resource-denial record.
+        if (result.status === 'denied' && result.error === 'policy_pending') return reply({ error: 'not_found' }, 404);
         if (result.httpStatus === 404 || result.httpStatus === 403) {
           let denialTimer: ReturnType<typeof setTimeout> | undefined;
           try {
