@@ -307,6 +307,11 @@ paths:
         Commits acceptance, audit and signed outbox event in Acquisition. Policy
         issuance is asynchronous; 202 does not mean issued or charged. Reuse the
         same key and unchanged request after an uncertain outcome.
+        Expiry is rechecked with the database wall clock after acquiring the
+        offer lock, including sealed terms and the authorization deadline.
+        A newly committed acceptance triggers background publication of its
+        own outbox event; scheduled publication remains the recovery path.
+        Background publication does not guarantee a delivery latency.
 components:
   securitySchemes:
     WebSession:
