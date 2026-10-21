@@ -7,8 +7,7 @@ import { theme } from '@/theme';
 import { messages } from '@/shared/i18n/messages';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
-import { IdentityVerification } from '../application/identity-verification';
-import { createVerificationApi } from '../adapters/verification-api';
+import { createIdentityVerification } from '../adapters/create-identity-verification';
 import { verificationFixtureAssets } from '../adapters/fixture-assets';
 import { verificationSteps } from '../domain/verification';
 import type { Fixture, Locale, Step } from '../domain/verification';
@@ -26,7 +25,7 @@ export function IdentityVerificationScreen() {
 }
 function VerificationFlow({ locale }: { locale: Locale }) {
   const session = useAuthenticatedSession();
-  const [flow] = useState(() => new IdentityVerification(createVerificationApi(session.baseUrl, session), locale, () => crypto.randomUUID()));
+  const [flow] = useState(() => createIdentityVerification(session.baseUrl, session, locale));
   const state = useSyncExternalStore(flow.subscribe, flow.getSnapshot, flow.getSnapshot);
   const [accepted, setAccepted] = useState(false);
   const copy = verificationMessages[locale];
