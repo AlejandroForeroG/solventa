@@ -74,7 +74,7 @@ Acquisition reaches a source or a stored copy of its data only through `ReadSign
 |---|---|---|---|
 | Denied or unavailable | Not called | Not read | `denied` with the reason |
 | Allowed, provider answers | Called | Not read | `available` |
-| Allowed, provider fails | Called | Read | `degraded` if the copy was captured under this same valid consent, otherwise `unavailable` |
+| Allowed, provider fails | Called | Read | `degraded`, with the copy if it was captured under this same valid consent and has not expired, otherwise with a conservative default; see [signal degradation](../acquisition-risk/README.md#signal-degradation) |
 
 The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
 

@@ -1,5 +1,5 @@
 import type { Signal, SignalScope } from '../../domain/signal';
-import { ProviderFailure } from '../../application/ports/signal-sources';
+import { ProviderFailure, SIGNAL_DEADLINE_MS } from '../../application/ports/signal-sources';
 import type { ProviderFailureCode } from '../../application/ports/signal-sources';
 
 // What every provider adapter must produce for each scope, whatever the provider's own format.
@@ -15,7 +15,7 @@ export type ProviderResponse = { status: number; body: unknown };
 export type ProviderSource = (scope: SignalScope, subjectToken: string, signal: AbortSignal) => Promise<ProviderResponse>;
 export type ProviderCall = { provider: string; source: ProviderSource; deadlineMs: number; translate: (scope: SignalScope, body: unknown) => Signal };
 
-export const DEFAULT_DEADLINE_MS = 700;
+export const DEFAULT_DEADLINE_MS = SIGNAL_DEADLINE_MS;
 
 export const invalidResponse = () => new ProviderFailure('invalid_response');
 export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
