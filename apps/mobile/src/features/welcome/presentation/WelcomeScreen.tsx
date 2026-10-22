@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -55,6 +56,7 @@ export function WelcomeScreen() {
               <Action variant="secondary" label={copy.actions.alternative} onPress={() => void auth.signIn()} />
             </>}
             {authenticated && <>
+              <Action label={copy.actions.verifyIdentity} onPress={() => router.push('./identity-verification')} />
               {auth.email && <View style={styles.account}><Text style={styles.accountLabel}>{copy.currentAccount}</Text>
                 <Text selectable style={styles.email}>{auth.email}</Text></View>}
               <View style={styles.biometricStatus}>
