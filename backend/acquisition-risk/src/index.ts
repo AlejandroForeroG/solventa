@@ -21,7 +21,7 @@ export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
-    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input) } }).fetch(request, this.env, this.ctx);
   }
   async scheduled(): Promise<void> {

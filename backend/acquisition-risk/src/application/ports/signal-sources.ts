@@ -20,8 +20,10 @@ export interface SignalProvider {
 
 // A stored copy of a signal, tied to the consent under which it was captured and valid until `validUntil`.
 export type SignalSnapshot = { consentId: string; validUntil: string; signal: Signal };
+export type SignalSnapshotWrite = SignalSnapshot & { subjectToken: string; consentVersion: number; traceId: string };
 export interface SignalSnapshots {
-  find(subjectToken: string, scope: SignalScope): Promise<SignalSnapshot | null>;
+  find(subjectToken: string, scope: SignalScope, consentId: string): Promise<SignalSnapshot | null>;
+  save(snapshot: SignalSnapshotWrite): Promise<void>;
 }
 
 // What the trace records when a source is replaced: which one failed, why, what replaced it and how far to trust it.
