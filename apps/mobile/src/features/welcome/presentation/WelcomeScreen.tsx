@@ -1,9 +1,10 @@
+import React from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { theme } from '@/theme';
-import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
-import { useAppMessages } from '@/shared/i18n/use-app-messages';
+import { theme } from '../../../theme';
+import { useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
+import { useAppMessages } from '../../../shared/i18n/use-app-messages';
 
 export function WelcomeScreen() {
   const auth = useAuthentication();
