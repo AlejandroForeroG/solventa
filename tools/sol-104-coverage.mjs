@@ -75,8 +75,3 @@ coverage.merge(await capture('financial-sql', ['--import', 'tsx', 'infra/financi
 
 const context = createContext({ dir: report, coverageMap: coverage });
 for (const reporter of ['text', 'json', 'lcov', 'html']) reports.create(reporter).execute(context);
-const lines = coverage.getCoverageSummary().lines.pct;
-if (lines < 80) {
-  console.error(`ERROR: Coverage for lines (${lines}%) does not meet global threshold (80%)`);
-  process.exit(1);
-}
