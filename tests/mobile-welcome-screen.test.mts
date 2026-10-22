@@ -50,6 +50,8 @@ const welcome = (imported.default ?? imported) as typeof import('../apps/mobile/
 
 function render(status: string, overrides: Record<string, unknown> = {}) {
   nodes.length = 0;
+  actions.length = 0;
+  Platform.OS = 'android';
   auth = {
     status, failure: undefined, traceId: undefined, email: undefined, biometricEnabled: false, canEnableBiometrics: true,
     signIn: () => actions.push('signIn'), signOut: () => actions.push('signOut'), retry: () => actions.push('retry'),
@@ -57,23 +59,122 @@ function render(status: string, overrides: Record<string, unknown> = {}) {
     revokeDevice: () => actions.push('revoke'), ...overrides,
   };
   welcome.WelcomeScreen();
-  for (const node of nodes.filter(node => node.type === 'Pressable')) (node.props.onPress as () => void)();
   return nodes;
 }
 
-test('welcome screen renders every authentication state and wires every action', () => {
-  Platform.OS = 'android';
+function button(label: string) {
+  const result = nodes.find(node => node.type === 'Pressable'
+    && (node.props.children as { props: { children: unknown } }).props.children === label);
+  assert.ok(result, `Missing action: ${label}`);
+  return result;
+}
+
+function press(label: string) {
+  const action = button(label);
+  assert.equal(action.props.disabled, false);
+  assert.deepEqual(action.props.accessibilityState, { disabled: false });
+  (action.props.onPress as () => void)();
+}
+
+function textContent(value: unknown): string {
+  if (Array.isArray(value)) return value.map(textContent).join('');
+  return typeof value === 'string' ? value : '';
+}
+
+const text = () => nodes.filter(node => node.type === 'Text').map(node => textContent(node.props.children));
+const labels = () => nodes.filter(node => node.type === 'Pressable')
+  .map(node => textContent((node.props.children as { props: { children: unknown } }).props.children));
+
+test('signed-out welcome offers primary sign-in without progress or an error', () => {
   render('signedOut');
-  render('loading', { failure: 'unavailable', traceId: 'trace-1' });
-  render('authorizing');
-  render('biometricPrompt', { failure: 'biometric_locked' });
+  assert.ok(text().includes('signedOut'));
+  assert.ok(text().includes('introduction'));
+  assert.equal(nodes.some(node => node.type === 'ActivityIndicator'), false);
+  assert.equal(text().includes('unavailable'), false);
+  assert.deepEqual(labels(), ['signIn']);
+  press('signIn');
+  assert.deepEqual(actions, ['signIn']);
+});
+
+for (const [state, message, availableActions] of [
+  ['loading', 'verifying', []],
+  ['authorizing', 'authorizing', ['cancel']],
+  ['biometricPrompt', 'biometricPrompt', []],
+] as const) {
+  test(`${state} announces progress and exposes only its permitted actions`, () => {
+    render(state);
+    const progress = nodes.filter(node => node.type === 'ActivityIndicator');
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].props.accessibilityLabel, message);
+    assert.ok(text().includes(message));
+    assert.ok(nodes.some(node => node.type === 'View' && node.props.accessibilityLiveRegion === 'polite'));
+    assert.deepEqual(labels(), [...availableActions]);
+    if (state === 'authorizing') {
+      press('cancel');
+      assert.deepEqual(actions, ['cancel']);
+    }
+  });
+}
+
+test('a blocked session displays its error and trace and permits retry or logout', () => {
+  render('blocked', { failure: 'unavailable', traceId: 'trace-1' });
+  assert.ok(text().includes('blocked'));
+  assert.ok(text().includes('unavailable'));
+  assert.ok(text().includes('reference: trace-1'));
+  assert.equal(nodes.some(node => node.type === 'ActivityIndicator'), false);
+  assert.deepEqual(labels(), ['retry', 'signOut']);
+  press('retry');
+  press('signOut');
+  assert.deepEqual(actions, ['retry', 'signOut']);
+});
+
+test('a locked session offers biometric unlock and primary authentication as an alternative', () => {
   render('locked');
+  assert.ok(text().includes('locked'));
+  assert.deepEqual(labels(), ['unlock', 'alternative']);
+  press('unlock');
+  press('alternative');
+  assert.deepEqual(actions, ['unlock', 'signIn']);
+  render('biometricPrompt', { failure: 'biometric_locked' });
+  assert.equal(text().includes('biometric_locked'), false);
+});
+
+test('biometric setup is disabled until primary authentication allows it', () => {
   render('authenticated', { email: 'cliente@example.test', canEnableBiometrics: false });
+  assert.ok(text().includes('authenticated'));
+  assert.ok(text().includes('cliente@example.test'));
+  assert.ok(text().includes('primaryRequired'));
+  assert.equal(button('enable').props.disabled, true);
+  assert.deepEqual(button('enable').props.accessibilityState, { disabled: true });
+  assert.deepEqual(labels(), ['enable', 'signOut']);
+  render('authenticated');
+  assert.ok(text().includes('biometricSetup'));
+  press('enable');
+  assert.deepEqual(actions, ['enable']);
+});
+
+test('an enrolled account can revoke biometric access and a pending logout can be retried', () => {
   render('authenticated', { biometricEnabled: true });
-  render('blocked');
+  assert.ok(text().includes('biometricEnabled'));
+  assert.ok(text().includes('biometricReady'));
+  assert.deepEqual(labels(), ['revoke', 'signOut']);
+  press('revoke');
+  assert.deepEqual(actions, ['revoke']);
   render('logoutPending');
+  assert.ok(text().includes('logoutPending'));
+  assert.ok(text().includes('pendingLogout'));
+  assert.deepEqual(labels(), ['retryLogout']);
+  press('retryLogout');
+  assert.deepEqual(actions, ['retry']);
+});
+
+test('web explains the native-only flow and disables sign-in', () => {
+  render('signedOut');
+  nodes.length = 0;
   Platform.OS = 'web';
-  const web = render('signedOut');
-  assert.ok(web.some(node => node.type === 'Text' && node.props.children === 'nativeOnly'));
-  for (const action of ['signIn', 'unlock', 'enable', 'revoke', 'retry', 'signOut', 'cancel']) assert.ok(actions.includes(action), action);
+  welcome.WelcomeScreen();
+  assert.ok(text().includes('nativeOnly'));
+  assert.equal(button('signIn').props.disabled, true);
+  assert.deepEqual(button('signIn').props.accessibilityState, { disabled: true });
+  assert.deepEqual(actions, []);
 });
