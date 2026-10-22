@@ -11,6 +11,8 @@ import { PROVIDER_FAILURES, ProviderFailure } from '../backend/acquisition-risk/
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { createOffers } from '../backend/acquisition-risk/src/adapters/outbound/offer-composition';
 import { sendWithinDeadline } from '../backend/acquisition-risk/src/adapters/outbound/financial-outbox-publisher';
+import { ReadSignal } from '../backend/acquisition-risk/src/application/read-signal';
+import type { SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 
 const actor = { clientId: '11111111-1111-4111-8111-111111111111', subjectToken: '22222222-2222-4222-8222-222222222222' };
 const other = { clientId: '33333333-3333-4333-8333-333333333333', subjectToken: '44444444-4444-4444-8444-444444444444' };
@@ -18,7 +20,7 @@ const authorization = { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: 
 const quote: OfferQuote = { id: randomUUID(), quoteId: 'COT-2026-00001', amount: 320000000, termMonths: 180, ageYears: 35, validUntil: '2026-11-01T12:00:00.000Z' };
 class MemoryOffers implements OfferStore {
   rows = new Map<string, StoredOffer>(); keys = new Map<string, StoredOffer>(); accepted = new Map<string, AcceptedOffer>(); events: AcceptanceEvent[] = [];
-  declines = 0; rejected: string[] = []; rejectionDetails: { traceId: string; operation: string }[] = []; requests = new Map<string, StoredOfferRequest>();
+  captures: unknown[] = []; declines = 0; rejected: string[] = []; rejectionDetails: { traceId: string; operation: string }[] = []; requests = new Map<string, StoredOfferRequest>();
   snapshots = { creation: 0, acceptance: 0 };
   async request(a: OfferActor, key: string) { return this.requests.get(a.clientId + key) ?? null; }
   async quote(a: OfferActor, id: string): Promise<OfferQuote | null> { return a.clientId === actor.clientId && a.subjectToken === actor.subjectToken && id === quote.quoteId ? quote : null; }
@@ -37,7 +39,7 @@ class MemoryOffers implements OfferStore {
   async create(i: Parameters<OfferStore['create']>[0]) {
     const existing = this.requests.get(i.actor.clientId + i.key); if (existing) return { created: false, request: existing };
     const request: StoredOfferRequest = { actor: i.actor, requestIdentity: i.requestIdentity, outcome: 'accepted', offer: i.offer };
-    this.rows.set(i.offer.terms.offerId, structuredClone(i.offer)); this.keys.set(i.actor.clientId + i.key, i.offer); this.requests.set(i.actor.clientId + i.key, request);
+    this.captures.push(structuredClone(i.capture)); this.rows.set(i.offer.terms.offerId, structuredClone(i.offer)); this.keys.set(i.actor.clientId + i.key, i.offer); this.requests.set(i.actor.clientId + i.key, request);
     return { created: true, request };
   }
   async decline(i: Parameters<OfferStore['decline']>[0]) {
@@ -54,11 +56,20 @@ class MemoryOffers implements OfferStore {
   }
   async reject(_a: OfferActor, _id: string, traceId: string, reason: string, operation = 'offer.accept') { this.rejected.push(reason); this.rejectionDetails.push({ traceId, operation }); }
 }
+class MemorySnapshots implements SignalSnapshots {
+  rows = new Map<string, SignalSnapshot>();
+  async find(_subjectToken: string, scope: typeof SIGNAL_SCOPES[number]) { return this.rows.get(scope) ?? null; }
+  async save(snapshot: Parameters<SignalSnapshots['save']>[0]) { this.rows.set(snapshot.signal.scope, snapshot); }
+}
+function signalReader(provider: SignalProvider, snapshots: SignalSnapshots, now: () => Date) {
+  return new ReadSignal({ guard: { verify: async () => ({ allowed: false, reason: 'unavailable' }) }, provider, snapshots, clock: { now },
+    timer: { after: () => new Promise<void>(() => {}) }, trace: { record: () => {} } });
+}
 function fixture() {
   let now = new Date('2026-10-16T10:00:00.000Z');
   const store = new MemoryOffers(), integrity = new HmacOfferIntegrity('synthetic-unit-financial-key-'.padEnd(40, 'x'));
-  const provider = new MockRiskSignals(() => now), flights = new MockFlightSchedule(() => now);
-  const deps = { store, integrity, provider, flights, clock: { now: () => now }, environment: 'local', enabled: true };
+  const provider = new MockRiskSignals(() => now), snapshots = new MemorySnapshots(), flights = new MockFlightSchedule(() => now);
+  const deps = { store, integrity, provider, signals: signalReader(provider, snapshots, () => now), snapshots, flights, clock: { now: () => now }, environment: 'local', enabled: true };
   const service = new OfferService(deps);
   const command = { actor, authorization, idempotencyKey: 'create-1', quoteId: quote.quoteId, traceId: randomUUID() };
   return { deps, service, store, command, setNow: (date: string) => { now = new Date(date); } };
@@ -77,21 +88,49 @@ test('expired or absent authorization prevents all provider use and persistence'
   assert.equal((await f.service.create({ ...f.command, authorization: { ...authorization, expiresAt: '2026-10-16T09:00:00.000Z' } })).status, 'denied');
   assert.equal(calls, 0); assert.equal(f.store.rows.size, 0);
 });
-test('missing, stale or failed signals cannot create a definitive offer', async () => {
+test('invalid or stale signals cannot create an offer, while a failed source creates only a preliminary one', async () => {
   for (const bad of ['error', 'stale', 'missing'] as const) {
     const f = fixture(); const original = f.deps.provider.read.bind(f.deps.provider);
     f.deps.provider.read = async (s, scope, t) => { const signal = await original(s, scope, t); if (scope !== 'payment_history_score') return signal;
       if (bad === 'error') throw Error('provider down'); return { ...signal, capturedAt: bad === 'stale' ? '2026-10-15T10:00:00.000Z' : signal.capturedAt, data: bad === 'missing' ? {} : signal.data }; };
-    assert.equal((await f.service.create(f.command)).status, 'unavailable'); assert.equal(f.store.rows.size, 0);
+    const result = await f.service.create(f.command);
+    if (bad === 'error') {
+      assert.equal(result.status, 'created');
+      if (result.status === 'created') assert.equal(result.offer.status, 'preliminary');
+      assert.equal(f.store.rows.size, 1);
+    } else { assert.equal(result.status, 'unavailable'); assert.equal(f.store.rows.size, 0); }
   }
 });
-test('every normalized provider failure on any scope leaves no definitive offer and no stored copy', async () => {
+test('every normalized provider failure on any scope produces a non-acceptable preliminary offer', async () => {
   for (const code of PROVIDER_FAILURES) for (const failing of SIGNAL_SCOPES) {
     const f = fixture(); const original = f.deps.provider.read.bind(f.deps.provider);
     f.deps.provider.read = async (s, scope, t) => { if (scope === failing) throw new ProviderFailure(code); return original(s, scope, t); };
-    assert.equal((await f.service.create(f.command)).status, 'unavailable', `${code} on ${failing}`);
-    assert.equal(f.store.rows.size, 0); assert.equal(f.store.declines, 0);
+    const result = await f.service.create(f.command);
+    assert.equal(result.status, 'created', `${code} on ${failing}`);
+    if (result.status !== 'created') throw Error('unreachable');
+    assert.equal(result.offer.status, 'preliminary');
+    const capture = f.store.captures[0] as { outcome: string; sources: { source: string; degraded: boolean; failure?: string; substitute?: string; confidence?: number }[] };
+    const degraded = capture.sources.find(source => source.degraded);
+    assert.deepEqual({ outcome: capture.outcome, source: degraded?.source, failure: degraded?.failure, substitute: degraded?.substitute, confidence: degraded?.confidence },
+      { outcome: 'preliminary', source: `signal:${failing}`, failure: code, substitute: 'default', confidence: 0 });
+    assert.equal((await f.service.accept({ ...f.command, offerId: result.offer.offerId, idempotencyKey: `accept-${code}-${failing}` })).status, 'conflict');
+    assert.equal(f.store.rows.size, 1); assert.equal(f.store.declines, 0); assert.equal(f.store.events.length, 0);
   }
+});
+test('a current same-consent snapshot is used for a preliminary offer and records reduced confidence', async () => {
+  const f = fixture();
+  const first = await f.service.create(f.command); assert.equal(first.status, 'created');
+  const original = f.deps.provider.read.bind(f.deps.provider);
+  f.deps.provider.read = async (subject, scope, trace) => scope === 'payment_history_score'
+    ? Promise.reject(new ProviderFailure('timeout')) : original(subject, scope, trace);
+  const second = await f.service.create({ ...f.command, idempotencyKey: 'create-from-copy' });
+  assert.equal(second.status, 'created'); if (second.status !== 'created') throw Error('unreachable');
+  assert.equal(second.offer.status, 'preliminary');
+  const capture = f.store.captures[1] as { sources: { source: string; substitute?: string; confidence?: number }[] };
+  assert.deepEqual(capture.sources.find(source => source.source === 'signal:payment_history_score'), {
+    source: 'signal:payment_history_score', capturedAt: '2026-10-16T10:00:00.000Z', quality: 'stored_copy', degraded: true,
+    confidence: 60, failure: 'timeout', substitute: 'stored_copy'
+  });
 });
 test('underwriting declines excessive obligations and records the actual decision', async () => {
   const f = fixture(); const original = f.deps.provider.read.bind(f.deps.provider);
@@ -191,8 +230,9 @@ test('a declined first outcome replays without reading changed sources and rejec
 test('concurrent accepted and declined underwriting share one first outcome', async () => {
   for (const declineFirst of [true, false]) {
     const f = fixture(), original = f.deps.provider.read.bind(f.deps.provider);
-    const declined = new OfferService({ ...f.deps, provider: { read: async (s, scope, t) => scope === 'income_obligations_12m'
-      ? { scope, capturedAt: f.deps.clock.now().toISOString(), data: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 5000000 } } : original(s, scope, t) } });
+    const declinedProvider = { read: async (s: string, scope: typeof SIGNAL_SCOPES[number], t: string) => scope === 'income_obligations_12m'
+      ? { scope, capturedAt: f.deps.clock.now().toISOString(), data: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 5000000 } } : original(s, scope, t) };
+    const declined = new OfferService({ ...f.deps, signals: signalReader(declinedProvider, new MemorySnapshots(), f.deps.clock.now) });
     const create = f.store.create.bind(f.store), decline = f.store.decline.bind(f.store);
     let release!: () => void; const firstWritten = new Promise<void>(resolve => { release = resolve; });
     f.store.create = async i => { if (declineFirst) await firstWritten; const result = await create(i); if (!declineFirst) release(); return result; };

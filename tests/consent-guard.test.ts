@@ -28,6 +28,7 @@ class CountingSnapshots implements SignalSnapshots {
   reads = 0;
   copy: SignalSnapshot | null = null;
   async find() { this.reads++; return this.copy; }
+  async save() {}
 }
 
 // Identity's real consent rules behind the same Service Binding contract the Worker exposes.

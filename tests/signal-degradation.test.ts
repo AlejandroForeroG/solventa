@@ -32,9 +32,11 @@ class ManualTimer {
 }
 class Snapshots implements SignalSnapshots {
   reads = 0;
+  writes: SignalSnapshot[] = [];
   copy: SignalSnapshot | null = null;
   failing = false;
   async find() { this.reads++; if (this.failing) throw new Error('copy_store_down'); return this.copy; }
+  async save(snapshot: Parameters<SignalSnapshots['save']>[0]) { this.writes.push(snapshot); }
 }
 
 function rig(allowed = true) {
@@ -85,6 +87,8 @@ test('a source that answers is not degraded and leaves no trace', async () => {
   const result = await ask(r);
   assert.equal(result.status, 'available');
   assert.deepEqual(r.degradations, []);
+  assert.equal(r.snapshots.writes.length, 1);
+  assert.equal(r.snapshots.writes[0].consentId, CONSENT);
 });
 
 test('a provider that never answers is replaced when the 700 ms limit expires', async () => {

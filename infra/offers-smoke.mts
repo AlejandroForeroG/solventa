@@ -11,6 +11,10 @@ import { FinancialOutboxPublisher } from '../backend/acquisition-risk/src/adapte
 import { OfferService } from '../backend/acquisition-risk/src/application/offer-service';
 import { MockFlightSchedule, MockRiskSignals } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
 import type { AcceptanceEvent } from '../backend/acquisition-risk/src/application/ports/offer-store';
+import { ReadSignal } from '../backend/acquisition-risk/src/application/read-signal';
+import type { SignalProvider } from '../backend/acquisition-risk/src/application/ports/signal-sources';
+import { SqlSignalSnapshots } from '../backend/acquisition-risk/src/adapters/outbound/sql-signal-snapshots';
+import { platformTimer } from '../backend/acquisition-risk/src/adapters/outbound/degradation-log';
 
 // Real local owner SQL; Identity and external data sources are explicit stand-ins.
 const config = await settings('local');
@@ -54,7 +58,10 @@ const traces: string[] = [];
 const trace = () => { const value = randomUUID(); traces.push(value); return value; };
 const now = new Date(), integrity = new HmacOfferIntegrity('local-synthetic-financial-key-'.padEnd(40, 'x'));
 const store = new SqlOfferStore(runtime.toString());
-const service = new OfferService({ store, provider: new MockRiskSignals(), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
+const snapshots = new SqlSignalSnapshots(runtime.toString());
+const signalReader = (provider: SignalProvider) => new ReadSignal({ guard: { verify: async () => ({ allowed: false, reason: 'unavailable' }) }, provider, snapshots,
+  clock: { now: () => new Date() }, timer: platformTimer, trace: { record: () => {} } });
+const service = new OfferService({ store, signals: signalReader(new MockRiskSignals()), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
 const authorization = { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: new Date(now.getTime() + 3600000).toISOString() };
 let testFailure: unknown;
 try {
@@ -65,6 +72,8 @@ try {
   assert.equal(quote.status, 'created'); if (quote.status !== 'created') throw Error('quote failed');
   const command = { actor, authorization, quoteId: quote.quote.quoteId, idempotencyKey: randomUUID(), traceId: trace() };
   const created = await service.create(command); assert.equal(created.status, 'created'); if (created.status !== 'created') throw Error('offer failed');
+  assert.equal(created.offer.status, 'definitive');
+  assert.equal((await admin.query("SELECT count(*)::INT4 AS n FROM acquisition.risk_profiles WHERE subject_token=$1 AND consent_reference=$2 AND purpose='risk_profiling'", [actor.subjectToken, authorization.consentId])).rows[0].n, 4);
   assert.equal((await service.create(command)).status, 'replayed');
   assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
   assert.equal((await service.get({ actor: other, offerId: created.offer.offerId, traceId: trace() })).status, 'not_found');
@@ -78,7 +87,7 @@ try {
   assert.deepEqual(await store.creationSnapshot(other, command.idempotencyKey, quote.quote.quoteId), { request: null, legacy: null, quote: null }, 'foreign actor sees no ledger, offer or quote');
   assert.equal((await store.creationSnapshot(actor, randomUUID(), null)).quote, null, 'flight snapshot reads no quote');
   // Offers created before the request ledger replay from their keyed context without any source read.
-  const sourceless = new OfferService({ store, provider: { async read() { throw Error('replay must not read sources'); } },
+  const sourceless = new OfferService({ store, signals: signalReader({ async read() { throw Error('replay must not read sources'); } }),
     flights: { async read() { throw Error('replay must not read schedules'); } }, integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
   const legacyCommand = { ...command, idempotencyKey: randomUUID(), traceId: trace() };
   const legacyOffer = await service.create(legacyCommand); assert.equal(legacyOffer.status, 'created');
@@ -132,6 +141,22 @@ try {
     (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.create') AS audit,
     (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.created') AS outbox`, [created.offer.offerId]);
   assert.deepEqual(c.rows[0], { contexts: 1, revisions: 1, audit: 1, outbox: 1 });
+  const healthy = new MockRiskSignals();
+  const degradedProvider: SignalProvider = { read: (subject, scope, correlation) => scope === 'payment_history_score'
+    ? Promise.reject(new Error('synthetic_provider_down')) : healthy.read(subject, scope, correlation) };
+  const degraded = new OfferService({ store, signals: signalReader(degradedProvider), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
+  const preliminary = await degraded.create({ ...command, idempotencyKey: randomUUID(), traceId: trace() });
+  assert.equal(preliminary.status, 'created'); if (preliminary.status !== 'created') throw Error('preliminary offer failed');
+  assert.equal(preliminary.offer.status, 'preliminary');
+  assert.equal((await degraded.get({ actor, offerId: preliminary.offer.offerId, traceId: trace() })).status, 'found');
+  assert.equal((await degraded.accept({ actor, authorization, offerId: preliminary.offer.offerId, idempotencyKey: randomUUID(), traceId: trace() })).status, 'conflict');
+  const preliminaryCapture = (await admin.query(`SELECT d.outcome,d.input_snapshot FROM acquisition.underwriting_decisions d
+    JOIN acquisition.offers o ON o.decision_id=d.id WHERE o.id=$1 AND o.status='preliminary'`, [preliminary.offer.offerId])).rows[0];
+  assert.equal(preliminaryCapture.outcome, 'preliminary');
+  assert.deepEqual(preliminaryCapture.input_snapshot.sources.find((source: { degraded: boolean }) => source.degraded), {
+    source: 'signal:payment_history_score', capturedAt: preliminaryCapture.input_snapshot.sources[1].capturedAt,
+    quality: 'stored_copy', degraded: true, confidence: 60, failure: 'unavailable', substitute: 'stored_copy'
+  });
   // First outcomes include declines. Changed providers cannot overwrite a committed decision.
   const healthyProvider = new MockRiskSignals();
   let deny = true, reads = 0;
@@ -140,7 +165,7 @@ try {
     if (deny && scope === 'income_obligations_12m') return { scope, capturedAt: new Date().toISOString(), data: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 5000000 } };
     return healthyProvider.read(subject, scope, correlation);
   } };
-  const declining = new OfferService({ store, provider: variableProvider, flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
+  const declining = new OfferService({ store, signals: signalReader(variableProvider), flights: new MockFlightSchedule(), integrity, clock: { now: () => new Date() }, environment: 'local', enabled: true });
   const declineCommand = { ...command, idempotencyKey: randomUUID(), traceId: trace() };
   assert.equal((await declining.create(declineCommand)).status, 'declined');
   const firstReads = reads; deny = false;
@@ -332,6 +357,7 @@ try {
       await admin.query('DELETE FROM acquisition.offer_revisions WHERE offer_id=ANY($1::UUID[])', [offers]);
       await admin.query('DELETE FROM acquisition.offers WHERE id=ANY($1::UUID[])', [offers]);
       await admin.query('DELETE FROM acquisition.underwriting_decisions WHERE id=ANY($1::UUID[])', [decisions]);
+      await admin.query('DELETE FROM acquisition.risk_profiles WHERE subject_token=$1', [actor.subjectToken]);
       await admin.query('DELETE FROM acquisition.quotes WHERE client_id=$1', [actor.clientId]);
     } finally {
       await admin.end();
