@@ -1,6 +1,8 @@
-# Quote load test
+# Quote and offer load tests
 
 Measures the latency of `POST /api/v1/quotes` with [k6](https://k6.io) against the quality scenario: **p95 ≤ 250 ms and p99 ≤ 500 ms**. Synthetic data only.
+
+`offers.k6.js` measures the complete HTTP request for `POST /api/v1/quotes/{quoteId}/offers` against the offer-profile objective: **p95 < 400 ms and p99 < 800 ms**. It measures the edge-to-response duration seen by the caller, including authentication, profile retrieval, external-signal deadlines, pricing, persistence and serialization. It never adds internal percentiles.
 
 ## What it measures and what it does not
 
@@ -26,6 +28,16 @@ TOKEN=<partner access token> sh infra/load/run.sh 30 60s    # POST /api/v1/quote
 ```
 
 `run.sh [rate] [duration] [url]` runs k6 in Docker, saves the full summary to `results/run-<rate>rps-<duration>.json` and prints the key numbers (`report.mjs`).
+
+To measure offer profiling, create a quote through the web flow, then pass its code and the same session cookie:
+
+```sh
+COOKIE=<cookie value> QUOTE_ID=COT-2026-00001 sh infra/load/run-offers.sh 10 60s
+```
+
+`run-offers.sh` writes `results/offers-<rate>rps-<duration>.json`. Every virtual user uses a fresh idempotency key and replays one in ten requests. Checks require the public Offer contract, trace correlation and the expected `201`/`200` create/replay statuses. The run fails if p95 reaches 400 ms, p99 reaches 800 ms, or failures exceed 1%. A preliminary response is valid and counted separately; it must not be discarded by the measurement.
+
+Local results are development evidence only. A staging run must use a staging-owned synthetic user and quote, and its summary must be attached separately; do not present a local result as staging evidence.
 
 The scenario warms up for 10 s at a low rate, then measures at a constant arrival rate. Each request uses a new `Idempotency-Key`, and one in ten repeats the previous request to exercise idempotency (it must answer 200 with the same quote). Checks cover the status, the `COT-YYYY-NNNNN` code, the COP currency and the `X-Trace-Id` header. k6 thresholds fail when p95 ≥ 250 ms, p99 ≥ 500 ms or more than 1 % of requests fail.
 

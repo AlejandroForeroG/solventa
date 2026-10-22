@@ -3,7 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Consent } from './api';
 
-export function ConsentGranted({ consent, uncertain = false, onPanel, onBack }: { consent: Consent; uncertain?: boolean; onPanel?: () => void; onBack: () => void }) {
+export function ConsentGranted({ consent, uncertain = false, onPanel, onContinue, onBack }: { consent: Consent; uncertain?: boolean; onPanel?: () => void; onContinue?: () => void; onBack: () => void }) {
   const intl = useIntl();
   const { dayMonthYear } = useFormatters();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -20,6 +20,7 @@ export function ConsentGranted({ consent, uncertain = false, onPanel, onBack }: 
     </div>
     <p>{intl.formatMessage({ id: uncertain ? 'granted.uncertainDetail' : consent.status === 'active' ? 'granted.detail' : 'granted.inactive' })}</p>
     <div className="actions">
+      {!uncertain && consent.status === 'active' && onContinue && <button type="button" className="btn btn-primary" onClick={onContinue}>{intl.formatMessage({ id: 'granted.continue' })}</button>}
       {onPanel && <button type="button" className="btn btn-primary" onClick={onPanel}>{intl.formatMessage({ id: 'granted.panel' })}</button>}
       <button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'granted.back' })}</button>
     </div>

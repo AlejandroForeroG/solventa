@@ -175,6 +175,8 @@ Mortgage offer creation consumes `executeAllAuthorized`. Any degraded source mak
 
 Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
 
+The web channel consumes this contract without reproducing underwriting or pricing. It validates the complete public response and displays a degraded decision as an explicit preliminary offer with no acceptance control. `infra/load/offers.k6.js` measures the whole authenticated HTTP operation with p95 < 400 ms and p99 < 800 ms thresholds, preserving preliminary responses as successful business outcomes. Local and target-environment summaries are intentionally kept separate.
+
 **Limits.**
 - The 400 ms p95 / 800 ms p99 profile-and-price objective requires measurement through the deployed web, Identity, provider and SQL path; unit tests establish parallel reads and the 700 ms per-dependency ceiling, not the percentile objective.
 - The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
