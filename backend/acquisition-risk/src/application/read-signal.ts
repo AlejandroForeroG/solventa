@@ -20,33 +20,54 @@ export class ReadSignal {
     background?: { waitUntil(work: Promise<unknown>): void } }) {}
 
   async execute(input: SignalRequest): Promise<SignalResult> {
+    return this.executeResult(input, true);
+  }
+
+  private async executeResult(input: SignalRequest, recordDegradation: boolean): Promise<SignalResult> {
     const consent = await this.deps.guard.verify(input.subjectToken, input.scope, input.traceId);
     if (!consent.allowed) return { status: 'denied', reason: consent.reason };
-    return this.executeAuthorized({ ...input, consent });
+    return this.executeAuthorizedResult({ ...input, consent }, recordDegradation);
   }
 
   // Offer creation already verifies the same four scopes atomically in Identity. Reusing that answer here
   // separates provider degradation from consent and avoids four redundant service-binding calls.
   async executeAuthorized(input: SignalRequest & { consent: VerifiedConsent }): Promise<SignalResult> {
+    return this.executeAuthorizedResult(input, true);
+  }
+
+  private async executeAuthorizedResult(input: SignalRequest & { consent: VerifiedConsent }, recordDegradation: boolean): Promise<SignalResult> {
     try {
       const signal = await this.readWithinDeadline(input);
       await this.remember(input, signal);
       return { status: 'available', signal, consentId: input.consent.consentId };
     } catch (error) {
       const failure = error instanceof ProviderFailure ? error.code : 'unavailable';
-      return this.substitute(input, input.consent.consentId, failure);
+      return this.substitute(input, input.consent.consentId, failure, recordDegradation);
     }
   }
 
   // The four sources are read in parallel: a failing one never delays or blocks the others.
   async executeAll(input: { subjectToken: string; traceId: string }) {
-    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.execute({ ...input, scope })));
-    return { results, confidence: overallConfidence(results.map(confidenceOf)) };
+    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeResult({ ...input, scope }, false)));
+    return this.finalizeParallel(input.traceId, results);
   }
 
   async executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: VerifiedConsent }) {
-    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeAuthorized({ ...input, scope })));
-    return { results, confidence: overallConfidence(results.map(confidenceOf)) };
+    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeAuthorizedResult({ ...input, scope }, false)));
+    return this.finalizeParallel(input.traceId, results);
+  }
+
+  private finalizeParallel(traceId: string, results: SignalResult[]) {
+    const now = this.deps.clock.now();
+    const finalized = results.map(result => {
+      if (result.status !== 'degraded' || result.degradation.substitute !== 'stored_copy') return result;
+      const capturedAt = Date.parse(result.signal.capturedAt);
+      if (Number.isFinite(capturedAt) && capturedAt <= now.getTime() && now.getTime() - capturedAt < SIGNAL_FRESHNESS_MS) return result;
+      const degradation: SignalDegradation = { ...result.degradation, substitute: 'default', confidence: CONFIDENCE.default };
+      return { ...result, signal: defaultSignal(result.signal.scope, now), degradation };
+    });
+    for (const result of finalized) if (result.status === 'degraded') this.deps.trace.record(traceId, result.degradation);
+    return { results: finalized, confidence: overallConfidence(finalized.map(confidenceOf)) };
   }
 
   // The adapter already enforces this limit; repeating it here keeps a provider that ignores it from holding the read.
@@ -71,10 +92,10 @@ export class ReadSignal {
     else await save;
   }
 
-  private async substitute(input: SignalRequest, consentId: string, failure: SignalDegradation['failure']): Promise<SignalResult> {
+  private async substitute(input: SignalRequest, consentId: string, failure: SignalDegradation['failure'], recordDegradation: boolean): Promise<SignalResult> {
     const copy = await this.validCopy(input, consentId);
     const degradation: SignalDegradation = { scope: input.scope, failure, substitute: copy ? 'stored_copy' : 'default', confidence: copy ? CONFIDENCE.stored_copy : CONFIDENCE.default };
-    this.deps.trace.record(input.traceId, degradation);
+    if (recordDegradation) this.deps.trace.record(input.traceId, degradation);
     return { status: 'degraded', signal: copy ?? defaultSignal(input.scope, this.deps.clock.now()), consentId, degradation };
   }
 
