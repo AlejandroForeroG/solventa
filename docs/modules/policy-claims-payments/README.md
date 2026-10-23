@@ -17,6 +17,12 @@ All routes below enter through the web Worker and require the existing sealed we
 
 Issuance derives money and ownership from the stored, integrity-checked acceptance. It orders premium charge, document signature and issuance through durable owner states with stable mock provider keys. A failed signature compensates a confirmed mock charge. An uncertain result returns 503 and must be reconciled using the same operation identity; never invent a fresh key to repeat an uncertain charge. Different payloads under an existing key conflict. The returned policy identifies `synthetic: true` and `providerMode: mock`.
 
+### Decision: charge before issuance
+
+The premium is charged before the policy is signed and issued; a policy never becomes `issued` without a confirmed premium. Alternative considered: issue first and charge afterwards, which would leave an issued, unpaid policy after a declined charge. With the chosen order, the recovery obligation is the opposite case, a confirmed charge whose issuance did not complete, which must end issued or refunded.
+
+Each policy has exactly one premium intent (`financial_payment_intents` is keyed by policy and operation). A declined premium is final for that policy and keeps its history; it never moves the policy out of `pending`. Another purchase attempt starts from a new quote and definitive offer for the same customer data and active consent, which produces a new policy and charge and may produce a different premium. Several premium attempts on the same policy would require an additive schema change and new integrity rules; it is not implemented.
+
 The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) is the public contract. Queue payloads follow [financial-event.v1](../../../packages/contracts/schemas/financial-event.v1.json); schema validation alone never authenticates an event. Consumers verify its HMAC, exact fields, environment, product/coverage, timestamps and immutable terms, persist effect/inbox/audit/outbox in their owner transaction, then acknowledge delivery. Delivery is at least once, not a distributed transaction or exactly-once transport. Rejected altered events must not create a financial effect. Parametric events have no public HTTP route.
 
 ## Academic rules and document integrity
