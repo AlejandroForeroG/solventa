@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import React from 'react';
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import type { PropsWithChildren } from 'react';
 import { AppState } from 'react-native';

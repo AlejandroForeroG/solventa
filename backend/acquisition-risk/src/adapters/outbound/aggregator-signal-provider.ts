@@ -47,8 +47,8 @@ function translate(scope: SignalScope, body: unknown): Signal {
 // Synthetic answers for the same fictitious person as the direct simulation, stamped with the query time;
 // no real source is reached.
 const RESULTS: Record<SignalScope, Record<string, unknown>> = {
-  income_obligations_12m: { ingresos_promedio_mensual: 4500000, obligaciones_mensuales: 1200000 },
-  payment_history_score: { score: 742, moras_ultimos_12_meses: 0 },
+  income_obligations_12m: { ingresos_promedio_mensual: 8000000, obligaciones_mensuales: 1800000 },
+  payment_history_score: { score: 780, moras_ultimos_12_meses: 0 },
   affiliation_regime: { regimen_salud: 'C', afiliado_activo: true },
   identity_validation: { cedula_vigente: true }
 };

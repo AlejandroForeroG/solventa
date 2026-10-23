@@ -31,6 +31,11 @@ test('financial examples match the public schemas and omit principal/provider cr
   }
 });
 
+test('the offer contract exposes preliminary profiling without changing the definitive example', () => {
+  validate('offers', 'Offer', { ...examples.offer, status: 'preliminary' });
+  assert.equal(examples.offer.status, 'definitive');
+});
+
 test('issue contract rejects free amounts, approval and destinations', () => {
   const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/IssueRequest');
   assert.ok(check);

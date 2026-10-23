@@ -77,10 +77,10 @@ export class SqlOfferStore implements OfferStore {
       try {
         const created = await c.query(`WITH decision AS (
           INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1','accepted',$3,$3,$4) RETURNING id
+          VALUES ($1,$2,'v1',$20,$3,$3,$4) RETURNING id
         ), offered AS (
           INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
-          SELECT $5,1,id,$6,'COP',$7,'definitive',$8,$9 FROM decision RETURNING id,decision_id
+          SELECT $5,1,id,$6,'COP',$7,$21,$8,$9 FROM decision RETURNING id,decision_id
         ), revision AS (
           INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
           SELECT id,1,decision_id,$6,'COP',$7,$8,$9 FROM offered RETURNING offer_id
@@ -98,7 +98,7 @@ export class SqlOfferStore implements OfferStore {
         [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId, t.offerId, t.premium, JSON.stringify(t.coverage),
           t.effectiveFrom, t.expiresAt, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference,
           JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion, input.requestIdentity,
-          JSON.stringify({ offerId: t.offerId, synthetic: true })]);
+          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), t.status === 'preliminary' ? 'preliminary' : 'accepted', t.status]);
         if (created.rowCount !== 1) throw new Error('offer_creation_incomplete');
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {

@@ -4,7 +4,7 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 ## Implemented state
 
-Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Definitive synthetic offers and asynchronous accepted-offer publication are implemented under the separate explicit financial mock mode described below. Profiling, real provider access, stored signal copies and general asynchronous signal refresh require implementation.
+Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Synthetic mortgage offer profiling consumes `ReadSignal`: it saves successful reads, replaces a failing source with a same-consent stored copy or conservative default, and persists degraded decisions as non-acceptable preliminary offers. Definitive offer acceptance and asynchronous publication remain under the explicit financial mock mode. Real provider access, dynamic simulated personas and general asynchronous signal refresh remain pending.
 
 ## Anonymous indicative calculator
 
@@ -73,20 +73,20 @@ The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in
 
 `ReadSignal` forwards the initiating trace UUID through the consent check before reaching a provider or stored signal. Its correlation, rejection and fallback rules are described in [Identity's Acquisition guard](../identity-consent-ecosystem/consent.md#guard-in-acquisition). This internal use case does not add a public signal endpoint.
 
-## Definitive synthetic offers
+## Profiled synthetic offers
 
 The existing calculator and saved minimum-data quote remain preliminary. Creating an offer does not change their meaning. The explicit academic offer rule runs only with `FINANCIAL_PROVIDER_MODE=mock`, an environment-specific `FINANCIAL_EVENT_KEY` of exactly 64 lowercase hexadecimal characters, and local/dev/staging. Production and missing configuration fail closed. The simulated sources are external adapters; ownership, current consent, underwriting, persistence, historical capture and idempotency execute in Solventa. These offers do not establish approved actuarial terms or real insurance coverage.
 
 | Route | Web operation and behavior |
 |---|---|
-| `POST /api/v1/quotes/{quoteId}/offers` | `offers:create`: accepts `{}` and an idempotency key. Identity verifies all four current risk-profiling scopes in the same private RPC as web authentication. The owner reads only the user's saved quote and evaluates deterministic mock data. |
+| `POST /api/v1/quotes/{quoteId}/offers` | `offers:create`: accepts `{}` and an idempotency key. Identity verifies all four current risk-profiling scopes in the same private RPC as web authentication. The owner reads only the user's saved quote and evaluates the configured simulated provider through `ReadSignal`. All-live inputs may produce a definitive offer; any substituted source produces a preliminary offer. |
 | `POST /api/v1/offers` | `offers:create-flight`: accepts only `{ "product": "flight_delay", "flightReference": "<synthetic UUID>" }`. This product reads no financial signals and needs no risk-data consent. Its fixed, versioned academic rule supplies premium, payout, threshold and validity. |
 | `GET /api/v1/offers/{offerId}` | `offers:read`: reads an integrity-checked offer owned by the authenticated user. Foreign and absent resources both return 404. |
 | `POST /api/v1/offers/{offerId}/accept` | `offers:accept`: accepts `{}` and an idempotency key. The persisted product determines whether current risk consent is mandatory. A client cannot select another product or operation to bypass mortgage consent. A successful 202 stores acceptance, audit and signed outbox together; delivery and policy creation are asynchronous. |
 
 Writes require the configured same-origin Origin and sealed web cookie, JSON up to 1024 bytes, and an `Idempotency-Key` of 1–128 visible ASCII characters. Caller-selected amounts, owner IDs, approval, coverage and unknown keys are rejected. Public offer responses omit `clientId` and `subjectToken`; errors contain only a canonical code and correlation UUID. Headers are no-store and correlated. Native sessions and partner tokens do not authorize these web-only operations. All paths retain the gateway version gate.
 
-The immutable offer carries its premium, coverage, effective dates, expiry and rule version. Acceptance rechecks integrity, ownership, expiry and applicable consent; it never turns a preliminary quote or a degraded source result into a contract. The publisher validates the signed canonical payload, claims bounded leases, publishes with a stable event ID and marks publication only after Queue confirmation. At-least-once delivery permits duplicate messages; Policy's inbox prevents duplicate owner effects. Exhausted/permanently invalid records remain observable rather than being silently discarded. There is no synchronous Acquisition-to-Policy call on the critical path.
+The immutable offer carries its premium, coverage, effective dates, expiry and rule version. A degraded decision records each source, failure, substitute and confidence and persists the offer as `preliminary`; reads and idempotent replays return it, while both application and SQL acceptance guards refuse it. Acceptance of a definitive offer rechecks integrity, ownership, expiry and applicable consent. The publisher validates the signed canonical payload, claims bounded leases, publishes with a stable event ID and marks publication only after Queue confirmation. At-least-once delivery permits duplicate messages; Policy's inbox prevents duplicate owner effects. Exhausted/permanently invalid records remain observable rather than being silently discarded. There is no synchronous Acquisition-to-Policy call on the critical path.
 
 Definitive offer creation writes its underwriting decision, offer, immutable revision, sealed context, audit, outbox and request ledger in one compound SQL statement using the database's implicit transaction. No separate BEGIN/COMMIT round trips are needed for that single statement; any failed insert rolls back the whole graph. This reduces SQL round trips without changing ownership, provider calls, replay/conflict rules or the durable delivery path. HTTP/event contracts and migrations are unchanged.
 
@@ -104,7 +104,7 @@ After acceptance, resolve the policy through the [Policy flow](../policy-claims-
 
 ## External integrations
 
-The financial offer flow above retains its own `MockRiskSignals` and `MockFlightSchedule` fixtures. `SIGNAL_PROVIDER` does not select or replace those financial fixtures. Its direct/aggregator translators are separate adapters for the internal `ReadSignal` capability and configuration diagnostics. They produce the same fields the offer underwriting reads (`monthlyIncomeCop`, `monthlyObligationsCop`, `score`, `active`, `verified`), and a test feeds that rule with each of them, so either could replace those fixtures by changing only the offer composition; neither `ReadSignal` nor the ACORD translator is mounted on a public route. No adapter here connects to a real signal, payment, signature or oracle provider.
+Mortgage offer profiling uses `SIGNAL_PROVIDER` through `ReadSignal`; flight offers retain the separate `MockFlightSchedule` fixture. The direct/aggregator translators produce the fields underwriting reads (`monthlyIncomeCop`, `monthlyObligationsCop`, `score`, `active`, `verified`). Neither the ACORD translator nor a standalone signal endpoint is public. No adapter here connects to a real signal, payment, signature or oracle provider.
 
 Every external format is translated in an adapter; the domain, use cases and ports only see internal models. Replacing a provider changes an adapter and configuration, never `src/domain` or `src/application`. The shared rule and the integrations that are not implemented yet are in [architecture](../../architecture.md#external-integrations); the schemas and corpus are described in [contracts](../../shared/contracts/README.md#integration-schemas-and-corpus).
 
@@ -119,7 +119,7 @@ Every external format is translated in an adapter; the domain, use cases and por
 
 Both are **simulated**: their source returns fixed synthetic answers for one fictitious person and never reaches a real provider. They exist to keep the core independent of any provider format; a real provider adds a source (HTTP client) and an entry in `src/adapters/outbound/signal-providers.ts`, and the configuration value selects it.
 
-**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. Simulated providers are the intended source in every environment, so the first deployed flow that consumes either of these two adapters, such as profiling, must make both simulated sources dynamic before relying on them. The current synthetic financial flow uses its separate, explicitly versioned fixture adapters instead. Each one then selects a deterministic synthetic persona from the subject token (for example good payer, late payer, no health affiliation, unknown subject, failing source), so the same subject always gets the same answer and different subjects get different profiles and failures. Only the simulated sources change; the translators, the port and the core stay as they are, and the corpus gains a case per persona.
+**Static simulation limit.** The simulated sources are static: every subject receives the same answer, and the failure paths (`not_found`, `unavailable`, `timeout`…) are reached only in tests. They are now consumed by the synthetic mortgage offer flow, so environment verification proves the integration and degradation mechanics, not person-specific risk behavior or real provider access. Dynamic deterministic personas remain future work.
 
 The direct and aggregator adapters produce the same signal for each scope (`SignalData` in `src/adapters/outbound/signal-provider-call.ts`):
 
@@ -143,9 +143,53 @@ The direct and aggregator adapters produce the same signal for each scope (`Sign
 | `not_found` | 404 or a provider state reporting no data for the subject |
 | `invalid_response` | Any other status, or a body that does not match the provider format |
 
-Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` does not use the code: any failure falls back to a stored copy (`degraded`) or `unavailable`, as documented in the consent guide.
+Before rejecting, the adapter logs one line, for example `{"event":"signal_provider_failed","traceId":"…","provider":"aggregator_simulated","scope":"payment_history_score","code":"not_found"}`. The subject token, the provider message and the payload are never logged. `ReadSignal` keeps the code in the degradation it reports; see [signal degradation](#signal-degradation).
 
-**Configuration.** `SIGNAL_PROVIDER` is a variable in `backend/acquisition-risk/wrangler.jsonc`, read only in `src/index.ts`. Every environment, prod included, uses `direct_simulated`, so signal data is synthetic everywhere. `ReadSignal` has no route yet; meanwhile `infraStatus` reports the configured `signalProvider` and is not ready when the value is unknown, so a misconfigured deployment fails its verification. Changing provider is a one-line change of this value.
+**Configuration.** `SIGNAL_PROVIDER` is a variable in `backend/acquisition-risk/wrangler.jsonc`, read in the composition root and diagnostics. Every environment, prod included, uses `direct_simulated`, so signal data is synthetic everywhere. `infraStatus` is not ready and offer creation is disabled when the value is unknown. Changing provider is a one-line configuration change.
+
+### Signal degradation
+
+`ReadSignal` keeps a read useful when an external source fails. A standalone call checks consent first. Offer creation instead receives the one current four-scope authorization already verified by its web boundary, preventing four duplicate Identity calls while preserving the same consent ID/version/expiry. It then reads each provider with a hard limit of 700 ms (`SIGNAL_DEADLINE_MS`, shared with the adapters; the use case repeats the limit so a provider that ignores it cannot hold the read). A successful read is saved for at most two minutes and never beyond consent expiry. When the read fails it replaces the source, in this order:
+
+1. A stored copy, only if it was captured under the same valid consent and its `validUntil` has not passed. Looking it up has its own 700 ms limit: a store that does not answer in time counts as no copy, so the default is never held back.
+2. A conservative default for that scope.
+
+The result is `degraded` and carries `degradation: { scope, failure, substitute, confidence }`. `failure` is the `ProviderFailure` code; any other error counts as `unavailable`. A consent denial never reaches a copy or a default: it stays `denied`. `executeAll` reads the four scopes in parallel, so one failing source does not delay or block the others, and returns the four results with an overall `confidence`.
+
+| Origin of the signal | Confidence |
+|---|---|
+| Live read | 100 |
+| Stored copy | 60 |
+| Default | 0 |
+
+The overall confidence is the rounded average of the four levels, and a denied source counts as 0. If Datacrédito fails and there is no copy, the other three stay live and the overall confidence is 75; with a valid copy it is 90.
+
+A default never favors the customer. Each one makes the mortgage underwriting rule reject, and a test replaces every live source by its default to prove it:
+
+| Scope | Default `data` | Why the rule rejects it |
+|---|---|---|
+| `income_obligations_12m` | `monthlyIncomeCop` 1, `monthlyObligationsCop` 1 | Obligations are 100 % of income, over the 50 % limit |
+| `payment_history_score` | `score` 0, `latePayments12m` 12 | Score under 600 |
+| `affiliation_regime` | `regime` `contributory`, `active` false | Not an active affiliation (`regime` is mandatory in the shape and means nothing when `active` is false) |
+| `identity_validation` | `verified` false | Identity not verified |
+
+The values, the confidence levels and the order above are versioned as `degradation-1` (`DEGRADATION_VERSION`). Every substitution writes one line that names the version and carries no subject token, provider message or payload:
+
+```json
+{"event":"signal_degraded","traceId":"…","rule":"degradation-1","scope":"payment_history_score","failure":"timeout","substitute":"default","confidence":0}
+```
+
+`SqlSignalSnapshots` stores successful reads append-only in `risk_profiles`. Migration `0011_risk_profile_consent_reference.sql` preserves legacy UUID consent IDs and adds the public `CNS-*` reference used by Identity. A snapshot is eligible only under that exact consent and before its validity ends. Storage is a cache: the Worker keeps its bounded write alive in `waitUntil`, outside the response critical path, and a failed snapshot write does not discard a live provider answer.
+
+Mortgage offer creation consumes `executeAllAuthorized`. Any degraded source makes the decision and persisted offer `preliminary`, with `degraded: true`, normalized failure, substitute and confidence in the immutable capture. Preliminary offers can be read and replayed but cannot emit `offer.accepted` or reach Policy. All-live sources retain the existing definitive/declined business rule.
+
+The grouped creation statement preserves the decision outcome, offer status and created-event status together with its revision, sealed context, audit and idempotency ledger. Acceptance uses the fresh owner snapshot and rejects preliminary terms before any acceptance write. The composition root retains both bounded background snapshot persistence and targeted publication after a committed definitive acceptance.
+
+Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
+
+**Limits.**
+- The 400 ms p95 / 800 ms p99 profile-and-price objective requires measurement through the deployed web, Identity, provider and SQL path; unit tests establish parallel reads and the 700 ms per-dependency ceiling, not the percentile objective.
+- The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
 
 ### ACORD Life inspired quote messages
 

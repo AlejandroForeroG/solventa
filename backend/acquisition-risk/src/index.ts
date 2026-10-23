@@ -39,7 +39,7 @@ export default class extends WorkerEntrypoint<Env> {
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
-    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       // The same leased publisher as the cron runs after the response; the minute cron remains the recovery path.
       acceptanceCommitted: eventId => this.ctx.waitUntil(publishAcceptedOffers(this.env, this.ctx, 'acceptance', eventId).catch(() => {

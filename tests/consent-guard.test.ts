@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { IdentityConsentGuard } from '../backend/acquisition-risk/src/adapters/outbound/identity-consent-guard';
 import type { IdentityConsentRpc } from '../backend/acquisition-risk/src/adapters/outbound/identity-consent-guard';
 import { ReadSignal } from '../backend/acquisition-risk/src/application/read-signal';
-import type { SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
+import type { ConsentGuard } from '../backend/acquisition-risk/src/application/ports/consent-guard';
+import type { SignalDegradation, SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import type { Signal, SignalScope } from '../backend/acquisition-risk/src/domain/signal';
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
@@ -27,6 +28,7 @@ class CountingSnapshots implements SignalSnapshots {
   reads = 0;
   copy: SignalSnapshot | null = null;
   async find() { this.reads++; return this.copy; }
+  async save() {}
 }
 
 // Identity's real consent rules behind the same Service Binding contract the Worker exposes.
@@ -44,10 +46,13 @@ function rig(identity?: IdentityConsentRpc) {
   const rpc: IdentityConsentRpc = identity ?? { verifyConsentV1: async request => { rpcCalls.push(request); return consents.verify(request as ConsentCheck); } };
   const provider = new CountingProvider();
   const snapshots = new CountingSnapshots();
-  const read = new ReadSignal({ guard: new IdentityConsentGuard(rpc, 50, time.now), provider, snapshots });
+  const degradations: SignalDegradation[] = [];
+  const readWith = (guard: ConsentGuard) => new ReadSignal({ guard, provider, snapshots, clock: time,
+    timer: { after: () => new Promise<void>(() => {}) }, trace: { record: (_traceId, degradation) => degradations.push(degradation) } });
+  const read = readWith(new IdentityConsentGuard(rpc, 50, time.now));
   const ask = (subjectToken = ANA.subjectToken, scope: SignalScope = 'income_obligations_12m') => read.execute({ subjectToken, scope, traceId: TRACE });
   const grant = (principal = ANA, key = 'key-1') => consents.grant({ principal, idempotencyKey: key, body: { textVersion: 2, locale: 'es-CO' }, traceId: TRACE });
-  return { store, time, consents, provider, snapshots, rpcCalls, ask, grant, securityEvents,
+  return { store, time, consents, provider, snapshots, degradations, rpcCalls, readWith, ask, grant, securityEvents,
     failSecurity: () => { securityFailing = true; } };
 }
 const untouched = (r: ReturnType<typeof rig>) => assert.deepEqual({ provider: r.provider.calls, copies: r.snapshots.reads }, { provider: 0, copies: 0 });
@@ -83,8 +88,7 @@ test('an allowed RPC reply must still be unexpired when Acquisition receives it'
       current = new Date(receivedAt);
       return { allowed: true, consent: { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt } };
     } }, 50, () => current);
-    const read = new ReadSignal({ guard, provider: r.provider, snapshots: r.snapshots });
-    const result = await read.execute({ subjectToken: ANA.subjectToken, scope: 'income_obligations_12m', traceId: TRACE });
+    const result = await r.readWith(guard).execute({ subjectToken: ANA.subjectToken, scope: 'income_obligations_12m', traceId: TRACE });
     assert.equal(checks, 1, 'checking response freshness adds no remote call');
     if (Date.parse(receivedAt) < Date.parse(expiresAt)) {
       assert.equal(result.status, 'available');
@@ -233,18 +237,22 @@ test('a stored copy is used only when the provider fails and only if it was capt
   assert.ok(granted.status === 'created');
   if (granted.status !== 'created') return;
   const signal: Signal = { scope: 'income_obligations_12m', capturedAt: '2026-10-01T12:00:00Z', data: { cached: true } };
+  const validUntil = '2026-11-01T12:00:00Z';
   r.provider.failing = true;
 
-  r.snapshots.copy = { consentId: granted.consent.consentId, signal };
-  assert.deepEqual(await r.ask(), { status: 'degraded', signal, consentId: granted.consent.consentId });
+  r.snapshots.copy = { consentId: granted.consent.consentId, validUntil, signal };
+  assert.deepEqual(await r.ask(), { status: 'degraded', signal, consentId: granted.consent.consentId,
+    degradation: { scope: 'income_obligations_12m', failure: 'unavailable', substitute: 'stored_copy', confidence: 60 } });
 
-  r.snapshots.copy = { consentId: 'CNS-2026-99999', signal };
-  assert.deepEqual(await r.ask(), { status: 'unavailable', consentId: granted.consent.consentId });
+  r.snapshots.copy = { consentId: 'CNS-2026-99999', validUntil, signal };
+  const other = await r.ask();
+  assert.ok(other.status === 'degraded' && other.degradation.substitute === 'default', 'a copy of another consent is never used');
 
   r.snapshots.copy = null;
-  assert.equal((await r.ask()).status, 'unavailable');
+  const none = await r.ask();
+  assert.ok(none.status === 'degraded' && none.degradation.substitute === 'default');
 
-  r.snapshots.copy = { consentId: granted.consent.consentId, signal };
+  r.snapshots.copy = { consentId: granted.consent.consentId, validUntil, signal };
   await r.consents.revoke({ principal: ANA, consentCode: granted.consent.consentId, traceId: TRACE });
   const reads = r.snapshots.reads;
   assert.deepEqual(await r.ask(), { status: 'denied', reason: 'consent_revoked' });

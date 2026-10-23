@@ -16,7 +16,7 @@ paths:
   /quotes/{quoteId}/offers:
     post:
       operationId: createMortgageOffer
-      summary: Create a definitive mortgage offer
+      summary: Create a profiled mortgage offer
       tags:
         - Offers
       security:
@@ -65,7 +65,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Offer"
         "201":
-          description: Definitive offer created.
+          description: Profiled offer created; status is preliminary when any signal was substituted.
           headers:
             X-Trace-Id:
               schema:
@@ -96,8 +96,10 @@ paths:
           $ref: "#/components/responses/Unavailable"
       description: Requires current risk_profiling consent covering all four
         configured sources. Uses only the authenticated user's stored quote and
-        deterministic mock signals; a preliminary quote is never accepted as a
-        contract. Returns a versioned immutable synthetic offer.
+        configured simulated signal provider through the degradation policy.
+        A failed source is replaced by a same-consent stored copy or a conservative
+        default, and the resulting offer is preliminary and cannot be accepted.
+        Returns a versioned immutable synthetic offer.
   /offers:
     post:
       operationId: createFlightOffer
@@ -176,7 +178,7 @@ paths:
   /offers/{offerId}:
     get:
       operationId: getOwnOffer
-      summary: Read an owned definitive offer
+      summary: Read an owned profiled offer
       tags:
         - Offers
       security:
@@ -434,6 +436,7 @@ components:
         status:
           type: string
           enum:
+            - preliminary
             - definitive
         traceId:
           type: string
@@ -587,8 +590,8 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Unavailable:
-      description: Identity, storage or mock provider unavailable; no partial success
-        is declared.
+      description: Identity or required storage unavailable, or invalid provider data;
+        provider outages with a valid substitute return a preliminary offer instead.
       headers:
         X-Trace-Id:
           schema:

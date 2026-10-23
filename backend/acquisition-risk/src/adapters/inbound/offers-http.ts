@@ -38,6 +38,7 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
   app.all('/api/v1/offers/:offerId/accept', handler('offers:accept'));
   function handler(operation: 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept') {
     return async (c: Context<{ Bindings: AcquisitionEnv }>) => {
+      const startedAt = performance.now();
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: Record<string, unknown>, status: 200 | 201 | 202 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
@@ -88,6 +89,9 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         if (operation === 'offers:create') {
           if (!authorization) return reply({ error: 'access_unavailable' }, 503);
           const result = await deps.offers.create({ actor, quoteId, authorization, idempotencyKey, traceId });
+          console.log(JSON.stringify({ event: 'mortgage_offer_profiled', traceId, result: result.status,
+            offerStatus: result.status === 'created' || result.status === 'replayed' ? result.offer.status : null,
+            latencyMs: Math.round((performance.now() - startedAt) * 10) / 10 }));
           return result.status === 'created' || result.status === 'replayed' ? reply(publicOffer(result.offer), result.status === 'created' ? 201 : 200) : failure(result.status);
         }
         const result = await deps.offers.accept({ actor, offerId, authorization, idempotencyKey, traceId });

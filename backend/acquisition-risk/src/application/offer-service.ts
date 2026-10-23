@@ -1,14 +1,15 @@
-import { offerRequestIdentity, offerTerms, underwrite, type OfferActor, type OfferAuthorization } from '../domain/offer';
-import { SIGNAL_SCOPES } from '../domain/signal';
+import { offerRequestIdentity, offerTerms, underwrite, type OfferActor, type OfferAuthorization, type OfferSignalSource } from '../domain/offer';
+import { CONFIDENCE, SIGNAL_FRESHNESS_MS, SIGNAL_SCOPES } from '../domain/signal';
 import type { Clock } from './ports/platform';
 import type { FlightSchedule, OfferCreationSnapshot, OfferIntegrity, OfferStore, StoredOffer, OfferRequestResult } from './ports/offer-store';
-import type { SignalProvider } from './ports/signal-sources';
+import type { SignalResult } from './read-signal';
 
 type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization };
+type OfferSignalReader = { executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: { allowed: true } & OfferAuthorization }): Promise<{ results: SignalResult[]; confidence: number }> };
 const validKey = (key: string) => typeof key === 'string' && key.length > 0 && key.length <= 128;
 
 export class OfferService {
-  constructor(private readonly deps: { store: OfferStore; provider: SignalProvider; flights: FlightSchedule; integrity: OfferIntegrity; clock: Clock; environment: string; enabled: boolean }) {}
+  constructor(private readonly deps: { store: OfferStore; signals: OfferSignalReader; flights: FlightSchedule; integrity: OfferIntegrity; clock: Clock; environment: string; enabled: boolean }) {}
   private authorized(input: Command): boolean {
     return this.deps.enabled && input.authorization.textVersion > 0 && !!input.authorization.consentId
       && Date.parse(input.authorization.expiresAt) > this.deps.clock.now().getTime();
@@ -16,7 +17,7 @@ export class OfferService {
   private async valid(offer: StoredOffer, actor: OfferActor): Promise<boolean> {
     try {
       return offer.terms.clientId === actor.clientId && offer.terms.subjectToken === actor.subjectToken
-        && offer.terms.status === 'definitive' && offer.terms.synthetic === true && await this.deps.integrity.verify(offer.terms, offer.seal, offer);
+        && offer.terms.synthetic === true && await this.deps.integrity.verify(offer.terms, offer.seal, offer);
     } catch { return false; }
   }
   private async outcome(result: OfferRequestResult, actor: OfferActor, identity: string) {
@@ -50,22 +51,31 @@ export class OfferService {
     if (!quote) return { status: 'not_found' as const };
     const now = this.deps.clock.now();
     if (Date.parse(quote.validUntil) <= now.getTime()) return { status: 'expired' as const };
-    let signals;
-    try { signals = await Promise.all(SIGNAL_SCOPES.map(scope => this.deps.provider.read(input.actor.subjectToken, scope, input.traceId))); }
+    let observed;
+    try { observed = await this.deps.signals.executeAllAuthorized({ subjectToken: input.actor.subjectToken, traceId: input.traceId, consent: { allowed: true, ...input.authorization } }); }
     catch { return { status: 'unavailable' as const }; }
+    if (observed.results.some(result => result.status === 'denied')) return { status: 'denied' as const };
+    const readable = observed.results.filter((result): result is Exclude<SignalResult, { status: 'denied' }> => result.status !== 'denied');
+    const signals = readable.map(result => result.signal);
     if (!this.authorized(input)) return { status: 'denied' as const };
     const observedAt = this.deps.clock.now().getTime();
     if (Date.parse(quote.validUntil) <= observedAt) return { status: 'expired' as const };
-    if (signals.some((s, i) => s.scope !== SIGNAL_SCOPES[i] || Date.parse(s.capturedAt) > observedAt || observedAt - Date.parse(s.capturedAt) > 120000 || !Number.isFinite(Date.parse(s.capturedAt)))) return { status: 'unavailable' as const };
-    const decision = underwrite(quote, signals, input.authorization, input.traceId);
+    if (signals.length !== SIGNAL_SCOPES.length || signals.some((s, index) => s.scope !== SIGNAL_SCOPES[index]
+      || Date.parse(s.capturedAt) > observedAt || observedAt - Date.parse(s.capturedAt) > SIGNAL_FRESHNESS_MS || !Number.isFinite(Date.parse(s.capturedAt)))) return { status: 'unavailable' as const };
+    const provenance: OfferSignalSource[] = readable.map(result => result.status === 'available'
+      ? { scope: result.signal.scope, quality: 'live', degraded: false, confidence: CONFIDENCE.live }
+      : { scope: result.signal.scope, quality: result.degradation.substitute, degraded: true, confidence: result.degradation.confidence,
+        failure: result.degradation.failure, substitute: result.degradation.substitute });
+    const decision = underwrite(quote, signals, input.authorization, input.traceId, provenance);
     if (!decision) return { status: 'unavailable' as const };
-    if (!decision.accepted) {
+    if (!decision.accepted && !decision.preliminary) {
       const result = await this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture: decision.capture, traceId: input.traceId });
       return this.outcome(result, input.actor, requestIdentity);
     }
     // A slow or unavailable provider cannot stretch a previously verified authorization window.
     if (!this.authorized(input)) return { status: 'denied' as const };
-    const terms = offerTerms(quote, input.actor, this.deps.integrity.id(), decision.premium, this.deps.clock.now(), input.authorization.expiresAt);
+    const terms = offerTerms(quote, input.actor, this.deps.integrity.id(), decision.premium, this.deps.clock.now(), input.authorization.expiresAt,
+      decision.preliminary ? 'preliminary' : 'definitive');
     const consent = { consentId: input.authorization.consentId, consentVersion: input.authorization.textVersion };
     const offer: StoredOffer = { terms, seal: await this.deps.integrity.seal(terms, consent), ...consent };
     const result = await this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture: decision.capture, traceId: input.traceId });
@@ -111,6 +121,7 @@ export class OfferService {
     if (offer.terms.product === 'vida_hipotecario' && (!input.authorization || !this.authorized({ ...input, authorization: input.authorization })
       || input.authorization.consentId !== offer.consentId || input.authorization.textVersion !== offer.consentVersion)) return { status: 'denied' as const };
     if (!await this.valid(offer, input.actor)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'integrity_invalid'); return { status: 'integrity_invalid' as const }; }
+    if (offer.terms.status !== 'definitive') return { status: 'conflict' as const };
     if (previous) return previous.offerId === input.offerId ? { status: 'replayed' as const, acceptance: previous } : { status: 'conflict' as const };
     const now = this.deps.clock.now().toISOString();
     if (Date.parse(offer.terms.expiresAt) <= Date.parse(now)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'expired'); return { status: 'expired' as const }; }
