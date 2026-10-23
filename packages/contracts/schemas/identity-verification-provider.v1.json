@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "identity-verification-provider.v1",
+  "title": "Synthetic KYC provider result v1",
+  "description": "Synthetic provider protocol only. It carries no documents, personal identifiers or biometric data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "evaluationId",
+    "providerReference",
+    "simulated",
+    "completedAt",
+    "checks",
+    "screening"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "synthetic-kyc.v1"
+    },
+    "evaluationId": {
+      "$ref": "#/definitions/uuid"
+    },
+    "providerReference": {
+      "$ref": "#/definitions/uuid"
+    },
+    "simulated": {
+      "const": true
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "selfie",
+        "liveness"
+      ],
+      "properties": {
+        "document": {
+          "$ref": "#/definitions/check"
+        },
+        "selfie": {
+          "$ref": "#/definitions/check"
+        },
+        "liveness": {
+          "$ref": "#/definitions/check"
+        }
+      }
+    },
+    "screening": {
+      "enum": [
+        "clear",
+        "match",
+        "review"
+      ]
+    }
+  },
+  "definitions": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "check": {
+      "enum": [
+        "pass",
+        "fail",
+        "review"
+      ]
+    }
+  }
+}

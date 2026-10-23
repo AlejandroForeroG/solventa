@@ -54,3 +54,10 @@ export function useAuthentication() {
   return { ...snapshot, signIn: authentication.signIn, signOut: authentication.signOut, retry: authentication.retry,
     cancel: authentication.cancel, enableBiometrics: authentication.enableBiometrics, unlock: authentication.unlock, revokeDevice: authentication.revokeDevice };
 }
+
+// An adapter/composition port, separate from the UI-safe authentication snapshot.
+export function useAuthenticatedSession() {
+  const authentication = useContext(Context);
+  if (!authentication) throw new Error('AuthenticationProvider is required');
+  return { execute: authentication.withSession, baseUrl: authentication.getApiBaseUrl() };
+}

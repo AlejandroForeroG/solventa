@@ -54,6 +54,7 @@ jobs:
       - run: npm run infra:up
       - run: npm run test:schema
       - run: npm run test:authentication:sql
+      - run: npm run test:identity-verification:sql
       - run: npm run test:partner-access:sql
       - run: npm run test:quotes:sql
       - run: npm run test:consents:sql
