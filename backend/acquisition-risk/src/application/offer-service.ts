@@ -1,7 +1,7 @@
 import { offerRequestIdentity, offerTerms, underwrite, type OfferActor, type OfferAuthorization, type OfferSignalSource } from '../domain/offer';
 import { CONFIDENCE, SIGNAL_FRESHNESS_MS, SIGNAL_SCOPES } from '../domain/signal';
 import type { Clock } from './ports/platform';
-import type { FlightSchedule, OfferIntegrity, OfferStore, StoredOffer, OfferRequestResult } from './ports/offer-store';
+import type { FlightSchedule, OfferCreationSnapshot, OfferIntegrity, OfferStore, StoredOffer, OfferRequestResult } from './ports/offer-store';
 import type { SignalResult } from './read-signal';
 
 type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization };
@@ -29,11 +29,10 @@ export class OfferService {
     if (!source || offerRequestIdentity(request.offer.terms.product, source) !== identity) return { status: 'conflict' as const };
     return { status: result.created ? 'created' as const : 'replayed' as const, offer: request.offer.terms };
   }
-  private async previous(actor: OfferActor, key: string, identity: string) {
-    const recorded = await this.deps.store.request(actor, key);
-    if (recorded) return this.outcome({ created: false, request: recorded }, actor, identity);
+  private async previous(snapshot: OfferCreationSnapshot, actor: OfferActor, identity: string) {
+    if (snapshot.request) return this.outcome({ created: false, request: snapshot.request }, actor, identity);
     // Compatibility: offers created before the outcome ledger keep their original idempotency key.
-    const old = await this.deps.store.byKey(actor, key);
+    const old = snapshot.legacy;
     if (!old) return null;
     if (!await this.valid(old, actor)) return { status: 'conflict' as const };
     const reference = old.terms.coverage.kind === 'flight_delay' ? old.terms.coverage.flightReference : old.terms.quoteId;
@@ -45,9 +44,10 @@ export class OfferService {
     if (!this.authorized(input)) return { status: 'denied' as const };
     if (!validKey(input.idempotencyKey)) return { status: 'invalid' as const };
     const requestIdentity = offerRequestIdentity('vida_hipotecario', input.quoteId);
-    const previous = await this.previous(input.actor, input.idempotencyKey, requestIdentity);
+    const snapshot = await this.deps.store.creationSnapshot(input.actor, input.idempotencyKey, input.quoteId);
+    const previous = await this.previous(snapshot, input.actor, requestIdentity);
     if (previous) return previous;
-    const quote = await this.deps.store.quote(input.actor, input.quoteId);
+    const quote = snapshot.quote;
     if (!quote) return { status: 'not_found' as const };
     const now = this.deps.clock.now();
     if (Date.parse(quote.validUntil) <= now.getTime()) return { status: 'expired' as const };
@@ -85,7 +85,7 @@ export class OfferService {
     if (!this.deps.enabled) return { status: 'unavailable' as const };
     if (!validKey(input.idempotencyKey) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input.flightReference)) return { status: 'invalid' as const };
     const requestIdentity = offerRequestIdentity('flight_delay', input.flightReference);
-    const previous = await this.previous(input.actor, input.idempotencyKey, requestIdentity);
+    const previous = await this.previous(await this.deps.store.creationSnapshot(input.actor, input.idempotencyKey, null), input.actor, requestIdentity);
     if (previous) return previous;
     let schedule;
     try { schedule = await this.deps.flights.read(input.flightReference); } catch { return { status: 'unavailable' as const }; }
@@ -116,13 +116,12 @@ export class OfferService {
   async accept(input: Omit<Command, 'authorization'> & { authorization?: OfferAuthorization; offerId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };
     if (!validKey(input.idempotencyKey)) return { status: 'invalid' as const };
-    const offer = await this.deps.store.get(input.actor, input.offerId);
+    const { offer, acceptance: previous } = await this.deps.store.acceptanceSnapshot(input.actor, input.offerId, input.idempotencyKey);
     if (!offer) return { status: 'not_found' as const };
     if (offer.terms.product === 'vida_hipotecario' && (!input.authorization || !this.authorized({ ...input, authorization: input.authorization })
       || input.authorization.consentId !== offer.consentId || input.authorization.textVersion !== offer.consentVersion)) return { status: 'denied' as const };
     if (!await this.valid(offer, input.actor)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'integrity_invalid'); return { status: 'integrity_invalid' as const }; }
     if (offer.terms.status !== 'definitive') return { status: 'conflict' as const };
-    const previous = await this.deps.store.acceptance(input.actor, input.idempotencyKey);
     if (previous) return previous.offerId === input.offerId ? { status: 'replayed' as const, acceptance: previous } : { status: 'conflict' as const };
     const now = this.deps.clock.now().toISOString();
     if (Date.parse(offer.terms.expiresAt) <= Date.parse(now)) { await this.deps.store.reject(input.actor, input.offerId, input.traceId, 'expired'); return { status: 'expired' as const }; }

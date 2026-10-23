@@ -24,7 +24,7 @@ export type PolicyView = { policyId: string; offerId: string; offerVersion: numb
   document: string; documentHash: string; synthetic: true; providerMode: 'mock' };
 export type FinancialErrorCode = 'invalid_request' | 'invalid_event' | 'event_conflict' | 'offer_invalid'
   | 'forbidden' | 'not_found' | 'idempotency_conflict' | 'document_mismatch' | 'integrity_violation'
-  | 'policy_not_active' | 'event_not_covered' | 'signature_failed' | 'payment_declined';
+  | 'policy_not_active' | 'event_not_covered' | 'signature_failed' | 'payment_declined' | 'policy_pending';
 export type FinancialResult = { status: 'ok'; replayed: boolean; policy: PolicyView }
   | { status: 'denied'; error: FinancialErrorCode; httpStatus: 400 | 403 | 404 | 409; traceId: string }
   | { status: 'unavailable'; error: 'financial_unavailable'; httpStatus: 503; traceId: string };

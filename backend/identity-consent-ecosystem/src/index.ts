@@ -136,7 +136,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
   }
   async authorizeFinancialAccessV1(request: unknown) {
     const decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input),
-      verifyConsent: input => consentsFor(this.env, false).verify(input), security: securityFor(this.env) }, request);
+      verifyConsents: input => consentsFor(this.env, false).verifyScopes(input), security: securityFor(this.env) }, request);
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return decision;
   }
