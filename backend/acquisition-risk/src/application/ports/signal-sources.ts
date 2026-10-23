@@ -24,6 +24,7 @@ export type SignalSnapshotWrite = SignalSnapshot & { subjectToken: string; conse
 export interface SignalSnapshots {
   find(subjectToken: string, scope: SignalScope, consentId: string): Promise<SignalSnapshot | null>;
   save(snapshot: SignalSnapshotWrite): Promise<void>;
+  saveAll?(snapshots: readonly SignalSnapshotWrite[]): Promise<void>;
 }
 
 // What the trace records when a source is replaced: which one failed, why, what replaced it and how far to trust it.
