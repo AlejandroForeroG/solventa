@@ -55,7 +55,7 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
-| `openapi/v1/offers.yaml` | Owned definitive synthetic offers, explicit current risk consent for mortgage creation/acceptance, and asynchronous acceptance |
+| `openapi/v1/offers.yaml` | Owned profiled synthetic offers, preliminary status on degraded signals, explicit current risk consent, and asynchronous acceptance of definitive offers |
 | `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
 | `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
@@ -165,7 +165,7 @@ External formats are boundary contracts too. Each one has a versioned schema or 
 
 The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
 
-The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Their external payment, signature and oracle protocols are explicit mocks; their owner SQL, event authentication and recovery checks do not establish a real provider integration. Neither a `ReadSignal` route nor an ACORD endpoint is enabled by publishing a schema or corpus.
+The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Mortgage offer composition consumes those translators through `ReadSignal`, but no standalone signal route or ACORD endpoint is public. External payment, signature, signal and oracle protocols remain explicit simulations; owner SQL, event authentication and recovery checks do not establish a real provider integration.
 
 To change an integration contract:
 

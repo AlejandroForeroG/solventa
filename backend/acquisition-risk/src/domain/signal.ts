@@ -16,6 +16,9 @@ export type SignalSubstitute = 'stored_copy' | 'default';
 // Percentage of trust in a signal by origin. A default never came from the person, so it carries none.
 export const CONFIDENCE = { live: 100, stored_copy: 60, default: 0 } as const;
 
+// A signal older than this cannot support a new offer or be reused as a stored copy.
+export const SIGNAL_FRESHNESS_MS = 2 * 60 * 1000;
+
 // Stand-ins for a source that did not answer. None can favor the customer: the mortgage underwriting rule
 // rejects every one of them (unverified identity, no affiliation, score under 600, debt over 50 % of income).
 export const DEFAULT_SIGNAL_DATA = {

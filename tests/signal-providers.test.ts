@@ -98,7 +98,7 @@ test('SIGNAL_PROVIDER selects a provider, and only a known name does', () => {
 
 test('ReadSignal behaves the same whichever provider the configuration selects', async () => {
   const guard: ConsentGuard = { verify: async () => ({ allowed: true, consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-06T15:00:00Z' }) };
-  const snapshots: SignalSnapshots = { find: async () => null };
+  const snapshots: SignalSnapshots = { find: async () => null, save: async () => {} };
   const results = [];
   for (const name of ['direct_simulated', 'aggregator_simulated']) {
     const provider = signalProviderFor(name, clock);
@@ -146,6 +146,7 @@ test('both simulated adapters produce the signal fields the offer underwriting r
     if (decision?.accepted) premiums.push(decision.premium);
   }
   assert.equal(premiums[1], premiums[0]);
+  assert.deepEqual(premiums, ['77760.0000', '77760.0000'], 'switching the configured adapter preserves the established synthetic offer');
 });
 
 type Body = Record<string, any>;

@@ -62,16 +62,16 @@ export class SqlOfferStore implements OfferStore {
       await c.query('BEGIN');
       try {
         const decision = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1','accepted',$3,$3,$4) RETURNING id`, [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId]);
+          VALUES ($1,$2,'v1',$3,$4,$4,$5) RETURNING id`, [input.quote?.id ?? null, t.ruleVersion, t.status === 'preliminary' ? 'preliminary' : 'accepted', JSON.stringify(input.capture), input.traceId]);
         await c.query(`INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
-          VALUES ($1,1,$2,$3,'COP',$4,'definitive',$5,$6)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.effectiveFrom, t.expiresAt]);
+          VALUES ($1,1,$2,$3,'COP',$4,$5,$6,$7)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.status, t.effectiveFrom, t.expiresAt]);
         await c.query(`INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
           VALUES ($1,1,$2,$3,'COP',$4,$5,$6)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.effectiveFrom, t.expiresAt]);
         await c.query(`INSERT INTO acquisition.offer_contexts (offer_id,quote_id,client_id,subject_token,idempotency_key,source_reference,terms,terms_seal,consent_reference,consent_version)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [t.offerId, input.quote?.id ?? null, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference, JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion]);
         await this.audit(c, input.actor.clientId, 'offer.create', t.offerId, 'success', input.traceId);
         await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-          VALUES (gen_random_uuid(),'offer',$1,'offer.created',1,$2,$3)`, [t.offerId, JSON.stringify({ offerId: t.offerId, synthetic: true }), input.traceId]);
+          VALUES (gen_random_uuid(),'offer',$1,'offer.created',1,$2,$3)`, [t.offerId, JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), input.traceId]);
         await c.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
           VALUES ($1,$2,$3,$4,'accepted',$5,$6)`, [input.actor.clientId, input.actor.subjectToken, input.key, input.requestIdentity, decision.rows[0].id, t.offerId]);
         await c.query('COMMIT');

@@ -32,9 +32,11 @@ class ManualTimer {
 }
 class Snapshots implements SignalSnapshots {
   reads = 0;
+  writes: SignalSnapshot[] = [];
   copy: SignalSnapshot | null = null;
   failing = false;
   async find() { this.reads++; if (this.failing) throw new Error('copy_store_down'); return this.copy; }
+  async save(snapshot: Parameters<SignalSnapshots['save']>[0]) { this.writes.push(snapshot); }
 }
 
 function rig(allowed = true) {
@@ -50,7 +52,7 @@ function rig(allowed = true) {
 }
 const ask = (r: ReturnType<typeof rig>, scope: SignalScope = 'payment_history_score') => r.read.execute({ subjectToken: SUBJECT, scope, traceId: TRACE });
 const copyOf = (scope: SignalScope, validUntil: string, consentId = CONSENT): SignalSnapshot =>
-  ({ consentId, validUntil, signal: { scope, capturedAt: '2026-10-10T10:00:00.000Z', data: { score: 700, latePayments12m: 1 } } });
+  ({ consentId, validUntil, signal: { scope, capturedAt: new Date(NOW.getTime() - 60000).toISOString(), data: { score: 700, latePayments12m: 1 } } });
 
 test('a default never favors the customer: replacing any single live source by its default turns an acceptance into a rejection', async () => {
   const quote = { id: 'q', quoteId: 'Q-1', amount: 100000000, termMonths: 120, ageYears: 40, validUntil: '2026-11-19T00:00:00.000Z' };
@@ -85,6 +87,8 @@ test('a source that answers is not degraded and leaves no trace', async () => {
   const result = await ask(r);
   assert.equal(result.status, 'available');
   assert.deepEqual(r.degradations, []);
+  assert.equal(r.snapshots.writes.length, 1);
+  assert.equal(r.snapshots.writes[0].consentId, CONSENT);
 });
 
 test('a provider that never answers is replaced when the 700 ms limit expires', async () => {
@@ -172,6 +176,38 @@ test('one failing source is replaced and traced while the other three stay live'
 
   r.snapshots.copy = copyOf('payment_history_score', '2026-11-01T00:00:00.000Z');
   assert.equal((await r.read.executeAll({ subjectToken: SUBJECT, traceId: TRACE })).confidence, 90);
+});
+
+test('a stored copy expiring during parallel reads is replaced by the conservative default', async () => {
+  let now = new Date(NOW);
+  let releaseSlow!: () => void;
+  const slow = new Promise<void>(resolve => { releaseSlow = resolve; });
+  const provider = new ScriptedProvider();
+  provider.behavior = async scope => {
+    if (scope === 'payment_history_score') throw new ProviderFailure('unavailable');
+    if (scope === 'affiliation_regime') { await slow; now = new Date(NOW.getTime() + 200); }
+    return live!.read(SUBJECT, scope, TRACE);
+  };
+  const snapshots = new Snapshots();
+  snapshots.copy = {
+    consentId: CONSENT,
+    validUntil: new Date(NOW.getTime() + 100).toISOString(),
+    signal: { scope: 'payment_history_score', capturedAt: new Date(NOW.getTime() - 119900).toISOString(), data: { score: 700, latePayments12m: 1 } }
+  };
+  const degradations: SignalDegradation[] = [];
+  const read = new ReadSignal({ guard: { verify: async () => ({ allowed: false, reason: 'unavailable' }) }, provider, snapshots,
+    clock: { now: () => now }, timer: new ManualTimer(), trace: { record: (_traceId, degradation) => degradations.push(degradation) } });
+  const pending = read.executeAllAuthorized({ subjectToken: SUBJECT, traceId: TRACE,
+    consent: { allowed: true, consentId: CONSENT, textVersion: 2, expiresAt: '2027-01-01T00:00:00Z' } });
+  await flush();
+  releaseSlow();
+  const all = await pending;
+  const result = all.results.find(item => item.status !== 'denied' && item.signal.scope === 'payment_history_score');
+  assert.ok(result?.status === 'degraded');
+  assert.deepEqual(result.degradation, { scope: 'payment_history_score', failure: 'unavailable', substitute: 'default', confidence: 0 });
+  assert.deepEqual(result.signal, defaultSignal('payment_history_score', now));
+  assert.equal(all.confidence, 75);
+  assert.deepEqual(degradations, [result.degradation], 'only the final conservative provenance is traced');
 });
 
 test('all four sources failing still answers, fully replaced and with no confidence', async () => {
