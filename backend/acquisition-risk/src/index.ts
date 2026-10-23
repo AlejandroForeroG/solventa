@@ -12,8 +12,26 @@ import { FinancialOutboxPublisher } from './adapters/outbound/financial-outbox-p
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
 import { signalProviderFor } from './adapters/outbound/signal-providers';
 
+type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string };
+
+// Module scope keeps the publisher off the Service Binding RPC surface of the entrypoint class.
+async function publishAcceptedOffers(env: Env, ctx: ExecutionContext, trigger: 'acceptance' | 'schedule', eventId?: string): Promise<void> {
+  if (!['local', 'dev', 'staging'].includes(env.APP_ENV) || env.FINANCIAL_PROVIDER_MODE !== 'mock') return;
+  const key = env.FINANCIAL_EVENT_KEY;
+  const queue = env.FINANCIAL_EVENTS;
+  if (!queue || typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('financial_publisher_configuration_invalid');
+  const result = await new FinancialOutboxPublisher({ connectionString: env.ACQUISITION_DB.connectionString, environment: env.APP_ENV,
+    integrity: new HmacOfferIntegrity(key), queue: { send: async event => {
+      const delivery = queue.send(event, { contentType: 'json' });
+      // A deadline ends this publishing attempt; it cannot cancel a Queue write already in flight.
+      ctx.waitUntil(delivery.then(() => {}, () => {}));
+      await delivery;
+    } } }).publish(eventId);
+  console.log(JSON.stringify({ event: 'financial_outbox_publication', environment: env.APP_ENV, trigger, ...result }));
+}
+
 // Composition root: platform wiring and operational probes stay outside the core.
-export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string }> {
+export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const quotes = new CreateQuote({
       access: new IdentityApiAccess(this.env.IDENTITY_SERVICE),
@@ -22,21 +40,14 @@ export default class extends WorkerEntrypoint<AcquisitionEnv & { QUOTE_HMAC_KEY?
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
     return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
-      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input) } }).fetch(request, this.env, this.ctx);
+      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
+      // The same leased publisher as the cron runs after the response; the minute cron remains the recovery path.
+      acceptanceCommitted: eventId => this.ctx.waitUntil(publishAcceptedOffers(this.env, this.ctx, 'acceptance', eventId).catch(() => {
+        console.error(JSON.stringify({ event: 'financial_outbox_publication_failed', environment: this.env.APP_ENV, trigger: 'acceptance', code: 'publication_unavailable' }));
+      })) } }).fetch(request, this.env, this.ctx);
   }
   async scheduled(): Promise<void> {
-    if (!['local', 'dev', 'staging'].includes(this.env.APP_ENV) || this.env.FINANCIAL_PROVIDER_MODE !== 'mock') return;
-    const key = this.env.FINANCIAL_EVENT_KEY;
-    const queue = this.env.FINANCIAL_EVENTS;
-    if (!queue || typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('financial_publisher_configuration_invalid');
-    const result = await new FinancialOutboxPublisher({ connectionString: this.env.ACQUISITION_DB.connectionString, environment: this.env.APP_ENV,
-      integrity: new HmacOfferIntegrity(key), queue: { send: async event => {
-        const delivery = queue.send(event, { contentType: 'json' });
-        // A deadline ends this publishing attempt; it cannot cancel a Queue write already in flight.
-        this.ctx.waitUntil(delivery.then(() => {}, () => {}));
-        await delivery;
-      } } }).publish();
-    console.log(JSON.stringify({ event: 'financial_outbox_publication', environment: this.env.APP_ENV, ...result }));
+    await publishAcceptedOffers(this.env, this.ctx, 'schedule');
   }
   liveness() { return { service: 'acquisition-risk', environment: this.env.APP_ENV }; }
   async infraStatus() {

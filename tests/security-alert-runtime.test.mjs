@@ -73,7 +73,7 @@ const aliases = {
     async published(id, owner) { return env.TEST_STATE.published(id, owner); }
     async failed(id, owner, delay) { return env.TEST_STATE.failed(id, owner, delay); }
   }`,
-  'sql-consents': `export class SqlConsents { async forSubject() { return []; } }`,
+  'sql-consents': `export class SqlConsents { async forSubject() { return []; } async forSubjectScopes() { return new Map(); } }`,
   'identity-sessions': `export class SqlIdentitySessions { async find() { return null; } }`,
   'partner-access': `export class SqlPartnerAccess { async find() { return null; } }`,
   'registered-devices': `export class SqlRegisteredDevices { async execute() { throw Error('unexpected_device_access'); } }`,
