@@ -185,6 +185,8 @@ The values, the confidence levels and the order above are versioned as `degradat
 
 Mortgage offer creation consumes `executeAllAuthorized`. Any degraded source makes the decision and persisted offer `preliminary`, with `degraded: true`, normalized failure, substitute and confidence in the immutable capture. Preliminary offers can be read and replayed but cannot emit `offer.accepted` or reach Policy. All-live sources retain the existing definitive/declined business rule.
 
+The grouped creation statement preserves the decision outcome, offer status and created-event status together with its revision, sealed context, audit and idempotency ledger. Acceptance uses the fresh owner snapshot and rejects preliminary terms before any acceptance write. The composition root retains both bounded background snapshot persistence and targeted publication after a committed definitive acceptance.
+
 Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
 
 **Limits.**
