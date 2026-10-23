@@ -32,13 +32,7 @@ export class OfferService {
   private async previous(actor: OfferActor, key: string, identity: string) {
     const recorded = await this.deps.store.request(actor, key);
     if (recorded) return this.outcome({ created: false, request: recorded }, actor, identity);
-    // Compatibility: offers created before the outcome ledger keep their original idempotency key.
-    const old = await this.deps.store.byKey(actor, key);
-    if (!old) return null;
-    if (!await this.valid(old, actor)) return { status: 'conflict' as const };
-    const reference = old.terms.coverage.kind === 'flight_delay' ? old.terms.coverage.flightReference : old.terms.quoteId;
-    if (!reference || offerRequestIdentity(old.terms.product, reference) !== identity) return { status: 'conflict' as const };
-    return { status: 'replayed' as const, offer: old.terms };
+    return null;
   }
   async create(input: Command & { quoteId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };

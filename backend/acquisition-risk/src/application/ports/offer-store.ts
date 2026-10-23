@@ -7,7 +7,6 @@ export type AcceptedOffer = { acceptanceId: string; offerId: string; eventId: st
 export type AcceptanceEvent = { version: 1; eventType: 'offer.accepted'; eventId: string; environment: string; synthetic: true; occurredAt: string; correlationId: string; payload: Omit<OfferTerms, 'quoteId' | 'synthetic' | 'status'> & { acceptanceId: string; acceptedAt: string }; signature: string };
 export interface OfferStore {
   quote(actor: OfferActor, quoteId: string): Promise<OfferQuote | null>;
-  byKey(actor: OfferActor, key: string): Promise<StoredOffer | null>;
   request(actor: OfferActor, key: string): Promise<StoredOfferRequest | null>;
   get(actor: OfferActor, offerId: string): Promise<StoredOffer | null>;
   create(input: { actor: OfferActor; quote: OfferQuote | null; sourceReference: string; requestIdentity: string; key: string; offer: StoredOffer; capture: OfferCapture | Record<string, unknown>; traceId: string }): Promise<OfferRequestResult>;

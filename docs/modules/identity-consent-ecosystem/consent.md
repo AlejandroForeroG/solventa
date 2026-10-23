@@ -50,7 +50,7 @@ To change the wording: edit the messages, add the new `textVersion` and fingerpr
 
 Another module that wants to query a source asks Identity, through the Service Binding, whether the consent is valid at that moment: active, not expired, covering the required scope and with an intact seal. Without a valid consent, or if Identity cannot answer, the source and any stored copy are not used and the technical cause is kept. A consent copied into a message or a profile never grants access. A revocation is effective on the next check, well inside the five-minute target of the case study. The check searches only the usable consents of the user, so any number of newer revoked or expired ones never hides an active one.
 
-The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route.
+The private RPC is `verifyConsentV1`, separate from `authorizeApiAccessV1`; it does not authenticate a caller and is not a public route. The authenticated financial-access RPC checks the complete required scope set against one current sealed consent in one database query. It returns that single consent only when every scope is covered; this avoids four serial checks without weakening freshness, expiry, revocation or seal validation. The single-scope RPC remains unchanged for independent signal reads.
 
 ```ts
 { subjectToken, purposeCode: 'risk_profiling', scope, traceId }
@@ -76,7 +76,7 @@ Acquisition reaches a source or a stored copy of its data only through `ReadSign
 | Allowed, provider answers | Called | Not read | `available` |
 | Allowed, provider fails | Called | Read | `degraded`, with the copy if it was captured under this same valid consent and has not expired, otherwise with a conservative default; see [signal degradation](../acquisition-risk/README.md#signal-degradation) |
 
-The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. `ReadSignal` is not wired to any route yet: the profiling use case will call it. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
+The check happens before the call and is not repeated afterwards, so a revocation that lands while the provider answers is caught on the next call; there is no distributed atomicity between Identity and Acquisition. A standalone `ReadSignal` call uses the single-scope check. Mortgage offer profiling receives the one freshly verified four-scope authorization from its authenticated boundary and then reads the four signals in parallel. Its provider is selected by configuration among the simulated adapters described in [Acquisition](../acquisition-risk/README.md#signal-providers).
 
 ## Operation
 

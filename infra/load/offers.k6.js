@@ -9,6 +9,7 @@ const COOKIE_NAME = __ENV.COOKIE_NAME || 'solventa-session';
 if (!COOKIE) throw new Error('Set COOKIE to a logged-in web session');
 if (!/^COT-\d{4}-\d{5}$/.test(QUOTE_ID)) throw new Error('Set QUOTE_ID to a quote owned by that session');
 const ORIGIN = __ENV.ORIGIN || BASE_URL.replace('host.docker.internal', 'localhost');
+const ORIGIN_HOST = ORIGIN.replace(/^https?:\/\//, '');
 const RATE = Number(__ENV.RATE || 10);
 const DURATION = __ENV.DURATION || '60s';
 const REPLAY_EVERY = Number(__ENV.REPLAY_EVERY || 10);
@@ -40,9 +41,10 @@ export function offer() {
     headers: {
       'content-type': 'application/json',
       'idempotency-key': key,
-      cookie: `${COOKIE_NAME}=${COOKIE}`,
-      origin: ORIGIN
-    }
+      origin: ORIGIN,
+      host: ORIGIN_HOST
+    },
+    cookies: { [COOKIE_NAME]: COOKIE }
   });
   const body = (() => { try { return response.json(); } catch { return null; } })();
   const expected = repeat ? 200 : 201;

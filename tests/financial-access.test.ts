@@ -64,6 +64,33 @@ test('mortgage creation requires all four current scopes for the same sealed con
   assert.deepEqual(mismatch, { allowed: false, error: 'consent_required', status: 403 });
 });
 
+test('mortgage consent scopes are verified concurrently without weakening the all-scopes decision', async () => {
+  const pending: Array<() => void> = [];
+  const checked: string[] = [];
+  const verifyConsent = (input: { scope: string }) => new Promise<ConsentDecision>(resolve => {
+    checked.push(input.scope);
+    pending.push(() => resolve({ allowed: true, consent }));
+  });
+  const result = authorizeFinancialAccess({ authorize: async (): Promise<AccessDecision> => ({ allowed: true, actor }), verifyConsent }, request);
+  await Promise.resolve();
+  assert.equal(new Set(checked).size, 4);
+  for (const resolve of pending) resolve();
+  assert.deepEqual(await result, { allowed: true, actor, consent });
+});
+
+test('the composed financial boundary verifies the complete consent set in one operation', async () => {
+  let singleCalls = 0;
+  const checked: string[][] = [];
+  const result = await authorizeFinancialAccess({
+    authorize: async (): Promise<AccessDecision> => ({ allowed: true, actor }),
+    verifyConsent: async () => { singleCalls++; return { allowed: true, consent }; },
+    verifyConsentSet: async input => { checked.push([...input.scopes]); return { allowed: true, consent }; }
+  }, request);
+  assert.deepEqual(result, { allowed: true, actor, consent });
+  assert.equal(singleCalls, 0);
+  assert.deepEqual(checked, [['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation']]);
+});
+
 test('missing or revoked consent cannot create a mortgage offer; acceptance gets no authorization to use signals', async () => {
   for (const reason of ['consent_missing', 'consent_revoked', 'consent_expired', 'consent_invalid'] as const) {
     const deps = { authorize: async (): Promise<AccessDecision> => ({ allowed: true, actor }), verifyConsent: async (): Promise<ConsentDecision> => ({ allowed: false, reason }) };

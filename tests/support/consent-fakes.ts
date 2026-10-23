@@ -62,9 +62,9 @@ export class MemoryConsents implements ConsentStore {
     this.audit.push({ action: 'consent.declined', subjectToken: principal.subjectToken });
   }
 
-  async forSubject(subjectToken: string, purposeCode: string, scope: string): Promise<Consent[]> {
+  async forSubject(subjectToken: string, purposeCode: string, scopes: readonly string[]): Promise<Consent[]> {
     this.check();
-    return this.consents.filter(c => c.subjectToken === subjectToken && c.purposeCode === purposeCode && (c.scopes as string[]).includes(scope))
+    return this.consents.filter(c => c.subjectToken === subjectToken && c.purposeCode === purposeCode && scopes.every(scope => (c.scopes as string[]).includes(scope)))
       .sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime());
   }
 }

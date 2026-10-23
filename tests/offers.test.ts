@@ -21,7 +21,12 @@ const quote: OfferQuote = { id: randomUUID(), quoteId: 'COT-2026-00001', amount:
 class MemoryOffers implements OfferStore {
   rows = new Map<string, StoredOffer>(); keys = new Map<string, StoredOffer>(); accepted = new Map<string, AcceptedOffer>(); events: AcceptanceEvent[] = [];
   captures: unknown[] = []; declines = 0; rejected: string[] = []; rejectionDetails: { traceId: string; operation: string }[] = []; requests = new Map<string, StoredOfferRequest>();
-  async request(a: OfferActor, key: string) { return this.requests.get(a.clientId + key) ?? null; }
+  async request(a: OfferActor, key: string) {
+    const current = this.requests.get(a.clientId + key); if (current) return current;
+    const offer = this.keys.get(a.clientId + key); if (!offer) return null;
+    const source = offer.terms.coverage.kind === 'flight_delay' ? offer.terms.coverage.flightReference : offer.terms.quoteId!;
+    return { actor: a, requestIdentity: offerRequestIdentity(offer.terms.product, source), outcome: 'accepted' as const, offer };
+  }
   async quote(a: OfferActor, id: string) { return a.clientId === actor.clientId && a.subjectToken === actor.subjectToken && id === quote.quoteId ? quote : null; }
   async byKey(a: OfferActor, key: string) { return this.keys.get(a.clientId + key) ?? null; }
   async get(a: OfferActor, id: string) { const r = this.rows.get(id); return r?.terms.clientId === a.clientId && r.terms.subjectToken === a.subjectToken ? r : null; }
@@ -192,14 +197,14 @@ test('changing lookup ownership cannot transfer an offer whose sealed owner is a
   const victim = f.store.rows.get(first.offer.offerId)!;
   // Simulate altered lookup columns; the financial terms and their valid HMAC still name the victim.
   f.store.get = async () => victim;
-  f.store.byKey = async () => victim;
+  f.store.request = async () => ({ actor: other, requestIdentity: offerRequestIdentity('flight_delay', flightReference), outcome: 'accepted', offer: victim });
   const read = await f.service.get({ actor: other, offerId: victim.terms.offerId, traceId: randomUUID() });
   assert.equal(read.status, 'integrity_invalid'); assert.equal('offer' in read, false);
   assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'victim-offer', traceId: randomUUID() })).status, 'conflict');
   assert.equal((await f.service.accept({ actor: other, offerId: victim.terms.offerId, idempotencyKey: 'foreign-accept', traceId: randomUUID() })).status, 'integrity_invalid');
   assert.equal(f.store.accepted.size, 0); assert.equal(f.store.events.length, 0);
   // A concurrent insert winner must be checked too, not only the initial lookup.
-  f.store.byKey = async () => null;
+  f.store.request = async () => null;
   f.store.create = async () => ({ created: false, request: { actor: other, requestIdentity: offerRequestIdentity('flight_delay', flightReference), outcome: 'accepted', offer: victim } });
   assert.equal((await f.service.createFlight({ actor: other, flightReference, idempotencyKey: 'race', traceId: randomUUID() })).status, 'conflict');
 });
