@@ -186,7 +186,7 @@ try {
   const legacyOwner = await person();
   const legacyGrant = await grant(legacyOwner, 'legacy-key');
   assert.ok(legacyGrant.status === 'created');
-  const legacy = (await store.forSubject(legacyOwner.subjectToken, 'risk_profiling', 'income_obligations_12m', current))[0];
+  const legacy = (await store.forSubject(legacyOwner.subjectToken, 'risk_profiling', ['income_obligations_12m'], current))[0];
   legacy.textVersion = 1;
   legacy.wordingHash = '5d51bd4f345588863206656f381e9d13ca1b420c7ce95ab7bec0e4b480c3c047';
   const legacySeal = await integrity.seal(sealContent(legacy));

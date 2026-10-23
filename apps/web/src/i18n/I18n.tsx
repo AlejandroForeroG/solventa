@@ -25,13 +25,20 @@ export function I18n({ children, initial }: { children: ReactNode; initial?: Loc
 // Amounts are always Colombian pesos; the locale only changes the separators.
 export function useFormatters() {
   const intl = useIntl();
+  const decimalSeparator = intl.formatNumberToParts(1.1).find(part => part.type === 'decimal')?.value ?? '.';
   return {
     copAmount: (value: number) => intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }),
     cop: (value: number) => `${intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })} COP`,
+    copDecimal: (value: string) => {
+      const [whole, fraction = ''] = value.split('.');
+      const significant = fraction.replace(/0+$/, '');
+      return `${intl.formatNumber(BigInt(whole))}${significant ? decimalSeparator + significant : ''} COP`;
+    },
     monthYear: (date: Date) => intl.formatDate(date, { month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
     dayMonthYear: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
     shortDate: (date: Date) => intl.formatDate(date, intl.locale.startsWith('es')
       ? { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Bogota' }
-      : { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' })
+      : { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
+    dateTime: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
   };
 }

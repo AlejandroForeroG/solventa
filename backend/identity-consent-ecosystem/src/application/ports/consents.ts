@@ -21,7 +21,7 @@ export interface ConsentStore {
   list(principal: Principal, limit: number, now: Date, after?: string): Promise<Consent[]>;
   revoke(principal: Principal, consentCode: string, now: Date, traceId: string): Promise<RevokeResult>;
   decline(principal: Principal, traceId: string): Promise<void>;
-  forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]>;
+  forSubject(subjectToken: string, purposeCode: string, scopes: readonly string[], now: Date): Promise<Consent[]>;
 }
 
 export interface Platform {

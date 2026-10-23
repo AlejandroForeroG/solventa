@@ -156,12 +156,12 @@ export class SqlConsents implements ConsentStore {
     }
   }
 
-  async forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]> {
+  async forSubject(subjectToken: string, purposeCode: string, scopes: readonly string[], now: Date): Promise<Consent[]> {
     const client = await this.connect();
     try {
       const of = `FROM identity.consents c JOIN identity.clients owner ON owner.id = c.client_id
-         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING = ANY(c.scopes) AND c.consent_code IS NOT NULL`;
-      const parameters = [subjectToken, purposeCode, scope];
+         WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND $3::STRING[] <@ c.scopes AND c.consent_code IS NOT NULL`;
+      const parameters = [subjectToken, purposeCode, scopes];
       // Only usable consents are searched, so newer revoked or expired ones never hide an active one; without
       // any, the latest record is read just to explain the denial.
       const usable = await client.query<Row>(

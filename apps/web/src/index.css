@@ -13,6 +13,19 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .error { color: #a32b22; }
 @media (max-width: 600px) { header { padding: 24px; } .access-panel { padding: 28px; } }
 
+.banner-warning { background: #fbf0dc; border-color: #e2bf78; color: #704604; }
+.banner-warning p { margin: 4px 0 0; color: #704604; }
+.offer-card { display: grid; gap: 24px; }
+.offer-id { overflow-wrap: anywhere; }
+.offer-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.offer-summary > div { padding: 16px; border: 1px solid #e3e1dc; border-radius: 8px; background: #f7f6f3; }
+.offer-summary dt { color: #6b7583; font-size: 12.5px; }
+.offer-summary dd { margin: 6px 0 0; color: #12151a; font-weight: 600; }
+.offer-summary .offer-premium { color: #0b6b5f; font: 600 24px 'Space Grotesk', sans-serif; }
+.pill-warning { background: #fbf0dc; color: #704604; }
+.offer-next { margin: 0; align-self: center; }
+@media (max-width: 600px) { .offer-summary { grid-template-columns: 1fr; } }
+
 /* Commercial front end: steps 1 and 2. Colours follow the Design System tokens; grey text never lighter than #6b7583. */
 .channel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .header-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

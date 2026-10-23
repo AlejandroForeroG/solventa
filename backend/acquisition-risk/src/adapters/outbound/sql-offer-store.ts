@@ -27,28 +27,29 @@ export class SqlOfferStore implements OfferStore {
   }
   async request(actor: OfferActor, key: string): Promise<StoredOfferRequest | null> {
     return this.connection(async c => {
-      const result = await c.query<OfferRow & { client_id: string; subject_token: string; request_identity: string; outcome: 'accepted' | 'declined' }>(`SELECT r.client_id,r.subject_token,r.request_identity,r.outcome,ctx.terms,ctx.terms_seal,ctx.consent_reference,ctx.consent_version
+      const result = await c.query<OfferRow & { client_id: string; subject_token: string; request_identity: string | null; outcome: 'accepted' | 'declined'; source_reference: string | null }>(`SELECT r.client_id,r.subject_token,r.request_identity,r.outcome,ctx.source_reference,ctx.terms,ctx.terms_seal,ctx.consent_reference,ctx.consent_version
         FROM acquisition.offer_requests r LEFT JOIN acquisition.offer_contexts ctx ON ctx.offer_id=r.offer_id
-        WHERE r.client_id=$1 AND r.subject_token=$2 AND r.idempotency_key=$3`, [actor.clientId, actor.subjectToken, key]);
+        WHERE r.client_id=$1 AND r.subject_token=$2 AND r.idempotency_key=$3
+        UNION ALL
+        SELECT ctx.client_id,ctx.subject_token,NULL::STRING,'accepted',ctx.source_reference,ctx.terms,ctx.terms_seal,ctx.consent_reference,ctx.consent_version
+        FROM acquisition.offer_contexts ctx
+        WHERE ctx.client_id=$1 AND ctx.subject_token=$2 AND ctx.idempotency_key=$3
+          AND NOT EXISTS (SELECT 1 FROM acquisition.offer_requests r WHERE r.client_id=$1 AND r.idempotency_key=$3)
+        LIMIT 1`, [actor.clientId, actor.subjectToken, key]);
       const row = result.rows[0]; if (!row) return null;
-      const common = { actor: { clientId: row.client_id, subjectToken: row.subject_token }, requestIdentity: row.request_identity };
-      if (row.outcome === 'declined') return { ...common, outcome: 'declined' };
+      if (row.outcome === 'declined') {
+        if (!row.request_identity) throw new Error('offer_request_identity_missing');
+        return { actor: { clientId: row.client_id, subjectToken: row.subject_token }, requestIdentity: row.request_identity, outcome: 'declined' };
+      }
       if (!row.terms) throw new Error('offer_request_context_missing');
-      return { ...common, outcome: 'accepted', offer: fromRow(row) };
+      const offer = fromRow(row);
+      if (!row.request_identity && !row.source_reference) throw new Error('offer_request_source_missing');
+      const requestIdentity = row.request_identity ?? offerRequestIdentity(offer.terms.product, row.source_reference as string);
+      return { actor: { clientId: row.client_id, subjectToken: row.subject_token }, requestIdentity, outcome: 'accepted', offer };
     });
   }
   private async winner(actor: OfferActor, key: string): Promise<StoredOfferRequest | null> {
-    const request = await this.request(actor, key); if (request) return request;
-    const offer = await this.byKey(actor, key); if (!offer) return null;
-    const source = offer.terms.coverage.kind === 'flight_delay' ? offer.terms.coverage.flightReference : offer.terms.quoteId;
-    if (!source) throw new Error('offer_request_source_missing');
-    return { actor, requestIdentity: offerRequestIdentity(offer.terms.product, source), outcome: 'accepted', offer };
-  }
-  async byKey(actor: OfferActor, key: string) {
-    return this.connection(async c => {
-      const result = await c.query<OfferRow>('SELECT terms, terms_seal, consent_reference, consent_version FROM acquisition.offer_contexts WHERE client_id=$1 AND subject_token=$2 AND idempotency_key=$3', [actor.clientId, actor.subjectToken, key]);
-      return result.rows[0] ? fromRow(result.rows[0]) : null;
-    });
+    return this.request(actor, key);
   }
   async get(actor: OfferActor, offerId: string) {
     return this.connection(async c => {
@@ -59,25 +60,38 @@ export class SqlOfferStore implements OfferStore {
   async create(input: Parameters<OfferStore['create']>[0]) {
     return this.retry(() => this.connection(async c => {
       const t = input.offer.terms;
-      await c.query('BEGIN');
       try {
-        const decision = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1',$3,$4,$4,$5) RETURNING id`, [input.quote?.id ?? null, t.ruleVersion, t.status === 'preliminary' ? 'preliminary' : 'accepted', JSON.stringify(input.capture), input.traceId]);
-        await c.query(`INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
-          VALUES ($1,1,$2,$3,'COP',$4,$5,$6,$7)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.status, t.effectiveFrom, t.expiresAt]);
-        await c.query(`INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
-          VALUES ($1,1,$2,$3,'COP',$4,$5,$6)`, [t.offerId, decision.rows[0].id, t.premium, JSON.stringify(t.coverage), t.effectiveFrom, t.expiresAt]);
-        await c.query(`INSERT INTO acquisition.offer_contexts (offer_id,quote_id,client_id,subject_token,idempotency_key,source_reference,terms,terms_seal,consent_reference,consent_version)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [t.offerId, input.quote?.id ?? null, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference, JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion]);
-        await this.audit(c, input.actor.clientId, 'offer.create', t.offerId, 'success', input.traceId);
-        await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
-          VALUES (gen_random_uuid(),'offer',$1,'offer.created',1,$2,$3)`, [t.offerId, JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), input.traceId]);
-        await c.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
-          VALUES ($1,$2,$3,$4,'accepted',$5,$6)`, [input.actor.clientId, input.actor.subjectToken, input.key, input.requestIdentity, decision.rows[0].id, t.offerId]);
-        await c.query('COMMIT');
+        // One atomic statement avoids a network round trip for every ledger projection. Every CTE
+        // consumes the preceding RETURNING row, so the decision, offer, revision, context, audit,
+        // outbox event and idempotency record either all exist or none do.
+        await c.query(`WITH decision AS (
+            INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
+            VALUES ($1,$2,'v1',$3,$4,$4,$5) RETURNING id
+          ), offer_row AS (
+            INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
+            SELECT $6,1,decision.id,$7,'COP',$8,$9,$10,$11 FROM decision RETURNING id
+          ), revision AS (
+            INSERT INTO acquisition.offer_revisions (offer_id,version,decision_id,premium,currency,coverages,valid_from,expires_at)
+            SELECT offer_row.id,1,decision.id,$7,'COP',$8,$10,$11 FROM decision,offer_row RETURNING offer_id
+          ), context AS (
+            INSERT INTO acquisition.offer_contexts (offer_id,quote_id,client_id,subject_token,idempotency_key,source_reference,terms,terms_seal,consent_reference,consent_version)
+            SELECT offer_row.id,$1,$12,$13,$14,$15,$16,$17,$18,$19 FROM offer_row RETURNING offer_id
+          ), audit AS (
+            INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+            SELECT $12::UUID::STRING,'offer.create','offer',offer_row.id,'success',$5,now()+interval '5 years' FROM offer_row RETURNING resource_id
+          ), outbox AS (
+            INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+            SELECT gen_random_uuid(),'offer',offer_row.id,'offer.created',1,$20,$5 FROM offer_row RETURNING aggregate_id
+          ), request AS (
+            INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
+            SELECT $12,$13,$14,$21,'accepted',decision.id,offer_row.id FROM decision,offer_row RETURNING offer_id
+          ) SELECT decision.id FROM decision,offer_row,revision,context,audit,outbox,request`,
+        [input.quote?.id ?? null, t.ruleVersion, t.status === 'preliminary' ? 'preliminary' : 'accepted', JSON.stringify(input.capture), input.traceId,
+          t.offerId, t.premium, JSON.stringify(t.coverage), t.status, t.effectiveFrom, t.expiresAt, input.actor.clientId, input.actor.subjectToken,
+          input.key, input.sourceReference, JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion,
+          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), input.requestIdentity]);
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
-        await c.query('ROLLBACK').catch(() => {});
         if ((e as { code?: string }).code === '23505') {
           const winner = await this.winner(input.actor, input.key);
           if (winner) return { created: false, request: winner };

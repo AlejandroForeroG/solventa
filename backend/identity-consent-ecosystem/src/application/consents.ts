@@ -23,6 +23,7 @@ export type ConsentView = {
 };
 
 export type ConsentCheck = { subjectToken: string; purposeCode: string; scope: string; traceId?: string };
+export type ConsentSetCheck = { subjectToken: string; purposeCode: string; scopes: readonly string[]; traceId?: string };
 export type ConsentDecision =
   | { allowed: true; consent: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; reason: 'invalid_request' | 'consent_missing' | 'consent_revoked' | 'consent_expired' | 'consent_invalid' | 'unavailable' };
@@ -103,7 +104,15 @@ export class Consents {
 
   // Called on every use of a source, never cached: a revocation blocks the next call.
   async verify(input: ConsentCheck): Promise<ConsentDecision> {
-    const decision = await this.checkConsent(input);
+    return this.verifyScopes(input, [input?.scope]);
+  }
+
+  async verifyAll(input: ConsentSetCheck): Promise<ConsentDecision> {
+    return this.verifyScopes(input, input?.scopes);
+  }
+
+  private async verifyScopes(input: { subjectToken: string; purposeCode: string; traceId?: string }, scopes: readonly string[]): Promise<ConsentDecision> {
+    const decision = await this.checkConsent(input, scopes);
     if (!decision.allowed && decision.reason !== 'unavailable') {
       try {
         await this.deps.security?.deny({ category: 'consent_use', channel: 'internal', operation: 'consent:use',
@@ -113,12 +122,13 @@ export class Consents {
     return decision;
   }
 
-  private async checkConsent(input: ConsentCheck): Promise<ConsentDecision> {
+  private async checkConsent(input: { subjectToken: string; purposeCode: string }, scopes: readonly string[]): Promise<ConsentDecision> {
     if (!input || typeof input.subjectToken !== 'string' || !UUID.test(input.subjectToken) || input.purposeCode !== PURPOSE_RISK_PROFILING
-      || typeof input.scope !== 'string' || !SCOPES.includes(input.scope)) return { allowed: false, reason: 'invalid_request' };
+      || !Array.isArray(scopes) || scopes.length === 0 || new Set(scopes).size !== scopes.length
+      || scopes.some(scope => typeof scope !== 'string' || !SCOPES.includes(scope))) return { allowed: false, reason: 'invalid_request' };
     try {
       const now = this.deps.platform.now();
-      const consents = await this.deps.store.forSubject(input.subjectToken, input.purposeCode, input.scope, now);
+      const consents = await this.deps.store.forSubject(input.subjectToken, input.purposeCode, scopes, now);
       if (!consents.length) return { allowed: false, reason: 'consent_missing' };
       let tampered = false;
       for (const consent of consents) {

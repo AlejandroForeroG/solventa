@@ -11,8 +11,9 @@ import { QuoteForm } from './QuoteForm';
 import { Denied, Loading, QuoteResult } from './QuoteResult';
 import { Stepper } from './Stepper';
 import { invalidEstimateFields, type EstimateValues } from './estimate-api';
+import { OfferStep } from '../offer/OfferStep';
 
-type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted';
+type Phase = 'form' | 'loading' | 'result' | 'denied' | 'consent' | 'declined' | 'granted' | 'offer';
 const empty: QuoteValues = { fullName: '', documentNumber: '', birthDate: '', city: '', amount: '', termMonths: '' };
 
 export function QuoteFlow({ request = defaultRequest, consent = consentApi, initialEstimate, consentUpdates = {}, uncertainConsents = {}, onOpenPrivacy, onSessionLost }: {
@@ -75,13 +76,14 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, init
   }
 
   return <>
-    <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : 3} available={3} />
+    <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : phase === 'offer' ? 4 : 3} available={phase === 'offer' ? 4 : 3} />
     {phase === 'form' && initialEstimate && !invalidEstimateFields(initialEstimate).length && <p className="banner banner-info">{intl.formatMessage({ id: 'estimate.resumed' }, { age: initialEstimate.ageYears })}</p>}
     {(phase === 'form') && <QuoteForm values={values} problems={problems} banner={banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
-    {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
+    {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onContinue={() => setPhase('offer')} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
+    {phase === 'offer' && quote && <OfferStep quoteId={quote.quoteId} onBack={() => setPhase('granted')} onRestartQuote={() => setPhase('form')} onSessionLost={onSessionLost} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;
