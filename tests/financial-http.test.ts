@@ -241,7 +241,8 @@ test('composed acceptance reads keep one opaque 404 but record a security denial
     let rejected = 0;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return lookup; },
-        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); }, async rejection() { rejected++; } },
+        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); }, async rejection() { rejected++; } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,
       authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
@@ -261,6 +262,7 @@ test('foreign acceptance discovery fails closed when either required denial audi
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return { status: 'foreign' }; },
         async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); },
         async rejection() { if (failedOwner === 'policy') throw new Error('synthetic_audit_failure'); } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,

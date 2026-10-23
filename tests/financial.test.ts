@@ -11,8 +11,9 @@ import { PolicyFinance } from '../backend/policy-claims-payments/src/application
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
 
-const unusedStoreReads: Pick<FinancialStore, 'readPolicy' | 'readAcceptedPolicy' | 'importAcceptance'> = {
+const unusedStoreReads: Pick<FinancialStore, 'readPolicy' | 'readAcceptedPolicy' | 'importAcceptance' | 'issuanceCandidates'> = {
   async readPolicy() { throw new Error('unexpected_policy_read'); },
+  async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); },
   async readAcceptedPolicy() { throw new Error('unexpected_acceptance_read'); },
   async importAcceptance() { throw new Error('unexpected_import'); }
 };
@@ -381,4 +382,95 @@ test('a failed initial premium bundle never reaches a provider or creates an app
   assert.equal(result.status, 'unavailable');
   assert.equal(attempted, true);
   assert.equal(providers, 0);
+});
+
+async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
+  clock?: Date; commandDocumentHash?: string; enabled?: boolean }) {
+  const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
+  const commandKey = await financialIntegrity.digest(randomUUID());
+  const requestHash = await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, options.commandDocumentHash ?? policy.documentHash]));
+  let provider: 'unknown' | 'confirmed' | 'refunded' = options.provider;
+  const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [], captures: FinancialDecisionCapture[] = [];
+  let completedKey: string | null = null;
+  const tx = {
+    async policy() { return { policy: { ...policy }, premium: { ...payment }, signature: null }; },
+    async issuanceSnapshot(_id: string, _actor: FinancialActor, key: string) {
+      assert.equal(key, commandKey);
+      return { record: await tx.policy(policy.id), command: { policyId: policy.id, requestHash, result: null } };
+    },
+    async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
+    async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
+    async audit(action: string, _id: string, _trace: string, _outcome: string, _actor: string, capture: FinancialDecisionCapture) { actions.push(action); captures.push(capture); },
+    async confirmPremium(_policy: StoredPolicy, confirmed: Payment, _trace: string, capture: FinancialDecisionCapture) {
+      payment.status = 'confirmed'; payment.providerReference = confirmed.providerReference; policy.status = 'charged';
+      actions.push('premium.confirmed'); captures.push(capture);
+    },
+    async completeIssuance(input: IssuanceCommit) {
+      policy.status = 'issued'; completedKey = input.commandKey; actions.push('policy.issued'); captures.push(input.capture);
+      return input.signature;
+    },
+    async finishCommand(_actor: string, key: string) { completedKey = key; }
+  } as unknown as FinancialTransaction;
+  let candidatesRead = 0;
+  const finance = new PolicyFinance({ enabled: options.enabled ?? true, environment: 'local', integrity: financialIntegrity, now: () => options.clock ?? financialNow(), newId: randomUUID,
+    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); },
+      async issuanceCandidates() { candidatesRead++; return [{ policyId: policy.id, actor: { clientId: policy.clientId, subjectToken: policy.subjectToken }, commandKey }]; } },
+    payments: {
+      async lookup() { return { status: provider, reference: provider === 'unknown' ? null : 'MOCK-' + payment.id }; },
+      async settle() { calls.settle++; throw new Error('recovery_must_not_start_a_charge'); },
+      async refund() { calls.refund++; provider = 'refunded'; return { status: 'refunded', reference: 'MOCK-' + payment.id }; } },
+    signatures: { async sign(id, hash) { calls.sign++; return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
+  return { finance, policy, payment, calls, actions, captures, commandKey, completed: () => completedKey, candidatesRead: () => candidatesRead };
+}
+
+test('recovery issues a confirmed charge whose customer command stopped, without a new charge or a client retry', async () => {
+  for (const [policyStatus, paymentStatus] of [['charged', 'confirmed'], ['pending', 'pending']] as const) {
+    const fixture = await recoveryFixture({ policyStatus, paymentStatus, provider: 'confirmed' });
+    const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+    assert.equal(result.outcome, 'issued', policyStatus);
+    assert.equal(fixture.policy.status, 'issued');
+    assert.deepEqual(fixture.calls, { settle: 0, refund: 0, sign: 1 });
+    assert.equal(fixture.completed(), fixture.commandKey, 'the original customer command receives the result');
+    assert.deepEqual(fixture.actions, policyStatus === 'pending' ? ['premium.confirmed', 'policy.issued'] : ['policy.issued']);
+    for (const capture of fixture.captures) {
+      assert.equal(capture.inputs.trigger, 'reconciliation');
+      assert.equal(capture.rule.version, 'academic-financial-1');
+      assert.equal(capture.correlationId, result.traceId);
+    }
+  }
+});
+
+test('recovery refunds a confirmed charge once the signing window has expired', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed', clock: new Date('2026-10-16T02:15:00.000Z') });
+  const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(result.outcome, 'refunded');
+  assert.equal(fixture.policy.status, 'refunded'); assert.equal(fixture.payment.status, 'refunded');
+  assert.deepEqual(fixture.calls, { settle: 0, refund: 1, sign: 0 });
+  assert.deepEqual(fixture.actions, ['premium.refund_requested', 'premium.refunded', 'signature_failed']);
+  assert.equal(fixture.captures[0].inputs.refundReason, 'expired_before_sign');
+  assert.ok(fixture.captures.every(capture => capture.inputs.trigger === 'reconciliation'));
+});
+
+test('recovery leaves a pending intent without a provider charge untouched and never starts one', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'pending', paymentStatus: 'pending', provider: 'unknown' });
+  const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(result.outcome, 'unchanged');
+  assert.equal(fixture.policy.status, 'pending');
+  assert.deepEqual(fixture.calls, { settle: 0, refund: 0, sign: 0 });
+  assert.deepEqual(fixture.actions, []);
+});
+
+test('recovery refuses a stored command that does not authorize the current document', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed', commandDocumentHash: '0'.repeat(64) });
+  const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+  assert.deepEqual({ outcome: result.outcome, error: result.error }, { outcome: 'rejected', error: 'integrity_violation' });
+  assert.equal(fixture.policy.status, 'charged');
+  assert.deepEqual(fixture.calls, { settle: 0, refund: 0, sign: 0 });
+  assert.deepEqual(fixture.actions, ['integrity_violation']);
+});
+
+test('disabled financial configuration does not look for recovery candidates', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed', enabled: false });
+  assert.deepEqual(await fixture.finance.reconcileIssuances(new Date(), 25), []);
+  assert.equal(fixture.candidatesRead(), 0);
 });
