@@ -51,6 +51,10 @@ describe('offer client', () => {
     expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('idempotency-key')).toBe('same-key');
     fetchMock.mockReset().mockResolvedValue(json({ error: 'consent_required' }, 403));
     expect(await createMortgageOffer(offer.quoteId, 'key')).toEqual({ kind: 'consentRequired' });
+    for (const kind of ['declined', 'expired', 'conflict'] as const) {
+      fetchMock.mockReset().mockResolvedValue(json({ error: kind }, 409));
+      expect(await createMortgageOffer(offer.quoteId, 'key')).toEqual({ kind });
+    }
     fetchMock.mockReset().mockResolvedValue(json({ ...offer, clientId: 'private' }));
     expect(await createMortgageOffer(offer.quoteId, 'key')).toEqual({ kind: 'unavailable' });
   });
@@ -93,5 +97,19 @@ describe('offer screen', () => {
     expect(request.mock.calls[0][1]).toBe(request.mock.calls[1][1]);
     await user.click(screen.getByRole('button', { name: 'Volver a la autorización' }));
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['declined', 'La evaluación actuarial no permite emitir una oferta para esta cotización.'],
+    ['expired', 'La cotización venció antes de calcular la oferta.']
+  ] as const)('shows a distinct %s outcome and starts a new quote instead of retrying the terminal request', async (kind, message) => {
+    const request = vi.fn().mockResolvedValue({ kind });
+    const onRestartQuote = vi.fn();
+    const user = userEvent.setup();
+    render(wrap(<OfferStep quoteId={offer.quoteId} request={request} onBack={vi.fn()} onRestartQuote={onRestartQuote} />));
+    expect(await screen.findByText(new RegExp(message))).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Generar nueva cotización' }));
+    expect(onRestartQuote).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledOnce();
   });
 });

@@ -5,12 +5,13 @@ import { useAnnounce } from '../quote/Live';
 import { newIdempotencyKey } from '../quote/api';
 import { createMortgageOffer, type MortgageOffer, type OfferOutcome } from './api';
 
-type Load = 'loading' | 'ready' | 'unavailable' | 'consentRequired' | 'notFound' | 'conflict';
+type Load = 'loading' | 'ready' | 'unavailable' | 'consentRequired' | 'notFound' | 'declined' | 'expired' | 'conflict';
 
-export function OfferStep({ quoteId, request = createMortgageOffer, onBack, onSessionLost }: {
+export function OfferStep({ quoteId, request = createMortgageOffer, onBack, onRestartQuote = onBack, onSessionLost }: {
   quoteId: string;
   request?: (quoteId: string, key: string, signal?: AbortSignal) => Promise<OfferOutcome>;
   onBack: () => void;
+  onRestartQuote?: () => void;
   onSessionLost?: () => void;
 }) {
   const intl = useIntl();
@@ -58,7 +59,9 @@ export function OfferStep({ quoteId, request = createMortgageOffer, onBack, onSe
       <p>{intl.formatMessage({ id: `offer.error.${load}` })}</p>
     </div>
     <div className="actions">
-      <button type="button" className="btn btn-primary" onClick={() => void loadOffer()}>{intl.formatMessage({ id: 'offer.retry' })}</button>
+      {load === 'declined' || load === 'expired'
+        ? <button type="button" className="btn btn-primary" onClick={onRestartQuote}>{intl.formatMessage({ id: 'offer.restartQuote' })}</button>
+        : <button type="button" className="btn btn-primary" onClick={() => void loadOffer()}>{intl.formatMessage({ id: 'offer.retry' })}</button>}
       <button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'offer.back' })}</button>
     </div>
   </section>;

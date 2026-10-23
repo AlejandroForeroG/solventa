@@ -83,7 +83,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, init
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
     {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onContinue={() => setPhase('offer')} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} />}
-    {phase === 'offer' && quote && <OfferStep quoteId={quote.quoteId} onBack={() => setPhase('granted')} onSessionLost={onSessionLost} />}
+    {phase === 'offer' && quote && <OfferStep quoteId={quote.quoteId} onBack={() => setPhase('granted')} onRestartQuote={() => setPhase('form')} onSessionLost={onSessionLost} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;

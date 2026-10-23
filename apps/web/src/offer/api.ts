@@ -22,6 +22,8 @@ export type OfferOutcome =
   | { kind: 'unauthenticated' }
   | { kind: 'consentRequired' }
   | { kind: 'notFound' }
+  | { kind: 'declined' }
+  | { kind: 'expired' }
   | { kind: 'conflict' }
   | { kind: 'unavailable' };
 
@@ -70,7 +72,12 @@ export async function createMortgageOffer(quoteId: string, idempotencyKey: strin
     if (response.status === 401) return { kind: 'unauthenticated' };
     if (response.status === 403) return { kind: 'consentRequired' };
     if (response.status === 404) return { kind: 'notFound' };
-    if (response.status === 409) return { kind: 'conflict' };
+    if (response.status === 409) {
+      const body: unknown = await response.json();
+      if (record(body) && (body.error === 'declined' || body.error === 'expired')) return { kind: body.error };
+      if (record(body) && (body.error === 'conflict' || body.error === 'idempotency_key_reused')) return { kind: 'conflict' };
+      return { kind: 'unavailable' };
+    }
   } catch { /* malformed or unreadable responses are unavailable */ }
   return { kind: 'unavailable' };
 }
