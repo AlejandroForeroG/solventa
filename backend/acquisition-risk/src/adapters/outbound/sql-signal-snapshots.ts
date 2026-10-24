@@ -35,12 +35,22 @@ export class SqlSignalSnapshots implements SignalSnapshots {
   }
 
   async save(snapshot: SignalSnapshotWrite): Promise<void> {
+    await this.saveAll([snapshot]);
+  }
+
+  async saveAll(snapshots: readonly SignalSnapshotWrite[]): Promise<void> {
+    if (!snapshots.length) return;
     await this.connection(async client => {
+      const parameters: unknown[] = [];
+      const values = snapshots.map((snapshot, index) => {
+        const offset = index * 8;
+        parameters.push(snapshot.subjectToken, snapshot.signal.scope, snapshot.signal.capturedAt, snapshot.validUntil, snapshot.consentId,
+          snapshot.consentVersion, JSON.stringify(snapshot.signal), snapshot.traceId);
+        return `(gen_random_uuid(),1,$${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},'provider','risk_profiling',NULL,$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8})`;
+      }).join(',');
       await client.query(`INSERT INTO acquisition.risk_profiles
         (id,version,subject_token,source,captured_at,expires_at,quality,purpose,consent_id,consent_reference,consent_version,signals,correlation_id)
-        VALUES (gen_random_uuid(),1,$1,$2,$3,$4,'provider','risk_profiling',NULL,$5,$6,$7,$8)`,
-      [snapshot.subjectToken, snapshot.signal.scope, snapshot.signal.capturedAt, snapshot.validUntil, snapshot.consentId,
-        snapshot.consentVersion, JSON.stringify(snapshot.signal), snapshot.traceId]);
+        VALUES ${values}`, parameters);
     });
   }
 }
