@@ -5,7 +5,8 @@ import { useAnnounce } from '../quote/Live';
 import { Stepper } from '../quote/Stepper';
 import type { Quote } from '../quote/api';
 import { financialApi, newIdempotencyKey, type Acceptance, type FinancialApi, type FinancialOutcome, type Offer, type Policy } from './api';
-import { OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
+import { ChargeConfirmed, ChargeDeclined, ChargePending, OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
+import { clearPurchaseDraft, savePurchaseDraft, type PurchaseDraft } from './purchase-draft';
 
 type Step = 4 | 5 | 6;
 type Phase =
@@ -14,11 +15,14 @@ type Phase =
   | { name: 'declined' }
   | { name: 'expired'; offerId?: string }
   | { name: 'preparing'; acceptance: Acceptance; slow: boolean }
-  | { name: 'review'; policy: Policy; confirming: boolean; problem?: 'uncertain' | 'document_changed' }
+  | { name: 'review'; policy: Policy; documentChanged: boolean }
+  | { name: 'charging'; policy: Policy; key: string; busy: boolean; uncertain: boolean }
+  | { name: 'charged'; policy: Policy; key: string }
+  | { name: 'chargeDeclined'; policy: Policy }
   | { name: 'issued'; policy: Policy }
   | { name: 'recovering'; policy: Policy; busy: boolean }
   | { name: 'refunded'; policy: Policy }
-  | { name: 'failed'; reason: 'payment' | 'conflict' | 'generic'; step: Step }
+  | { name: 'failed'; reason: 'conflict' | 'generic'; step: Step }
   | { name: 'unavailable'; retry: () => void; traceId?: string; step: Step };
 
 export type PollSchedule = { firstDelayMs: number; maxDelayMs: number; budgetMs: number };
@@ -27,7 +31,9 @@ const DEFAULT_POLL: PollSchedule = { firstDelayMs: 50, maxDelayMs: 100, budgetMs
 
 function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
-  return phase.name === 'preparing' || phase.name === 'review' ? 5 : phase.name === 'issued' ? 7 : phase.name === 'recovering' || phase.name === 'refunded' ? 6 : 4;
+  if (phase.name === 'preparing' || phase.name === 'review') return 5;
+  if (['charging', 'charged', 'chargeDeclined', 'recovering', 'refunded'].includes(phase.name)) return 6;
+  return phase.name === 'issued' ? 7 : 4;
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -39,8 +45,12 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+// Phases after which a reload has nothing left to resume.
+const SETTLED: readonly Phase['name'][] = ['declined', 'expired', 'charged', 'chargeDeclined', 'issued', 'refunded', 'failed'];
+
 export function OfferJourney(props: {
-  quote: Quote;
+  quote: Pick<Quote, 'quoteId'>;
+  resume?: PurchaseDraft;
   api?: FinancialApi;
   poll?: PollSchedule;
   onRequote: () => void;
@@ -69,7 +79,10 @@ export function OfferJourney(props: {
   const say = (id: string, values?: Record<string, string>) => latest.current.announce(latest.current.intl.formatMessage({ id }, values));
   const api = () => latest.current.props.api ?? financialApi;
 
-  useEffect(() => { heading.current?.focus(); }, [phase.name]);
+  useEffect(() => {
+    heading.current?.focus();
+    if (SETTLED.includes(phase.name)) clearPurchaseDraft();
+  }, [phase.name]);
 
   // Shared handling for responses that end a step the same way everywhere. Returns true when it changed the screen.
   function common(outcome: FinancialOutcome<unknown>, retry: () => void, step: Step): boolean {
@@ -78,7 +91,7 @@ export function OfferJourney(props: {
     if (outcome.kind === 'unavailable') { setPhase({ name: 'unavailable', retry, traceId: outcome.traceId, step }); say('live.financialUnavailable'); return true; }
     return false;
   }
-  function fail(reason: 'payment' | 'conflict' | 'generic', step: Step) {
+  function fail(reason: 'conflict' | 'generic', step: Step) {
     setPhase({ name: 'failed', reason, step }); say('live.financialError');
   }
   function expired(offerId?: string) {
@@ -101,8 +114,13 @@ export function OfferJourney(props: {
 
   // Each mount owns its controller, so StrictMode's effect replay never reuses an aborted signal.
   // The offer is requested once per mounted quote; later values are read through `latest`.
-  const start = useRef(create);
-  start.current = create;
+  // After a reload the journey resumes from the stored acceptance and command key instead of creating another offer.
+  const start = useRef((current: AbortSignal) => {
+    const resume = latest.current.props.resume;
+    if (!resume) return create(current);
+    if (resume.issue) issueKeys.current.set(`${resume.issue.policyId}:${resume.issue.documentHash}`, resume.issue.key);
+    return waitForPolicy(resume.acceptance);
+  });
   useEffect(() => {
     const controller = new AbortController();
     signal.current = controller.signal;
@@ -127,11 +145,17 @@ export function OfferJourney(props: {
         if (outcome.kind === 'ok') {
           if (knownPolicyId.current && knownPolicyId.current !== outcome.value.policyId) { fail('generic', 5); return; }
           knownPolicyId.current = outcome.value.policyId;
+          const sentKey = issueKeys.current.get(`${outcome.value.policyId}:${outcome.value.documentHash}`);
           setChecked(false);
           if (outcome.value.status === 'issued') { setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); }
+          else if (outcome.value.payment?.status === 'declined') { setPhase({ name: 'chargeDeclined', policy: outcome.value }); say('live.chargeDeclined'); }
           else if (outcome.value.status === 'refunded') { setPhase({ name: 'refunded', policy: outcome.value }); say('live.refunded'); }
           else if (outcome.value.status === 'refunding') { setPhase({ name: 'recovering', policy: outcome.value, busy: false }); say('live.refunding'); }
-          else { setPhase({ name: 'review', policy: outcome.value, confirming: false, ...(documentChanged ? { problem: 'document_changed' as const } : {}) }); say('live.policyReady'); }
+          else if (sentKey && (outcome.value.status === 'charged' || outcome.value.payment)) {
+            // A command already sent for this document continues with its own key; it is never reviewed and paid again.
+            setPhase({ name: 'charging', policy: outcome.value, key: sentKey, busy: false, uncertain: false }); say('live.chargePending');
+          }
+          else { setPhase({ name: 'review', policy: outcome.value, documentChanged }); say('live.policyReady'); }
           return;
         }
         if (outcome.kind === 'unauthenticated' || outcome.kind === 'consentRequired') { common(outcome, () => {}, 5); return; }
@@ -157,7 +181,10 @@ export function OfferJourney(props: {
     try {
       const outcome = await api().acceptOffer(offer.offerId, key, current);
       if (current.aborted || common(outcome, () => setPhase({ name: 'offer', offer, accepting: false }), 4)) return;
-      if (outcome.kind === 'ok') { say('live.accepted'); void waitForPolicy(outcome.value); }
+      if (outcome.kind === 'ok') {
+        savePurchaseDraft({ quoteId: quote.quoteId, acceptance: outcome.value, issue: null });
+        say('live.accepted'); void waitForPolicy(outcome.value);
+      }
       else if (outcome.kind === 'rejected' && outcome.code === 'expired') expired(offer.offerId);
       else fail(outcome.kind === 'rejected' && outcome.code === 'conflict' ? 'conflict' : 'generic', 4);
     } catch { /* aborted: the user left the screen */ }
@@ -166,22 +193,27 @@ export function OfferJourney(props: {
   async function issue(policy: Policy) {
     const current = signal.current;
     const recovering = phase.name === 'recovering' && !phase.busy;
-    if (!current || (!recovering && (phase.name !== 'review' || phase.confirming || !checked))) return;
+    const retrying = phase.name === 'charging' && !phase.busy;
+    if (!current || (!recovering && !retrying && (phase.name !== 'review' || !checked))) return;
     const identity = `${policy.policyId}:${policy.documentHash}`;
     const key = issueKeys.current.get(identity) ?? newIdempotencyKey();
     issueKeys.current.set(identity, key);
-    setPhase(recovering ? { name: 'recovering', policy, busy: true } : { name: 'review', policy, confirming: true });
+    if (accepted.current) savePurchaseDraft({ quoteId: quote.quoteId, acceptance: accepted.current, issue: { policyId: policy.policyId, documentHash: policy.documentHash, key } });
+    setPhase(recovering ? { name: 'recovering', policy, busy: true } : { name: 'charging', policy, key, busy: true, uncertain: false });
+    if (!recovering) say('live.chargePending');
     try {
       const outcome = await api().issuePolicy(policy, key, current);
       if (current.aborted) return;
       if (outcome.kind === 'unauthenticated' || outcome.kind === 'consentRequired') { common(outcome, () => {}, 6); return; }
-      if (outcome.kind === 'ok' && outcome.value.status === 'issued' && outcome.value.documentHash === policy.documentHash) {
-        setPhase({ name: 'issued', policy: outcome.value }); say('live.issued');
+      if (outcome.kind === 'ok' && outcome.value.status === 'issued' && outcome.value.documentHash === policy.documentHash
+        && outcome.value.payment?.status === 'confirmed') {
+        setPhase({ name: 'charged', policy: outcome.value, key });
+        say('live.chargeConfirmed', { amount: latest.current.copDecimal(outcome.value.premium) });
         return;
       }
       if (outcome.kind === 'ok' || outcome.kind === 'unavailable') {
         // The charge or signature may have committed without a confirmation reaching us: retry only with the same key.
-        setPhase(recovering ? { name: 'recovering', policy, busy: false } : { name: 'review', policy, confirming: false, problem: 'uncertain' }); say(recovering ? 'live.refunding' : 'live.issueUncertain');
+        setPhase(recovering ? { name: 'recovering', policy, busy: false } : { name: 'charging', policy, key, busy: false, uncertain: true }); say(recovering ? 'live.refunding' : 'live.issueUncertain');
         return;
       }
       if (outcome.kind === 'rejected' && outcome.code === 'offer_invalid') { expired(policy.offerId); return; }
@@ -195,7 +227,8 @@ export function OfferJourney(props: {
         if (accepted.current) await waitForPolicy(accepted.current); else fail('generic', 6);
         return;
       }
-      fail(outcome.kind === 'rejected' && outcome.code === 'payment_declined' ? 'payment' : 'generic', 6);
+      if (outcome.kind === 'rejected' && outcome.code === 'payment_declined') { setPhase({ name: 'chargeDeclined', policy }); say('live.chargeDeclined'); return; }
+      fail('generic', 6);
     } catch { /* aborted: the user left the screen */ }
   }
 
@@ -237,8 +270,13 @@ export function OfferJourney(props: {
       <p>{t(phase.slow ? 'policy.slowDetail' : 'policy.preparingDetail')}</p>
       {phase.slow && <div className="actions"><button type="button" className="btn btn-primary" onClick={() => void waitForPolicy(phase.acceptance)}>{t('policy.refresh')}</button></div>}
     </section>}
-    {phase.name === 'review' && <PolicyDocument heading={heading} policy={phase.policy} checked={checked} confirming={phase.confirming} problem={phase.problem}
+    {phase.name === 'review' && <PolicyDocument heading={heading} policy={phase.policy} checked={checked} documentChanged={phase.documentChanged}
       onCheck={setChecked} onConfirm={() => void issue(phase.policy)} />}
+    {phase.name === 'charging' && <ChargePending heading={heading} policy={phase.policy} idempotencyKey={phase.key} busy={phase.busy} uncertain={phase.uncertain}
+      onRefresh={() => void issue(phase.policy)} />}
+    {phase.name === 'charged' && <ChargeConfirmed heading={heading} policy={phase.policy} idempotencyKey={phase.key}
+      onContinue={() => { setPhase({ name: 'issued', policy: phase.policy }); say('live.issued'); }} />}
+    {phase.name === 'chargeDeclined' && <ChargeDeclined heading={heading} policy={phase.policy} onRetry={onRequote} onBack={onBack} />}
     {phase.name === 'issued' && <PolicyIssued heading={heading} policy={phase.policy} />}
     {(phase.name === 'recovering' || phase.name === 'refunded') && <section className="step card" aria-busy={phase.name === 'recovering' && phase.busy}>
       <h1 ref={heading} tabIndex={-1} className="h-card">{t(phase.name === 'refunded' ? 'policy.refundedTitle' : 'policy.refundingTitle')}</h1>
