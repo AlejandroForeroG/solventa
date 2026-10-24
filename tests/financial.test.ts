@@ -474,3 +474,14 @@ test('disabled financial configuration does not look for recovery candidates', a
   assert.deepEqual(await fixture.finance.reconcileIssuances(new Date(), 25), []);
   assert.equal(fixture.candidatesRead(), 0);
 });
+
+test('policy reads expose the premium state and only an acknowledged synthetic receipt', async () => {
+  for (const [policyStatus, paymentStatus, reference] of [['pending', 'pending', false], ['pending', 'declined', false],
+    ['charged', 'confirmed', true], ['refunded', 'refunded', true]] as const) {
+    const fixture = await stateFixture(policyStatus, paymentStatus, { status: 'unknown', reference: null });
+    const result = await fixture.finance.get({ actor: fixture.actor, policyId: fixture.policy.id, traceId: randomUUID() });
+    assert.ok(result.status === 'ok', JSON.stringify(result));
+    assert.deepEqual(result.payment, { status: paymentStatus, reference: reference ? 'MOCK-' + fixture.payment.id : null });
+    assert.equal('payment' in result.policy, false, 'the stored command result shape stays unchanged for replays');
+  }
+});

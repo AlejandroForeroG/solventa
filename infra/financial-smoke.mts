@@ -394,6 +394,11 @@ try {
   await recoverAll(finance);
   assert.deepEqual(await stateOf(stranded.candidate.policyId), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 });
   assert.equal((await captures(stranded.candidate.policyId, 'policy.issued'))[0].inputs.trigger, 'reconciliation');
+  const strandedRead = ok(await finance.get({ actor: stranded.event.payload, policyId: stranded.candidate.policyId, traceId: randomUUID() }));
+  const strandedPayment = (await db.query("SELECT id FROM policy.payments WHERE policy_id=$1 AND operation='premium'", [stranded.candidate.policyId])).rows[0].id;
+  assert.deepEqual(strandedRead.payment, { status: 'confirmed', reference: 'MOCK-' + strandedPayment }, 'the read exposes the recovered receipt');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.financial_commands WHERE policy_id=$1 AND result ? $2', [stranded.candidate.policyId, 'payment'])).rows[0].n, 0,
+    'stored command results keep their replay shape');
   await recoverAll(finance);
   assert.deepEqual(await stateOf(stranded.candidate.policyId), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 }, 'a later run changes nothing');
   assert.equal(ok(await issue(finance, stranded.event, stranded.candidate)).policy.status, 'issued', 'a late client retry with a new key sees the same issuance');
@@ -565,7 +570,7 @@ try {
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {
   await db?.end();

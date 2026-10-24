@@ -25,9 +25,23 @@ test('financial examples match the public schemas and omit principal/provider cr
   validate('offers', 'Offer', examples.offer);
   validate('offers', 'Acceptance', examples.acceptance);
   validate('policies', 'Policy', examples.policy);
-  for (const body of [examples.offer, examples.acceptance, examples.policy]) {
+  validate('policies', 'Policy', examples.issuedPolicy);
+  for (const body of [examples.offer, examples.acceptance, examples.policy, examples.issuedPolicy]) {
     assert.equal('subjectToken' in body, false);
     assert.equal('clientId' in body, false);
+  }
+});
+
+test('the premium state exposes only a synthetic provider receipt and no caller-controlled payment data', () => {
+  const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/Policy');
+  assert.ok(check);
+  const payment = examples.issuedPolicy.payment;
+  for (const accepted of [{ status: 'pending', reference: null }, { status: 'declined', reference: null }, payment]) {
+    assert.equal(check({ ...examples.issuedPolicy, payment: accepted }), true, JSON.stringify(check.errors));
+  }
+  for (const rejected of [{ status: 'confirmed' }, { ...payment, reference: 'REC-9931-2026' }, { ...payment, status: 'succeeded' },
+    { ...payment, amount: '1.0000' }, { ...payment, paymentMethod: 'Bancolombia 4471' }]) {
+    assert.equal(check({ ...examples.issuedPolicy, payment: rejected }), false, JSON.stringify(rejected));
   }
 });
 
