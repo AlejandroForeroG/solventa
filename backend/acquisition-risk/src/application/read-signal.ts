@@ -2,8 +2,8 @@ import { CONFIDENCE, defaultSignal, overallConfidence, SIGNAL_FRESHNESS_MS, SIGN
 import type { Signal, SignalScope } from '../domain/signal';
 import type { ConsentCheck, ConsentDenial, ConsentGuard } from './ports/consent-guard';
 import type { Clock, Timer } from './ports/platform';
-import { ProviderFailure, SIGNAL_DEADLINE_MS } from './ports/signal-sources';
-import type { DegradationTrace, SignalDegradation, SignalProvider, SignalSnapshots } from './ports/signal-sources';
+import { ProviderFailure, SIGNAL_BUDGET_MS, SIGNAL_DEADLINE_MS } from './ports/signal-sources';
+import type { BudgetedDependency, DegradationTrace, SignalDegradation, SignalProvider, SignalSnapshots } from './ports/signal-sources';
 
 export type SignalResult =
   | { status: 'available'; signal: Signal; consentId: string }
@@ -72,7 +72,21 @@ export class ReadSignal {
 
   // The adapter already enforces this limit; repeating it here keeps a provider that ignores it from holding the read.
   private readWithinDeadline(input: SignalRequest): Promise<Signal> {
-    return this.withinDeadline(this.deps.provider.read(input.subjectToken, input.scope, input.traceId));
+    return this.measured('provider', input, () => this.withinDeadline(this.deps.provider.read(input.subjectToken, input.scope, input.traceId)));
+  }
+
+  private async measured<T>(dependency: BudgetedDependency, input: SignalRequest, call: () => Promise<T>): Promise<T> {
+    const startedAt = this.deps.clock.now().getTime();
+    let outcome: 'ok' | 'failed' = 'ok';
+    try {
+      return await call();
+    } catch (error) {
+      outcome = 'failed';
+      throw error;
+    } finally {
+      const durationMs = this.deps.clock.now().getTime() - startedAt;
+      if (durationMs > SIGNAL_BUDGET_MS) this.deps.trace.overBudget?.(input.traceId, { dependency, scope: input.scope, durationMs, outcome });
+    }
   }
 
   private withinDeadline<T>(work: Promise<T>): Promise<T> {
@@ -102,7 +116,7 @@ export class ReadSignal {
   // A provider failure may fall back to a copy, but only one captured under this same, still valid consent and not expired.
   private async validCopy(input: SignalRequest, consentId: string): Promise<Signal | null> {
     try {
-      const copy = await this.withinDeadline(this.deps.snapshots.find(input.subjectToken, input.scope, consentId));
+      const copy = await this.measured('stored_copy', input, () => this.withinDeadline(this.deps.snapshots.find(input.subjectToken, input.scope, consentId)));
       return copy && copy.consentId === consentId && Date.parse(copy.validUntil) > this.deps.clock.now().getTime() ? copy.signal : null;
     } catch {
       return null; // a copy that cannot be read in time is the same as no copy

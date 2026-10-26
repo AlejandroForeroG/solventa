@@ -187,7 +187,16 @@ The grouped creation statement preserves the decision outcome, offer status and 
 
 Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
 
+**Latency budget per external call.** Each provider read and each stored copy lookup has a budget of 120 ms (`SIGNAL_BUDGET_MS`) inside the 700 ms hard limit. The budget is measured, not enforced: a call that takes more than 120 ms but less than 700 ms still answers live, and only the hard limit degrades a source. A call that exceeds the budget, whether it answers or fails, writes one line from the injected clock, with no subject token, provider message or payload:
+
+```json
+{"event":"dependency_budget_exceeded","traceId":"…","budgetMs":120,"dependency":"provider","scope":"payment_history_score","durationMs":300,"outcome":"ok"}
+```
+
+`dependency` is `provider` or `stored_copy` and `outcome` is `ok` or `failed`. A call that reaches 700 ms writes both this line and `signal_degraded`. Identity authorization and the offer SQL calls cannot be replaced by a default, so they are outside this budget.
+
 **Limits.**
+- Only calls that exceed the budget are logged; the duration of every call, the dominant dependency and the percentiles per dependency are not recorded yet.
 - The 400 ms p95 / 800 ms p99 profile-and-price objective requires measurement through the deployed web, Identity, provider and SQL path; unit tests establish parallel reads and the 700 ms per-dependency ceiling, not the percentile objective.
 - The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
 
