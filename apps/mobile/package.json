@@ -13,6 +13,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
+    "@solventa/contracts": "0.0.0",
     "@solventa/assets": "0.0.0",
     "@workos-inc/node": "^11.0.0",
     "expo": "~57.0.27",

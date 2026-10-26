@@ -5,6 +5,7 @@ const mobile = new URL('../apps/mobile/src/', import.meta.url);
 const Fragment = Symbol('Fragment');
 const nodes: Array<{ type: unknown; props: Record<string, unknown> }> = [];
 const actions: string[] = [];
+const routes: string[] = [];
 const Platform = { OS: 'android' };
 let auth: Record<string, unknown>;
 
@@ -23,6 +24,7 @@ function createElement(type: unknown, props: Record<string, unknown> | null, ...
 }
 
 mock.module('react', { defaultExport: { createElement, Fragment }, namedExports: {} });
+mock.module('expo-router', { namedExports: { router: { push: (route: string) => routes.push(route) } } });
 mock.module('react-native', { namedExports: {
   ActivityIndicator: 'ActivityIndicator', Platform, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View',
   StyleSheet: { create: (styles: unknown) => styles },
@@ -41,7 +43,7 @@ const copy = {
   currentAccount: 'currentAccount', biometricEnabled: 'biometricEnabled', biometricSetup: 'biometricSetup',
   biometricReady: 'biometricReady', biometricDescription: 'biometricDescription', primaryRequired: 'primaryRequired',
   pendingLogout: 'pendingLogout', nativeOnly: 'nativeOnly',
-  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
+  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', verifyIdentity: 'verifyIdentity', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
 };
 mock.module(new URL('shared/i18n/use-app-messages.ts', mobile).href, { namedExports: { useAppMessages: () => copy } });
 
@@ -51,6 +53,7 @@ const welcome = (imported.default ?? imported) as typeof import('../apps/mobile/
 function render(status: string, overrides: Record<string, unknown> = {}) {
   nodes.length = 0;
   actions.length = 0;
+  routes.length = 0;
   Platform.OS = 'android';
   auth = {
     status, failure: undefined, traceId: undefined, email: undefined, biometricEnabled: false, canEnableBiometrics: true,
@@ -146,7 +149,7 @@ test('biometric setup is disabled until primary authentication allows it', () =>
   assert.ok(text().includes('primaryRequired'));
   assert.equal(button('enable').props.disabled, true);
   assert.deepEqual(button('enable').props.accessibilityState, { disabled: true });
-  assert.deepEqual(labels(), ['enable', 'signOut']);
+  assert.deepEqual(labels(), ['verifyIdentity', 'enable', 'signOut']);
   render('authenticated');
   assert.ok(text().includes('biometricSetup'));
   press('enable');
@@ -157,7 +160,7 @@ test('an enrolled account can revoke biometric access and a pending logout can b
   render('authenticated', { biometricEnabled: true });
   assert.ok(text().includes('biometricEnabled'));
   assert.ok(text().includes('biometricReady'));
-  assert.deepEqual(labels(), ['revoke', 'signOut']);
+  assert.deepEqual(labels(), ['verifyIdentity', 'revoke', 'signOut']);
   press('revoke');
   assert.deepEqual(actions, ['revoke']);
   render('logoutPending');
@@ -177,4 +180,10 @@ test('web explains the native-only flow and disables sign-in', () => {
   assert.equal(button('signIn').props.disabled, true);
   assert.deepEqual(button('signIn').props.accessibilityState, { disabled: true });
   assert.deepEqual(actions, []);
+});
+
+test('an authenticated account retains the existing identity-verification entry', () => {
+  render('authenticated');
+  press('verifyIdentity');
+  assert.deepEqual(routes, ['/identity-verification']);
 });

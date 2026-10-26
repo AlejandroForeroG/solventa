@@ -93,6 +93,49 @@ function sessionRecord(phase: 'active' | 'bootstrap' | 'logout' = 'active'): Aut
   return { version: 1, transaction: null, session: { configuration: config, baseUrl, tokens, phase } };
 }
 
+test('authenticated feature requests use the current credential without exposing it in observable state', async () => {
+  const f = fixture(sessionRecord()); await f.auth.restore();
+  assert.equal(await f.auth.withSession(async token => { assert.equal(token, tokens.accessToken); return 'safe-result'; }), 'safe-result');
+  assert.equal(JSON.stringify(f.auth.getSnapshot()).includes(tokens.accessToken), false);
+  assert.equal(f.auth.getApiBaseUrl(), baseUrl);
+  f.auth.lock();
+  let reads = 0; f.store.read = async () => { reads++; return sessionRecord(); };
+  await assert.rejects(f.auth.withSession(async () => assert.fail('locked feature must not run')), AuthFailure);
+  assert.equal(reads, 0);
+});
+
+test('backgrounding while a feature refreshes cannot release a credential to its callback', async () => {
+  const f = fixture(sessionRecord()); await f.auth.restore(); f.advance(300_000);
+  let start!: () => void; const started = new Promise<void>(resolve => { start = resolve; });
+  let release!: () => void; const waiting = new Promise<void>(resolve => { release = resolve; });
+  const original = f.identity.refresh;
+  f.identity.refresh = async (...args) => { start(); await waiting; return original(...args); };
+  const request = f.auth.withSession(async () => assert.fail('background request must not run'));
+  await started; f.auth.lock(); release();
+  await assert.rejects(request, AuthFailure);
+  assert.notEqual(f.auth.getSnapshot().status, 'authenticated');
+});
+
+test('logout discards a late feature result and serializes remote session revocation', async () => {
+  const f = fixture(sessionRecord()); await f.auth.restore();
+  let start!: () => void; const started = new Promise<void>(resolve => { start = resolve; });
+  let release!: () => void; const waiting = new Promise<void>(resolve => { release = resolve; });
+  const request = f.auth.withSession(async () => { start(); await waiting; return 'late-approval'; });
+  await started; const logout = f.auth.signOut(); release();
+  await assert.rejects(request, AuthFailure); await logout;
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.equal(f.calls.filter(call => call === 'logout').length, 1);
+});
+
+test('feature authorization denial blocks the active session while ordinary business errors preserve it', async () => {
+  const f = fixture(sessionRecord()); await f.auth.restore();
+  await assert.rejects(f.auth.withSession(async () => { throw new Error('business_conflict'); }), /business_conflict/);
+  assert.equal(f.auth.getSnapshot().status, 'authenticated');
+  await assert.rejects(f.auth.withSession(async () => { throw new AuthFailure('unauthorized', traceId); }), AuthFailure);
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.deepEqual(f.saved(), emptyRecord());
+});
+
 test('PKCE callback registers, inspects and checks access before granting entry; duplicate delivery cannot exchange twice', async () => {
   const f = fixture(transactionRecord());
   await Promise.all([f.auth.complete(callback), f.auth.complete(callback)]);

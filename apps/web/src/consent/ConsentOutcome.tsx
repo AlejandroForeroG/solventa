@@ -3,11 +3,13 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Consent } from './api';
 
-export function ConsentGranted({ consent, uncertain = false, onPanel, onContinue, onBack }: { consent: Consent; uncertain?: boolean; onPanel?: () => void; onContinue?: () => void; onBack: () => void }) {
+export function ConsentGranted({ consent, uncertain = false, onPanel, onBack, onOffer }: { consent: Consent; uncertain?: boolean; onPanel?: () => void; onBack: () => void; onOffer?: () => void }) {
   const intl = useIntl();
   const { dayMonthYear } = useFormatters();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
+  // Only a confirmed active authorization can continue; the server verifies consent again before any offer.
+  const canContinue = !!onOffer && !uncertain && consent.status === 'active';
   return <section className="step card">
     <div className="result-head">
       <div>
@@ -20,8 +22,8 @@ export function ConsentGranted({ consent, uncertain = false, onPanel, onContinue
     </div>
     <p>{intl.formatMessage({ id: uncertain ? 'granted.uncertainDetail' : consent.status === 'active' ? 'granted.detail' : 'granted.inactive' })}</p>
     <div className="actions">
-      {!uncertain && consent.status === 'active' && onContinue && <button type="button" className="btn btn-primary" onClick={onContinue}>{intl.formatMessage({ id: 'granted.continue' })}</button>}
-      {onPanel && <button type="button" className="btn btn-primary" onClick={onPanel}>{intl.formatMessage({ id: 'granted.panel' })}</button>}
+      {canContinue && <button type="button" className="btn btn-primary" onClick={onOffer}>{intl.formatMessage({ id: 'granted.offer' })}</button>}
+      {onPanel && <button type="button" className={`btn ${canContinue ? 'btn-secondary' : 'btn-primary'}`} onClick={onPanel}>{intl.formatMessage({ id: 'granted.panel' })}</button>}
       <button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'granted.back' })}</button>
     </div>
   </section>;

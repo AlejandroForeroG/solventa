@@ -1,4 +1,4 @@
-import type { Consent } from '../../domain/consent';
+import type { Consent, ScopeCode } from '../../domain/consent';
 import type { Principal } from '../authentication';
 
 export class ConsentCursorNotOwned extends Error {
@@ -21,7 +21,9 @@ export interface ConsentStore {
   list(principal: Principal, limit: number, now: Date, after?: string): Promise<Consent[]>;
   revoke(principal: Principal, consentCode: string, now: Date, traceId: string): Promise<RevokeResult>;
   decline(principal: Principal, traceId: string): Promise<void>;
-  forSubject(subjectToken: string, purposeCode: string, scopes: readonly string[], now: Date): Promise<Consent[]>;
+  forSubject(subjectToken: string, purposeCode: string, scope: string, now: Date): Promise<Consent[]>;
+  // Same per-scope selection as forSubject, read for every requested scope from one snapshot.
+  forSubjectScopes(subjectToken: string, purposeCode: string, scopes: readonly ScopeCode[], now: Date): Promise<ReadonlyMap<ScopeCode, Consent[]>>;
 }
 
 export interface Platform {

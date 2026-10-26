@@ -10,10 +10,20 @@ export { createPolicyFinance } from './adapters/composition';
 // Composition root: platform wiring and operational probes stay outside the core.
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
-    return createHttp({ finance: createPolicyFinance(this.env),
+    const started = performance.now();
+    const response = await createHttp({ finance: createPolicyFinance(this.env),
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input)
     }).fetch(request, this.env, this.ctx);
+    if (new URL(request.url).pathname.startsWith('/api/v1/policies/')) {
+      const placement = request.headers.get('cf-placement') ?? '';
+      const traceId = response.headers.get('x-trace-id') ?? '';
+      console.log(JSON.stringify({ event: 'financial_http_duration', environment: this.env.APP_ENV,
+        ...(UUID.test(traceId) ? { traceId } : {}), status: response.status,
+        ...(/^(local|remote)-[A-Z]{3}$/.test(placement) ? { placement } : {}),
+        durationMs: Math.round((performance.now() - started) * 100) / 100 }));
+    }
+    return response;
   }
   async acceptOfferV1(input: unknown) {
     const traceId = object(input) && typeof input.correlationId === 'string' && UUID.test(input.correlationId) ? input.correlationId : crypto.randomUUID();
@@ -24,10 +34,16 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     for (const message of batch.messages) {
       const body = message.body;
       const traceId = object(body) && typeof body.correlationId === 'string' && UUID.test(body.correlationId) ? body.correlationId : crypto.randomUUID();
+      const started = performance.now();
+      const eventTime = object(body) && typeof body.occurredAt === 'string' ? Date.parse(body.occurredAt) : NaN;
+      const ageMs = Number.isFinite(eventTime) ? Math.max(0, Date.now() - eventTime) : null;
+      const queueAgeMs = Math.max(0, Date.now() - message.timestamp.getTime());
       const result = object(body) && body.eventType === 'offer.accepted'
         ? await finance.acceptOffer(body, traceId) : await finance.consumeParametricEvent(body, traceId);
       if (result.status === 'unavailable') message.retry({ delaySeconds: Math.min(60, 2 ** Math.min(message.attempts, 5)) });
       else message.ack();
+      console.log(JSON.stringify({ event: 'financial_queue_delivery', environment: this.env.APP_ENV, traceId,
+        attempts: message.attempts, ageMs, queueAgeMs, processingMs: Math.round((performance.now() - started) * 100) / 100, outcome: result.status }));
     }
   }
   liveness() { return { service: 'policy-claims-payments', environment: this.env.APP_ENV }; }
