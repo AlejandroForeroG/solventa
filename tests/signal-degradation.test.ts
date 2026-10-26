@@ -2,8 +2,8 @@ import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ReadSignal } from '../backend/acquisition-risk/src/application/read-signal';
 import type { ConsentCheck, ConsentGuard } from '../backend/acquisition-risk/src/application/ports/consent-guard';
-import { ProviderFailure, SIGNAL_DEADLINE_MS } from '../backend/acquisition-risk/src/application/ports/signal-sources';
-import type { SignalDegradation, SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
+import { ProviderFailure, SIGNAL_BUDGET_MS, SIGNAL_DEADLINE_MS } from '../backend/acquisition-risk/src/application/ports/signal-sources';
+import type { BudgetOverrun, SignalDegradation, SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 import { CONFIDENCE, DEFAULT_SIGNAL_DATA, SIGNAL_SCOPES, defaultSignal, overallConfidence } from '../backend/acquisition-risk/src/domain/signal';
 import type { Signal, SignalScope } from '../backend/acquisition-risk/src/domain/signal';
 import { underwrite } from '../backend/acquisition-risk/src/domain/offer';
@@ -237,6 +237,75 @@ test('the degradation line carries only normalized values', () => {
     new ConsoleDegradationTrace().record(TRACE, { scope: 'payment_history_score', failure: 'timeout', substitute: 'default', confidence: 0 });
   } finally { warn.mock.restore(); }
   assert.deepEqual(JSON.parse(lines[0]), { event: 'signal_degraded', traceId: TRACE, rule: 'degradation-1', scope: 'payment_history_score', failure: 'timeout', substitute: 'default', confidence: 0 });
+});
+
+function budgetRig() {
+  const r = rig();
+  let now = NOW.getTime();
+  const overruns: BudgetOverrun[] = [];
+  const read = new ReadSignal({ guard: { verify: async () => ({ allowed: true, consentId: CONSENT, textVersion: 2, expiresAt: '2027-01-01T00:00:00Z' }) }, provider: r.provider,
+    snapshots: r.snapshots, clock: { now: () => new Date(now) }, timer: r.timer,
+    trace: { record: (traceId, degradation) => r.degradations.push({ traceId, degradation }), overBudget: (_traceId, overrun) => overruns.push(overrun) } });
+  const takes = (milliseconds: number, outcome: 'answer' | 'failure' = 'answer') => async (scope: SignalScope) => {
+    now += milliseconds;
+    if (outcome === 'failure') throw new ProviderFailure('unavailable');
+    return live!.read(SUBJECT, scope, TRACE);
+  };
+  return { ...r, read, overruns, takes, advance: (milliseconds: number) => { now += milliseconds; } };
+}
+const askBudgeted = (r: ReturnType<typeof budgetRig>) => r.read.execute({ subjectToken: SUBJECT, scope: 'payment_history_score', traceId: TRACE });
+
+test('a provider that answers over the 120 ms budget is recorded and not degraded', async () => {
+  const r = budgetRig();
+  r.provider.behavior = r.takes(SIGNAL_BUDGET_MS + 1);
+  assert.equal((await askBudgeted(r)).status, 'available');
+  assert.deepEqual(r.overruns, [{ dependency: 'provider', scope: 'payment_history_score', durationMs: SIGNAL_BUDGET_MS + 1, outcome: 'ok' }]);
+  assert.deepEqual(r.degradations, []);
+});
+
+test('a provider within the budget leaves no overrun, including exactly 120 ms', async () => {
+  const r = budgetRig();
+  r.provider.behavior = r.takes(SIGNAL_BUDGET_MS);
+  await askBudgeted(r);
+  assert.deepEqual(r.overruns, []);
+});
+
+test('a provider that fails over the budget records the overrun as failed and still degrades', async () => {
+  const r = budgetRig();
+  r.provider.behavior = r.takes(300, 'failure');
+  const result = await askBudgeted(r);
+  assert.equal(result.status, 'degraded');
+  assert.deepEqual(r.overruns, [{ dependency: 'provider', scope: 'payment_history_score', durationMs: 300, outcome: 'failed' }]);
+});
+
+test('a provider that hits the hard limit exceeds the budget and degrades', async () => {
+  const r = budgetRig();
+  r.provider.behavior = () => new Promise<Signal>(() => {});
+  const pending = askBudgeted(r);
+  await flush();
+  r.advance(SIGNAL_DEADLINE_MS);
+  r.timer.fire();
+  assert.equal((await pending).status, 'degraded');
+  assert.deepEqual(r.overruns.map(({ dependency, durationMs, outcome }) => ({ dependency, durationMs, outcome })), [{ dependency: 'provider', durationMs: SIGNAL_DEADLINE_MS, outcome: 'failed' }]);
+});
+
+test('a stored copy lookup over the budget is recorded separately from the provider', async () => {
+  const r = budgetRig();
+  r.provider.behavior = () => Promise.reject(new ProviderFailure('unavailable'));
+  r.snapshots.copy = copyOf('payment_history_score', '2026-10-19T15:02:00.000Z');
+  r.snapshots.find = async () => { r.advance(200); return r.snapshots.copy; };
+  const result = await askBudgeted(r);
+  assert.equal(result.status, 'degraded');
+  assert.deepEqual(r.overruns, [{ dependency: 'stored_copy', scope: 'payment_history_score', durationMs: 200, outcome: 'ok' }]);
+});
+
+test('the budget line carries only normalized values', () => {
+  const lines: string[] = [];
+  const warn = mock.method(console, 'warn', (line: string) => { lines.push(line); });
+  try {
+    new ConsoleDegradationTrace().overBudget(TRACE, { dependency: 'provider', scope: 'payment_history_score', durationMs: 300, outcome: 'ok' });
+  } finally { warn.mock.restore(); }
+  assert.deepEqual(JSON.parse(lines[0]), { event: 'dependency_budget_exceeded', traceId: TRACE, budgetMs: 120, dependency: 'provider', scope: 'payment_history_score', durationMs: 300, outcome: 'ok' });
 });
 
 test('the platform timer resolves', async () => {
