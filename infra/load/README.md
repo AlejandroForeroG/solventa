@@ -1,6 +1,8 @@
-# Quote load test
+# Quote and offer load tests
 
 Measures the latency of `POST /api/v1/quotes` with [k6](https://k6.io) against the quality scenario: **p95 ≤ 250 ms and p99 ≤ 500 ms**. Synthetic data only.
+
+`offers.k6.js` measures the complete HTTP request for `POST /api/v1/quotes/{quoteId}/offers` against the offer-profile objective: **p95 < 400 ms and p99 < 800 ms**. It measures the edge-to-response duration seen by the caller, including authentication, profile retrieval, external-signal deadlines, pricing, persistence and serialization. It never adds internal percentiles.
 
 ## What it measures and what it does not
 
@@ -27,9 +29,21 @@ TOKEN=<partner access token> sh infra/load/run.sh 30 60s    # POST /api/v1/quote
 
 `run.sh [rate] [duration] [url]` runs k6 in Docker, saves the full summary to `results/run-<rate>rps-<duration>.json` and prints the key numbers (`report.mjs`).
 
+To measure offer profiling, create a quote through the web flow, then pass its code and the same session cookie:
+
+```sh
+COOKIE=<cookie value> QUOTE_ID=COT-2026-00001 sh infra/load/run-offers.sh 10 60s
+```
+
+`run-offers.sh` writes `results/offers-<rate>rps-<duration>.json`. Every virtual user uses a fresh idempotency key and replays one in ten requests. Checks require the public Offer contract, trace correlation and the expected `201`/`200` create/replay statuses. The run fails if p95 reaches 400 ms, p99 reaches 800 ms, or failures exceed 1%. A preliminary response is valid and counted separately; it must not be discarded by the measurement.
+
+Local results are development evidence only. A staging run must use a staging-owned synthetic user and quote, and its summary must be attached separately; do not present a local result as staging evidence.
+
+The 2026-10-22 local authenticated offer check used a constant arrival rate of 10 requests/s for 60 seconds: 600 requests, zero failures, 157 ms average, 246 ms p95, 347 ms p99 and 487 ms maximum. It exercised fresh and idempotent offer creation through the complete local web, Identity, provider and SQL path. This particular summary came from the local Node arrival-rate runner because the session credential was deliberately kept out of the Docker command boundary; it is not a k6 or staging result. The sanitized JSON summary is retained with the internal story evidence rather than committed.
+
 The scenario warms up for 10 s at a low rate, then measures at a constant arrival rate. Each request uses a new `Idempotency-Key`, and one in ten repeats the previous request to exercise idempotency (it must answer 200 with the same quote). Checks cover the status, the `COT-YYYY-NNNNN` code, the COP currency and the `X-Trace-Id` header. k6 thresholds fail when p95 ≥ 250 ms, p99 ≥ 500 ms or more than 1 % of requests fail.
 
-For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, idempotency lookup, counter allocation, the atomic quote/audit/outbox write and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
+For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, the combined atomic lookup/counter/quote/audit/outbox statement (`save`), a race lookup when needed, and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
 
 ## Baseline before the Identity access call (local, 60 s per load)
 
@@ -45,9 +59,13 @@ On this machine the service sustains about 100 requests per second within the th
 
 ## Finding that changed the code
 
-The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) showed that this row was the cause: the quote transaction held it locked until `COMMIT`, so every quote queued behind it. The number is now allocated in a short statement before the transaction (`src/adapters/outbound/sql-quote-store.ts`), which raised the ceiling to about 190/s.
+The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) implicated that row: the transaction held it locked through multiple sequential client queries before `COMMIT`. Moving the allocation to a short separate statement raised the observed local ceiling to about 190/s. These are historical measurements of earlier implementations.
 
-Consequence: if a transaction fails after the number is allocated, the numbering has a gap. Codes stay unique and readable but are not contiguous.
+That intermediate implementation could leave a gap when the later transaction failed. Existing gaps remain valid: codes are unique and readable, not necessarily contiguous.
+
+The current store combines the actor/key lookup, conditional counter allocation and quote/audit/outbox write in one SQL statement. An existing key returns its stored quote or conflict without advancing the counter. A failed statement rolls back the counter along with all business effects. Concurrent first attempts may still allocate an unused number if another attempt wins the actor/key uniqueness constraint; the loser reads that winner in a new snapshot and compares the request fingerprint. The counter is held until this statement commits, but there are no client round trips while it is locked. This is different from the earlier multi-query transaction: capacity and latency must be measured again rather than inferred from historical throughput. The published code, price, fresh authorization and idempotency contract remain unchanged.
+
+`npm run test:quotes:sql` checks both actors, unchanged result/event payloads, identical and conflicting concurrent requests, no counter advancement on replay/conflict, and rollback of the counter/quote/audit/outbox after an injected quote-constraint failure.
 
 ## To improve
 

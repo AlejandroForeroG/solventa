@@ -60,7 +60,7 @@ export class OfferService {
     if (!this.authorized(input)) return { status: 'denied' as const };
     const observedAt = this.deps.clock.now().getTime();
     if (Date.parse(quote.validUntil) <= observedAt) return { status: 'expired' as const };
-    if (signals.length !== SIGNAL_SCOPES.length || signals.some((s, index) => s.scope !== SIGNAL_SCOPES[index]
+    if (signals.length !== SIGNAL_SCOPES.length || signals.some((s, i) => s.scope !== SIGNAL_SCOPES[i]
       || Date.parse(s.capturedAt) > observedAt || observedAt - Date.parse(s.capturedAt) > SIGNAL_FRESHNESS_MS || !Number.isFinite(Date.parse(s.capturedAt)))) return { status: 'unavailable' as const };
     const provenance: OfferSignalSource[] = readable.map(result => result.status === 'available'
       ? { scope: result.signal.scope, quality: 'live', degraded: false, confidence: CONFIDENCE.live }
