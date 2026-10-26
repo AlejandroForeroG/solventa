@@ -31,6 +31,12 @@ The scenario warms up for 10 s at a low rate, then measures at a constant arriva
 
 For dev diagnosis, Acquisition emits a structured `quote_sql_slow` log when one SQL store attempt takes at least 250 ms. It includes the trace ID, outcome and elapsed milliseconds for connection, idempotency lookup, counter allocation, the atomic quote/audit/outbox write and close. It does not log credentials or request data. Correlate these stages with Workers wall time and the k6 summary before changing the quote-code allocator; the log is disabled outside dev.
 
+## Offer profiling (local evidence)
+
+A local run is development evidence only: do not present it as dev, staging or prod performance, and attach a remote run separately when one is actually executed.
+
+There is no offer load scenario in this guide yet. The 2026-10-26 local run of offer profiling was driven from the browser, not by k6: the web session cookie is HttpOnly, so a page script is the only runner that can use it without handling its value. A page script sent `fetch` requests from the signed-in tab at a constant arrival rate of 10 requests/s for 60 s after a 10 s warm-up at 2 requests/s, against `POST /api/v1/quotes/{quoteId}/offers` with a fresh `Idempotency-Key` on each request and one in ten repeated. The time runs from sending the request to reading the whole body in the browser, which is close to but not the same as `http_req_duration`. It measured 600 requests: zero failures, 80 ms average, 71 ms median, 107 ms p90, 153 ms p95, 245 ms p99 and 319 ms maximum, against the 400 ms p95 and 800 ms p99 objective. All 600 returned the Offer contract and an `X-Trace-Id`; 540 were fresh `201` and 60 were replayed `200`, all `definitive`. It ran with the simulated providers on the local Workers and database, after the 120 ms call budget was added: the backend wrote no `dependency_budget_exceeded` and no `signal_degraded` line, so no call went over budget and no source was replaced. It is not a k6, remote or staging result, and it does not measure each dependency apart.
+
 ## Baseline before the Identity access call (local, 60 s per load)
 
 Measured when a local stand-in authenticated the request inside Acquisition. The Identity call now adds a hop to every quote, so repeat the test before comparing.
