@@ -277,11 +277,36 @@ components:
           type: string
           enum:
             - mock
+        payment:
+          $ref: "#/components/schemas/PremiumPayment"
         replayed:
           type: boolean
         traceId:
           type: string
           format: uuid
+    PremiumPayment:
+      type: object
+      additionalProperties: false
+      description: Current state of the policy's single premium charge with the
+        synthetic provider. Absent until the customer confirms issuance. A
+        declined premium is final for this policy. The reference is the
+        synthetic receipt and is present only once the provider confirmed the
+        charge; it is not a real payment receipt.
+      required:
+        - status
+        - reference
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - declined
+            - refunded
+        reference:
+          type: string
+          nullable: true
+          pattern: ^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
     IssueRequest:
       type: object
       additionalProperties: false

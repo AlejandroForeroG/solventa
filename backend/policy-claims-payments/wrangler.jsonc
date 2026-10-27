@@ -30,6 +30,7 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "triggers": { "crons": ["* * * * *"] },
   "env": {
     "dev": {
       "name": "solventa-policy-claims-payments-dev",
@@ -40,6 +41,7 @@
         "APP_ENV": "dev",
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -73,6 +75,7 @@
         "APP_ENV": "staging",
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -105,6 +108,7 @@
         "APP_ENV": "prod",
         "FINANCIAL_PROVIDER_MODE": "disabled"
       },
+      "triggers": { "crons": [] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
