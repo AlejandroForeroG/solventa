@@ -281,18 +281,23 @@ export class SqlFinancialStore implements FinancialStore {
   }
   issuanceCandidates(staleBefore: Date, limit: number): Promise<IssuanceCandidate[]> {
     return this.connection(async db => {
-      // Charged/refunding states always hold a confirmed premium and come first. A pending intent may hold an unrecorded
-      // provider charge and is examined for one day; its offer and signature window expires long before.
-      const rows = (await db.query<{ id: string; client_id: string; subject_token: string; idempotency_key: string }>(`SELECT p.id,f.client_id,p.subject_token,cmd.idempotency_key
+      // An unresolved intent can hold a provider charge regardless of its age. Refreshing selected activity rotates
+      // bounded batches even when a provider remains unknown; it changes no financial state or customer command.
+      const rows = (await db.query<{ id: string; client_id: string; subject_token: string; idempotency_key: string }>(`WITH candidates AS (
+        SELECT p.id,f.client_id,p.subject_token,cmd.idempotency_key,greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at)) AS last_changed
         FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id
         LEFT JOIN policy.financial_payment_intents i ON i.policy_id=p.id AND i.operation='premium'
         LEFT JOIN policy.payments pay ON pay.id=i.payment_id
         JOIN LATERAL (SELECT c.idempotency_key FROM policy.financial_commands c
           WHERE c.policy_id=p.id AND c.actor_id=f.client_id AND c.result IS NULL
           ORDER BY c.created_at,c.idempotency_key LIMIT 1) cmd ON true
-        WHERE (p.status IN ('charged','refunding') OR (p.status='pending' AND pay.status='pending' AND pay.updated_at>$1::TIMESTAMPTZ-INTERVAL '1 day'))
+        WHERE (p.status IN ('charged','refunding') OR (p.status='pending' AND pay.status='pending'))
           AND greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at))<$1
-        ORDER BY p.status='pending',greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at)),p.id LIMIT $2`, [staleBefore.toISOString(), limit])).rows;
+        ORDER BY last_changed,p.id LIMIT $2
+      ), refreshed AS (
+        UPDATE policy.policies p SET updated_at=now() FROM candidates c WHERE p.id=c.id RETURNING p.id
+      ) SELECT c.id,c.client_id,c.subject_token,c.idempotency_key FROM candidates c JOIN refreshed r ON r.id=c.id
+        ORDER BY c.last_changed,c.id`, [staleBefore.toISOString(), limit])).rows;
       return rows.map(row => ({ policyId: row.id, actor: { clientId: row.client_id, subjectToken: row.subject_token }, commandKey: row.idempotency_key }));
     });
   }

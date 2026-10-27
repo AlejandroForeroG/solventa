@@ -192,7 +192,14 @@ export class PolicyFinance {
       return this.proceed({ actor, policyId, documentHash: policy.documentHash, commandKey, traceId, trigger: 'reconciliation' }, policy, payment, true);
     });
     if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };
-    if (result.status === 'denied') return result.error === 'signature_failed' ? { traceId, outcome: 'refunded' } : { traceId, outcome: 'rejected', error: result.error };
+    if (result.status === 'denied') {
+      if (result.error !== 'signature_failed') return { traceId, outcome: 'rejected', error: result.error };
+      // A concurrent request may still be refunding. The error alone never proves a completed compensation.
+      const current = await this.get({ actor: candidate.actor, policyId: candidate.policyId, traceId });
+      if (current.status === 'unavailable') return { traceId, outcome: 'unavailable' };
+      if (current.status === 'denied') return { traceId, outcome: 'rejected', error: current.error };
+      return { traceId, outcome: current.policy.status === 'refunded' ? 'refunded' : current.policy.status === 'issued' ? 'issued' : 'unchanged' };
+    }
     return { traceId, outcome: !unchanged && result.policy.status === 'issued' ? 'issued' : 'unchanged' };
   }
 

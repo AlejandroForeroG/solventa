@@ -427,6 +427,30 @@ try {
   assert.deepEqual(await stateOf(raced.candidate.policyId), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 },
     'recovery racing a client retry signs, issues and charges once');
 
+  // Old unresolved intents must remain eligible, and an unchanged batch must not starve later charges.
+  const unacknowledged: PaymentGateway = { lookup: payment => gateway.lookup(payment), refund: payment => gateway.refund(payment),
+    async settle() { return { status: 'uncertain', reference: null }; } };
+  const aged: string[] = [];
+  for (let index = 0; index < 3; index++) {
+    const event = await acceptedOffer(), candidate = await importOffer(event);
+    lostResponse = true;
+    const payments = index === 2 ? lostConfirmation : unacknowledged;
+    assert.equal((await issue(new PolicyFinance({ ...base, payments }), event, candidate)).status, 'unavailable');
+    const changedAt = new Date(Date.now() - (4 - index) * 86_400_000).toISOString();
+    await db.query('UPDATE policy.policies SET updated_at=$2 WHERE id=$1', [candidate.policyId, changedAt]);
+    await db.query("UPDATE policy.payments SET updated_at=$2 WHERE policy_id=$1 AND operation='premium'", [candidate.policyId, changedAt]);
+    aged.push(candidate.policyId);
+  }
+  for (const policyId of aged) {
+    const selected = await store.issuanceCandidates(new Date(Date.now() - 120_000), 1);
+    assert.deepEqual(selected.map(candidate => candidate.policyId), [policyId], 'old intents rotate through the bounded recovery batch');
+  }
+  await recoverAll(finance);
+  assert.equal((await stateOf(aged[0])).charges, 0, 'recovery must not charge an unresolved intent the provider never received');
+  assert.equal((await stateOf(aged[1])).charges, 0);
+  assert.deepEqual(await stateOf(aged[2]), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 },
+    'a provider charge with an unrecorded confirmation remains recoverable after more than a day');
+
   const flight = await acceptedOffer('flight_delay'); const flightPolicy = await importOffer(flight);
   assert.equal(ok(await issue(finance, flight, flightPolicy)).policy.status, 'issued');
   assert.equal(flight.payload.coverage.kind, 'flight_delay');
