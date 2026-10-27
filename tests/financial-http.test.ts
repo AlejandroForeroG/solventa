@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
+import { DependencyTimings } from '../backend/acquisition-risk/src/application/dependency-timings';
 import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition-risk/src/adapters/inbound/offers-http';
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
@@ -71,7 +72,9 @@ test('offer creation uses one authorization, real Origin and server-derived acto
   assert.ok(!('clientId' in body) && !('subjectToken' in body));
   assert.deepEqual(calls.map(c => c.operation), ['authorize', 'create']);
   assert.deepEqual(calls[0].input, { kind: 'web', operation: 'offers:create', traceId, cookie: 'synthetic-sealed', origin: 'https://web.example', method: 'POST', requestOrigin: 'https://web.example' });
-  assert.deepEqual(calls[1].input, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
+  const { timings, ...created } = calls[1].input as { timings: unknown };
+  assert.ok(timings instanceof DependencyTimings, 'the use case receives the request timings');
+  assert.deepEqual(created, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
 });
 
 test('financial authorization binds Origin to the actual destination for primary and retained hosts', async () => {
@@ -287,4 +290,22 @@ test('only a newly committed acceptance starts publication of its own event, wit
     await contractual(response, 'offers', 'Acceptance');
     assert.deepEqual(started, published);
   }
+});
+
+test('the profiling log line names the slowest dependency and lists every timed call without personal data', async () => {
+  const lines: string[] = [];
+  const log = mock.method(console, 'log', (line: string) => { lines.push(line); });
+  try {
+    const app = new Hono<{ Bindings: AcquisitionEnv }>();
+    mountOffers(app, { authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
+      denyResourceAccess: async () => ({ recorded: true }),
+      offers: { create: async input => { input.timings?.record('provider:payment_history_score', 90, 'ok'); input.timings?.record('offer_write', 12, 'ok'); return { status: 'created', offer: terms }; },
+        createFlight: async () => ({ status: 'created', offer: terms }), get: async () => ({ status: 'found', offer: terms }), accept: async () => { throw new Error('unexpected_accept'); } } });
+    const response = await app.fetch(request('/quotes/COT-2026-00001/offers', '{}', { 'idempotency-key': 'profile-1', 'x-trace-id': traceId }), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, 201);
+  } finally { log.mock.restore(); }
+  const line = JSON.parse(lines.find(candidate => candidate.includes('mortgage_offer_profiled')) ?? '{}');
+  assert.equal(line.dominant, 'provider:payment_history_score');
+  assert.deepEqual(line.dependencies.map((call: { name: string }) => call.name), ['identity_access', 'provider:payment_history_score', 'offer_write']);
+  assert.deepEqual(Object.keys(line).sort(), ['dependencies', 'dominant', 'event', 'latencyMs', 'offerStatus', 'result', 'traceId']);
 });
