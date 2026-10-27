@@ -37,6 +37,29 @@ A local run is development evidence only: do not present it as dev, staging or p
 
 There is no offer load scenario in this guide yet. The 2026-10-26 local run of offer profiling was driven from the browser, not by k6: the web session cookie is HttpOnly, so a page script is the only runner that can use it without handling its value. A page script sent `fetch` requests from the signed-in tab at a constant arrival rate of 10 requests/s for 60 s after a 10 s warm-up at 2 requests/s, against `POST /api/v1/quotes/{quoteId}/offers` with a fresh `Idempotency-Key` on each request and one in ten repeated. The time runs from sending the request to reading the whole body in the browser, which is close to but not the same as `http_req_duration`. It measured 600 requests: zero failures, 80 ms average, 71 ms median, 107 ms p90, 153 ms p95, 245 ms p99 and 319 ms maximum, against the 400 ms p95 and 800 ms p99 objective. All 600 returned the Offer contract and an `X-Trace-Id`; 540 were fresh `201` and 60 were replayed `200`, all `definitive`. It ran with the simulated providers on the local Workers and database, after the 120 ms call budget was added: the backend wrote no `dependency_budget_exceeded` and no `signal_degraded` line, so no call went over budget and no source was replaced. It is not a k6, remote or staging result, and it does not measure each dependency apart.
 
+To see which dependency dominates, after a run that creates offers, save the backend output to a file and read it with `dependencies.mjs`. Each offer logs the time of every call it made, and the script reports the calls, errors, p50, p95 and p99 of each dependency, how many offers each one dominated and the end-to-end percentiles:
+
+```sh
+npm run dev:backend | tee offers-backend.log
+node infra/load/dependencies.mjs offers-backend.log
+```
+
+The names and what each one measures are in the [Acquisition guide](../../docs/modules/acquisition-risk/README.md#signal-degradation). The log only contains offers created after the instrumentation was deployed, and a log from another environment must be attached as that environment's evidence, not as a local one.
+
+A second local run, after offers began logging the time of each dependency, produced the table below with `node infra/load/dependencies.mjs` over the backend log of that run (620 profiled offers, the 600 measured plus the 20 of the warm-up). The browser slowed its timers in the first two attempts, which sent only 241 requests instead of 600 and were discarded, so this run's page script sends every request that is due by the clock whenever its timer wakes. Arrivals therefore come in small groups at an average of 10 requests/s, and the browser-side figures are higher than the backend's because requests queue behind each other: browser-side 600 requests, zero failures, 157 ms average, 158 ms median, 278 ms p95, 371 ms p99 and 584 ms maximum. In this pattern a few same-key requests overlapped, so 14 fresh requests answered `200` and 14 repeated ones `201`; every response still carried the Offer contract, a trace ID and `definitive` status.
+
+| Dependency | Calls | Errors | p50 ms | p95 ms | p99 ms | Slowest call in |
+|---|---|---|---|---|---|---|
+| `identity_access` | 620 | 0 | 41 | 71 | 99 | 462 offers |
+| `offer_write` | 590 | 0 | 36 | 71 | 131 | 154 offers |
+| `offer_read` | 620 | 0 | 18 | 34 | 43 | 4 offers |
+| `provider:affiliation_regime` | 590 | 0 | 0 | 1 | 1 | 0 |
+| `provider:identity_validation` | 590 | 0 | 0 | 1 | 1 | 0 |
+| `provider:income_obligations_12m` | 590 | 0 | 0 | 1 | 1 | 0 |
+| `provider:payment_history_score` | 590 | 0 | 0 | 1 | 1 | 0 |
+
+The backend measured 94 ms median, 163 ms p95 and 213 ms p99 end to end, inside the 400 ms and 800 ms objective. Identity authorization dominated three of every four offers and the grouped offer write most of the rest. The four providers are simulated and answer instantly, so their rows show the instrumentation, not a real provider's latency. No call exceeded the 120 ms budget (no `dependency_budget_exceeded` line) and no source was replaced (no `signal_degraded` line). The provider and write rows have 590 calls because 30 of the 620 offers were replays answered from the stored result before any source was read. A local database and Workers run on one machine, so these percentiles say where the time goes, not what dev, staging or prod would measure.
+
 ## Baseline before the Identity access call (local, 60 s per load)
 
 Measured when a local stand-in authenticated the request inside Acquisition. The Identity call now adds a hop to every quote, so repeat the test before comparing.
