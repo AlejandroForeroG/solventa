@@ -72,6 +72,19 @@ Measured when a local stand-in authenticated the request inside Acquisition. The
 
 On this machine the service sustains about 100 requests per second within the thresholds; beyond that a queue forms and latency climbs. An earlier run at 30 req/s on a less loaded machine gave a p95 of 32 ms, so repeat the measurement before comparing runs.
 
+## Quote latency with the Identity call in the path (local, 2026-10-26)
+
+The table above predates the Identity access call and the single-statement quote write, so the quote was measured again with both in the path. It was not run with k6: the web session cookie is HttpOnly, so a page script in the signed-in browser sent `POST /api/v1/me/quotes` with the same request shape as `quotes.k6.js` (random synthetic customer and credit, a fresh `Idempotency-Key`, one in ten repeated), at an average of 30 requests/s for 60 s after a 10 s warm-up at 6 requests/s. The script sends every request that is due by the clock whenever its timer wakes, so arrivals come in small groups. All 1,800 measured requests returned the quote contract with COP and an `X-Trace-Id` and none failed: 1,620 were `201` and 180 `200`, the replays.
+
+Two clocks give different numbers, and only the second one is the service latency:
+
+| Clock | Average | p50 | p95 | p99 | Max | Against p95 250 ms / p99 500 ms |
+|---|---|---|---|---|---|---|
+| Browser, from sending to the whole body | 207 ms | 185 ms | 474 ms | 607 ms | 912 ms | Not met, but inflated by queueing |
+| Web Worker request time in the local backend log (`wrangler`) | 71 ms | 70 ms | 133 ms | 186 ms | 621 ms | Met |
+
+The browser opens at most six connections to the origin. At 30 requests/s and about 70 ms of service time that cap is close to saturated, so requests wait in the browser before they are sent and the browser figures include that wait. The backend figures are the time the web Worker took, which includes the Identity call and the SQL write. Report the second row as the local result and do not read the first row as service latency. The 100 and 150 requests/s rows above were not repeated: a browser cannot send that rate through six connections, so a k6 run is needed for them. The run is local, with Workers and the database on one machine, and says nothing about dev, staging or prod.
+
 ## Finding that changed the code
 
 The first version saturated at about **35 quotes per second**: at 100 req/s the p95 was 5.8 s and 96 % of requests failed. Comparing against a variant without the `COT-YYYY-NNNNN` counter (up to 270/s) showed that this row was the cause: the quote transaction held it locked until `COMMIT`, so every quote queued behind it. The number is now allocated in a short statement before the transaction (`src/adapters/outbound/sql-quote-store.ts`), which raised the ceiling to about 190/s.
