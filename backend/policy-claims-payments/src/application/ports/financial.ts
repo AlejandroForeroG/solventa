@@ -43,6 +43,7 @@ export interface FinancialStore {
   readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<AcceptedPolicyLookup>;
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport>;
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
+  // Selects and refreshes candidate activity atomically so bounded recovery batches rotate.
   issuanceCandidates(staleBefore: Date, limit: number): Promise<IssuanceCandidate[]>;
   rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void>;
 }

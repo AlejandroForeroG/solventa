@@ -385,7 +385,7 @@ test('a failed initial premium bundle never reaches a provider or creates an app
 });
 
 async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
-  clock?: Date; commandDocumentHash?: string; enabled?: boolean }) {
+  clock?: Date; commandDocumentHash?: string; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
   const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
   const commandKey = await financialIntegrity.digest(randomUUID());
   const requestHash = await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, options.commandDocumentHash ?? policy.documentHash]));
@@ -412,15 +412,16 @@ async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; 
     async finishCommand(_actor: string, key: string) { completedKey = key; }
   } as unknown as FinancialTransaction;
   let candidatesRead = 0;
+  const store: FinancialStore = { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); },
+    async issuanceCandidates() { candidatesRead++; return [{ policyId: policy.id, actor: { clientId: policy.clientId, subjectToken: policy.subjectToken }, commandKey }]; } };
   const finance = new PolicyFinance({ enabled: options.enabled ?? true, environment: 'local', integrity: financialIntegrity, now: () => options.clock ?? financialNow(), newId: randomUUID,
-    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); },
-      async issuanceCandidates() { candidatesRead++; return [{ policyId: policy.id, actor: { clientId: policy.clientId, subjectToken: policy.subjectToken }, commandKey }]; } },
+    store,
     payments: {
       async lookup() { return { status: provider, reference: provider === 'unknown' ? null : 'MOCK-' + payment.id }; },
       async settle() { calls.settle++; throw new Error('recovery_must_not_start_a_charge'); },
       async refund() { calls.refund++; provider = 'refunded'; return { status: 'refunded', reference: 'MOCK-' + payment.id }; } },
-    signatures: { async sign(id, hash) { calls.sign++; return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
-  return { finance, policy, payment, calls, actions, captures, commandKey, completed: () => completedKey, candidatesRead: () => candidatesRead };
+    signatures: { async sign(id, hash) { calls.sign++; options.onSign?.(policy); return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
+  return { finance, store, policy, payment, calls, actions, captures, commandKey, completed: () => completedKey, candidatesRead: () => candidatesRead };
 }
 
 test('recovery issues a confirmed charge whose customer command stopped, without a new charge or a client retry', async () => {
@@ -458,6 +459,25 @@ test('recovery leaves a pending intent without a provider charge untouched and n
   assert.equal(fixture.policy.status, 'pending');
   assert.deepEqual(fixture.calls, { settle: 0, refund: 0, sign: 0 });
   assert.deepEqual(fixture.actions, []);
+});
+
+test('recovery does not report a completed refund while another request is still refunding', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed',
+    onSign: policy => { policy.status = 'refunding'; } });
+  const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(fixture.policy.status, 'refunding');
+  assert.equal(result.outcome, 'unchanged');
+  assert.equal(fixture.calls.refund, 0);
+  assert.equal(fixture.actions.includes('premium.refunded'), false);
+});
+
+test('recovery reports unavailable when the authoritative refund state cannot be read', async () => {
+  const fixture = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed',
+    onSign: policy => { policy.status = 'refunding'; } });
+  fixture.store.readPolicy = async () => { throw new Error('policy_read_unavailable'); };
+  const [result] = await fixture.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(result.outcome, 'unavailable');
+  assert.equal(fixture.policy.status, 'refunding');
 });
 
 test('recovery refuses a stored command that does not authorize the current document', async () => {
