@@ -1,6 +1,7 @@
 import { CONFIDENCE, defaultSignal, overallConfidence, SIGNAL_FRESHNESS_MS, SIGNAL_SCOPES } from '../domain/signal';
 import type { Signal, SignalScope } from '../domain/signal';
 import type { ConsentCheck, ConsentDenial, ConsentGuard } from './ports/consent-guard';
+import type { DependencyTimings } from './dependency-timings';
 import type { Clock, Timer } from './ports/platform';
 import { ProviderFailure, SIGNAL_BUDGET_MS, SIGNAL_DEADLINE_MS } from './ports/signal-sources';
 import type { BudgetedDependency, DegradationTrace, SignalDegradation, SignalProvider, SignalSnapshots } from './ports/signal-sources';
@@ -10,7 +11,7 @@ export type SignalResult =
   | { status: 'degraded'; signal: Signal; consentId: string; degradation: SignalDegradation }
   | { status: 'denied'; reason: ConsentDenial };
 
-type SignalRequest = { subjectToken: string; scope: SignalScope; traceId: string };
+type SignalRequest = { subjectToken: string; scope: SignalScope; traceId: string; timings?: DependencyTimings };
 type VerifiedConsent = Extract<ConsentCheck, { allowed: true }>;
 
 // The only way to reach a source or stored copy. Standalone reads check consent here; composed offer reads
@@ -52,7 +53,7 @@ export class ReadSignal {
     return this.finalizeParallel(input.traceId, results);
   }
 
-  async executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: VerifiedConsent }) {
+  async executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: VerifiedConsent; timings?: DependencyTimings }) {
     const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeAuthorizedResult({ ...input, scope }, false, false)));
     await this.rememberAll(input, results);
     return this.finalizeParallel(input.traceId, results);
@@ -86,6 +87,7 @@ export class ReadSignal {
       throw error;
     } finally {
       const durationMs = this.deps.clock.now().getTime() - startedAt;
+      input.timings?.record(`${dependency}:${input.scope}`, durationMs, outcome);
       if (durationMs > SIGNAL_BUDGET_MS) this.deps.trace.overBudget?.(input.traceId, { dependency, scope: input.scope, durationMs, outcome });
     }
   }

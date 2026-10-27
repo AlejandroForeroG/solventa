@@ -1,5 +1,6 @@
 import type { Hono, Context } from 'hono';
 import { getCookie } from 'hono/cookie';
+import { DependencyTimings } from '../../application/dependency-timings';
 import type { OfferService } from '../../application/offer-service';
 import type { OfferAuthorization } from '../../domain/offer';
 import type { OfferTerms } from '../../domain/offer';
@@ -39,6 +40,7 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
   function handler(operation: 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept') {
     return async (c: Context<{ Bindings: AcquisitionEnv }>) => {
       const startedAt = performance.now();
+      const timings = new DependencyTimings({ now: () => new Date() });
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: Record<string, unknown>, status: 200 | 201 | 202 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
@@ -48,8 +50,8 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         const method = operation === 'offers:read' ? 'GET' : 'POST';
         if (c.req.method !== method) { c.header('Allow', method); return reply({ error: 'method_not_allowed' }, 405); }
         if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
-        const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method, requestOrigin: new URL(c.req.url).origin,
-          cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('origin') ?? '' }),
+        const decision = await Promise.race([timings.measure('identity_access', () => deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method, requestOrigin: new URL(c.req.url).origin,
+          cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('origin') ?? '' })),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]);
         if (!record(decision)) return reply({ error: 'access_unavailable' }, 503);
         if (decision.allowed !== true) {
@@ -88,10 +90,10 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         if (Object.keys(body).length !== 0) return reply({ error: 'invalid_request' }, 400);
         if (operation === 'offers:create') {
           if (!authorization) return reply({ error: 'access_unavailable' }, 503);
-          const result = await deps.offers.create({ actor, quoteId, authorization, idempotencyKey, traceId });
+          const result = await deps.offers.create({ actor, quoteId, authorization, idempotencyKey, traceId, timings });
           console.log(JSON.stringify({ event: 'mortgage_offer_profiled', traceId, result: result.status,
             offerStatus: result.status === 'created' || result.status === 'replayed' ? result.offer.status : null,
-            latencyMs: Math.round((performance.now() - startedAt) * 10) / 10 }));
+            latencyMs: Math.round((performance.now() - startedAt) * 10) / 10, ...timings.summary() }));
           return result.status === 'created' || result.status === 'replayed' ? reply(publicOffer(result.offer), result.status === 'created' ? 201 : 200) : failure(result.status);
         }
         const result = await deps.offers.accept({ actor, offerId, authorization, idempotencyKey, traceId });

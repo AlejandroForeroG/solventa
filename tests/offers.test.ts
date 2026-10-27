@@ -12,6 +12,7 @@ import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { createOffers } from '../backend/acquisition-risk/src/adapters/outbound/offer-composition';
 import { sendWithinDeadline } from '../backend/acquisition-risk/src/adapters/outbound/financial-outbox-publisher';
 import { ReadSignal } from '../backend/acquisition-risk/src/application/read-signal';
+import { DependencyTimings } from '../backend/acquisition-risk/src/application/dependency-timings';
 import type { SignalProvider, SignalSnapshot, SignalSnapshots } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 
 const actor = { clientId: '11111111-1111-4111-8111-111111111111', subjectToken: '22222222-2222-4222-8222-222222222222' };
@@ -280,4 +281,26 @@ test('reading altered sealed terms records the read trace and fails unavailable 
   assert.deepEqual(f.store.rejectionDetails, [{ traceId, operation: 'offer.read' }]);
   f.store.reject = async () => { throw Error('audit unavailable'); };
   assert.equal((await f.service.get({ actor, offerId: created.offer.offerId, traceId: randomUUID() })).status, 'unavailable');
+});
+
+test('an offer times each of its dependencies under its own name, and a copy lookup only when a source fails', async () => {
+  const f = fixture(), timings = new DependencyTimings({ now: () => new Date() });
+  assert.equal((await f.service.create({ ...f.command, timings })).status, 'created');
+  assert.deepEqual(timings.summary().dependencies.map(call => call.name).sort(),
+    ['offer_read', 'offer_write', ...SIGNAL_SCOPES.map(scope => `provider:${scope}`)].sort());
+  const original = f.deps.provider.read.bind(f.deps.provider);
+  f.deps.provider.read = async (subject, scope, trace) => scope === 'payment_history_score' ? Promise.reject(new ProviderFailure('timeout')) : original(subject, scope, trace);
+  const degraded = new DependencyTimings({ now: () => new Date() });
+  assert.equal((await f.service.create({ ...f.command, idempotencyKey: 'create-degraded', timings: degraded })).status, 'created');
+  const calls = degraded.summary().dependencies;
+  assert.deepEqual(calls.filter(call => call.outcome === 'failed').map(call => call.name), ['provider:payment_history_score']);
+  assert.ok(calls.some(call => call.name === 'stored_copy:payment_history_score' && call.outcome === 'ok'));
+});
+
+test('a replayed offer is timed only for the read that finds it', async () => {
+  const f = fixture();
+  await f.service.create(f.command);
+  const timings = new DependencyTimings({ now: () => new Date() });
+  assert.equal((await f.service.create({ ...f.command, timings })).status, 'replayed');
+  assert.deepEqual(timings.summary().dependencies.map(call => call.name), ['offer_read']);
 });
