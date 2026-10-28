@@ -1,16 +1,14 @@
 import type { AcceptanceEvent } from '../../application/ports/offer-store';
-import type { FinancialEventQueue } from './financial-outbox-publisher';
 
 export interface PolicyImportService { acceptOfferV1(event: unknown): Promise<unknown> }
 type ImportOutcome = 'imported' | 'rejected' | 'unavailable';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 
-// Queue acknowledgement remains the publication receipt. The additional delivery
-// imports the same durable signed event through Policy's existing idempotent inbox.
-export class FinancialEventDelivery implements FinancialEventQueue {
+// The HTTP adapter schedules this only after the owner's acceptance commit.
+// Queue publication independently retains the leased outbox recovery path.
+export class FinancialEventDelivery {
   constructor(private readonly deps: {
-    queue: { send(event: AcceptanceEvent, options: { contentType: 'json' }): Promise<unknown> };
     policy?: PolicyImportService;
     waitUntil(work: Promise<unknown>): void;
     report(input: { eventId: string; traceId: string; outcome: ImportOutcome; durationMs: number }): void;
@@ -20,14 +18,8 @@ export class FinancialEventDelivery implements FinancialEventQueue {
     if (!Number.isSafeInteger(deadline) || deadline < 1 || deadline > 1000) throw new Error('financial_import_deadline_invalid');
   }
   async send(event: AcceptanceEvent): Promise<void> {
-    const acknowledged = Promise.resolve().then(() => this.deps.queue.send(event, { contentType: 'json' })).then(() => {
-      if (this.deps.policy) this.deps.waitUntil(this.notify(event, this.deps.policy));
-    });
-    // Keep a Queue write and its continuation alive even if the publisher's wait expires.
-    this.deps.waitUntil(acknowledged.then(() => {}, () => {}));
-    await acknowledged;
-  }
-  private async notify(event: AcceptanceEvent, policy: PolicyImportService): Promise<void> {
+    const policy = this.deps.policy;
+    if (!policy) return;
     const started = performance.now();
     let outcome: ImportOutcome = 'unavailable';
     let timer: ReturnType<typeof setTimeout> | undefined;

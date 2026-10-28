@@ -10,48 +10,36 @@ function deferred<T>() {
   const promise = new Promise<T>(fulfill => { resolve = fulfill; });
   return { promise, resolve };
 }
-function fixture(policy?: PolicyImportService, queueSend: () => Promise<void> = async () => {}, deadline = 750) {
+function fixture(policy?: PolicyImportService, deadline = 750) {
   const background: Promise<unknown>[] = [];
   const reports: Parameters<ConstructorParameters<typeof FinancialEventDelivery>[0]['report']>[0][] = [];
   const reported = deferred<typeof reports[number]>();
-  const delivery = new FinancialEventDelivery({ policy, queue: { send: async (_event, options) => {
-    assert.deepEqual(options, { contentType: 'json' }); await queueSend();
-  } }, waitUntil: work => { background.push(work); }, report: result => { reports.push(result); reported.resolve(result); }, importDeadlineMs: deadline });
+  const delivery = new FinancialEventDelivery({ policy, waitUntil: work => { background.push(work); }, report: result => { reports.push(result); reported.resolve(result); }, importDeadlineMs: deadline });
   return { delivery, background, reports, reported };
 }
 
-test('a signed committed event reaches Policy only after Queue ACK without delaying publication for the RPC', async () => {
-  const event = await acceptedOffer(), queue = deferred<void>(), imported = deferred<unknown>();
+test('a committed event can reach Policy while independent Queue publication is still pending', async () => {
+  const event = await acceptedOffer(), imported = deferred<unknown>(), receivedEvent = deferred<unknown>();
   let received: unknown;
-  const f = fixture({ acceptOfferV1: async input => { received = input; return imported.promise; } }, () => queue.promise);
+  const f = fixture({ acceptOfferV1: async input => { received = input; receivedEvent.resolve(input); return imported.promise; } });
   const sent = f.delivery.send(event);
-  await Promise.resolve();
-  assert.equal(received, undefined, 'a pending Queue write must not start the additional delivery');
-  queue.resolve(); await sent;
+  await receivedEvent.promise;
   assert.deepEqual(received, event);
-  assert.deepEqual(f.reports, [], 'Queue acknowledgement does not await the Policy receipt');
+  assert.deepEqual(f.reports, [], 'a pending RPC has not established import');
   imported.resolve({ status: 'ok', policy: { policyId: randomUUID(), offerId: event.payload.offerId, offerVersion: event.payload.offerVersion } });
+  await sent;
   await Promise.all(f.background);
   assert.equal(f.reports[0].outcome, 'imported');
   assert.equal(f.reports[0].eventId, event.eventId);
 });
 
-test('a failed Queue write propagates to the outbox publisher and never starts Policy import', async () => {
-  let calls = 0;
-  const f = fixture({ acceptOfferV1: async () => { calls++; return {}; } }, async () => { throw new Error('queue_unavailable'); });
-  await assert.rejects(f.delivery.send(await acceptedOffer()), /queue_unavailable/);
-  await Promise.all(f.background);
-  assert.equal(calls, 0); assert.deepEqual(f.reports, []);
-});
-
-test('a rollout without the optional Policy binding retains the Queue-only recovery path', async () => {
-  let sends = 0;
-  const f = fixture(undefined, async () => { sends++; });
+test('an absent optional Policy binding reports no false import receipt', async () => {
+  const f = fixture(undefined);
   await f.delivery.send(await acceptedOffer()); await Promise.all(f.background);
-  assert.equal(sends, 1); assert.deepEqual(f.reports, []);
+  assert.deepEqual(f.reports, []);
 });
 
-test('an uncertain RPC never turns a confirmed Queue write into a second producer attempt or leaks a provider error', async () => {
+test('an unavailable RPC reports a canonical outcome without exposing the provider error', async () => {
   const f = fixture({ acceptOfferV1: async () => { throw new Error('synthetic-private-marker'); } });
   const event = await acceptedOffer();
   await f.delivery.send(event); await Promise.all(f.background);
@@ -64,7 +52,7 @@ test('an uncertain RPC never turns a confirmed Queue write into a second produce
 
 test('an RPC deadline preserves the actual in-flight promise until its eventual completion without retrying it', async () => {
   const call = deferred<unknown>(); let calls = 0;
-  const f = fixture({ acceptOfferV1: async () => { calls++; return call.promise; } }, async () => {}, 1);
+  const f = fixture({ acceptOfferV1: async () => { calls++; return call.promise; } }, 1);
   await f.delivery.send(await acceptedOffer());
   assert.equal((await f.reported.promise).outcome, 'unavailable');
   assert.equal(calls, 1);
@@ -92,6 +80,6 @@ test('only a matching owner receipt establishes an imported event', async () => 
 
 test('invalid import deadlines cannot start a delivery', () => {
   for (const importDeadlineMs of [0, -1, 1.5, 1001, NaN]) {
-    assert.throws(() => new FinancialEventDelivery({ queue: { send: async () => {} }, waitUntil() {}, report() {}, importDeadlineMs }), /financial_import_deadline_invalid/);
+    assert.throws(() => new FinancialEventDelivery({ waitUntil() {}, report() {}, importDeadlineMs }), /financial_import_deadline_invalid/);
   }
 });
