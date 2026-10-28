@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { Client } from 'pg';
 import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
 import { authorizeFinancialAccess } from '../backend/identity-consent-ecosystem/src/application/financial-access';
 import type { AccessDecision, UserActor } from '../backend/identity-consent-ecosystem/src/application/api-access';
@@ -8,8 +9,10 @@ import type { ConsentDecision, ConsentScopesCheck } from '../backend/identity-co
 import { authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { HmacIntegrity } from '../backend/identity-consent-ecosystem/src/adapters/outbound/hmac-integrity';
 import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
+import { SqlIdentitySessions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/identity-sessions';
+import { SqlConsents } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-consents';
 import { WORDING_FINGERPRINT, expiryFor, sealContent } from '../backend/identity-consent-ecosystem/src/domain/consent';
-import type { Consent } from '../backend/identity-consent-ecosystem/src/domain/consent';
+import type { Consent, ScopeCode } from '../backend/identity-consent-ecosystem/src/domain/consent';
 import type { SecurityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 import { ANA, MemoryConsents, SEAL_KEY, TRACE, clock } from './support/consent-fakes';
 
@@ -20,6 +23,21 @@ const request = { kind: 'web', operation: 'offers:create', cookie: 'synthetic-se
 const SCOPES = ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation'];
 const everyScope = (decision: ConsentDecision) => async (input: ConsentScopesCheck): Promise<ConsentDecision[]> => input.scopes.map(() => decision);
 const byScope = (decide: (scope: string) => ConsentDecision) => async (input: ConsentScopesCheck): Promise<ConsentDecision[]> => input.scopes.map(decide);
+
+test('financial access repositories reuse one caller-owned database connection', async () => {
+  let queries = 0;
+  const shared = {
+    query: async () => ({ rows: ++queries === 1 ? [{ id: principal.clientId, subject_token: principal.subjectToken }] : [] }),
+    connect: async () => assert.fail('a caller-owned connection is already connected'),
+    end: async () => assert.fail('a repository must not close a caller-owned connection'),
+    on: () => shared,
+  } as unknown as Client;
+  const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
+  assert.deepEqual(await new SqlIdentitySessions('unused', shared).find(identity), principal);
+  const found = await new SqlConsents('unused', shared).forSubjectScopes(principal.subjectToken, 'risk_profiling', SCOPES as readonly ScopeCode[], new Date('2026-10-28T00:00:00.000Z'));
+  assert.equal(found.size, SCOPES.length);
+  assert.equal(queries, 2);
+});
 
 // Identity's real consent rules over the in-memory store, behind the financial check of an authenticated web user.
 function withConsents() {

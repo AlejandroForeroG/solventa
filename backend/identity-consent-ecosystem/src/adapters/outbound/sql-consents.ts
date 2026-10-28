@@ -23,13 +23,17 @@ const fromRow = (row: Row): Consent => ({
 });
 
 export class SqlConsents implements ConsentStore {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly shared?: Client) {}
 
   private async connect() {
+    if (this.shared) return this.shared;
     const client = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
     await client.connect();
     return client;
+  }
+  private async release(client: Client) {
+    if (!this.shared) await client.end().catch(() => {});
   }
 
   private async retrying<T>(operation: () => Promise<T>): Promise<T> {
@@ -77,14 +81,14 @@ export class SqlConsents implements ConsentStore {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
   async findGrant(principal: Principal, idempotencyKey: string, requestHash: string): Promise<GrantResult | null> {
     const client = await this.connect();
     try { return await this.findByKey(client, { clientId: principal.clientId, idempotencyKey, requestHash }); }
-    finally { await client.end().catch(() => {}); }
+    finally { await this.release(client); }
   }
 
   private async findByKey(client: Client, c: Pick<NewConsent, 'clientId' | 'idempotencyKey' | 'requestHash'>): Promise<GrantResult | null> {
@@ -111,7 +115,7 @@ export class SqlConsents implements ConsentStore {
       await this.auditExpired(client, principal.subjectToken, result.rows, now);
       return result.rows.map(fromRow);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -142,7 +146,7 @@ export class SqlConsents implements ConsentStore {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -152,7 +156,7 @@ export class SqlConsents implements ConsentStore {
       // There is no consent to point at, so the audit event refers to the request itself.
       await this.audit(client, principal.subjectToken, 'consent.declined', 'consent_request', traceId, traceId);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -171,7 +175,7 @@ export class SqlConsents implements ConsentStore {
       await this.auditExpired(client, subjectToken, rows, now);
       return rows.map(fromRow);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -207,7 +211,7 @@ export class SqlConsents implements ConsentStore {
       await this.auditExpired(client, subjectToken, [...selected.values()], now);
       return found;
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
