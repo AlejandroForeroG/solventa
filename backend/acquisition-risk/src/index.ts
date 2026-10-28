@@ -9,10 +9,12 @@ import { IdentityApiAccess } from './adapters/outbound/identity-api-access';
 import { SqlQuoteStore } from './adapters/outbound/sql-quote-store';
 import { createOffers } from './adapters/outbound/offer-composition';
 import { FinancialOutboxPublisher } from './adapters/outbound/financial-outbox-publisher';
+import { FinancialEventDelivery } from './adapters/outbound/financial-event-delivery';
+import type { PolicyImportService } from './adapters/outbound/financial-event-delivery';
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
 import { signalProviderFor } from './adapters/outbound/signal-providers';
 
-type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string };
+type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string; POLICY_SERVICE?: PolicyImportService };
 
 // Module scope keeps the publisher off the Service Binding RPC surface of the entrypoint class.
 async function publishAcceptedOffers(env: Env, ctx: ExecutionContext, trigger: 'acceptance' | 'schedule', eventId?: string): Promise<void> {
@@ -21,12 +23,8 @@ async function publishAcceptedOffers(env: Env, ctx: ExecutionContext, trigger: '
   const queue = env.FINANCIAL_EVENTS;
   if (!queue || typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('financial_publisher_configuration_invalid');
   const result = await new FinancialOutboxPublisher({ connectionString: env.ACQUISITION_DB.connectionString, environment: env.APP_ENV,
-    integrity: new HmacOfferIntegrity(key), queue: { send: async event => {
-      const delivery = queue.send(event, { contentType: 'json' });
-      // A deadline ends this publishing attempt; it cannot cancel a Queue write already in flight.
-      ctx.waitUntil(delivery.then(() => {}, () => {}));
-      await delivery;
-    } } }).publish(eventId);
+    integrity: new HmacOfferIntegrity(key), queue: new FinancialEventDelivery({ queue, policy: env.POLICY_SERVICE,
+      waitUntil: work => ctx.waitUntil(work), report: result => console.log(JSON.stringify({ event: 'financial_import_delivery', environment: env.APP_ENV, trigger, ...result })) }) }).publish(eventId);
   console.log(JSON.stringify({ event: 'financial_outbox_publication', environment: env.APP_ENV, trigger, ...result }));
 }
 
