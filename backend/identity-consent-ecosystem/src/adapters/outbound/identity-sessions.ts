@@ -133,6 +133,7 @@ export class SqlIdentitySessions implements IdentitySessions {
   }
   async find(identity: VerifiedIdentity): Promise<Principal | null> {
     return this.connection(async db => {
+      // One SELECT already reads a consistent snapshot; no explicit transaction round trips are needed.
       const row = (await db.query(`SELECT c.id, c.subject_token FROM identity.authentication_sessions s
         JOIN identity.clients c ON c.id=s.client_id JOIN identity.external_identities e ON e.client_id=c.id
         WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider='workos' AND e.provider_subject=$2
