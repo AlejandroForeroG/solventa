@@ -26,17 +26,20 @@ const byScope = (decide: (scope: string) => ConsentDecision) => async (input: Co
 
 test('financial access repositories reuse one caller-owned database connection', async () => {
   let queries = 0;
-  const shared = {
+  let connections = 0;
+  const client = {
     query: async () => ({ rows: ++queries === 1 ? [{ id: principal.clientId, subject_token: principal.subjectToken }] : [] }),
     connect: async () => assert.fail('a caller-owned connection is already connected'),
     end: async () => assert.fail('a repository must not close a caller-owned connection'),
-    on: () => shared,
+    on: () => client,
   } as unknown as Client;
+  const shared = { get: async () => { connections++; return client; }, close: async () => {} };
   const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
   assert.deepEqual(await new SqlIdentitySessions('unused', shared).find(identity), principal);
   const found = await new SqlConsents('unused', shared).forSubjectScopes(principal.subjectToken, 'risk_profiling', SCOPES as readonly ScopeCode[], new Date('2026-10-28T00:00:00.000Z'));
   assert.equal(found.size, SCOPES.length);
   assert.equal(queries, 2);
+  assert.equal(connections, 2);
 });
 
 // Identity's real consent rules over the in-memory store, behind the financial check of an authenticated web user.
