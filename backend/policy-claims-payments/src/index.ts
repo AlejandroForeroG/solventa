@@ -7,6 +7,9 @@ import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
 
+const RECONCILIATION_GRACE_MS = 120_000;
+const RECONCILIATION_BATCH = 25;
+
 // Composition root: platform wiring and operational probes stay outside the core.
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
@@ -44,6 +47,13 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       else message.ack();
       console.log(JSON.stringify({ event: 'financial_queue_delivery', environment: this.env.APP_ENV, traceId,
         attempts: message.attempts, ageMs, queueAgeMs, processingMs: Math.round((performance.now() - started) * 100) / 100, outcome: result.status }));
+    }
+  }
+  async scheduled(): Promise<void> {
+    // The grace period lets an in-flight customer request finish before recovery competes for the same policy.
+    const outcomes = await createPolicyFinance(this.env).reconcileIssuances(new Date(Date.now() - RECONCILIATION_GRACE_MS), RECONCILIATION_BATCH);
+    for (const { traceId, outcome, error } of outcomes) {
+      console.log(JSON.stringify({ event: 'financial_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
     }
   }
   liveness() { return { service: 'policy-claims-payments', environment: this.env.APP_ENV }; }

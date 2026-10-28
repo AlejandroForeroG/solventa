@@ -16,6 +16,8 @@ export type Offer = {
 };
 export type Acceptance = { acceptanceId: string; offerId: string; acceptedAt: string; traceId: string };
 export type PolicyStatus = 'pending' | 'charged' | 'issued' | 'refunding' | 'refunded';
+// The policy's single premium charge; a reference exists only once the synthetic provider confirmed it.
+export type PremiumPayment = { status: 'pending' | 'confirmed' | 'declined' | 'refunded'; reference: string | null };
 export type Policy = {
   policyId: string;
   offerId: string;
@@ -26,6 +28,7 @@ export type Policy = {
   effectiveUntil: string;
   document: string;
   documentHash: string;
+  payment: PremiumPayment | null;
   replayed: boolean;
   traceId: string;
 };
@@ -46,6 +49,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MONEY = /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const STATUSES: readonly unknown[] = ['pending', 'charged', 'issued', 'refunding', 'refunded'];
+const RECEIPT = /^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const instant = (value: unknown): value is string => typeof value === 'string'
   && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const uuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
@@ -67,17 +71,29 @@ function asAcceptance(value: unknown, offerId: string): Acceptance | null {
   return { acceptanceId: value.acceptanceId.toLowerCase(), offerId, acceptedAt: value.acceptedAt, traceId: value.traceId };
 }
 
+// Absent means the customer has not confirmed issuance yet; a malformed state is rejected rather than guessed.
+function asPayment(value: unknown): PremiumPayment | null | undefined {
+  if (value === undefined) return null;
+  if (!isRecord(value) || Object.keys(value).length !== 2) return undefined;
+  const { status, reference } = value;
+  if ((status === 'confirmed' || status === 'refunded') && typeof reference === 'string' && RECEIPT.test(reference)) return { status, reference };
+  if ((status === 'pending' || status === 'declined') && reference === null) return { status, reference };
+  return undefined;
+}
+
 function asPolicy(value: unknown, expected: { offerId?: string; policyId?: string }): Policy | null {
   if (!isRecord(value) || !uuid(value.policyId) || !uuid(value.offerId) || !STATUSES.includes(value.status)
     || typeof value.premium !== 'string' || !MONEY.test(value.premium) || value.currency !== 'COP'
     || !instant(value.effectiveFrom) || !instant(value.effectiveUntil) || typeof value.document !== 'string' || value.document.length === 0
     || typeof value.documentHash !== 'string' || !HASH.test(value.documentHash) || value.synthetic !== true || value.providerMode !== 'mock'
     || typeof value.replayed !== 'boolean' || !uuid(value.traceId)) return null;
+  const payment = asPayment(value.payment);
+  if (payment === undefined) return null;
   const policyId = value.policyId.toLowerCase();
   const offerId = value.offerId.toLowerCase();
   if ((expected.offerId && offerId !== expected.offerId) || (expected.policyId && policyId !== expected.policyId)) return null;
   return { policyId, offerId, status: value.status as PolicyStatus, premium: value.premium, currency: 'COP', effectiveFrom: value.effectiveFrom,
-    effectiveUntil: value.effectiveUntil, document: value.document, documentHash: value.documentHash, replayed: value.replayed, traceId: value.traceId };
+    effectiveUntil: value.effectiveUntil, document: value.document, documentHash: value.documentHash, payment, replayed: value.replayed, traceId: value.traceId };
 }
 
 async function send<T>(path: string, init: RequestInit, read: (body: unknown) => T | null, ok: readonly number[]): Promise<FinancialOutcome<T>> {

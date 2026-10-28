@@ -69,7 +69,9 @@ npm run test:quotes:sql   # real local SQL for both actors; requires npm run inf
 
 The load test in [`infra/load`](../../../infra/load/README.md) needs a logged-in session cookie or a partner token.
 
-**Limits.** Authenticated browser and M2M quote journeys require separate environment verification; local stand-ins, contracts and builds do not establish real provider access. For M2M, verify valid creation/replay, changed-payload conflicts and denied revoked or out-of-scope credentials, checking that rejected requests create no quote or quote audit/outbox in Acquisition. Covered Identity denials do create their separate security audit/outbox. Use dedicated synthetic credentials and revoke them after verification; never alter another operator's integration credential. Each quote adds one Identity call to the critical path, so performance must be measured through the complete authenticated path. The yearly quote-code counter is one shared row: it sustained about 190 writes per second locally, and a failed write leaves a gap in the numbering.
+The SQL store performs the fresh actor/key lookup, conditional annual counter allocation and quote/audit/outbox write in one implicit transaction/statement. The database builds the same `COT-YYYY-NNNNN` code and adds it to the stored result/event payload; pricing, fingerprints and capture still come from the application. Replays and changed-payload conflicts allocate no code. A losing concurrent first attempt reads the winner in a new snapshot and compares fingerprints. Existing numbering gaps remain valid, and a losing first attempt can still leave one; a failed SQL statement rolls back its counter and every business effect. The counter lock lasts through this server-side statement, with no intermediate client round trip. The shared row still requires load testing; fewer calls do not establish latency or unlimited throughput. Authorization remains a fresh Identity check on every request.
+
+**Limits.** Authenticated browser and M2M quote journeys require separate environment verification; local stand-ins, contracts and builds do not establish real provider access. For M2M, verify valid creation/replay, changed-payload conflicts and denied revoked or out-of-scope credentials, checking that rejected requests create no quote or quote audit/outbox in Acquisition. Covered Identity denials do create their separate security audit/outbox. Use dedicated synthetic credentials and revoke them after verification; never alter another operator's integration credential. Each quote adds one Identity call to the critical path, so performance must be measured through the complete authenticated path. The yearly quote-code counter remains one shared row with its existing 99,999-code annual limit. Historical throughput of its earlier multi-statement implementation does not establish the capacity of the current statement.
 
 `ReadSignal` forwards the initiating trace UUID through the consent check before reaching a provider or stored signal. Its correlation, rejection and fallback rules are described in [Identity's Acquisition guard](../identity-consent-ecosystem/consent.md#guard-in-acquisition). This internal use case does not add a public signal endpoint.
 
@@ -189,9 +191,25 @@ Mortgage offer creation consumes `executeAllAuthorized`. Any degraded source mak
 
 The grouped creation statement preserves the decision outcome, offer status and created-event status together with its revision, sealed context, audit and idempotency ledger. Acceptance uses the fresh owner snapshot and rejects preliminary terms before any acceptance write. The composition root retains both bounded background snapshot persistence and targeted publication after a committed definitive acceptance.
 
-Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
+Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status, end-to-end HTTP latency in milliseconds and the time of each dependency it called. Use these records to calculate the 400 ms p95 / 800 ms p99 objective and the percentiles per dependency in the target environment; no actor, quote, consent or provider payload is logged.
+
+```json
+{"event":"mortgage_offer_profiled","traceId":"…","result":"created","offerStatus":"definitive","latencyMs":61,"dominant":"offer_write","dependencies":[{"name":"identity_access","durationMs":9,"outcome":"ok"},{"name":"offer_read","durationMs":8,"outcome":"ok"},{"name":"provider:payment_history_score","durationMs":0,"outcome":"ok"},{"name":"offer_write","durationMs":31,"outcome":"ok"}]}
+```
+
+Each entry is one call, timed by `DependencyTimings` from the injected clock, and `outcome` is `ok` or `failed`. The names are `identity_access` (authorization in Identity), `offer_read` and `offer_write` (the offer SQL reads and the grouped creation statement), `provider:<scope>` for each of the four source reads and `stored_copy:<scope>` for a copy lookup, which only happens after a provider fails. `dominant` is the single slowest call of the request, including a failed one. Background snapshot writes are not part of the response and are not timed. [`infra/load/dependencies.mjs`](../../../infra/load/dependencies.mjs) turns a backend log into the table of calls, errors, p50, p95 and p99 per dependency; see the [load guide](../../../infra/load/README.md).
+
+**Latency budget per external call.** Each provider read and each stored copy lookup has a budget of 120 ms (`SIGNAL_BUDGET_MS`) inside the 700 ms hard limit. The budget is measured, not enforced: a call that takes more than 120 ms but less than 700 ms still answers live, and only the hard limit degrades a source. A call that exceeds the budget, whether it answers or fails, writes one line from the injected clock, with no subject token, provider message or payload:
+
+```json
+{"event":"dependency_budget_exceeded","traceId":"…","budgetMs":120,"dependency":"provider","scope":"payment_history_score","durationMs":300,"outcome":"ok"}
+```
+
+`dependency` is `provider` or `stored_copy` and `outcome` is `ok` or `failed`. A call that reaches 700 ms writes both this line and `signal_degraded`. Identity authorization and the offer SQL calls cannot be replaced by a default, so they are outside this budget.
 
 **Limits.**
+- The 120 ms budget line is written only for provider and stored copy calls that exceed it. Identity and the offer SQL are timed in `mortgage_offer_profiled` but have no budget. Only the offer creation route records timings; offer reads, acceptance and the flight offer do not.
+- The percentiles per dependency come from a log file the caller provides. No dashboard or metrics service reads them yet.
 - The 400 ms p95 / 800 ms p99 profile-and-price objective requires measurement through the deployed web, Identity, provider and SQL path; unit tests establish parallel reads and the 700 ms per-dependency ceiling, not the percentile objective.
 - The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
 

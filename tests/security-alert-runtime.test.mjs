@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { runtimeCoveragePlugins, captureRuntimeCoverage } from './support/runtime-coverage.mjs';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -111,7 +112,7 @@ test('workerd executes real Identity security composition with explicit local SQ
         { path: args.path.split('/').at(-1), namespace: 'composition-collaborator' }
       ));
       builder.onLoad({ filter: /.*/, namespace: 'composition-collaborator' }, args => ({ contents: aliases[args.path], loader: 'js' }));
-    } }],
+    } }, ...runtimeCoveragePlugins()],
   });
   const email = { environment: 'local', from: 'security@example.invalid', to: 'operator@example.invalid' };
   const worker = (name, emailConfig) => ({
@@ -127,7 +128,10 @@ test('workerd executes real Identity security composition with explicit local SQ
     { name: 'caller', unsafeDirectSockets: [{ host: '127.0.0.1', port: 0 }], modules: true, script: rpcCaller,
       compatibilityDate: config.compatibility_date, serviceBindings: { IDENTITY: 'enabled' } },
   ] }));
-  t.after(() => runtime.dispose());
+  t.after(async () => {
+    try { await captureRuntimeCoverage(runtime, ['enabled', 'disabled', 'invalid']); }
+    finally { await runtime.dispose(); }
+  });
   await runtime.ready;
   const state = await runtime.getWorker('state');
   const enabled = await runtime.getWorker('enabled');

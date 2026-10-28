@@ -1,6 +1,6 @@
 import { canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
-import type { FinancialActor, FinancialErrorCode, FinancialResult, PolicyView } from '../domain/financial';
-import type { FinancialDependencies, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
+import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyView } from '../domain/financial';
+import type { FinancialDependencies, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
 import { financialDecision, financialEventSource, financialRejection, gatewaySource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
 
@@ -11,7 +11,12 @@ const reject = (code: FinancialErrorCode, httpStatus: 400 | 403 | 404 | 409 = 40
 const view = (policy: StoredPolicy): PolicyView => ({ policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
   status: policy.status, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
   effectiveUntil: policy.effectiveUntil, document: policy.document, documentHash: policy.documentHash, synthetic: true, providerMode: 'mock' });
+// Only a provider-acknowledged premium exposes its synthetic receipt reference.
+const paid = (premium: Payment | null): { payment?: PaymentView } => premium ? { payment: { status: premium.status,
+  reference: premium.status === 'confirmed' || premium.status === 'refunded' ? premium.providerReference : null } } : {};
 const validActor = (actor: FinancialActor) => UUID.test(actor.clientId) && UUID.test(actor.subjectToken);
+type IssuanceContext = { actor: FinancialActor; policyId: string; documentHash: string; commandKey: string; traceId: string; trigger?: 'reconciliation' };
+export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refunded' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 
 export class PolicyFinance {
   constructor(private readonly deps: FinancialDependencies) {}
@@ -96,8 +101,8 @@ export class PolicyFinance {
   get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult> {
     return this.run(input.traceId, async () => {
       if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
-      return { status: 'ok', replayed: false,
-        policy: view((await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor)).policy) };
+      const { policy, premium } = await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor);
+      return { status: 'ok', replayed: false, policy: view(policy), ...paid(premium) };
     });
   }
 
@@ -109,7 +114,8 @@ export class PolicyFinance {
       // Waiting is not a rejection, so it records neither a financial rejection nor a security denial.
       if (lookup.status === 'absent') return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
       if (lookup.status === 'foreign') return reject('not_found', 404);
-      return { status: 'ok', replayed: false, policy: view((await this.checked(lookup.record, input.actor)).policy) };
+      const { policy, premium } = await this.checked(lookup.record, input.actor);
+      return { status: 'ok', replayed: false, policy: view(policy), ...paid(premium) };
     });
   }
 
@@ -127,13 +133,13 @@ export class PolicyFinance {
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if (policy.status !== 'issued' || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
-          return { policy, payment: null, replayed: true, completed: view(policy) };
+          return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
         if (policy.status === 'refunded') return reject('signature_failed');
         if (policy.status === 'issued') {
           if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
           const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result);
-          return { policy, payment: null, replayed: !!previous, completed: result };
+          return { policy, payment: premium, replayed: !!previous, completed: result };
         }
         let payment = premium;
         if (!payment) {
@@ -148,120 +154,169 @@ export class PolicyFinance {
         if (payment.status === 'declined') return reject('payment_declined');
         return { policy, payment, replayed: !!previous, completed: null };
       });
-      if (plan.completed) return { status: 'ok', replayed: plan.replayed, policy: plan.completed };
+      if (plan.completed) return { status: 'ok', replayed: plan.replayed, policy: plan.completed, ...paid(plan.payment) };
       if (!plan.payment) throw new Error('financial_plan_unavailable');
-      const payment = plan.payment;
-      const refund = async (reason: FinancialEvidence['refundReason'] = 'existing_refund_intent', sources: FinancialSource[] = []): Promise<FinancialResult> => {
-        const refundPlan = await this.deps.store.transaction(async tx => {
-          const { policy, premium } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
-          if (policy.status === 'issued') {
-            const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result); return { completed: result, payment: null };
-          }
-          if (policy.status === 'refunded') return reject('signature_failed');
-          if (policy.status !== 'charged' && policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
-          if (!premium || premium.status !== 'confirmed') return reject('integrity_violation');
-          await this.checkPayment(premium, policy);
-          if (policy.status !== 'refunding') {
-            await tx.setPolicyStatus(policy.id, 'refunding');
-            await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId,
-              this.decision('premium.refund_requested', traceId, policy, 'refunding', { payment: premium, refundReason: reason, sources }));
-          }
-          return { completed: null, payment: premium };
-        });
-        if (refundPlan.completed) return { status: 'ok', replayed: true, policy: refundPlan.completed };
-        const refundPayment = refundPlan.payment;
-        if (!refundPayment) throw new Error('financial_refund_intent_missing');
-        const known = await this.deps.payments.lookup(refundPayment);
-        const lookupSource = gatewaySource('lookup', known, refundPayment, this.deps.now().toISOString());
-        if (!refundPayment.providerReference || known.reference !== refundPayment.providerReference
-          || (known.status !== 'confirmed' && known.status !== 'refunded')) return reject('integrity_violation');
-        const refunded = await this.deps.payments.refund(refundPayment);
-        const refundSource = gatewaySource('refund', refunded, refundPayment, this.deps.now().toISOString());
-        if (refunded.status !== 'refunded') throw new Error('financial_refund_uncertain');
-        await this.deps.store.transaction(async tx => {
-          const { policy } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
-          if (policy.status === 'refunded') return;
-          if (policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
-          await tx.setPaymentStatus(refundPayment.id, 'refunded', refunded.reference);
-          await tx.setPolicyStatus(policy.id, 'refunded');
-          await tx.audit('premium.refunded', policy.id, traceId, 'refunded', policy.clientId,
-            this.decision('premium.refunded', traceId, policy, 'refunded', { payment: { ...refundPayment, status: 'refunded', providerReference: refunded.reference },
-              refundReason: reason, sources: [lookupSource, refundSource] }));
-        });
-        return reject('signature_failed');
-      };
-      if (plan.policy.status === 'refunding') return refund();
-      const settled = await this.settle(payment, this.deps.now().getTime() < Date.parse(plan.policy.offer.expiresAt));
-      if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
-      if (settled.status === 'declined') {
-        const refundInProgress = await this.deps.store.transaction(async tx => {
-          const { policy } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
-          if (policy.status === 'refunding') return true;
-          if (policy.status === 'refunded') return reject('signature_failed');
-          await tx.setPaymentStatus(payment.id, 'declined', settled.reference);
-          await tx.audit('premium.declined', policy.id, traceId, 'declined', policy.clientId,
-            this.decision('premium.declined', traceId, policy, 'declined', { payment: { ...payment, status: 'declined', providerReference: settled.reference }, sources: settled.sources }));
-          return false;
-        });
-        if (refundInProgress) return refund();
-        return reject('payment_declined');
-      }
-      const completed = await this.deps.store.transaction(async tx => {
-        const { policy, premium } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
-        if (policy.status === 'refunding') return null;
-        if (policy.status === 'refunded') return reject('signature_failed');
-        if (policy.status === 'issued') {
-          const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result); return result;
-        }
-        if (policy.status === 'pending') {
-          if (!premium || premium.id !== payment.id) return reject('integrity_violation');
-          const confirmedPayment: Payment = { ...premium, status: 'confirmed', providerReference: settled.reference };
-          await tx.confirmPremium(policy, confirmedPayment, traceId,
-            this.decision('premium.confirmed', traceId, policy, 'confirmed', { payment: confirmedPayment, sources: settled.sources }));
-        }
-        return null;
+      return this.proceed({ actor: input.actor, policyId: input.policyId, documentHash: input.documentHash, commandKey, traceId }, plan.policy, plan.payment, plan.replayed);
+    });
+  }
+
+  // Completes customer commands that stopped after a provider charge may have committed, without waiting for a client retry.
+  async reconcileIssuances(staleBefore: Date, limit: number): Promise<ReconciliationOutcome[]> {
+    if (!this.deps.enabled) return [];
+    const outcomes: ReconciliationOutcome[] = [];
+    for (const candidate of await this.deps.store.issuanceCandidates(staleBefore, limit)) outcomes.push(await this.reconcile(candidate));
+    return outcomes;
+  }
+
+  private async reconcile(candidate: IssuanceCandidate): Promise<ReconciliationOutcome> {
+    let unchanged = false;
+    const traceId = this.deps.newId();
+    const result = await this.run(traceId, async () => {
+      const { actor, policyId, commandKey } = candidate;
+      const plan = await this.deps.store.transaction(async (tx): Promise<{ policy: StoredPolicy; payment: Payment | null }> => {
+        const snapshot = await tx.issuanceSnapshot(policyId, actor, commandKey);
+        const { policy, premium } = await this.checked(snapshot.record, actor);
+        // Recovery acts only on the customer's stored command for this exact reviewed document.
+        const requestHash = await this.deps.integrity.digest(JSON.stringify(['issue.v1', actor.clientId, policy.id, policy.documentHash]));
+        const command = snapshot.command;
+        if (!command || command.policyId !== policy.id || command.requestHash !== requestHash) return reject('integrity_violation');
+        if (policy.status === 'issued' && !command.result) await tx.finishCommand(actor.clientId, commandKey, view(policy));
+        if (command.result || policy.status === 'issued' || policy.status === 'refunded' || !premium || premium.status === 'declined') return { policy, payment: null };
+        return { policy, payment: premium };
       });
-      if (completed) return { status: 'ok', replayed: true, policy: completed };
-      const expiredBeforeSignature = this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt);
-      const signature = expiredBeforeSignature ? { status: 'failed' as const } : await this.deps.signatures.sign(input.policyId, input.documentHash);
-      const signatureSources: FinancialSource[] = expiredBeforeSignature ? [] : [{ source: 'synthetic-signature-v1', capturedAt: this.deps.now().toISOString(),
-        quality: 'synthetic_result', degraded: false, operation: 'sign', result: signature.status }];
-      if (signature.status === 'failed' || this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt) || !HEX.test(signature.receipt)
-        || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', input.policyId, input.documentHash]), signature.receipt))) {
-        return refund(expiredBeforeSignature || this.deps.now().getTime() >= Date.parse(plan.policy.offer.expiresAt) ? (expiredBeforeSignature ? 'expired_before_sign' : 'expired_after_sign')
-          : signature.status === 'failed' ? 'signature_refused' : 'signature_invalid', signatureSources);
+      const { policy, payment } = plan;
+      // A pending intent is only continued when the provider already holds its charge; recovery never starts a new one.
+      if (!payment || (policy.status === 'pending' && (await this.deps.payments.lookup(payment)).status !== 'confirmed')) {
+        unchanged = true; return { status: 'ok', replayed: true, policy: view(policy) };
       }
-      const final = await this.deps.store.transaction(async tx => {
-        const { policy, premium } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
-        if (policy.status === 'refunded' || policy.status === 'refunding') return reject('signature_failed');
+      return this.proceed({ actor, policyId, documentHash: policy.documentHash, commandKey, traceId, trigger: 'reconciliation' }, policy, payment, true);
+    });
+    if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };
+    if (result.status === 'denied') {
+      if (result.error !== 'signature_failed') return { traceId, outcome: 'rejected', error: result.error };
+      // A concurrent request may still be refunding. The error alone never proves a completed compensation.
+      const current = await this.get({ actor: candidate.actor, policyId: candidate.policyId, traceId });
+      if (current.status === 'unavailable') return { traceId, outcome: 'unavailable' };
+      if (current.status === 'denied') return { traceId, outcome: 'rejected', error: current.error };
+      return { traceId, outcome: current.policy.status === 'refunded' ? 'refunded' : current.policy.status === 'issued' ? 'issued' : 'unchanged' };
+    }
+    return { traceId, outcome: !unchanged && result.policy.status === 'issued' ? 'issued' : 'unchanged' };
+  }
+
+  // Continues a planned issuance from durable state: confirm the charge, then sign and issue, or compensate.
+  private async proceed(context: IssuanceContext, planned: StoredPolicy, payment: Payment, replayed: boolean): Promise<FinancialResult> {
+    const { actor, policyId, documentHash, commandKey, traceId } = context;
+    const by: FinancialEvidence = context.trigger ? { trigger: context.trigger } : {};
+    const refund = async (reason: FinancialEvidence['refundReason'] = 'existing_refund_intent', sources: FinancialSource[] = []): Promise<FinancialResult> => {
+      const refundPlan = await this.deps.store.transaction(async tx => {
+        const { policy, premium } = await this.checked(await tx.policy(policyId, actor), actor);
         if (policy.status === 'issued') {
-          const result = view(policy);
-          await tx.finishCommand(input.actor.clientId, commandKey, result);
-          return { status: 'ok' as const, replayed: plan.replayed, policy: result };
+          const result = view(policy); await tx.finishCommand(actor.clientId, commandKey, result); return { completed: result, payment: premium };
         }
-        if (policy.status !== 'charged') throw new Error('financial_charge_missing');
-        if (!premium) throw new Error('financial_intent_missing');
-        const signedAt = this.deps.now().toISOString();
-        if (Date.parse(signedAt) >= Date.parse(policy.offer.expiresAt)) {
+        if (policy.status === 'refunded') return reject('signature_failed');
+        if (policy.status !== 'charged' && policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
+        if (!premium || premium.status !== 'confirmed') return reject('integrity_violation');
+        await this.checkPayment(premium, policy);
+        if (policy.status !== 'refunding') {
           await tx.setPolicyStatus(policy.id, 'refunding');
           await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId,
-            this.decision('premium.refund_requested', traceId, policy, 'refunding', { payment: premium,
-              refundReason: 'expired_during_final_transaction', sources: signatureSources }));
-          return null;
+            this.decision('premium.refund_requested', traceId, policy, 'refunding', { ...by, payment: premium, refundReason: reason, sources }));
         }
-        const timeSeal = await this.deps.integrity.digest(issuanceTimeContent(policy.id, input.documentHash, signedAt));
-        const issuance = { documentHash: input.documentHash, receipt: signature.receipt, signedAt, timeSeal };
-        const result = view({ ...policy, status: 'issued' });
-        const stored = await tx.completeIssuance({ policy, signature: issuance, commandKey, result, traceId,
-          capture: this.decision('policy.issued', traceId, policy, 'issued', { payment: premium, sources: signatureSources,
-            issuance: { signedAt, documentHash: input.documentHash } }) });
-        // The transaction commits only after the stored evidence matches the reviewed document and provider receipt.
-        if (!stored || stored.documentHash !== issuance.documentHash || stored.receipt !== issuance.receipt
-          || stored.signedAt !== signedAt || stored.timeSeal !== timeSeal) throw new Error('financial_issuance_evidence_missing');
-        return { status: 'ok' as const, replayed: plan.replayed, policy: result };
+        return { completed: null, payment: premium };
       });
-      return final ?? refund();
+      if (refundPlan.completed) return { status: 'ok', replayed: true, policy: refundPlan.completed, ...paid(refundPlan.payment) };
+      const refundPayment = refundPlan.payment;
+      if (!refundPayment) throw new Error('financial_refund_intent_missing');
+      const known = await this.deps.payments.lookup(refundPayment);
+      const lookupSource = gatewaySource('lookup', known, refundPayment, this.deps.now().toISOString());
+      if (!refundPayment.providerReference || known.reference !== refundPayment.providerReference
+        || (known.status !== 'confirmed' && known.status !== 'refunded')) return reject('integrity_violation');
+      const refunded = await this.deps.payments.refund(refundPayment);
+      const refundSource = gatewaySource('refund', refunded, refundPayment, this.deps.now().toISOString());
+      if (refunded.status !== 'refunded') throw new Error('financial_refund_uncertain');
+      await this.deps.store.transaction(async tx => {
+        const { policy } = await this.checked(await tx.policy(policyId, actor), actor);
+        if (policy.status === 'refunded') return;
+        if (policy.status !== 'refunding') throw new Error('financial_refund_state_invalid');
+        await tx.setPaymentStatus(refundPayment.id, 'refunded', refunded.reference);
+        await tx.setPolicyStatus(policy.id, 'refunded');
+        await tx.audit('premium.refunded', policy.id, traceId, 'refunded', policy.clientId,
+          this.decision('premium.refunded', traceId, policy, 'refunded', { ...by, payment: { ...refundPayment, status: 'refunded', providerReference: refunded.reference },
+            refundReason: reason, sources: [lookupSource, refundSource] }));
+      });
+      return reject('signature_failed');
+    };
+    if (planned.status === 'refunding') return refund();
+    const settled = await this.settle(payment, this.deps.now().getTime() < Date.parse(planned.offer.expiresAt));
+    if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
+    if (settled.status === 'declined') {
+      const refundInProgress = await this.deps.store.transaction(async tx => {
+        const { policy } = await this.checked(await tx.policy(policyId, actor), actor);
+        if (policy.status === 'refunding') return true;
+        if (policy.status === 'refunded') return reject('signature_failed');
+        await tx.setPaymentStatus(payment.id, 'declined', settled.reference);
+        await tx.audit('premium.declined', policy.id, traceId, 'declined', policy.clientId,
+          this.decision('premium.declined', traceId, policy, 'declined', { ...by, payment: { ...payment, status: 'declined', providerReference: settled.reference }, sources: settled.sources }));
+        return false;
+      });
+      if (refundInProgress) return refund();
+      return reject('payment_declined');
+    }
+    const completed = await this.deps.store.transaction(async tx => {
+      const { policy, premium } = await this.checked(await tx.policy(policyId, actor), actor);
+      if (policy.status === 'refunding') return null;
+      if (policy.status === 'refunded') return reject('signature_failed');
+      if (policy.status === 'issued') {
+        const result = view(policy); await tx.finishCommand(actor.clientId, commandKey, result); return { result, premium };
+      }
+      if (policy.status === 'pending') {
+        if (!premium || premium.id !== payment.id) return reject('integrity_violation');
+        const confirmedPayment: Payment = { ...premium, status: 'confirmed', providerReference: settled.reference };
+        await tx.confirmPremium(policy, confirmedPayment, traceId,
+          this.decision('premium.confirmed', traceId, policy, 'confirmed', { ...by, payment: confirmedPayment, sources: settled.sources }));
+      }
+      return null;
     });
+    if (completed) return { status: 'ok', replayed: true, policy: completed.result, ...paid(completed.premium) };
+    const expiredBeforeSignature = this.deps.now().getTime() >= Date.parse(planned.offer.expiresAt);
+    const signature = expiredBeforeSignature ? { status: 'failed' as const } : await this.deps.signatures.sign(policyId, documentHash);
+    const signatureSources: FinancialSource[] = expiredBeforeSignature ? [] : [{ source: 'synthetic-signature-v1', capturedAt: this.deps.now().toISOString(),
+      quality: 'synthetic_result', degraded: false, operation: 'sign', result: signature.status }];
+    if (signature.status === 'failed' || this.deps.now().getTime() >= Date.parse(planned.offer.expiresAt) || !HEX.test(signature.receipt)
+      || !(await this.deps.integrity.verify(JSON.stringify(['mock-signature-v1', policyId, documentHash]), signature.receipt))) {
+      return refund(expiredBeforeSignature || this.deps.now().getTime() >= Date.parse(planned.offer.expiresAt) ? (expiredBeforeSignature ? 'expired_before_sign' : 'expired_after_sign')
+        : signature.status === 'failed' ? 'signature_refused' : 'signature_invalid', signatureSources);
+    }
+    const final = await this.deps.store.transaction(async tx => {
+      const { policy, premium } = await this.checked(await tx.policy(policyId, actor), actor);
+      if (policy.status === 'refunded' || policy.status === 'refunding') return reject('signature_failed');
+      if (policy.status === 'issued') {
+        const result = view(policy);
+        await tx.finishCommand(actor.clientId, commandKey, result);
+        return { status: 'ok' as const, replayed, policy: result, ...paid(premium) };
+      }
+      if (policy.status !== 'charged') throw new Error('financial_charge_missing');
+      if (!premium) throw new Error('financial_intent_missing');
+      const signedAt = this.deps.now().toISOString();
+      if (Date.parse(signedAt) >= Date.parse(policy.offer.expiresAt)) {
+        await tx.setPolicyStatus(policy.id, 'refunding');
+        await tx.audit('premium.refund_requested', policy.id, traceId, 'refunding', policy.clientId,
+          this.decision('premium.refund_requested', traceId, policy, 'refunding', { ...by, payment: premium,
+            refundReason: 'expired_during_final_transaction', sources: signatureSources }));
+        return null;
+      }
+      const timeSeal = await this.deps.integrity.digest(issuanceTimeContent(policy.id, documentHash, signedAt));
+      const issuance = { documentHash, receipt: signature.receipt, signedAt, timeSeal };
+      const result = view({ ...policy, status: 'issued' });
+      const stored = await tx.completeIssuance({ policy, signature: issuance, commandKey, result, traceId,
+        capture: this.decision('policy.issued', traceId, policy, 'issued', { ...by, payment: premium, sources: signatureSources,
+          issuance: { signedAt, documentHash } }) });
+      // The transaction commits only after the stored evidence matches the reviewed document and provider receipt.
+      if (!stored || stored.documentHash !== issuance.documentHash || stored.receipt !== issuance.receipt
+        || stored.signedAt !== signedAt || stored.timeSeal !== timeSeal) throw new Error('financial_issuance_evidence_missing');
+      return { status: 'ok' as const, replayed, policy: result, ...paid(premium) };
+    });
+    return final ?? refund();
   }
 
   private async checkPayment(payment: Payment, policy: StoredPolicy): Promise<void> {
