@@ -12,13 +12,15 @@ import { QuoteFlow } from '../quote/QuoteFlow';
 import type { Consent } from '../consent/api';
 import { acceptOffer, createOffer, issuePolicy, policyForAcceptance, type Acceptance, type FinancialApi, type FinancialOutcome, type Offer, type Policy } from './api';
 import { OfferJourney } from './OfferJourney';
+import { readPurchaseDraft, savePurchaseDraft } from './purchase-draft';
 
 const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e-1b4d-4c8a-a0d1-e2f3a4b5c6d7' };
 const offer: Offer = { offerId: '10000000-0000-4000-8000-000000000001', offerVersion: 1, quoteId: quote.quoteId, premium: '77760.0000', currency: 'COP', sumInsured: '320000000.0000', effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', traceId: '50000000-0000-4000-8000-000000000001' };
 const acceptance: Acceptance = { acceptanceId: '20000000-0000-4000-8000-000000000002', offerId: offer.offerId, acceptedAt: '2026-10-15T00:01:00.000Z', traceId: '50000000-0000-4000-8000-000000000002' };
 const document = '{"currency":"COP","offerId":"10000000-0000-4000-8000-000000000001","premium":"77760.0000","providerMode":"mock","synthetic":true}';
-const pending: Policy = { policyId: '30000000-0000-4000-8000-000000000003', offerId: offer.offerId, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, document, documentHash: 'a'.repeat(64), replayed: false, traceId: '50000000-0000-4000-8000-000000000003' };
-const issued: Policy = { ...pending, status: 'issued', traceId: '50000000-0000-4000-8000-000000000004' };
+const pending: Policy = { policyId: '30000000-0000-4000-8000-000000000003', offerId: offer.offerId, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, document, documentHash: 'a'.repeat(64), payment: null, replayed: false, traceId: '50000000-0000-4000-8000-000000000003' };
+const receipt = 'MOCK-60000000-0000-4000-8000-000000000006';
+const issued: Policy = { ...pending, status: 'issued', payment: { status: 'confirmed', reference: receipt }, traceId: '50000000-0000-4000-8000-000000000004' };
 const ok = <T,>(value: T): FinancialOutcome<T> => ({ kind: 'ok', value });
 const fast = { firstDelayMs: 1, maxDelayMs: 1, budgetMs: 50 };
 
@@ -124,6 +126,14 @@ describe('definitive offer journey', () => {
 
     await user.click(screen.getByRole('checkbox'));
     await user.click(confirm);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
+    expect(screen.getByText(receipt)).toBeInTheDocument();
+    expect(screen.getByText(api.issuePolicy.mock.calls[0][1])).toBeInTheDocument();
+    expect(screen.queryByText(/ya fue procesada/)).toBeNull();
+    await waitFor(() => expect(live()).toHaveTextContent('Cobro confirmado por $ 77.760 COP. Un solo cargo, un solo recibo.'));
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Ver póliza emitida' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Póliza emitida' })).toBeInTheDocument();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 7: Firma');
     expect(screen.getByText(/Emitida · cobrada y firmada/)).toBeInTheDocument();
@@ -210,8 +220,11 @@ describe('definitive offer journey', () => {
     await user.click(await screen.findByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('no se repite el cobro');
-    await user.click(screen.getByRole('button', { name: 'Reintentar confirmación' }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Póliza emitida' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Cobro en proceso' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
+    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(screen.getByText(/Esta transacción ya fue procesada/)).toBeInTheDocument();
     expect(api.issuePolicy).toHaveBeenCalledTimes(2);
     expect(api.issuePolicy.mock.calls[0][1]).toBe(api.issuePolicy.mock.calls[1][1]);
   });
@@ -230,7 +243,7 @@ describe('definitive offer journey', () => {
     const changed = { ...pending, document: document + '\n', documentHash: 'b'.repeat(64) };
     const api = stubs({
       policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValue(ok(changed)),
-      issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'rejected', code: 'document_mismatch' }).mockResolvedValue(ok({ ...changed, status: 'issued' }))
+      issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'rejected', code: 'document_mismatch' }).mockResolvedValue(ok({ ...changed, status: 'issued', payment: issued.payment }))
     });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
@@ -243,7 +256,7 @@ describe('definitive offer journey', () => {
     expect(screen.getByText(new RegExp(changed.documentHash))).toBeInTheDocument();
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
-    expect(await screen.findByRole('heading', { name: 'Póliza emitida' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cobro confirmado' })).toBeInTheDocument();
     expect(api.issuePolicy.mock.calls[1][0].documentHash).toBe(changed.documentHash);
     expect(api.acceptOffer).toHaveBeenCalledTimes(1);
   });
@@ -280,17 +293,57 @@ describe('definitive offer journey', () => {
     expect(api.issuePolicy).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['payment_declined', 'El cobro no se completó'],
-    ['integrity_violation', 'No pudimos continuar con esta oferta']
-  ])('ends a rejected issuance (%s) without claiming a policy', async (code, text) => {
-    const api = stubs({ issuePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code }) });
+  it('ends a rejected issuance without claiming a policy', async () => {
+    const api = stubs({ issuePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'integrity_violation' }) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await user.click(await screen.findByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'No pudimos completar esta operación' })).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(text))).toBeInTheDocument();
+    expect(screen.getByText(/No pudimos continuar con esta oferta/)).toBeInTheDocument();
+  });
+
+  it('shows a declined charge as final for this policy and retries through a new offer with the same data', async () => {
+    const api = stubs({ issuePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'payment_declined' }) });
+    const { user, onRequote, container } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'El cobro no se pudo completar' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
+    expect(screen.getByText('La póliza no se emitió y no se generó ningún cargo.')).toBeInTheDocument();
+    expect(screen.getByText(/el valor podría cambiar/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cambiar medio de pago' })).toBeNull();
+    await waitFor(() => expect(live()).toHaveTextContent('El cobro fue rechazado.'));
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole('button', { name: 'Reintentar cobro' }));
+    expect(onRequote).toHaveBeenCalledTimes(1);
+    expect(api.issuePolicy).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a policy whose charge was already declined on the declined state instead of asking to pay again', async () => {
+    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok({ ...pending, payment: { status: 'declined', reference: null } })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'El cobro no se pudo completar' })).toBeInTheDocument();
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pending charge inert while its request is in flight and sends one request per click burst', async () => {
+    let finish: (value: FinancialOutcome<Policy>) => void = () => {};
+    const api = stubs({ issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
+    const refresh = await screen.findByRole('button', { name: 'Actualizar estado' });
+    await user.click(refresh);
+    expect(refresh).toHaveAttribute('aria-disabled', 'true');
+    await user.click(refresh); await user.click(refresh);
+    expect(api.issuePolicy).toHaveBeenCalledTimes(2);
+    await act(async () => { finish(ok({ ...issued, replayed: true })); });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(new Set(api.issuePolicy.mock.calls.map(call => call[1])).size).toBe(1);
   });
 
   it('shows the underwriting decline without an offer', async () => {
@@ -328,6 +381,45 @@ describe('definitive offer journey', () => {
     expect(api.acceptOffer.mock.calls[0][1]).toBe(api.acceptOffer.mock.calls[1][1]);
   });
 
+  it('stores the acceptance and the command key while a purchase is open and clears them once the charge is confirmed', async () => {
+    let finish: (value: FinancialOutcome<Policy>) => void = () => {};
+    const api = stubs({ issuePolicy: vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await screen.findByRole('checkbox');
+    expect(readPurchaseDraft()).toEqual({ quoteId: quote.quoteId, acceptance, issue: null });
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Confirmar cobro y firma' }));
+    expect(readPurchaseDraft()?.issue).toEqual({ policyId: pending.policyId, documentHash: pending.documentHash, key: api.issuePolicy.mock.calls[0][1] });
+    await act(async () => { finish(ok(issued)); });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(readPurchaseDraft()).toBeNull();
+  });
+
+  it('resumes an interrupted charge after a reload with the original key and no new offer or acceptance', async () => {
+    const key = '70000000-0000-4000-8000-000000000007';
+    savePurchaseDraft({ quoteId: quote.quoteId, acceptance, issue: { policyId: pending.policyId, documentHash: pending.documentHash, key } });
+    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok({ ...pending, status: 'charged', payment: { status: 'confirmed', reference: receipt } })) });
+    const user = userEvent.setup();
+    render(wrap('es-CO', <OfferJourney quote={{ quoteId: quote.quoteId }} resume={readPurchaseDraft() ?? undefined} api={api as never} poll={fast} onRequote={vi.fn()} onConsentRequired={vi.fn()} onBack={vi.fn()} />));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro en proceso' })).toBeInTheDocument();
+    expect(screen.getByText(key)).toBeInTheDocument();
+    expect(api.createOffer).not.toHaveBeenCalled();
+    expect(api.acceptOffer).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(api.issuePolicy).toHaveBeenCalledWith(expect.objectContaining({ policyId: pending.policyId }), key, expect.any(AbortSignal));
+    expect(readPurchaseDraft()).toBeNull();
+  });
+
+  it('resumes at document review when no payment command was sent before the reload', async () => {
+    savePurchaseDraft({ quoteId: quote.quoteId, acceptance, issue: null });
+    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok(pending)) });
+    render(wrap('es-CO', <OfferJourney quote={{ quoteId: quote.quoteId }} resume={readPurchaseDraft() ?? undefined} api={api as never} poll={fast} onRequote={vi.fn()} onConsentRequired={vi.fn()} onBack={vi.fn()} />));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Revisa tu póliza antes de confirmar' })).toBeInTheDocument();
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+  });
+
   it('renders in English', async () => {
     journey(stubs(), 'en-US');
     expect(await screen.findByRole('button', { name: 'Accept offer' })).toBeInTheDocument();
@@ -336,6 +428,18 @@ describe('definitive offer journey', () => {
 });
 
 describe('quote flow continuation', () => {
+  it('opens a purchase interrupted by a reload on its policy, and sends the user to the form when leaving it', async () => {
+    savePurchaseDraft({ quoteId: quote.quoteId, acceptance, issue: null });
+    const financial = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok({ ...pending, payment: { status: 'declined', reference: null } })) });
+    const user = userEvent.setup();
+    render(wrap('es-CO', <QuoteFlow financial={financial as never} />));
+    expect(await screen.findByRole('heading', { level: 1, name: 'El cobro no se pudo completar' })).toBeInTheDocument();
+    expect(financial.createOffer).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Reintentar cobro' }));
+    expect(await screen.findByRole('button', { name: 'Calcular cotización' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   const terms = { purposeCode: 'risk_profiling', textVersion: 2, validityDays: 90, sources: [
     { code: 'open_finance_bancolombia', scope: 'income_obligations_12m', kind: 'open_finance' },
     { code: 'datacredito_experian', scope: 'payment_history_score', kind: 'credit_bureau' },
@@ -417,14 +521,29 @@ describe('financial API client', () => {
   });
 
   it('reads a pending policy only for the accepted offer and binds issuance to the reviewed hash', async () => {
-    const policyBody = { ...pending, offerVersion: 1, synthetic: true, providerMode: 'mock' };
+    const { payment: _absent, ...withoutPayment } = pending;
+    const policyBody = { ...withoutPayment, offerVersion: 1, synthetic: true, providerMode: 'mock' };
     fetchMock(json(404, { error: 'not_found' }));
     expect(await policyForAcceptance(acceptance)).toEqual({ kind: 'notFound' });
     vi.restoreAllMocks(); fetchMock(json(200, { ...policyBody, offerId: '90000000-0000-4000-8000-000000000009' }));
     expect((await policyForAcceptance(acceptance)).kind).toBe('unavailable');
-    vi.restoreAllMocks(); const spy = fetchMock(json(200, { ...policyBody, status: 'issued' }));
-    expect(await issuePolicy(pending, 'issue-key')).toEqual(ok({ ...pending, status: 'issued' }));
+    vi.restoreAllMocks(); const spy = fetchMock(json(200, { ...policyBody, status: 'issued', payment: issued.payment }));
+    expect(await issuePolicy(pending, 'issue-key')).toEqual(ok({ ...pending, status: 'issued', payment: issued.payment }));
     expect(JSON.parse(String((spy.mock.calls[0][1] as RequestInit).body))).toEqual({ documentHash: pending.documentHash });
+  });
+
+  it('accepts only a well-formed premium state with a receipt exactly when the provider acknowledged it', async () => {
+    const { payment: _absent, ...withoutPayment } = pending;
+    const body = { ...withoutPayment, offerVersion: 1, synthetic: true, providerMode: 'mock' };
+    for (const payment of [{ status: 'pending', reference: null }, { status: 'declined', reference: null }, { status: 'refunded', reference: receipt }]) {
+      vi.restoreAllMocks(); fetchMock(json(200, { ...body, payment }));
+      expect(await policyForAcceptance(acceptance)).toEqual(ok({ ...pending, payment }));
+    }
+    for (const payment of [null, { status: 'confirmed', reference: null }, { status: 'pending', reference: receipt }, { status: 'confirmed', reference: 'REC-9931-2026' },
+      { status: 'succeeded', reference: receipt }, { ...issued.payment, amount: '1.0000' }]) {
+      vi.restoreAllMocks(); fetchMock(json(200, { ...body, payment }));
+      expect((await policyForAcceptance(acceptance)).kind, JSON.stringify(payment)).toBe('unavailable');
+    }
   });
 
   it('rethrows an aborted request so callers can ignore it', async () => {

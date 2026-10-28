@@ -12,6 +12,7 @@ export type FinancialDecisionCapture = { schemaVersion: 1; contractVersion: 'v1'
 export type FinancialEvidence = { payment?: Payment; sources?: FinancialSource[];
   event?: { eventId: string; eventType: string; environment: string; occurredAt: string; delayMinutes?: number };
   issuance?: { signedAt: string; documentHash: string };
+  trigger?: 'reconciliation';
   refundReason?: 'signature_refused' | 'expired_before_sign' | 'expired_after_sign' | 'expired_during_final_transaction' | 'signature_invalid' | 'existing_refund_intent' };
 
 export function financialDecision(action: Exclude<FinancialAction, 'financial.denied'>, traceId: string, policy: StoredPolicy,
@@ -27,6 +28,7 @@ export function financialDecision(action: Exclude<FinancialAction, 'financial.de
         intentKey: payment.key, intentHash: payment.hash, status: payment.status,
         providerReference: payment.providerReference === 'MOCK-' + payment.id ? payment.providerReference : null } } : {}),
       ...(evidence.event ? { event: { ...evidence.event } } : {}), ...(evidence.issuance ? { issuance: { ...evidence.issuance } } : {}),
+      ...(evidence.trigger ? { trigger: evidence.trigger } : {}),
       ...(evidence.refundReason ? { refundReason: evidence.refundReason, refundIntent: { policyId: policy.id, action: 'premium.refund_requested' } } : {}) },
     sources: (evidence.sources ?? []).map(source => ({ ...source })), consent: { status: 'not_required' },
     rule: { id: action, version: FINANCIAL_RULE }, outcome };
