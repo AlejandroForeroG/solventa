@@ -7,12 +7,6 @@ type RevocationSession = { id: string; client_id: string; subject_token: string;
 
 export class SqlIdentitySessions implements IdentitySessions {
   constructor(private readonly connectionString: string) {}
-  private async connection<T>(operation: (db: Client) => Promise<T>): Promise<T> {
-    const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
-    db.on('error', () => {});
-    try { await db.connect(); return await operation(db); }
-    finally { await db.end().catch(() => {}); }
-  }
   private async transaction<T>(operation: (db: Client) => Promise<T>): Promise<T> {
     const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     db.on('error', () => {});
@@ -125,13 +119,17 @@ export class SqlIdentitySessions implements IdentitySessions {
       }
   }
   async find(identity: VerifiedIdentity): Promise<Principal | null> {
-    return this.connection(async db => {
+    const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
+    db.on('error', () => {});
+    try {
+      await db.connect();
+      // One SELECT already reads a consistent snapshot; no explicit transaction round trips are needed.
       const row = (await db.query(`SELECT c.id, c.subject_token FROM identity.authentication_sessions s
         JOIN identity.clients c ON c.id=s.client_id JOIN identity.external_identities e ON e.client_id=c.id
         WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider='workos' AND e.provider_subject=$2
         AND c.status='active' AND s.revoked_at IS NULL AND s.expires_at>now()`, [identity.sessionReference, identity.providerSubject])).rows[0];
       return row ? { clientId: row.id, subjectToken: row.subject_token } : null;
-    });
+    } finally { await db.end().catch(() => {}); }
   }
   async register(identity: VerifiedIdentity): Promise<Principal | null> {
     const active = await this.find(identity);

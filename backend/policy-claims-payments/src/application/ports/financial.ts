@@ -18,7 +18,9 @@ export type IssuanceCommit = { policy: StoredPolicy; signature: Signature & { ti
 export type AcceptanceSnapshot = { inbox: Inbox | null; conflict: boolean };
 export type ImportedEvent = { eventId: string; consumer: string; eventType: string; hash: string };
 export type AcceptanceImport = { status: 'created' } | { status: 'existing'; snapshot: AcceptanceSnapshot };
-export type PremiumStart = { policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
+// An unfinished customer issuance command whose policy may hold a provider charge without its final state.
+export type IssuanceCandidate = { policyId: string; actor: FinancialActor; commandKey: string };
+export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
   traceId: string; capture: FinancialDecisionCapture };
 export interface FinancialTransaction {
   policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
@@ -41,6 +43,8 @@ export interface FinancialStore {
   readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<AcceptedPolicyLookup>;
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport>;
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
+  // Selects and refreshes candidate activity atomically so bounded recovery batches rotate.
+  issuanceCandidates(staleBefore: Date, limit: number): Promise<IssuanceCandidate[]>;
   rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialIntegrity {

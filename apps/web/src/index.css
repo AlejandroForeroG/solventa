@@ -175,3 +175,18 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .review-confirm { width: 100%; margin-bottom: 14px; }
 .facts dd.mono { overflow-wrap: anywhere; }
 @media (max-width: 720px) { .offer-grid, .offer-facts { grid-template-columns: 1fr; } .offer-card { padding: 24px; } .offer-premium { font-size: 36px; } }
+
+/* Step 6: premium charge states. */
+.status-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.status-head h1 { margin: 0; }
+.status-head .note { margin-top: 2px; }
+.spinner { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 3px solid #e3e1dc; border-top-color: #0b6b5f; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.status-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; font: 700 16px 'IBM Plex Mono', ui-monospace, monospace; }
+.status-icon-ok { background: #e6f3ec; color: #1f7a4d; }
+.status-icon-pending { background: #fbf0dc; color: #9a6206; }
+.facts-pairs { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.trace + .note { margin-top: 12px; }
+.charge-key { color: #0b6b5f; overflow-wrap: anywhere; }
+.btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #6b7583; border-color: #edebe6; cursor: wait; }

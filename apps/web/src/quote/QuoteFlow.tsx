@@ -6,6 +6,7 @@ import { ConsentDeclined, ConsentGranted } from '../consent/ConsentOutcome';
 import { useFormatters, useLocale } from '../i18n/I18n';
 import { financialApi, type FinancialApi } from '../offer/api';
 import { OfferJourney } from '../offer/OfferJourney';
+import { readPurchaseDraft } from '../offer/purchase-draft';
 import { newIdempotencyKey, requestQuote as defaultRequest, type Quote, type QuoteValues } from './api';
 import { checkLocally, fromServer, type FieldKey, type FieldProblem } from './fields';
 import { useAnnounce } from './Live';
@@ -31,7 +32,9 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
   const { locale } = useLocale();
   const { cop } = useFormatters();
   const announce = useAnnounce();
-  const [phase, setPhase] = useState<Phase>('form');
+  // A purchase interrupted by a reload resumes at its policy; the form data itself is never stored.
+  const [resume] = useState(readPurchaseDraft);
+  const [phase, setPhase] = useState<Phase>(resume ? 'offer' : 'form');
   const [values, setValues] = useState<QuoteValues>(() => initialEstimate ? { ...empty, amount: initialEstimate.amount, termMonths: initialEstimate.termMonths } : empty);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
@@ -80,6 +83,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
   // Requoting after an expired offer saves a new quote from the same form data, then requests a fresh offer for it.
   function requote() {
     key.current = newIdempotencyKey();
+    if (checkLocally(values).length) { setPhase('form'); return; }
     void submit('offer');
   }
 
@@ -92,6 +96,8 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
     {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} onOffer={() => setPhase('offer')} />}
     {phase === 'offer' && quote && <OfferJourney key={quote.quoteId} quote={quote} api={financial} onRequote={requote} onConsentRequired={() => setPhase('consent')} onBack={() => setPhase('result')} onSessionLost={onSessionLost} />}
+    {phase === 'offer' && !quote && resume && <OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} api={financial} onRequote={requote}
+      onConsentRequired={() => setPhase('form')} onBack={() => setPhase('form')} onSessionLost={onSessionLost} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}
     {phase === 'denied' && <Denied traceId={deniedTrace} onRetry={() => void submit()} onBack={() => setPhase('form')} />}
   </>;

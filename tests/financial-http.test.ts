@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
+import { DependencyTimings } from '../backend/acquisition-risk/src/application/dependency-timings';
 import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition-risk/src/adapters/inbound/offers-http';
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
@@ -54,7 +55,8 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const finance: PolicyHttpDependencies['finance'] = {
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
-    issue: async input => { calls.push({ operation: 'issue', input }); return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' } }; },
+    issue: async input => { calls.push({ operation: 'issue', input });
+      return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
   };
   const policyApp = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance });
   const run = (req: Request, policyRoute = false) => (policyRoute ? policyApp : app).fetch(req, { APP_ENV: 'local' } as never);
@@ -71,7 +73,9 @@ test('offer creation uses one authorization, real Origin and server-derived acto
   assert.ok(!('clientId' in body) && !('subjectToken' in body));
   assert.deepEqual(calls.map(c => c.operation), ['authorize', 'create']);
   assert.deepEqual(calls[0].input, { kind: 'web', operation: 'offers:create', traceId, cookie: 'synthetic-sealed', origin: 'https://web.example', method: 'POST', requestOrigin: 'https://web.example' });
-  assert.deepEqual(calls[1].input, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
+  const { timings, ...created } = calls[1].input as { timings: unknown };
+  assert.ok(timings instanceof DependencyTimings, 'the use case receives the request timings');
+  assert.deepEqual(created, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
 });
 
 test('financial authorization binds Origin to the actual destination for primary and retained hosts', async () => {
@@ -142,11 +146,15 @@ test('acceptance returns 202 pending asynchronous issuance, and issue requires t
   await contractual(accepted, 'offers', 'Acceptance');
   const found = await run(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), true);
   assert.equal(found.status, 200);
-  assert.equal((await contractual(found, 'policies', 'Policy')).policyId, id);
+  const pending = await contractual(found, 'policies', 'Policy');
+  assert.equal(pending.policyId, id);
+  assert.equal('payment' in pending, false, 'no premium state before the customer confirms issuance');
   assert.deepEqual(calls.find(c => c.operation === 'policyGetByAcceptance')?.input, { actor, acceptanceId: id, traceId });
   const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash })), true);
   assert.equal(response.status, 200);
-  assert.equal((await contractual(response, 'policies', 'Policy')).status, 'issued');
+  const issued = await contractual(response, 'policies', 'Policy');
+  assert.equal(issued.status, 'issued');
+  assert.deepEqual(issued.payment, { status: 'confirmed', reference: 'MOCK-' + id });
   assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
 });
 
@@ -241,7 +249,8 @@ test('composed acceptance reads keep one opaque 404 but record a security denial
     let rejected = 0;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return lookup; },
-        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); }, async rejection() { rejected++; } },
+        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); }, async rejection() { rejected++; } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,
       authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
@@ -261,6 +270,7 @@ test('foreign acceptance discovery fails closed when either required denial audi
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return { status: 'foreign' }; },
         async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); },
         async rejection() { if (failedOwner === 'policy') throw new Error('synthetic_audit_failure'); } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,
@@ -287,4 +297,22 @@ test('only a newly committed acceptance starts publication of its own event, wit
     await contractual(response, 'offers', 'Acceptance');
     assert.deepEqual(started, published);
   }
+});
+
+test('the profiling log line names the slowest dependency and lists every timed call without personal data', async () => {
+  const lines: string[] = [];
+  const log = mock.method(console, 'log', (line: string) => { lines.push(line); });
+  try {
+    const app = new Hono<{ Bindings: AcquisitionEnv }>();
+    mountOffers(app, { authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
+      denyResourceAccess: async () => ({ recorded: true }),
+      offers: { create: async input => { input.timings?.record('provider:payment_history_score', 90, 'ok'); input.timings?.record('offer_write', 12, 'ok'); return { status: 'created', offer: terms }; },
+        createFlight: async () => ({ status: 'created', offer: terms }), get: async () => ({ status: 'found', offer: terms }), accept: async () => { throw new Error('unexpected_accept'); } } });
+    const response = await app.fetch(request('/quotes/COT-2026-00001/offers', '{}', { 'idempotency-key': 'profile-1', 'x-trace-id': traceId }), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, 201);
+  } finally { log.mock.restore(); }
+  const line = JSON.parse(lines.find(candidate => candidate.includes('mortgage_offer_profiled')) ?? '{}');
+  assert.equal(line.dominant, 'provider:payment_history_score');
+  assert.deepEqual(line.dependencies.map((call: { name: string }) => call.name), ['identity_access', 'provider:payment_history_score', 'offer_write']);
+  assert.deepEqual(Object.keys(line).sort(), ['dependencies', 'dominant', 'event', 'latencyMs', 'offerStatus', 'result', 'traceId']);
 });
