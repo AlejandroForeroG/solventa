@@ -53,15 +53,15 @@ export function OfferCard({ heading, offer, accepting, onAccept, onBack }: { hea
   </section>;
 }
 
-export function PolicyDocument({ heading, policy, checked, confirming, problem, onCheck, onConfirm }: {
-  heading: RefObject<HTMLHeadingElement | null>; policy: Policy; checked: boolean; confirming: boolean; problem?: 'uncertain' | 'document_changed';
+export function PolicyDocument({ heading, policy, checked, documentChanged, onCheck, onConfirm }: {
+  heading: RefObject<HTMLHeadingElement | null>; policy: Policy; checked: boolean; documentChanged: boolean;
   onCheck: (checked: boolean) => void; onConfirm: () => void;
 }) {
   const intl = useIntl();
   const { copDecimal, dayMonthYear } = useFormatters();
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   return <section className="step">
-    {problem && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t(problem === 'uncertain' ? 'policy.uncertain' : 'policy.documentChanged')}</p></div>}
+    {documentChanged && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t('policy.documentChanged')}</p></div>}
     <div className="review-grid">
       <div className="card document-card">
         <div className="document-bar">
@@ -83,10 +83,10 @@ export function PolicyDocument({ heading, policy, checked, confirming, problem, 
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('policy.reviewTitle')}</h1>
         <p className="note">{t('policy.reviewSubtitle')}</p>
         <div className="check review-check">
-          <input id="policy-review-cb" type="checkbox" checked={checked} onChange={event => onCheck(event.target.checked)} disabled={confirming} />
+          <input id="policy-review-cb" type="checkbox" checked={checked} onChange={event => onCheck(event.target.checked)} />
           <label htmlFor="policy-review-cb">{t('policy.check')}</label>
         </div>
-        <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={!checked || confirming}>{t(confirming ? 'policy.confirming' : problem === 'uncertain' ? 'policy.retryConfirm' : 'policy.confirm')}</button>
+        <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={!checked}>{t('policy.confirm')}</button>
         <p className="note">{t('policy.mock')}</p>
       </div>
     </div>
@@ -115,6 +115,84 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
+      </div>
+    </div>
+  </section>;
+}
+
+type ChargeProps = { heading: RefObject<HTMLHeadingElement | null>; policy: Policy };
+
+// While a request is in flight the action stays focusable but inert, so focus is not lost and a repeated click sends nothing.
+export function ChargePending({ heading, policy, idempotencyKey, busy, uncertain, onRefresh }: ChargeProps & {
+  idempotencyKey: string; busy: boolean; uncertain: boolean; onRefresh: () => void;
+}) {
+  const intl = useIntl();
+  const { copDecimal } = useFormatters();
+  const t = (id: string) => intl.formatMessage({ id });
+  return <section className="step card" aria-busy={busy}>
+    <div className="status-head">
+      {busy ? <span className="spinner" aria-hidden="true" /> : <span className="status-icon status-icon-pending" aria-hidden="true">…</span>}
+      <div>
+        <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.pendingTitle')}</h1>
+        <p className="note">{t('charge.pendingDetail')}</p>
+      </div>
+    </div>
+    {uncertain && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t('policy.uncertain')}</p></div>}
+    <dl className="facts">
+      <div><dt>{t('charge.amount')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
+      <div><dt>{t('charge.key')}</dt><dd className="mono charge-key">{idempotencyKey}</dd></div>
+    </dl>
+    <div className="banner banner-info"><span aria-hidden="true" className="banner-icon">i</span><p><strong>{t('charge.waitStrong')}</strong> {t('charge.waitDetail')}</p></div>
+    <p className="note">{t('policy.mock')}</p>
+    <div className="actions">
+      <button type="button" className="btn btn-primary" aria-disabled={busy} onClick={busy ? undefined : onRefresh}>{t('policy.refresh')}</button>
+    </div>
+  </section>;
+}
+
+export function ChargeDeclined({ heading, policy, onRetry, onBack }: ChargeProps & { onRetry: () => void; onBack: () => void }) {
+  const intl = useIntl();
+  const t = (id: string) => intl.formatMessage({ id });
+  return <section className="step card card-error">
+    <div className="denied-head">
+      <span aria-hidden="true" className="denied-icon">×</span>
+      <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.declinedTitle')}</h1>
+    </div>
+    <div className="denied-body">
+      <p>{t('charge.declinedDetail')} <strong>{t('charge.declinedNoCharge')}</strong></p>
+      <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('issued.reference')}: {policy.traceId}</p>
+      <p className="note">{t('charge.retryNote')}</p>
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={onRetry}>{t('charge.retry')}</button>
+        <button type="button" className="btn btn-secondary" onClick={onBack}>{t('offer.backToEstimate')}</button>
+      </div>
+    </div>
+  </section>;
+}
+
+export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }: ChargeProps & { idempotencyKey: string; onContinue: () => void }) {
+  const intl = useIntl();
+  const { copDecimal } = useFormatters();
+  const t = (id: string) => intl.formatMessage({ id });
+  return <section className="step">
+    {policy.replayed && <div className="banner banner-ok"><span aria-hidden="true" className="banner-icon">✓</span><p><strong>{t('charge.replayedTitle')}</strong> {t('charge.replayedDetail')}</p></div>}
+    <div className="card">
+      <div className="status-head">
+        <span className="status-icon status-icon-ok" aria-hidden="true">✓</span>
+        <div>
+          <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.okTitle')}</h1>
+          <p className="note">{t('charge.okDetail')}</p>
+        </div>
+      </div>
+      <dl className="facts facts-pairs">
+        <div><dt>{t('charge.receipt')}</dt><dd className="mono">{policy.payment?.reference}</dd></div>
+        <div><dt>{t('charge.charged')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
+        <div><dt>{t('charge.key')}</dt><dd className="mono charge-key">{idempotencyKey}</dd></div>
+        <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
+      </dl>
+      <p className="note">{t('policy.mock')}</p>
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={onContinue}>{t('charge.continue')}</button>
       </div>
     </div>
   </section>;

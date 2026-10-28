@@ -55,7 +55,8 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const finance: PolicyHttpDependencies['finance'] = {
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
-    issue: async input => { calls.push({ operation: 'issue', input }); return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' } }; },
+    issue: async input => { calls.push({ operation: 'issue', input });
+      return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
   };
   const policyApp = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance });
   const run = (req: Request, policyRoute = false) => (policyRoute ? policyApp : app).fetch(req, { APP_ENV: 'local' } as never);
@@ -145,11 +146,15 @@ test('acceptance returns 202 pending asynchronous issuance, and issue requires t
   await contractual(accepted, 'offers', 'Acceptance');
   const found = await run(request(`/policies/by-acceptance/${id}/policy`, undefined, {}, 'GET'), true);
   assert.equal(found.status, 200);
-  assert.equal((await contractual(found, 'policies', 'Policy')).policyId, id);
+  const pending = await contractual(found, 'policies', 'Policy');
+  assert.equal(pending.policyId, id);
+  assert.equal('payment' in pending, false, 'no premium state before the customer confirms issuance');
   assert.deepEqual(calls.find(c => c.operation === 'policyGetByAcceptance')?.input, { actor, acceptanceId: id, traceId });
   const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash })), true);
   assert.equal(response.status, 200);
-  assert.equal((await contractual(response, 'policies', 'Policy')).status, 'issued');
+  const issued = await contractual(response, 'policies', 'Policy');
+  assert.equal(issued.status, 'issued');
+  assert.deepEqual(issued.payment, { status: 'confirmed', reference: 'MOCK-' + id });
   assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
 });
 
@@ -244,7 +249,8 @@ test('composed acceptance reads keep one opaque 404 but record a security denial
     let rejected = 0;
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return lookup; },
-        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); }, async rejection() { rejected++; } },
+        async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); }, async rejection() { rejected++; } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,
       authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
@@ -264,6 +270,7 @@ test('foreign acceptance discovery fails closed when either required denial audi
     const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: () => crypto.randomUUID(),
       store: { async readPolicy() { throw new Error('unexpected_policy_read'); }, async readAcceptedPolicy() { return { status: 'foreign' }; },
         async importAcceptance() { throw new Error('unexpected_import'); }, async transaction() { throw new Error('unexpected_transaction'); },
+        async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); },
         async rejection() { if (failedOwner === 'policy') throw new Error('synthetic_audit_failure'); } },
       payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
     const app = createPolicyHttp({ finance,
