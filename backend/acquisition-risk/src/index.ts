@@ -23,8 +23,11 @@ async function publishAcceptedOffers(env: Env, ctx: ExecutionContext, trigger: '
   const queue = env.FINANCIAL_EVENTS;
   if (!queue || typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('financial_publisher_configuration_invalid');
   const result = await new FinancialOutboxPublisher({ connectionString: env.ACQUISITION_DB.connectionString, environment: env.APP_ENV,
-    integrity: new HmacOfferIntegrity(key), queue: new FinancialEventDelivery({ queue, policy: env.POLICY_SERVICE,
-      waitUntil: work => ctx.waitUntil(work), report: result => console.log(JSON.stringify({ event: 'financial_import_delivery', environment: env.APP_ENV, trigger, ...result })) }) }).publish(eventId);
+    integrity: new HmacOfferIntegrity(key), queue: { send: async event => {
+      const delivery = queue.send(event, { contentType: 'json' });
+      ctx.waitUntil(delivery.then(() => {}, () => {}));
+      await delivery;
+    } } }).publish(eventId);
   console.log(JSON.stringify({ event: 'financial_outbox_publication', environment: env.APP_ENV, trigger, ...result }));
 }
 
@@ -39,10 +42,17 @@ export default class extends WorkerEntrypoint<Env> {
     });
     return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
-      // The same leased publisher as the cron runs after the response; the minute cron remains the recovery path.
-      acceptanceCommitted: eventId => this.ctx.waitUntil(publishAcceptedOffers(this.env, this.ctx, 'acceptance', eventId).catch(() => {
-        console.error(JSON.stringify({ event: 'financial_outbox_publication_failed', environment: this.env.APP_ENV, trigger: 'acceptance', code: 'publication_unavailable' }));
-      })) } }).fetch(request, this.env, this.ctx);
+      // Queue publication keeps its independent lease and minute-cron recovery.
+      acceptanceCommitted: (eventId, event) => {
+        // The committed event is already signed and durable. Import need not wait
+        // for a separate outbox claim or Queue acknowledgement; neither delays HTTP.
+        if (event && event.eventId === eventId && event.environment === this.env.APP_ENV
+          && ['local', 'dev', 'staging'].includes(this.env.APP_ENV) && this.env.FINANCIAL_PROVIDER_MODE === 'mock') this.ctx.waitUntil(new FinancialEventDelivery({ policy: this.env.POLICY_SERVICE,
+          waitUntil: work => this.ctx.waitUntil(work), report: result => console.log(JSON.stringify({ event: 'financial_import_delivery', environment: this.env.APP_ENV, trigger: 'acceptance', ...result })) }).send(event));
+        this.ctx.waitUntil(publishAcceptedOffers(this.env, this.ctx, 'acceptance', eventId).catch(() => {
+          console.error(JSON.stringify({ event: 'financial_outbox_publication_failed', environment: this.env.APP_ENV, trigger: 'acceptance', code: 'publication_unavailable' }));
+        }));
+      } } }).fetch(request, this.env, this.ctx);
   }
   async scheduled(): Promise<void> {
     await publishAcceptedOffers(this.env, this.ctx, 'schedule');
