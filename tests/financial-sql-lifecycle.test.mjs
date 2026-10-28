@@ -8,6 +8,7 @@ const { build } = createRequire(require.resolve('wrangler/package.json'))('esbui
 const bundled = (await build({ stdin: { contents: `
   export { SqlFinancialStore } from './backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
   export { SqlMockPaymentGateway } from './backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
+  export { SqlOfferStore } from './backend/acquisition-risk/src/adapters/outbound/sql-offer-store';
   export { configure } from 'pg';`, resolveDir: process.cwd() },
 bundle: true, write: false, format: 'esm', platform: 'node', plugins: [{ name: 'explicit-sql-transport', setup(builder) {
   builder.onResolve({ filter: /^pg$/ }, () => ({ path: 'pg', namespace: 'transport' }));
@@ -90,6 +91,64 @@ const payment = { id: '80000000-0000-4000-8000-000000000001', policyId: '8000000
   operation: 'premium', amount: '24300.00', currency: 'COP', key: 'initial-premium', hash: 'a'.repeat(64), status: 'pending', providerReference: null };
 const gatewayRow = { request_hash: payment.hash, operation: payment.operation, amount: payment.amount,
   currency: payment.currency, status: 'confirmed', provider_reference: 'MOCK-' + payment.id };
+
+const offerId = '80000000-0000-4000-8000-000000000003';
+const acceptanceInput = { actor: { clientId: payment.id, subjectToken: payment.policyId }, key: 'synthetic-acceptance',
+  offer: { seal: 'c'.repeat(64), terms: { offerId, expiresAt: '2027-01-01T00:00:00.000Z' } },
+  acceptance: { acceptanceId: payment.id, offerId, eventId: payment.policyId, acceptedAt: '2026-10-27T00:00:00.000Z', status: 'pending_issuance', synthetic: true },
+  event: { eventId: payment.policyId }, traceId: offerId, now: '2026-10-27T00:00:00.000Z', authorizedUntil: '2027-01-01T00:00:00.000Z' };
+
+test('acceptance keeps COMMIT on the response path while retaining the actual close afterwards', { timeout: 5000 }, async () => {
+  const f = await fixture(), committing = deferred(), commit = deferred(), close = deferred(), background = [];
+  f.state.query = async sql => {
+    if (sql === 'COMMIT') { committing.resolve(); await commit.promise; }
+    return sql.startsWith('WITH locked') ? { rows: [{ matched: true, expired: false, acceptances: 1, audits: 1, events: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
+  };
+  f.state.close = () => close.promise;
+  const store = new f.SqlOfferStore('synthetic-transport', { waitUntil: work => background.push(work) });
+  let returned = false;
+  const result = store.accept(acceptanceInput).then(value => { returned = true; return value; });
+  await committing.promise; assert.equal(returned, false); assert.equal(f.state.closes, 0);
+  commit.resolve(); assert.equal((await result).status, 'created'); assert.equal(background.length, 1);
+  assert.equal(f.state.queries.length, 3, 'one compound guarded write between BEGIN and COMMIT');
+  close.resolve(); await Promise.all(background);
+});
+
+test('a failed acceptance COMMIT cannot dispatch created metadata or become a success', { timeout: 5000 }, async () => {
+  const f = await fixture(), background = [];
+  f.state.query = async sql => {
+    if (sql === 'COMMIT') throw Error('synthetic_commit_failed');
+    return sql.startsWith('WITH locked') ? { rows: [{ matched: true, expired: false, acceptances: 1, audits: 1, events: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
+  };
+  await assert.rejects(new f.SqlOfferStore('synthetic-transport', { waitUntil: work => background.push(work) }).accept(acceptanceInput), /synthetic_commit_failed/);
+  assert.equal(f.state.queries.at(-1), 'ROLLBACK'); await Promise.all(background);
+});
+
+test('Acquisition awaits its close when the lifecycle is absent or rejects registration', { timeout: 5000 }, async () => {
+  for (const lifecycle of [undefined, { waitUntil() { throw Error('synthetic_context_unavailable'); } }]) {
+    const f = await fixture(), closing = deferred(), close = deferred();
+    f.state.query = async sql => sql.startsWith('WITH locked') ? { rows: [{ matched: true, expired: false, acceptances: 1, audits: 1, events: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
+    f.state.close = () => { closing.resolve(); return close.promise; };
+    let returned = false;
+    const result = new f.SqlOfferStore('synthetic-transport', lifecycle).accept(acceptanceInput).then(value => { returned = true; return value; });
+    await closing.promise; await Promise.resolve(); assert.equal(returned, false);
+    close.resolve(); assert.equal((await result).status, 'created');
+  }
+});
+
+test('expired or altered locked evidence writes nothing and an incomplete effect graph rolls back', async () => {
+  for (const row of [{ matched: true, expired: true, acceptances: 0, audits: 0, events: 0 },
+    { matched: false, expired: false, acceptances: 0, audits: 0, events: 0 },
+    { matched: true, expired: false, acceptances: 1, audits: 1, events: 0 },
+    { matched: true, expired: true, acceptances: 1, audits: 1, events: 1 }]) {
+    const f = await fixture();
+    f.state.query = async sql => sql.startsWith('WITH locked') ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
+    const result = new f.SqlOfferStore('synthetic-transport').accept(acceptanceInput);
+    if (row.acceptances) await assert.rejects(result, /offer_acceptance_evidence_incomplete/);
+    else assert.equal((await result).status, row.matched ? 'expired' : 'conflict');
+    assert.equal(f.state.queries.at(-1), 'ROLLBACK'); assert.equal(f.state.queries.includes('COMMIT'), false);
+  }
+});
 
 test('a fresh gateway settlement validates the returned durable row without a second query', async () => {
   const f = await fixture(), close = deferred(), background = [];
