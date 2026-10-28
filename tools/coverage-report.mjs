@@ -28,6 +28,7 @@ for (const [name, components] of [['unit-global', [unit, web]], ['extended-globa
   const report = path.join(directory, name);
   const context = createContext({ dir: report, coverageMap: map, sourceFinder: file => fs.readFileSync(path.join(root, file), 'utf8') });
   for (const format of ['html', 'json', 'json-summary', 'lcovonly']) reports.create(format).execute(context);
+  fs.appendFileSync(path.join(report, 'base.css'), fs.readFileSync(new URL('./coverage-report.css', import.meta.url), 'utf8'));
   totals[name] = map.getCoverageSummary().toJSON();
 }
 fs.writeFileSync(path.join(directory, 'summary.json'), JSON.stringify({ revision: inventory.sourceRevision, files: inventory.files.length, totals, runtime: 'Istanbul workerd entrypoints reported separately; never mixed with V8 totals' }, null, 2));

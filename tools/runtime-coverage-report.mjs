@@ -1,4 +1,4 @@
-import { readdir, readFile, mkdir } from 'node:fs/promises';
+import { readdir, readFile, mkdir, appendFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { instrumentEntrypoint } from '../tests/support/runtime-coverage.mjs';
@@ -31,4 +31,5 @@ await mkdir(path.join(directory, 'report'), { recursive: true });
 const context = createContext({ dir: path.join(directory, 'report'), coverageMap: normalized,
   sourceFinder: file => require('node:fs').readFileSync(path.join(root, file), 'utf8') });
 for (const reporter of ['html', 'json', 'json-summary', 'lcovonly']) reports.create(reporter).execute(context);
+await appendFile(path.join(directory, 'report/base.css'), await readFile(new URL('./coverage-report.css', import.meta.url), 'utf8'));
 console.log(JSON.stringify(normalized.getCoverageSummary().toJSON()));
