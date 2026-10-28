@@ -185,9 +185,25 @@ Mortgage offer creation consumes `executeAllAuthorized`. Any degraded source mak
 
 The grouped creation statement preserves the decision outcome, offer status and created-event status together with its revision, sealed context, audit and idempotency ledger. Acceptance uses the fresh owner snapshot and rejects preliminary terms before any acceptance write. The composition root retains both bounded background snapshot persistence and targeted publication after a committed definitive acceptance.
 
-Every completed mortgage profiling attempt logs `mortgage_offer_profiled` with only its trace, normalized result, offer status and end-to-end HTTP latency in milliseconds. Use these records to calculate the 400 ms p95 / 800 ms p99 objective in the target environment; no actor, quote, consent or provider payload is logged.
+Every mortgage offer creation request logs one `mortgage_offer_profiled` record with only its trace, normalized final result, offer status, handler latency in milliseconds and the time of each dependency it called. This includes authorization denials, Identity deadlines and SQL failures; a failed security denial audit is recorded as `unavailable`, matching the final HTTP response. An authorization denial is a successful Identity call with a denied result; an RPC rejection or deadline is a failed call. Identity timing includes its caller-observed deadline, even if the RPC never settles. Use these records to calculate backend latency and dependency percentiles in the target environment. The 400 ms p95 / 800 ms p99 journey objective also requires measurement through the deployed web path; no actor, quote, consent or provider payload is logged.
+
+```json
+{"event":"mortgage_offer_profiled","traceId":"…","result":"created","offerStatus":"definitive","latencyMs":61,"dominant":"offer_write","dependencies":[{"name":"identity_access","durationMs":9,"outcome":"ok"},{"name":"offer_read","durationMs":8,"outcome":"ok"},{"name":"provider:payment_history_score","durationMs":0,"outcome":"ok"},{"name":"offer_write","durationMs":31,"outcome":"ok"}]}
+```
+
+Each entry is one call, timed by `DependencyTimings` from the injected clock, and `outcome` is `ok` or `failed`. The names are `identity_access` (authorization in Identity), `offer_read` and `offer_write` (the offer SQL reads and the grouped creation statement), `provider:<scope>` for each of the four source reads and `stored_copy:<scope>` for a copy lookup, which only happens after a provider fails. `dominant` is the single slowest call of the request, including a failed one. Background snapshot writes are not part of the response and are not timed. [`infra/load/dependencies.mjs`](../../../infra/load/dependencies.mjs) turns a backend log into the table of calls, errors, p50, p95 and p99 per dependency; see the [load guide](../../../infra/load/README.md).
+
+**Latency budget per external call.** Each provider read and each stored copy lookup has a budget of 120 ms (`SIGNAL_BUDGET_MS`) inside the 700 ms hard limit. The budget is measured, not enforced: a call that takes more than 120 ms but less than 700 ms still answers live, and only the hard limit degrades a source. A call that exceeds the budget, whether it answers or fails, writes one line from the injected clock, with no subject token, provider message or payload:
+
+```json
+{"event":"dependency_budget_exceeded","traceId":"…","budgetMs":120,"dependency":"provider","scope":"payment_history_score","durationMs":300,"outcome":"ok"}
+```
+
+`dependency` is `provider` or `stored_copy` and `outcome` is `ok` or `failed`. A call that reaches 700 ms writes both this line and `signal_degraded`. Identity authorization and the offer SQL calls cannot be replaced by a default, so they are outside this budget.
 
 **Limits.**
+- The 120 ms budget line is written only for provider and stored copy calls that exceed it. Identity and the offer SQL are timed in `mortgage_offer_profiled` but have no budget. Only the offer creation route records timings; offer reads, acceptance and the flight offer do not.
+- The percentiles per dependency come from a log file the caller provides. No dashboard or metrics service reads them yet.
 - The 400 ms p95 / 800 ms p99 profile-and-price objective requires measurement through the deployed web, Identity, provider and SQL path; unit tests establish parallel reads and the 700 ms per-dependency ceiling, not the percentile objective.
 - The minimum-data quote and the calculator call no external provider, so nothing degrades there. A provider added to either must use this degradation: hard limit, stored copy or conservative default, and a trace with source, substitute and confidence.
 
