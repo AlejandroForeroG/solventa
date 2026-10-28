@@ -37,7 +37,7 @@ function securityFor(env: IdentityEnv) {
   return new SecurityDecisions(new SqlSecurityDecisions(env.IDENTITY_DB.connectionString), () => crypto.randomUUID());
 }
 
-type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.sharedConnection>>['client'];
+type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.sharedConnection>>;
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
@@ -140,9 +140,8 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
     let decision: Awaited<ReturnType<typeof authorizeFinancialAccess>>;
     try {
       shared = await SqlIdentitySessions.sharedConnection(this.env.IDENTITY_DB.connectionString);
-      const client = shared.client;
-      decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input, client),
-        verifyConsents: input => consentsFor(this.env, false, client).verifyScopes(input), security: securityFor(this.env) }, request);
+      decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input, shared),
+        verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env) }, request);
     } catch { decision = { allowed: false, error: 'access_unavailable', status: 503 }; }
     finally { await shared?.close(); }
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
