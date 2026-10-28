@@ -129,7 +129,10 @@ export class OfferService {
     const t = offer.terms;
     const event = await this.deps.integrity.sign({ version: 1, eventType: 'offer.accepted', eventId: acceptance.eventId, environment: this.deps.environment, synthetic: true, occurredAt: now, correlationId: input.traceId,
       payload: { acceptanceId: acceptance.acceptanceId, offerId: t.offerId, offerVersion: t.offerVersion, clientId: t.clientId, subjectToken: t.subjectToken, product: t.product, premium: t.premium, currency: t.currency, coverage: t.coverage, effectiveFrom: t.effectiveFrom, effectiveUntil: t.effectiveUntil, expiresAt: t.expiresAt, ruleVersion: t.ruleVersion, acceptedAt: now } });
-    return this.deps.store.accept({ actor: input.actor, key: input.idempotencyKey, offer, event, acceptance, traceId: input.traceId, now,
+    const result = await this.deps.store.accept({ actor: input.actor, key: input.idempotencyKey, offer, event, acceptance, traceId: input.traceId, now,
       authorizedUntil: input.authorization?.expiresAt ?? offer.terms.expiresAt });
+    // Internal dispatch metadata becomes available only after the owner commits.
+    // Replays and rejected writes must never dispatch a newly generated event.
+    return { ...result, ...(result.status === 'created' ? { committedEvent: event } : {}) };
   }
 }
