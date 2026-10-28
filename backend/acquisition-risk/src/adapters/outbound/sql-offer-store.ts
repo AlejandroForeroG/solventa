@@ -11,11 +11,18 @@ type SnapshotRow =
 const fromRow = (r: OfferRow): StoredOffer => ({ terms: r.terms, seal: r.terms_seal, consentId: r.consent_reference, consentVersion: Number(r.consent_version) });
 const SERIALIZATION_FAILURE = '40001';
 export class SqlOfferStore implements OfferStore {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly background?: { waitUntil(work: Promise<unknown>): void }) {}
   private async connection<T>(action: (client: Client) => Promise<T>): Promise<T> {
     const client = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
-    try { await client.connect(); return await action(client); } finally { await client.end().catch(() => {}); }
+    try { await client.connect(); return await action(client); }
+    finally {
+      const closed = client.end().catch(() => {});
+      if (this.background) {
+        try { this.background.waitUntil(closed); }
+        catch { await closed; }
+      } else await closed;
+    }
   }
   private async retry<T>(action: () => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
@@ -148,30 +155,38 @@ export class SqlOfferStore implements OfferStore {
     return this.retry(() => this.connection(async c => {
       await c.query('BEGIN');
       try {
-        const offer = await c.query<{ terms_seal: string; status: string; expired: boolean }>(`SELECT context.terms_seal, o.status, (o.expires_at<=now() OR $4::TIMESTAMPTZ<=now()) AS expired FROM acquisition.offer_contexts context
-          JOIN acquisition.offers o ON o.id=context.offer_id WHERE context.offer_id=$1 AND context.client_id=$2 AND context.subject_token=$3 FOR UPDATE OF o`, [input.offer.terms.offerId, input.actor.clientId, input.actor.subjectToken, input.authorizedUntil]);
-        const current = offer.rows[0];
-        if (!current || current.status !== 'definitive' || current.terms_seal !== input.offer.seal) { await c.query('ROLLBACK'); return { status: 'conflict' as const }; }
-        if (current.expired) { await c.query('ROLLBACK'); return { status: 'expired' as const }; }
-        // now() is fixed at transaction start, so it cannot see time spent waiting for the row lock.
-        // Recheck the current offer, its sealed terms and the authorization with the wall clock before writing.
-        const late = await c.query<{ expired: boolean }>(`SELECT clock_timestamp() >= least(o.expires_at, $2::TIMESTAMPTZ, $3::TIMESTAMPTZ) AS expired
-          FROM acquisition.offers o WHERE o.id=$1`, [input.offer.terms.offerId, input.offer.terms.expiresAt, input.authorizedUntil]);
-        if (late.rows[0]?.expired !== false) { await c.query('ROLLBACK'); return { status: 'expired' as const }; }
+        // Materialize the owner lock before evaluating the wall clock. now() is
+        // fixed at BEGIN and cannot detect authorization/offer expiry while waiting.
         // Audit and outbox select from the inserted acceptance, so an ON CONFLICT no-op cannot produce either.
-        const written = await c.query<{ acceptances: number; audits: number; events: number }>(`WITH accepted AS (
+        const written = await c.query<{ matched: boolean; expired: boolean; acceptances: number; audits: number; events: number }>(`WITH locked AS MATERIALIZED (
+          SELECT context.terms_seal,o.status,o.expires_at FROM acquisition.offer_contexts context
+          JOIN acquisition.offers o ON o.id=context.offer_id
+          WHERE context.offer_id=$11 AND context.client_id=$3::UUID AND context.subject_token=$4 FOR UPDATE OF o
+        ), checked AS MATERIALIZED (
+          SELECT status='definitive' AND terms_seal=$12 AS matched,
+            clock_timestamp() >= least(expires_at,$13::TIMESTAMPTZ,$14::TIMESTAMPTZ) AS expired FROM locked
+        ), accepted AS (
           INSERT INTO acquisition.offer_acceptances (id,offer_id,client_id,subject_token,idempotency_key,event_id,accepted_at,result)
-          VALUES ($1,$2,$3::UUID,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id
+          SELECT $1,$2,$3::UUID,$4,$5,$6,$7,$8 FROM checked WHERE matched AND NOT expired
+          ON CONFLICT DO NOTHING RETURNING id
         ), audited AS (
           INSERT INTO acquisition.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
           SELECT $3::STRING,'offer.accept','offer',$11,'success',$9,now()+interval '5 years' FROM accepted RETURNING correlation_id
         ), evented AS (
           INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
           SELECT $6,'offer',$11,'offer.accepted',1,$10,correlation_id FROM audited RETURNING event_id
-        ) SELECT (SELECT count(*) FROM accepted)::INT4 AS acceptances, (SELECT count(*) FROM audited)::INT4 AS audits, (SELECT count(*) FROM evented)::INT4 AS events`,
+        ) SELECT coalesce((SELECT matched FROM checked),false) AS matched,coalesce((SELECT expired FROM checked),true) AS expired,
+          (SELECT count(*) FROM accepted)::INT4 AS acceptances, (SELECT count(*) FROM audited)::INT4 AS audits, (SELECT count(*) FROM evented)::INT4 AS events`,
         [input.acceptance.acceptanceId, input.acceptance.offerId, input.actor.clientId, input.actor.subjectToken, input.key, input.event.eventId, input.now,
-          JSON.stringify(input.acceptance), input.traceId, JSON.stringify(input.event), input.offer.terms.offerId]);
+          JSON.stringify(input.acceptance), input.traceId, JSON.stringify(input.event), input.offer.terms.offerId,
+          input.offer.seal,input.offer.terms.expiresAt,input.authorizedUntil]);
         const effects = written.rows[0];
+        if (written.rowCount !== 1 || !effects || typeof effects.matched !== 'boolean' || typeof effects.expired !== 'boolean') throw new Error('offer_acceptance_evidence_incomplete');
+        if (!effects.matched || effects.expired) {
+          if (effects.acceptances !== 0 || effects.audits !== 0 || effects.events !== 0) throw new Error('offer_acceptance_evidence_incomplete');
+          await c.query('ROLLBACK');
+          return { status: !effects.matched ? 'conflict' as const : 'expired' as const };
+        }
         if (effects?.acceptances === 0 && effects.audits === 0 && effects.events === 0) {
           const existing = await c.query<{ result: AcceptedOffer }>('SELECT result FROM acquisition.offer_acceptances WHERE client_id=$1 AND subject_token=$2 AND idempotency_key=$3', [input.actor.clientId, input.actor.subjectToken, input.key]);
           await c.query('ROLLBACK');
