@@ -9,7 +9,7 @@ import type { PolicyView } from '../backend/policy-claims-payments/src/domain/fi
 import gateway from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
-import { financialIntegrity, financialNow } from './financial-fixtures';
+import { acceptedOffer, financialIntegrity, financialNow } from './financial-fixtures';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
@@ -284,18 +284,24 @@ test('foreign acceptance discovery fails closed when either required denial audi
 });
 
 test('only a newly committed acceptance starts publication of its own event, without changing the response', async () => {
-  for (const [status, expected, published] of [['created', 202, [id]], ['replayed', 200, []]] as const) {
+  const event = await acceptedOffer();
+  const committed = { ...acceptance, eventId: event.eventId, offerId: event.payload.offerId, acceptanceId: event.payload.acceptanceId };
+  for (const [status, expected, published] of [['created', 202, [event.eventId]], ['replayed', 200, []]] as const) {
     const started: string[] = [];
+    const suppliedEvents: unknown[] = [];
     const app = new Hono<{ Bindings: AcquisitionEnv }>();
     mountOffers(app, { authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
       denyResourceAccess: async () => ({ recorded: true }),
       offers: { create: async () => ({ status: 'created', offer: terms }), createFlight: async () => ({ status: 'created', offer: terms }), get: async () => ({ status: 'found', offer: terms }),
-        accept: async () => ({ status, acceptance }) },
-      acceptanceCommitted: eventId => { started.push(eventId); throw new Error('scheduling failure must not change the committed answer'); } });
-    const response = await app.fetch(request(`/offers/${id}/accept`), { APP_ENV: 'local' } as never);
+        accept: async () => ({ status, acceptance: committed, ...(status === 'created' ? { committedEvent: event } : {}) }) },
+      acceptanceCommitted: (eventId, supplied) => { started.push(eventId); suppliedEvents.push(supplied); throw new Error('scheduling failure must not change the committed answer'); } });
+    const response = await app.fetch(request(`/offers/${event.payload.offerId}/accept`), { APP_ENV: 'local' } as never);
     assert.equal(response.status, expected);
-    await contractual(response, 'offers', 'Acceptance');
+    const publicResult = await contractual(response, 'offers', 'Acceptance');
+    assert.equal(Object.hasOwn(publicResult, 'committedEvent'), false);
+    assert.equal(JSON.stringify(publicResult).includes(event.signature), false);
     assert.deepEqual(started, published);
+    assert.deepEqual(suppliedEvents, status === 'created' ? [event] : []);
   }
 });
 

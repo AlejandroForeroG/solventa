@@ -42,6 +42,9 @@ export function validateEnvironments(configs, provisionedEnvironment) {
       ] : ['acquisition-risk', 'policy-claims-payments'].includes(name) ? [
         { binding: 'IDENTITY_SERVICE', service: `solventa-identity-consent-ecosystem-${environment}` },
       ] : [];
+      if (name === 'acquisition-risk' && environment !== 'prod') {
+        expectedServices.push({ binding: 'POLICY_SERVICE', service: `solventa-policy-claims-payments-${environment}` });
+      }
       assert.deepEqual(target.services ?? [], expectedServices);
       if (['acquisition-risk', 'policy-claims-payments'].includes(name)) {
         assert.equal(target.vars.FINANCIAL_PROVIDER_MODE, environment === 'prod' ? 'disabled' : 'mock');
