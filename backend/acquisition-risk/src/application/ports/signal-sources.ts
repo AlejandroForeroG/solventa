@@ -6,6 +6,9 @@ export type ProviderFailureCode = typeof PROVIDER_FAILURES[number];
 // Hard limit for one external source; an adapter enforces it and the use case does not trust it to.
 export const SIGNAL_DEADLINE_MS = 700;
 
+// Target for one external call. Exceeding it is recorded, not punished: only the hard limit above degrades a source.
+export const SIGNAL_BUDGET_MS = 120;
+
 // The only error a provider adapter may reject with: provider messages, codes and payloads never cross the port.
 export class ProviderFailure extends Error {
   constructor(readonly code: ProviderFailureCode) {
@@ -31,4 +34,9 @@ export interface SignalSnapshots {
 export type SignalDegradation = { scope: SignalScope; failure: ProviderFailureCode; substitute: SignalSubstitute; confidence: number };
 export interface DegradationTrace {
   record(traceId: string, degradation: SignalDegradation): void;
+  overBudget?(traceId: string, overrun: BudgetOverrun): void;
 }
+
+// An external call that took longer than SIGNAL_BUDGET_MS, whether it answered or failed.
+export type BudgetedDependency = 'provider' | 'stored_copy';
+export type BudgetOverrun = { dependency: BudgetedDependency; scope: SignalScope; durationMs: number; outcome: 'ok' | 'failed' };

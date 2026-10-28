@@ -3,9 +3,10 @@ import { CONFIDENCE, SIGNAL_FRESHNESS_MS, SIGNAL_SCOPES } from '../domain/signal
 import type { Clock } from './ports/platform';
 import type { FlightSchedule, OfferCreationSnapshot, OfferIntegrity, OfferStore, StoredOffer, OfferRequestResult } from './ports/offer-store';
 import type { SignalResult } from './read-signal';
+import type { DependencyTimings } from './dependency-timings';
 
-type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization };
-type OfferSignalReader = { executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: { allowed: true } & OfferAuthorization }): Promise<{ results: SignalResult[]; confidence: number }> };
+type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization; timings?: DependencyTimings };
+type OfferSignalReader = { executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: { allowed: true } & OfferAuthorization; timings?: DependencyTimings }): Promise<{ results: SignalResult[]; confidence: number }> };
 const validKey = (key: string) => typeof key === 'string' && key.length > 0 && key.length <= 128;
 
 export class OfferService {
@@ -13,6 +14,9 @@ export class OfferService {
   private authorized(input: Command): boolean {
     return this.deps.enabled && input.authorization.textVersion > 0 && !!input.authorization.consentId
       && Date.parse(input.authorization.expiresAt) > this.deps.clock.now().getTime();
+  }
+  private timed<T>(input: Pick<Command, 'timings'>, name: string, call: () => Promise<T>): Promise<T> {
+    return input.timings ? input.timings.measure(name, call) : call();
   }
   private async valid(offer: StoredOffer, actor: OfferActor): Promise<boolean> {
     try {
@@ -44,7 +48,7 @@ export class OfferService {
     if (!this.authorized(input)) return { status: 'denied' as const };
     if (!validKey(input.idempotencyKey)) return { status: 'invalid' as const };
     const requestIdentity = offerRequestIdentity('vida_hipotecario', input.quoteId);
-    const snapshot = await this.deps.store.creationSnapshot(input.actor, input.idempotencyKey, input.quoteId);
+    const snapshot = await this.timed(input, 'offer_read', () => this.deps.store.creationSnapshot(input.actor, input.idempotencyKey, input.quoteId));
     const previous = await this.previous(snapshot, input.actor, requestIdentity);
     if (previous) return previous;
     const quote = snapshot.quote;
@@ -52,7 +56,7 @@ export class OfferService {
     const now = this.deps.clock.now();
     if (Date.parse(quote.validUntil) <= now.getTime()) return { status: 'expired' as const };
     let observed;
-    try { observed = await this.deps.signals.executeAllAuthorized({ subjectToken: input.actor.subjectToken, traceId: input.traceId, consent: { allowed: true, ...input.authorization } }); }
+    try { observed = await this.deps.signals.executeAllAuthorized({ subjectToken: input.actor.subjectToken, traceId: input.traceId, consent: { allowed: true, ...input.authorization }, timings: input.timings }); }
     catch { return { status: 'unavailable' as const }; }
     if (observed.results.some(result => result.status === 'denied')) return { status: 'denied' as const };
     const readable = observed.results.filter((result): result is Exclude<SignalResult, { status: 'denied' }> => result.status !== 'denied');
@@ -69,7 +73,7 @@ export class OfferService {
     const decision = underwrite(quote, signals, input.authorization, input.traceId, provenance);
     if (!decision) return { status: 'unavailable' as const };
     if (!decision.accepted && !decision.preliminary) {
-      const result = await this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture: decision.capture, traceId: input.traceId });
+      const result = await this.timed(input, 'offer_write', () => this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture: decision.capture, traceId: input.traceId }));
       return this.outcome(result, input.actor, requestIdentity);
     }
     // A slow or unavailable provider cannot stretch a previously verified authorization window.
@@ -78,7 +82,7 @@ export class OfferService {
       decision.preliminary ? 'preliminary' : 'definitive');
     const consent = { consentId: input.authorization.consentId, consentVersion: input.authorization.textVersion };
     const offer: StoredOffer = { terms, seal: await this.deps.integrity.seal(terms, consent), ...consent };
-    const result = await this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture: decision.capture, traceId: input.traceId });
+    const result = await this.timed(input, 'offer_write', () => this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture: decision.capture, traceId: input.traceId }));
     return this.outcome(result, input.actor, requestIdentity);
   }
   async createFlight(input: { actor: OfferActor; flightReference: string; idempotencyKey: string; traceId: string }) {
