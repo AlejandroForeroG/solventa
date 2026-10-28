@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
+import { DependencyTimings } from '../backend/acquisition-risk/src/application/dependency-timings';
 import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition-risk/src/adapters/inbound/offers-http';
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
@@ -72,7 +73,9 @@ test('offer creation uses one authorization, real Origin and server-derived acto
   assert.ok(!('clientId' in body) && !('subjectToken' in body));
   assert.deepEqual(calls.map(c => c.operation), ['authorize', 'create']);
   assert.deepEqual(calls[0].input, { kind: 'web', operation: 'offers:create', traceId, cookie: 'synthetic-sealed', origin: 'https://web.example', method: 'POST', requestOrigin: 'https://web.example' });
-  assert.deepEqual(calls[1].input, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
+  const { timings, ...created } = calls[1].input as { timings: unknown };
+  assert.ok(timings instanceof DependencyTimings, 'the use case receives the request timings');
+  assert.deepEqual(created, { actor, quoteId: 'COT-2026-00001', idempotencyKey: 'synthetic-operation-1', authorization: consent, traceId });
 });
 
 test('financial authorization binds Origin to the actual destination for primary and retained hosts', async () => {
@@ -294,4 +297,88 @@ test('only a newly committed acceptance starts publication of its own event, wit
     await contractual(response, 'offers', 'Acceptance');
     assert.deepEqual(started, published);
   }
+});
+
+test('the profiling log line names the slowest dependency and lists every timed call without personal data', async () => {
+  const lines: string[] = [];
+  const log = mock.method(console, 'log', (line: string) => { lines.push(line); });
+  try {
+    const app = new Hono<{ Bindings: AcquisitionEnv }>();
+    mountOffers(app, { authorizeFinancialAccess: async input => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal: actor, operations: [(input as { operation: string }).operation] }, consent }),
+      denyResourceAccess: async () => ({ recorded: true }),
+      offers: { create: async input => { input.timings?.record('provider:payment_history_score', 90, 'ok'); input.timings?.record('offer_write', 12, 'ok'); return { status: 'created', offer: terms }; },
+        createFlight: async () => ({ status: 'created', offer: terms }), get: async () => ({ status: 'found', offer: terms }), accept: async () => { throw new Error('unexpected_accept'); } } });
+    const response = await app.fetch(request('/quotes/COT-2026-00001/offers', '{}', { 'idempotency-key': 'profile-1', 'x-trace-id': traceId }), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, 201);
+  } finally { log.mock.restore(); }
+  const line = JSON.parse(lines.find(candidate => candidate.includes('mortgage_offer_profiled')) ?? '{}');
+  assert.equal(line.dominant, 'provider:payment_history_score');
+  assert.deepEqual(line.dependencies.map((call: { name: string }) => call.name), ['identity_access', 'provider:payment_history_score', 'offer_write']);
+  assert.deepEqual(Object.keys(line).sort(), ['dependencies', 'dominant', 'event', 'latencyMs', 'offerStatus', 'result', 'traceId']);
+});
+
+test('profiling includes failed SQL reads and writes without changing the unavailable response', async t => {
+  for (const name of ['offer_read', 'offer_write']) await t.test(name, async t => {
+    const lines: string[] = [];
+    t.mock.method(console, 'log', (line: string) => { lines.push(line); });
+    const { run, offers } = setup();
+    offers.create = async input => input.timings!.measure(name, async () => { throw new Error('private SQL detail'); });
+    const response = await run(request('/quotes/COT-2026-00001/offers'));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'financial_unavailable', traceId });
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('x-trace-id'), traceId);
+    const profiles = lines.map(line => JSON.parse(line)).filter(line => line.event === 'mortgage_offer_profiled');
+    assert.equal(profiles.length, 1);
+    const profile = profiles[0];
+    assert.equal(profile.result, 'unavailable');
+    assert.equal(profile.offerStatus, null);
+    assert.equal(profile.traceId, traceId);
+    assert.deepEqual(profile.dependencies.map((call: { name: string; outcome: string }) => [call.name, call.outcome]), [['identity_access', 'ok'], [name, 'failed']]);
+    assert.ok(profile.dependencies.some((call: { name: string }) => call.name === profile.dominant));
+    for (const privateValue of [actor.clientId, actor.subjectToken, consent.consentId, 'synthetic-sealed', 'private SQL detail']) assert.ok(!JSON.stringify(profile).includes(privateValue));
+  });
+});
+
+test('profiling includes authorization rejection, failure and its observed deadline', async t => {
+  for (const mode of ['denied', 'failed', 'timeout'] as const) await t.test(mode, async t => {
+    const lines: string[] = [];
+    t.mock.method(console, 'log', (line: string) => { lines.push(line); });
+    if (mode === 'timeout') t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const { offers } = setup();
+    offers.create = unexpected;
+    const app = new Hono<{ Bindings: AcquisitionEnv }>();
+    mountOffers(app, { offers, denyResourceAccess: unexpected, authorizeFinancialAccess: async () => {
+      if (mode === 'denied') return { allowed: false, status: 403, error: 'consent_required' };
+      if (mode === 'failed') throw new Error('private Identity detail');
+      return new Promise(() => {});
+    } });
+    const pending = app.fetch(request('/quotes/COT-2026-00001/offers'), { APP_ENV: 'local' } as never);
+    if (mode === 'timeout') t.mock.timers.tick(2000);
+    const response = await pending;
+    assert.equal(response.status, mode === 'denied' ? 403 : 503);
+    assert.deepEqual(await response.json(), { error: mode === 'denied' ? 'consent_required' : 'financial_unavailable', traceId });
+    const profiles = lines.map(line => JSON.parse(line)).filter(line => line.event === 'mortgage_offer_profiled');
+    assert.equal(profiles.length, 1);
+    assert.equal(profiles[0].result, mode === 'denied' ? 'denied' : 'unavailable');
+    assert.equal(profiles[0].offerStatus, null);
+    assert.equal(profiles[0].dominant, 'identity_access');
+    assert.equal(profiles[0].dependencies.length, 1);
+    assert.equal(profiles[0].dependencies[0].outcome, mode === 'denied' ? 'ok' : 'failed');
+    if (mode === 'timeout') assert.equal(profiles[0].dependencies[0].durationMs, 2000);
+    assert.ok(!JSON.stringify(profiles[0]).includes('private Identity detail'));
+  });
+});
+
+test('profiling waits for a failed security denial audit and records the final unavailable result', async t => {
+  const lines: string[] = [];
+  t.mock.method(console, 'log', (line: string) => { lines.push(line); });
+  const { run, offers } = setup(undefined, new Error('private audit detail'));
+  offers.create = async () => ({ status: 'not_found' });
+  const response = await run(request('/quotes/COT-2026-00001/offers'));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'access_unavailable', traceId });
+  const profiles = lines.map(line => JSON.parse(line)).filter(line => line.event === 'mortgage_offer_profiled');
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0].result, 'unavailable');
 });
