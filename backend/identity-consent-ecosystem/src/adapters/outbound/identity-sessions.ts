@@ -4,14 +4,43 @@ import { canonicalInstallationId, deviceLogoutPolicy } from '../../domain/regist
 
 type StoredClient = { id: string; subject_token: string; status: string };
 type RevocationSession = { id: string; client_id: string; subject_token: string; revoked_at: Date | null };
+export type SharedIdentityConnection = { get(): Promise<Client>; close(): Promise<void> };
 
 export class SqlIdentitySessions implements IdentitySessions {
-  constructor(private readonly connectionString: string) {}
-  private async transaction<T>(operation: (db: Client) => Promise<T>): Promise<T> {
+  constructor(private readonly connectionString: string, private readonly shared?: SharedIdentityConnection) {}
+  static async sharedConnection(connectionString: string) {
+    let client: Client | undefined;
+    let connecting: Promise<Client> | undefined;
+    return {
+      get: async () => {
+        if (client) return client;
+        if (!connecting) {
+          const next = new Client({ connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
+          next.on('error', () => {});
+          connecting = next.connect().then(() => { client = next; return next; });
+        }
+        return connecting;
+      },
+      close: async () => {
+        const active = client ?? await connecting?.catch(() => undefined);
+        client = undefined;
+        connecting = undefined;
+        await active?.end().catch(() => {});
+      },
+    };
+  }
+  private async connection<T>(operation: (db: Client) => Promise<T>): Promise<T> {
+    if (this.shared) return operation(await this.shared.get());
     const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
     db.on('error', () => {});
+    try { await db.connect(); return await operation(db); }
+    finally { await db.end().catch(() => {}); }
+  }
+  private async transaction<T>(operation: (db: Client) => Promise<T>): Promise<T> {
+    const db = this.shared ? await this.shared.get() : new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
+    db.on('error', () => {});
     try {
-      await db.connect();
+      if (!this.shared) await db.connect();
       await db.query('BEGIN');
       const result = await operation(db);
       await db.query('COMMIT');
@@ -24,7 +53,7 @@ export class SqlIdentitySessions implements IdentitySessions {
       }
       throw error;
     }
-    finally { await db.end().catch(() => {}); }
+    finally { if (!this.shared) await db.end().catch(() => {}); }
   }
   private async ensureClient(db: Client, identity: VerifiedIdentity, correlation: string): Promise<StoredClient> {
       let row = (await db.query<StoredClient>(`SELECT c.id, c.subject_token, c.status FROM identity.external_identities e
@@ -119,17 +148,14 @@ export class SqlIdentitySessions implements IdentitySessions {
       }
   }
   async find(identity: VerifiedIdentity): Promise<Principal | null> {
-    const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 5000 });
-    db.on('error', () => {});
-    try {
-      await db.connect();
+    return this.connection(async db => {
       // One SELECT already reads a consistent snapshot; no explicit transaction round trips are needed.
       const row = (await db.query(`SELECT c.id, c.subject_token FROM identity.authentication_sessions s
         JOIN identity.clients c ON c.id=s.client_id JOIN identity.external_identities e ON e.client_id=c.id
         WHERE s.provider='workos' AND s.provider_session=$1 AND e.provider='workos' AND e.provider_subject=$2
         AND c.status='active' AND s.revoked_at IS NULL AND s.expires_at>now()`, [identity.sessionReference, identity.providerSubject])).rows[0];
       return row ? { clientId: row.id, subjectToken: row.subject_token } : null;
-    } finally { await db.end().catch(() => {}); }
+    });
   }
   async register(identity: VerifiedIdentity): Promise<Principal | null> {
     const active = await this.find(identity);
