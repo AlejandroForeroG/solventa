@@ -4,10 +4,11 @@ import { DependencyTimings } from '../../application/dependency-timings';
 import type { OfferService } from '../../application/offer-service';
 import type { OfferAuthorization } from '../../domain/offer';
 import type { OfferTerms } from '../../domain/offer';
+import type { AcceptanceEvent } from '../../application/ports/offer-store';
 
 export type OffersHttpDependencies = { offers: Pick<OfferService, 'create' | 'createFlight' | 'get' | 'accept'>; authorizeFinancialAccess(input: unknown): Promise<unknown>; denyResourceAccess(input: unknown): Promise<unknown>;
   // Starts background publication after a newly committed acceptance; it must not delay or change the response.
-  acceptanceCommitted?(eventId: string): void };
+  acceptanceCommitted?(eventId: string, event?: AcceptanceEvent): void };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 function publicOffer(terms: OfferTerms) {
@@ -98,7 +99,7 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         }
         const result = await deps.offers.accept({ actor, offerId, authorization, idempotencyKey, traceId });
         if (result.status === 'created') {
-          try { deps.acceptanceCommitted?.(result.acceptance.eventId); } catch { console.error(JSON.stringify({ event: 'financial_publication_trigger_failed', traceId, code: 'publication_not_started' })); }
+          try { deps.acceptanceCommitted?.(result.acceptance.eventId, result.committedEvent); } catch { console.error(JSON.stringify({ event: 'financial_publication_trigger_failed', traceId, code: 'publication_not_started' })); }
         }
         return result.status === 'created' || result.status === 'replayed' ? reply({ ...result.acceptance }, result.status === 'created' ? 202 : 200) : failure(result.status);
       } catch { return reply({ error: 'financial_unavailable' }, 503); }
