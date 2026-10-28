@@ -132,6 +132,35 @@ try {
     (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.accepted') AS outbox,
     (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.accept' AND outcome='success') AS audit`, [lockedOffer.offer.offerId]);
   assert.deepEqual(lockedEffects.rows[0], { acceptances: 0, outbox: 0, audit: 0 });
+  // A real-time sealed offer deadline also expires under the lock, with a still-valid authorization.
+  const expiringId = randomUUID(), expiringKey = randomUUID();
+  const original = await store.get(actor, created.offer.offerId); assert.ok(original);
+  const expiringTerms = { ...original.terms, offerId: expiringId, expiresAt: new Date(Date.now() + 900).toISOString() };
+  const expiring = { ...original, terms: expiringTerms, seal: await integrity.seal(expiringTerms, original) };
+  const ownedQuote = (await store.creationSnapshot(actor, randomUUID(), quote.quote.quoteId)).quote; assert.ok(ownedQuote);
+  await store.create({ actor, quote: ownedQuote, sourceReference: quote.quote.quoteId,
+    requestIdentity: JSON.stringify(['vida_hipotecario', quote.quote.quoteId]), key: expiringKey, offer: expiring,
+    capture: { synthetic: true, purpose: 'sealed-deadline-lock-regression' }, traceId: trace() });
+  const deadlineBlocker = clientFor(url, config.ssl); await deadlineBlocker.connect();
+  try {
+    await deadlineBlocker.query('BEGIN');
+    await deadlineBlocker.query('SELECT id FROM acquisition.offers WHERE id=$1 FOR UPDATE', [expiringId]);
+    let settled = false;
+    const attempt = service.accept({ actor, authorization, offerId: expiringId, idempotencyKey: randomUUID(), traceId: trace() })
+      .then(result => { settled = true; return { result }; }, error => { settled = true; return { error }; });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(settled, false, 'the fresh request is waiting for the actual owner row lock');
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    await deadlineBlocker.query('COMMIT');
+    const completed = await attempt;
+    if ('error' in completed) throw completed.error;
+    assert.equal(completed.result.status, 'expired', 'the wall clock is evaluated after the materialized lock');
+  } finally { await deadlineBlocker.query('ROLLBACK').catch(() => {}); await deadlineBlocker.end(); }
+  assert.deepEqual((await admin.query(`SELECT
+    (SELECT count(*)::INT4 FROM acquisition.offer_acceptances WHERE offer_id=$1) AS acceptances,
+    (SELECT count(*)::INT4 FROM acquisition.audit_events WHERE resource_id=$1 AND action='offer.accept' AND outcome='success') AS audit,
+    (SELECT count(*)::INT4 FROM acquisition.outbox_events WHERE aggregate_id=$1 AND event_type='offer.accepted') AS outbox`, [expiringId])).rows[0],
+  { acceptances: 0, audit: 0, outbox: 0 });
   const race = { ...command, idempotencyKey: randomUUID(), traceId: trace() };
   const raced = await Promise.all(Array.from({ length: 3 }, () => service.create(race)));
   assert.equal(raced.filter(x => x.status === 'created').length, 1);
