@@ -36,10 +36,10 @@ export class ReadSignal {
     return this.executeAuthorizedResult(input, true);
   }
 
-  private async executeAuthorizedResult(input: SignalRequest & { consent: VerifiedConsent }, recordDegradation: boolean): Promise<SignalResult> {
+  private async executeAuthorizedResult(input: SignalRequest & { consent: VerifiedConsent }, recordDegradation: boolean, remember = true): Promise<SignalResult> {
     try {
       const signal = await this.readWithinDeadline(input);
-      await this.remember(input, signal);
+      if (remember) await this.remember(input, signal);
       return { status: 'available', signal, consentId: input.consent.consentId };
     } catch (error) {
       const failure = error instanceof ProviderFailure ? error.code : 'unavailable';
@@ -54,7 +54,8 @@ export class ReadSignal {
   }
 
   async executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: VerifiedConsent; timings?: DependencyTimings }) {
-    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeAuthorizedResult({ ...input, scope }, false)));
+    const results = await Promise.all(SIGNAL_SCOPES.map(scope => this.executeAuthorizedResult({ ...input, scope }, false, false)));
+    await this.rememberAll(input, results);
     return this.finalizeParallel(input.traceId, results);
   }
 
@@ -104,6 +105,23 @@ export class ReadSignal {
     // Snapshot storage is a cache, not another provider dependency. A failed write must not discard a live answer.
     const save = this.withinDeadline(this.deps.snapshots.save({ subjectToken: input.subjectToken, consentId: input.consent.consentId,
       consentVersion: input.consent.textVersion, validUntil, signal, traceId: input.traceId })).catch(() => {});
+    if (this.deps.background) this.deps.background.waitUntil(save);
+    else await save;
+  }
+
+  private async rememberAll(input: { subjectToken: string; traceId: string; consent: VerifiedConsent }, results: SignalResult[]): Promise<void> {
+    const writes = results.flatMap(result => {
+      if (result.status !== 'available') return [];
+      const capturedAt = Date.parse(result.signal.capturedAt);
+      if (!Number.isFinite(capturedAt)) return [];
+      const validUntil = new Date(Math.min(capturedAt + SIGNAL_FRESHNESS_MS, Date.parse(input.consent.expiresAt))).toISOString();
+      return Date.parse(validUntil) <= capturedAt ? [] : [{ subjectToken: input.subjectToken, consentId: input.consent.consentId,
+        consentVersion: input.consent.textVersion, validUntil, signal: result.signal, traceId: input.traceId }];
+    });
+    if (!writes.length) return;
+    const save = (this.deps.snapshots.saveAll
+      ? this.deps.snapshots.saveAll(writes)
+      : Promise.all(writes.map(write => this.deps.snapshots.save(write))).then(() => {})).catch(() => {});
     if (this.deps.background) this.deps.background.waitUntil(save);
     else await save;
   }
