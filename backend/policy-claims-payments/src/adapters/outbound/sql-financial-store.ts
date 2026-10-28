@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
@@ -199,7 +200,7 @@ class SqlFinancialTransaction implements FinancialTransaction {
 }
 
 export class SqlFinancialStore implements FinancialStore {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly lifecycle?: ClientLifecycle) {}
   private async connection<T>(work: (db: Client) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
@@ -209,7 +210,7 @@ export class SqlFinancialStore implements FinancialStore {
       } catch (error) {
         const code = error && typeof error === 'object' && Object.hasOwn(error, 'code') ? Object.getOwnPropertyDescriptor(error, 'code')?.value : null;
         if (!['40001', '23505'].includes(code) || attempt >= 2) throw error;
-      } finally { await db.end().catch(() => {}); }
+      } finally { await closeClient(db, this.lifecycle); }
     }
   }
   async transaction<T>(work: (tx: FinancialTransaction) => Promise<T>): Promise<T> {

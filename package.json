@@ -64,7 +64,7 @@
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts",
     "test:quotes": "tsx --test tests/quotes.test.ts tests/quote-estimates.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts",
     "test:quotes:sql": "tsx infra/quotes-smoke.mts",
-    "test:financial": "tsx --test tests/financial-access.test.ts tests/financial-http.test.ts tests/financial-contract.test.ts tests/financial.test.ts tests/offers.test.ts tests/resource-access-denials.test.ts tests/financial-event-delivery.test.ts",
+    "test:financial": "tsx --test tests/financial-access.test.ts tests/financial-http.test.ts tests/financial-contract.test.ts tests/financial.test.ts tests/offers.test.ts tests/resource-access-denials.test.ts tests/financial-event-delivery.test.ts tests/financial-sql-lifecycle.test.mjs",
     "test:financial:sql": "tsx infra/financial-smoke.mts",
     "test:offers:sql": "tsx infra/offers-smoke.mts",
     "test:security": "tsx --test tests/security-logging.test.ts tests/security-alerts.test.ts tests/security-alert-configuration.test.ts tests/web-security-headers.test.ts",

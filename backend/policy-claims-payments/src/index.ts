@@ -11,7 +11,7 @@ export { createPolicyFinance } from './adapters/composition';
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
-    const response = await createHttp({ finance: createPolicyFinance(this.env),
+    const response = await createHttp({ finance: createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }),
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input)
     }).fetch(request, this.env, this.ctx);
@@ -27,10 +27,10 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
   }
   async acceptOfferV1(input: unknown) {
     const traceId = object(input) && typeof input.correlationId === 'string' && UUID.test(input.correlationId) ? input.correlationId : crypto.randomUUID();
-    return createPolicyFinance(this.env).acceptOffer(input, traceId);
+    return createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }).acceptOffer(input, traceId);
   }
   async queue(batch: MessageBatch<unknown>): Promise<void> {
-    const finance = createPolicyFinance(this.env);
+    const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     for (const message of batch.messages) {
       const body = message.body;
       const traceId = object(body) && typeof body.correlationId === 'string' && UUID.test(body.correlationId) ? body.correlationId : crypto.randomUUID();

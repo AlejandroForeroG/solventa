@@ -221,6 +221,15 @@ try {
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
   assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations']), financialCounts);
+  const existingPremium = (await store.readPolicy(policy.policyId, offer.payload))?.premium;
+  assert.ok(existingPremium);
+  const originalGateway = (await db.query('SELECT * FROM policy.mock_gateway_operations WHERE payment_id=$1', [existingPremium.id])).rows;
+  assert.deepEqual(await gateway.settle(existingPremium), { status: 'confirmed', reference: 'MOCK-' + existingPremium.id });
+  for (const changed of [{ ...existingPremium, hash: '0'.repeat(64) }, { ...existingPremium, amount: '1.00' }]) {
+    await assert.rejects(gateway.settle(changed), /mock_gateway_conflict/);
+  }
+  assert.deepEqual((await db.query('SELECT * FROM policy.mock_gateway_operations WHERE payment_id=$1', [existingPremium.id])).rows, originalGateway,
+    'a settlement replay or collision cannot overwrite the durable mock operation');
   const sameActorOffer = await acceptedOffer();
   sameActorOffer.payload.clientId = offer.payload.clientId;
   sameActorOffer.payload.subjectToken = offer.payload.subjectToken;
@@ -314,6 +323,10 @@ try {
   assert.ok(refusal.status === 'denied' && refusal.error === 'signature_failed', JSON.stringify({ status: refusal.status, error: refusal.status === 'ok' ? null : refusal.error }));
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [refusedPolicy.policyId])).rows[0].status, 'refunded');
   assert.equal((await db.query('SELECT status FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [refusedPolicy.policyId])).rows[0].status, 'refunded');
+  const refundedPremium = (await store.readPolicy(refusedPolicy.policyId, refused.payload))?.premium;
+  assert.ok(refundedPremium);
+  assert.deepEqual(await gateway.settle(refundedPremium), { status: 'declined', reference: 'MOCK-' + refundedPremium.id });
+  assert.equal((await gateway.lookup(refundedPremium)).status, 'refunded', 'settlement replay cannot reverse a recorded refund');
   assert.equal(Number((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [refusedPolicy.policyId])).rows[0].n), 0);
   const refusedCaptures = { confirmed: (await captures(refusedPolicy.policyId, 'premium.confirmed'))[0],
     requested: (await captures(refusedPolicy.policyId, 'premium.refund_requested'))[0], refunded: (await captures(refusedPolicy.policyId, 'premium.refunded'))[0] };
