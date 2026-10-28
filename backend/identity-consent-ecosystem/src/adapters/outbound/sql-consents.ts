@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import type { SharedIdentityConnection } from './identity-sessions';
 import type { Principal } from '../../application/authentication';
 import { safeCode } from '../safe-code';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../application/ports/consents';
@@ -23,10 +24,10 @@ const fromRow = (row: Row): Consent => ({
 });
 
 export class SqlConsents implements ConsentStore {
-  constructor(private readonly connectionString: string, private readonly shared?: Client) {}
+  constructor(private readonly connectionString: string, private readonly shared?: SharedIdentityConnection) {}
 
   private async connect() {
-    if (this.shared) return this.shared;
+    if (this.shared) return this.shared.get();
     const client = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
     await client.connect();
