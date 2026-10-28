@@ -1,0 +1,12 @@
+body, a, a:visited, .quiet, .fraction, .coverage-summary td { color: #000 !important; }
+body, pre, .wrapper, .pad1, .pad2, .coverage-summary td, .coverage-summary th,
+.high, .medium, .low, .status-line, .cline-any, .cstat-no, .fstat-no,
+.cbranch-no, .missing-if-branch { background: #fff !important; color: #000 !important; }
+a { text-decoration: underline; }
+.coverage-summary { border-collapse: collapse; }
+.coverage-summary td, .coverage-summary th { border: 1px solid #000 !important; }
+.chart, .cover-empty { background: #fff !important; border-color: #000 !important; }
+.cover-fill { background: #000 !important; border-color: #000 !important; }
+.cline-no, .cstat-no, .fstat-no, .cbranch-no, .missing-if-branch {
+  border-bottom: 1px dotted #000; text-decoration: underline dotted;
+}
