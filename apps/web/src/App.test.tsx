@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
+import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -126,5 +127,27 @@ describe('privacy dashboard in the application', () => {
     window.localStorage.setItem('solventa.locale', 'en-US');
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Privacy dashboard' })).toBeInTheDocument();
+  });
+});
+
+describe('purchase interrupted by a reload', () => {
+  const acceptance = { acceptanceId: '20000000-0000-4000-8000-000000000002', offerId: '10000000-0000-4000-8000-000000000001', acceptedAt: '2026-10-15T00:01:00.000Z', traceId: '50000000-0000-4000-8000-000000000002' };
+
+  it('reopens the signed-in purchase instead of the landing page, and logout forgets it', async () => {
+    window.history.replaceState(null, '', '/');
+    savePurchaseDraft({ quoteId: 'COT-2026-08843', acceptance, issue: null });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/logout') return json({ error: 'unauthenticated' }, 401);
+      if (path === '/api/v1/consents') return json({ items: [] });
+      return json({ error: 'not_found' }, 404);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path) === `/api/v1/policies/by-acceptance/${acceptance.acceptanceId}/policy`)).toBe(true));
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/offers'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    expect(readPurchaseDraft()).toBeNull();
   });
 });
