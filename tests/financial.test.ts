@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
-import type { FinancialActor } from '../backend/policy-claims-payments/src/domain/financial';
+import type { FinancialActor, PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
 import type { AcceptanceSnapshot, AcceptedPolicyLookup, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -514,7 +514,8 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
     receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash])),
     timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) };
   const issuedFrom = moment === 'before_confirmation' ? 2 : 3;
-  let transactions = 0, finished = 0;
+  let transactions = 0;
+  const finished: { actorId: string; key: string; result: PolicyView }[] = [];
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [];
   const tx = {
     async policy() {
@@ -523,7 +524,7 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
     },
     async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
     async createCommand() {},
-    async finishCommand() { finished++; },
+    async finishCommand(actorId: string, key: string, result: PolicyView) { finished.push({ actorId, key, result }); },
     async setPolicyStatus() { actions.push('status'); },
     async audit(action: string) { actions.push(action); },
     async confirmPremium() { actions.push('premium.confirmed'); },
@@ -535,23 +536,27 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
       async settle() { calls.settle++; throw new Error('unexpected_new_charge'); },
       async refund() { calls.refund++; throw new Error('unexpected_refund'); } },
     signatures: { async sign() { calls.sign++; return { status: 'failed' }; } } });
-  const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
-  return { result, calls, actions, finished: () => finished, receipt: confirmed.providerReference };
+  const idempotencyKey = randomUUID();
+  const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() });
+  const ownCommand = { actorId: policy.clientId, key: await financialIntegrity.digest(JSON.stringify(['command-key.v1', policy.clientId, idempotencyKey])) };
+  return { result, calls, actions, finished, ownCommand, receipt: confirmed.providerReference };
 }
 
 test('a policy issued by another request before this charge is confirmed is returned without signing or charging again', async () => {
-  const { result, calls, actions, finished, receipt } = await issuedConcurrently('before_confirmation');
+  const { result, calls, actions, finished, ownCommand, receipt } = await issuedConcurrently('before_confirmation');
   assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
   assert.deepEqual(result.payment, { status: 'confirmed', reference: receipt });
   assert.deepEqual(calls, { settle: 0, refund: 0, sign: 0 });
   assert.deepEqual(actions, [], 'no confirmation, issuance or refund decision is recorded twice');
-  assert.equal(finished(), 1, 'this request completes its own command with the existing issuance');
+  assert.ok(result.status === 'ok');
+  assert.deepEqual(finished, [{ ...ownCommand, result: result.policy }], 'this request completes its own command with the existing issuance');
 });
 
 test('a signature refusal does not refund a charge that another request already issued', async () => {
-  const { result, calls, actions, finished } = await issuedConcurrently('before_refund');
+  const { result, calls, actions, finished, ownCommand } = await issuedConcurrently('before_refund');
   assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
   assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
   assert.deepEqual(actions, [], 'no refund intent is recorded for an issued policy');
-  assert.equal(finished(), 1);
+  assert.ok(result.status === 'ok');
+  assert.deepEqual(finished, [{ ...ownCommand, result: result.policy }], 'this request completes its own command with the existing issuance');
 });
