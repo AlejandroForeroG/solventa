@@ -58,7 +58,8 @@
         {
           "binding": "IDENTITY_SERVICE",
           "service": "solventa-identity-consent-ecosystem-dev"
-        }
+        },
+        { "binding": "POLICY_SERVICE", "service": "solventa-policy-claims-payments-dev" }
       ]
     },
     "staging": {
@@ -82,7 +83,8 @@
         {
           "binding": "IDENTITY_SERVICE",
           "service": "solventa-identity-consent-ecosystem-staging"
-        }
+        },
+        { "binding": "POLICY_SERVICE", "service": "solventa-policy-claims-payments-staging" }
       ]
     },
     "prod": {
@@ -114,6 +116,7 @@
     {
       "binding": "IDENTITY_SERVICE",
       "service": "solventa-identity-consent-ecosystem-local"
-    }
+    },
+    { "binding": "POLICY_SERVICE", "service": "solventa-policy-claims-payments-local" }
   ]
 }
