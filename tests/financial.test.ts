@@ -515,7 +515,7 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
     timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) };
   const issuedFrom = moment === 'before_confirmation' ? 2 : 3;
   let transactions = 0;
-  const finished: { actorId: string; key: string; result: PolicyView }[] = [];
+  const commands: { actorId: string; key: string; policyId: string; requestHash: string; result: PolicyView | null }[] = [];
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [];
   const tx = {
     async policy() {
@@ -523,8 +523,11 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
         : { policy: { ...policy }, premium: { ...payment }, signature: null };
     },
     async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
-    async createCommand() {},
-    async finishCommand(actorId: string, key: string, result: PolicyView) { finished.push({ actorId, key, result }); },
+    async createCommand(actorId: string, key: string, policyId: string, requestHash: string) { commands.push({ actorId, key, policyId, requestHash, result: null }); },
+    async finishCommand(actorId: string, key: string, result: PolicyView) {
+      const command = commands.find(stored => stored.actorId === actorId && stored.key === key);
+      if (command) command.result = result;
+    },
     async setPolicyStatus() { actions.push('status'); },
     async audit(action: string) { actions.push(action); },
     async confirmPremium() { actions.push('premium.confirmed'); },
@@ -538,25 +541,26 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
     signatures: { async sign() { calls.sign++; return { status: 'failed' }; } } });
   const idempotencyKey = randomUUID();
   const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() });
-  const ownCommand = { actorId: policy.clientId, key: await financialIntegrity.digest(JSON.stringify(['command-key.v1', policy.clientId, idempotencyKey])) };
-  return { result, calls, actions, finished, ownCommand, receipt: confirmed.providerReference };
+  const ownCommand = { actorId: policy.clientId, key: await financialIntegrity.digest(JSON.stringify(['command-key.v1', policy.clientId, idempotencyKey])),
+    policyId: policy.id, requestHash: await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, policy.documentHash])) };
+  return { result, calls, actions, commands, ownCommand, receipt: confirmed.providerReference };
 }
 
 test('a policy issued by another request before this charge is confirmed is returned without signing or charging again', async () => {
-  const { result, calls, actions, finished, ownCommand, receipt } = await issuedConcurrently('before_confirmation');
+  const { result, calls, actions, commands, ownCommand, receipt } = await issuedConcurrently('before_confirmation');
   assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
   assert.deepEqual(result.payment, { status: 'confirmed', reference: receipt });
   assert.deepEqual(calls, { settle: 0, refund: 0, sign: 0 });
   assert.deepEqual(actions, [], 'no confirmation, issuance or refund decision is recorded twice');
   assert.ok(result.status === 'ok');
-  assert.deepEqual(finished, [{ ...ownCommand, result: result.policy }], 'this request completes its own command with the existing issuance');
+  assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
 });
 
 test('a signature refusal does not refund a charge that another request already issued', async () => {
-  const { result, calls, actions, finished, ownCommand } = await issuedConcurrently('before_refund');
+  const { result, calls, actions, commands, ownCommand } = await issuedConcurrently('before_refund');
   assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
   assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
   assert.deepEqual(actions, [], 'no refund intent is recorded for an issued policy');
   assert.ok(result.status === 'ok');
-  assert.deepEqual(finished, [{ ...ownCommand, result: result.policy }], 'this request completes its own command with the existing issuance');
+  assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
 });
