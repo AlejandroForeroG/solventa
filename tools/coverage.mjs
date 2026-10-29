@@ -57,7 +57,7 @@ function run(name, args, cwd = root, extraEnv = {}) {
 const c8 = path.join(root, 'node_modules/c8/bin/c8.js');
 run('node', [c8, '--config', path.join(destination, 'c8.json'), process.execPath, path.join(destination, 'run-node.mjs')]);
 const sqlRunner = path.join(destination, 'run-sql.mjs');
-fs.writeFileSync(sqlRunner, `import {spawnSync} from 'node:child_process';\nfor(const file of ['security-alerts','offers','financial']){const result=spawnSync(process.execPath,['--import','tsx','infra/'+file+'-smoke.mts'],{stdio:'inherit'});if(result.status!==0)process.exit(result.status??1);}\n`);
+fs.writeFileSync(sqlRunner, `import {spawnSync} from 'node:child_process';\nfor(const file of ['security-alerts','offers','financial','consents','quotes']){const result=spawnSync(process.execPath,['--import','tsx','infra/'+file+'-smoke.mts'],{stdio:'inherit'});if(result.status!==0)process.exit(result.status??1);}\n`);
 run('sql', [c8, '--config', path.join(destination, 'c8.json'), '--temp-directory', path.join(destination, 'raw-sql'), '--reports-dir', path.join(destination, 'sql-report'), process.execPath, sqlRunner]);
 run('web', [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--config', path.join(destination, 'web.config.ts')], path.join(root, 'apps/web'));
 run('runtime', ['--test', 'tests/access-runtime.test.mjs', 'tests/security-alert-runtime.test.mjs', 'tests/identity-verification-runtime.test.mjs', 'tests/financial-runtime.test.mjs'], root,
