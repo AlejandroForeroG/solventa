@@ -31,7 +31,7 @@ An in-memory repository test does not establish a SQL transaction. A mobile buil
 
 ## Coverage across Node, SQL and workerd
 
-Start the local database, then run `npm run coverage -- <new-output-directory>`. The directory must not already exist. The command inventories executable application TypeScript/TSX, including untouched and unexecuted files, records source hashes/revision, and retains each command, result and log. Type-only files are listed separately. It runs the Node/HTTP/Pact suites, the real security/offer/financial SQL suites, web tests and local runtime tests. A failed suite stops the command; a partial directory is not a passing report.
+Start the local database, then run `npm run coverage -- <new-output-directory>`. The directory must not already exist. The command inventories executable application TypeScript/TSX, including untouched and unexecuted files, records source hashes/revision, and retains each command, result and log. Type-only files are listed separately. It runs the Node/HTTP/Pact suites, the real security, offer, financial, consent and quote SQL suites, web tests and local runtime tests. A failed suite stops the command; a partial directory is not a passing report.
 
 `unit-global` contains Node and web V8 coverage. `extended-global` adds the real SQL executions using the same application inventory. Each report contains HTML, JSON, a summary and LCOV; adding existing suites to instrumentation is distinct from adding behavior tests. Compare counters and inventories rather than averaging percentages. There is no numeric coverage gate.
 

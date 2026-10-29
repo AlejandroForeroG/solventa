@@ -256,6 +256,33 @@ try {
   assert.deepEqual(await grant(legacyOwner, 'unused-legacy-key', { textVersion: 1, locale: 'es-CO' }), { status: 'terms_outdated' });
   assert.ok((await check(legacyOwner)).allowed);
 
+  for (const table of ['audit_events', 'outbox_events']) {
+    const kim = await person();
+    const outboxBefore = await count('SELECT count(*)::INT4 FROM identity.outbox_events');
+    await db.query(`REVOKE INSERT ON identity.${table} FROM solventa_local_identity`);
+    try { await assert.rejects(grant(kim, 'rollback-grant'), undefined, table); }
+    finally { await db.query(`GRANT INSERT ON identity.${table} TO solventa_local_identity`); }
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents WHERE client_id = $1', [kim.clientId]), 0, `${table}: no consent after a failed grant`);
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference = $1', [kim.subjectToken]), 0, `${table}: no audit after a failed grant`);
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.outbox_events'), outboxBefore, `${table}: no event after a failed grant`);
+    assert.deepEqual(await check(kim), { allowed: false, reason: 'consent_missing' });
+    const retried = await grant(kim, 'rollback-grant');
+    assert.equal(retried.status, 'created', `${table}: the same key grants once the write succeeds`);
+    if (retried.status !== 'created') throw Error('unreachable');
+
+    const auditsBefore = await count('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference = $1', [kim.subjectToken]);
+    const eventsBefore = await count('SELECT count(*)::INT4 FROM identity.outbox_events');
+    await db.query(`REVOKE INSERT ON identity.${table} FROM solventa_local_identity`);
+    try { await assert.rejects(consents.revoke({ principal: kim, consentCode: retried.consent.consentId, traceId: traceId() }), undefined, table); }
+    finally { await db.query(`GRANT INSERT ON identity.${table} TO solventa_local_identity`); }
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.consents WHERE client_id = $1 AND revoked_at IS NULL', [kim.clientId]), 1, `${table}: a failed revocation leaves the consent active`);
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.audit_events WHERE actor_reference = $1', [kim.subjectToken]), auditsBefore, `${table}: no revocation audit`);
+    assert.equal(await count('SELECT count(*)::INT4 FROM identity.outbox_events'), eventsBefore, `${table}: no revocation event`);
+    assert.ok((await check(kim)).allowed, `${table}: the consent still verifies after a failed revocation`);
+    assert.equal((await consents.revoke({ principal: kim, consentCode: retried.consent.consentId, traceId: traceId() })).status, 'revoked');
+    assert.deepEqual(await check(kim), { allowed: false, reason: 'consent_revoked' });
+  }
+
   const app = clientFor(runtime, config.ssl); await app.connect();
   try {
     await assert.rejects(app.query('DELETE FROM identity.consents'), /permission|denied|privilege/i);
@@ -266,7 +293,7 @@ try {
     + JSON.stringify((await db.query('SELECT payload FROM identity.outbox_events WHERE aggregate_type = $1', ['consent'])).rows);
   assert.ok(!/@|document|nombre|name/i.test(text));
 
-  console.log(JSON.stringify({ consentsSQL: 'passed', checks: ['grant+audit+outbox in one transaction', 'idempotent replay, conflict and concurrent retries', 'idempotency scoped to the user', 'seal verified after the round trip', 'revocation owner only and effective on the next check', 'decline audit without a consent', 'expiry denied, not revocable and audited once, a failed expiry audit logged and retried', 'an older active consent found behind more than 20 newer revoked ones', 'tampered record denied', 'suspended user denied', 'batch scope verification from one statement: same selection per scope, mixed grants, expiry audited once, rollback ignored, revocation effective on the next check, unreachable store unavailable', 'runtime role cannot delete consents or edit audit', 'no personal data stored'] }));
+  console.log(JSON.stringify({ consentsSQL: 'passed', checks: ['grant+audit+outbox in one transaction', 'idempotent replay, conflict and concurrent retries', 'idempotency scoped to the user', 'seal verified after the round trip', 'revocation owner only and effective on the next check', 'decline audit without a consent', 'expiry denied, not revocable and audited once, a failed expiry audit logged and retried', 'an older active consent found behind more than 20 newer revoked ones', 'tampered record denied', 'suspended user denied', 'batch scope verification from one statement: same selection per scope, mixed grants, expiry audited once, rollback ignored, revocation effective on the next check, unreachable store unavailable', 'grant and revocation roll back completely when their audit or outbox write fails', 'runtime role cannot delete consents or edit audit', 'no personal data stored'] }));
 } finally {
   await db?.end();
   if (created) await admin.query(`DROP DATABASE ${name} CASCADE`);
