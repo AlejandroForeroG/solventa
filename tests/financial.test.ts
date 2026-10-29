@@ -505,3 +505,53 @@ test('policy reads expose the premium state and only an acknowledged synthetic r
     assert.equal('payment' in result.policy, false, 'the stored command result shape stays unchanged for replays');
   }
 });
+
+async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund') {
+  const { policy, payment, actor } = await stateFixture(moment === 'before_refund' ? 'charged' : 'pending', moment === 'before_refund' ? 'confirmed' : 'pending', { status: 'unknown', reference: null });
+  const confirmed: Payment = { ...payment, status: 'confirmed', providerReference: 'MOCK-' + payment.id };
+  const signedAt = '2026-10-16T02:01:00.000Z';
+  const signature = { documentHash: policy.documentHash, signedAt,
+    receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash])),
+    timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) };
+  const issuedFrom = moment === 'before_confirmation' ? 2 : 3;
+  let transactions = 0, finished = 0;
+  const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [];
+  const tx = {
+    async policy() {
+      return transactions >= issuedFrom ? { policy: { ...policy, status: 'issued' as const }, premium: { ...confirmed }, signature: { ...signature } }
+        : { policy: { ...policy }, premium: { ...payment }, signature: null };
+    },
+    async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
+    async createCommand() {},
+    async finishCommand() { finished++; },
+    async setPolicyStatus() { actions.push('status'); },
+    async audit(action: string) { actions.push(action); },
+    async confirmPremium() { actions.push('premium.confirmed'); },
+    async completeIssuance() { actions.push('policy.issued'); }
+  } as unknown as FinancialTransaction;
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { ...unusedStoreReads, async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
+    payments: { async lookup() { return { status: 'confirmed', reference: confirmed.providerReference }; },
+      async settle() { calls.settle++; throw new Error('unexpected_new_charge'); },
+      async refund() { calls.refund++; throw new Error('unexpected_refund'); } },
+    signatures: { async sign() { calls.sign++; return { status: 'failed' }; } } });
+  const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+  return { result, calls, actions, finished: () => finished, receipt: confirmed.providerReference };
+}
+
+test('a policy issued by another request before this charge is confirmed is returned without signing or charging again', async () => {
+  const { result, calls, actions, finished, receipt } = await issuedConcurrently('before_confirmation');
+  assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
+  assert.deepEqual(result.payment, { status: 'confirmed', reference: receipt });
+  assert.deepEqual(calls, { settle: 0, refund: 0, sign: 0 });
+  assert.deepEqual(actions, [], 'no confirmation, issuance or refund decision is recorded twice');
+  assert.equal(finished(), 1, 'this request completes its own command with the existing issuance');
+});
+
+test('a signature refusal does not refund a charge that another request already issued', async () => {
+  const { result, calls, actions, finished } = await issuedConcurrently('before_refund');
+  assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
+  assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
+  assert.deepEqual(actions, [], 'no refund intent is recorded for an issued policy');
+  assert.equal(finished(), 1);
+});
