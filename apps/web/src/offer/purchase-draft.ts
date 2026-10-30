@@ -41,7 +41,11 @@ export function readPurchaseDraft(now = Date.now()): PurchaseDraft | null {
       ...(savedCharge ? { charge: savedCharge } : {}) };
     if (!isRecord(draft.issue)) { clearPurchaseDraft(); return null; }
     const { policyId, documentHash, key, challengeId } = draft.issue;
-    if (!uuid(policyId) || typeof documentHash !== 'string' || !HASH.test(documentHash) || !uuid(key) || !uuid(challengeId)) { clearPurchaseDraft(); return null; }
+    if (!uuid(policyId) || typeof documentHash !== 'string' || !HASH.test(documentHash) || !uuid(key)) { clearPurchaseDraft(); return null; }
+    // Rediscover legacy v1 purchases without replaying their command through the v2 signature protocol.
+    if (challengeId === undefined) return { quoteId: draft.quoteId, acceptance, issue: null,
+      ...(savedCharge ? { charge: savedCharge } : {}) };
+    if (!uuid(challengeId)) { clearPurchaseDraft(); return null; }
     return { quoteId: draft.quoteId, acceptance, issue: { policyId, documentHash, key, challengeId },
       ...(savedCharge ? { charge: savedCharge } : {}) };
   } catch { clearPurchaseDraft(); return null; }
