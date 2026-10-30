@@ -155,6 +155,58 @@ test('acceptance emits the exact Policy contract and same-key replay produces on
   assert.equal((await f.service.accept({ ...command, authorization: { ...authorization, consentId: 'CNS-2026-00002' } })).status, 'denied', 'a new consent cannot authorize reuse of sources from another consent');
   assert.equal((await f.service.accept({ ...command, actor: other })).status, 'not_found');
 });
+
+test('dispatch metadata is the exact durable event and is available only after acceptance commit', async () => {
+  const f = fixture(), offer = await f.service.create(f.command);
+  if (offer.status !== 'created') throw Error('unreachable');
+  let release = () => {}, entered = () => {};
+  const commit = new Promise<void>(resolve => { release = resolve; });
+  const waiting = new Promise<void>(resolve => { entered = resolve; });
+  const accept = f.store.accept.bind(f.store);
+  f.store.accept = async input => { entered(); await commit; return accept(input); };
+  const command = { ...f.command, offerId: offer.offer.offerId, idempotencyKey: 'dispatch-commit' };
+  const pending = f.service.accept(command);
+  let completed = false; void pending.then(() => { completed = true; });
+  await waiting; assert.equal(completed, false); assert.equal(f.store.events.length, 0);
+  release(); const result = await pending;
+  if (result.status !== 'created') throw Error('unreachable');
+  assert.deepEqual(result.committedEvent, f.store.events[0]);
+  assert.equal(result.committedEvent?.eventId, result.acceptance.eventId);
+  assert.equal(result.committedEvent?.payload.acceptanceId, result.acceptance.acceptanceId);
+  assert.equal(await f.deps.integrity.verifyEvent(result.committedEvent), true);
+  const replay = await f.service.accept(command);
+  assert.equal(replay.status, 'replayed'); assert.equal('committedEvent' in replay, false);
+  const conflict = await f.service.accept({ ...command, idempotencyKey: 'another-key' });
+  assert.equal(conflict.status, 'conflict'); assert.equal('committedEvent' in conflict, false);
+  assert.equal(f.store.events.length, 1);
+});
+
+test('an expired or failed acceptance write exposes no newly signed dispatch event', async () => {
+  for (const failure of ['expired', 'unavailable'] as const) {
+    const f = fixture(), offer = await f.service.create(f.command);
+    if (offer.status !== 'created') throw Error('unreachable');
+    f.store.accept = async () => { if (failure === 'unavailable') throw Error('commit_unavailable'); return { status: 'expired' }; };
+    const pending = f.service.accept({ ...f.command, offerId: offer.offer.offerId });
+    if (failure === 'unavailable') await assert.rejects(pending, /commit_unavailable/);
+    else { const result = await pending; assert.equal(result.status, 'expired'); assert.equal('committedEvent' in result, false); }
+    assert.equal(f.store.events.length, 0); assert.equal(f.store.accepted.size, 0);
+  }
+});
+
+test('a concurrent acceptance loser cannot dispatch its newly generated event instead of the stored winner', async () => {
+  const f = fixture(), offer = await f.service.create(f.command);
+  if (offer.status !== 'created') throw Error('unreachable');
+  const command = { ...f.command, offerId: offer.offer.offerId, idempotencyKey: 'racing-dispatch' };
+  const first = await f.service.accept(command);
+  if (first.status !== 'created') throw Error('unreachable');
+  // Reproduce a snapshot taken before the rival committed; the SQL write resolves the replay.
+  f.store.acceptanceSnapshot = async (a, offerId) => ({ offer: await f.store.get(a, offerId), acceptance: null });
+  const loser = await f.service.accept(command);
+  if (loser.status !== 'replayed') throw Error('expected stored winner');
+  assert.deepEqual(loser.acceptance, first.acceptance);
+  assert.equal('committedEvent' in loser, false);
+  assert.equal(f.store.events.length, 1);
+});
 test('tampered persisted terms, changed consent provenance and expired offers cause no financial event', async () => {
   for (const mode of ['tamper', 'consent', 'expiry'] as const) {
     const f = fixture(), created = await f.service.create(f.command); if (created.status !== 'created') throw Error('unreachable');
