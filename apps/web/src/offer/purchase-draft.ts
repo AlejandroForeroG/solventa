@@ -10,7 +10,7 @@ const HASH = /^[0-9a-f]{64}$/;
 export type PurchaseDraft = {
   quoteId: string;
   acceptance: Acceptance;
-  issue: { policyId: string; documentHash: string; key: string } | null;
+  issue: { policyId: string; documentHash: string; key: string; challengeId: string } | null;
 };
 
 export function clearPurchaseDraft() {
@@ -34,9 +34,9 @@ export function readPurchaseDraft(now = Date.now()): PurchaseDraft | null {
     const acceptance = { acceptanceId, offerId, acceptedAt, traceId };
     if (draft.issue === null) return { quoteId: draft.quoteId, acceptance, issue: null };
     if (!isRecord(draft.issue)) { clearPurchaseDraft(); return null; }
-    const { policyId, documentHash, key } = draft.issue;
-    if (!uuid(policyId) || typeof documentHash !== 'string' || !HASH.test(documentHash) || !uuid(key)) { clearPurchaseDraft(); return null; }
-    return { quoteId: draft.quoteId, acceptance, issue: { policyId, documentHash, key } };
+    const { policyId, documentHash, key, challengeId } = draft.issue;
+    if (!uuid(policyId) || typeof documentHash !== 'string' || !HASH.test(documentHash) || !uuid(key) || !uuid(challengeId)) { clearPurchaseDraft(); return null; }
+    return { quoteId: draft.quoteId, acceptance, issue: { policyId, documentHash, key, challengeId } };
   } catch { clearPurchaseDraft(); return null; }
 }
 

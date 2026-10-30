@@ -55,6 +55,9 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const finance: PolicyHttpDependencies['finance'] = {
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
+    beginSignatureChallenge: async input => { calls.push({ operation: 'challenge', input }); return { status: 'ok', replayed: false, policy,
+      challenge: { challengeId: id, expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }; },
+    cancelSignatureChallenge: async input => { calls.push({ operation: 'cancelChallenge', input }); return { status: 'ok', replayed: false, policy }; },
     issue: async input => { calls.push({ operation: 'issue', input });
       return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
   };
@@ -150,12 +153,16 @@ test('acceptance returns 202 pending asynchronous issuance, and issue requires t
   assert.equal(pending.policyId, id);
   assert.equal('payment' in pending, false, 'no premium state before the customer confirms issuance');
   assert.deepEqual(calls.find(c => c.operation === 'policyGetByAcceptance')?.input, { actor, acceptanceId: id, traceId });
-  const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash })), true);
+  const challenge = await run(request(`/policies/${id}/signature-challenges`, JSON.stringify({ documentHash: policy.documentHash, accepted: true })), true);
+  assert.equal(challenge.status, 200);
+  const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash,
+    challengeId: id, code: '123456' })), true);
   assert.equal(response.status, 200);
   const issued = await contractual(response, 'policies', 'Policy');
   assert.equal(issued.status, 'issued');
   assert.deepEqual(issued.payment, { status: 'confirmed', reference: 'MOCK-' + id });
-  assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
+  assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1',
+    documentHash: policy.documentHash, challengeId: id, code: '123456', traceId });
 });
 
 test('financial routes reach only their owner and retain credentials and safe failure traces', async () => {

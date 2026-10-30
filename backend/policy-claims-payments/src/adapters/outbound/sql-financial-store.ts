@@ -3,7 +3,7 @@ import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -59,6 +59,27 @@ const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
 
 class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
+  async createSignatureChallenge(challenge: SignatureChallenge): Promise<void> {
+    await this.db.query(`INSERT INTO policy.signature_challenges
+      (id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,0,'active')`,
+    [challenge.id, challenge.policyId, challenge.clientId, challenge.subjectToken, challenge.documentHash, challenge.codeHash, challenge.expiresAt]);
+  }
+  async signatureChallenge(id: string, actor: FinancialActor, policyId: string): Promise<SignatureChallenge | null> {
+    const row = (await this.db.query<{ id: string; policy_id: string; client_id: string; subject_token: string; document_hash: string;
+      code_hash: string; expires_at: Date; attempts: number; status: SignatureChallenge['status']; command_key: string | null }>(
+      `SELECT id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts,status,command_key
+       FROM policy.signature_challenges WHERE id=$1 AND policy_id=$2 AND client_id=$3 AND subject_token=$4 FOR UPDATE`,
+      [id, policyId, actor.clientId, actor.subjectToken])).rows[0];
+    return row ? { id: row.id, policyId: row.policy_id, clientId: row.client_id, subjectToken: row.subject_token,
+      documentHash: row.document_hash, codeHash: row.code_hash, expiresAt: row.expires_at.toISOString(),
+      attempts: row.attempts, status: row.status, commandKey: row.command_key } : null;
+  }
+  async updateSignatureChallenge(id: string, attempts: number, status: SignatureChallenge['status'], commandKey?: string): Promise<void> {
+    const result = await this.db.query(`UPDATE policy.signature_challenges SET attempts=$2,status=$3,command_key=$4 WHERE id=$1`,
+      [id, attempts, status, commandKey ?? null]);
+    if (result.rowCount !== 1) throw new InvalidFinancialRecord();
+  }
   async policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null> {
     const owned = actor ? ' AND f.client_id=$2 AND p.subject_token=$3' : '';
     return recordFrom((await this.db.query<RecordRow>(selectRecord() + ' WHERE p.id=$1' + owned + ' FOR UPDATE OF p',

@@ -7,7 +7,7 @@ import { SUPPORTED_TERMS } from '../../apps/web/src/consent/wording';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
 import { requestEstimate } from '../../apps/web/src/quote/estimate-api';
-import { acceptOffer, createOffer, issuePolicy, policyForAcceptance } from '../../apps/web/src/offer/api';
+import { acceptOffer, beginSignatureChallenge, createOffer, issuePolicy, policyForAcceptance } from '../../apps/web/src/offer/api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
 
 const consumerName = 'solventa-web-spa';
@@ -341,6 +341,8 @@ describe('SPA definitive offer and policy issuance', () => {
   const acceptanceId = '20000000-0000-4000-8000-000000000002';
   const policyId = '30000000-0000-4000-8000-000000000003';
   const documentHash = 'a'.repeat(64);
+  const challengeId = '80000000-0000-4000-8000-000000000008';
+  const code = '123456';
   const offerKey = '22222222-2222-4222-8222-222222222222';
   const post = (path: string, idempotencyKey: string, body: unknown) => ({ method: 'POST', path, headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body });
   const money = (example: string) => MatchersV3.regex('^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$', example);
@@ -414,18 +416,30 @@ describe('SPA definitive offer and policy issuance', () => {
 
   test('issues the reviewed document', async () => {
     pact.given('the accepted offer was imported').uponReceiving('an issuance of the reviewed document')
-      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash }))
+      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
       .willRespondWith({ status: 200, headers: jsonResponse, body: policyBody('issued') });
     await pact.executeTest(async server => {
-      const outcome = await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey));
+      const outcome = await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey, challengeId, code));
       assert.ok(outcome.kind === 'ok' && outcome.value.status === 'issued');
     });
   });
 
   test('reports an uncertain issuance as unavailable', async () => {
     pact.given('the policy service is down').uponReceiving('an issuance while Policy is unavailable')
-      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash }))
+      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
       .willRespondWith({ status: 503 });
-    await pact.executeTest(async server => assert.equal((await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey))).kind, 'unavailable'));
+    await pact.executeTest(async server => assert.equal((await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey, challengeId, code))).kind, 'unavailable'));
+  });
+  test('requests a code for the reviewed document', async () => {
+    pact.given('the accepted offer was imported').uponReceiving('a signature challenge for the reviewed document')
+      .withRequest({ method: 'POST', path: `/api/v1/policies/${policyId}/signature-challenges`,
+        headers: { 'content-type': 'application/json' }, body: { documentHash, accepted: true } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { ...policyBody('pending'),
+        challenge: { challengeId: MatchersV3.equal(challengeId), expiresAt: instant('2026-10-15T00:05:00.000Z'),
+          demoCode: MatchersV3.equal(code) } } });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => beginSignatureChallenge({ policyId, documentHash }));
+      assert.ok(outcome.kind === 'ok' && outcome.value.challengeId === challengeId);
+    });
   });
 });

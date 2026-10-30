@@ -3,13 +3,15 @@ import type { FinancialErrorCode, SignedOfferAcceptanceV1, SignedParametricEvent
 import type { Payment, StoredPolicy } from './ports/financial';
 
 export type FinancialAction = 'offer.accepted' | 'premium.requested' | 'premium.declined' | 'premium.confirmed'
-  | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed' | 'financial.denied';
+  | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed'
+  | 'signature.challenge_created' | 'signature.challenge_failed' | 'signature.challenge_cancelled' | 'signature.challenge_verified' | 'financial.denied';
 export type FinancialSource = { source: string; capturedAt: string; quality: 'synthetic_verified' | 'synthetic_result'; degraded: false;
   operation?: string; result?: string; reference?: string | null; referenceRecognized?: boolean; eventId?: string; occurredAt?: string };
 export type FinancialDecisionCapture = { schemaVersion: 1; contractVersion: 'v1'; correlationId: string;
   inputs: Record<string, unknown>; sources: FinancialSource[]; consent: { status: 'not_required' };
   rule: { id: FinancialAction; version: string }; outcome: string };
 export type FinancialEvidence = { payment?: Payment; sources?: FinancialSource[];
+  challenge?: { id: string; expiresAt: string; attempts: number; accepted: boolean };
   event?: { eventId: string; eventType: string; environment: string; occurredAt: string; delayMinutes?: number };
   issuance?: { signedAt: string; documentHash: string };
   trigger?: 'reconciliation';
@@ -28,6 +30,7 @@ export function financialDecision(action: Exclude<FinancialAction, 'financial.de
         intentKey: payment.key, intentHash: payment.hash, status: payment.status,
         providerReference: payment.providerReference === 'MOCK-' + payment.id ? payment.providerReference : null } } : {}),
       ...(evidence.event ? { event: { ...evidence.event } } : {}), ...(evidence.issuance ? { issuance: { ...evidence.issuance } } : {}),
+      ...(evidence.challenge ? { challenge: { ...evidence.challenge } } : {}),
       ...(evidence.trigger ? { trigger: evidence.trigger } : {}),
       ...(evidence.refundReason ? { refundReason: evidence.refundReason, refundIntent: { policyId: policy.id, action: 'premium.refund_requested' } } : {}) },
     sources: (evidence.sources ?? []).map(source => ({ ...source })), consent: { status: 'not_required' },
