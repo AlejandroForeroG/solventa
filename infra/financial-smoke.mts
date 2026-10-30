@@ -60,7 +60,7 @@ try {
   const ok = (result: FinancialResult) => { assert.equal(result.status, 'ok', JSON.stringify(result)); if (result.status !== 'ok') throw new Error('unexpected_result'); return result; };
   const importOffer = async (event: SignedOfferAcceptanceV1) => ok(await finance.acceptOffer(event, randomUUID())).policy;
   const challengeByCommand = new Map<string, { challengeId: string; code: string }>();
-  const issue = async (service: PolicyFinance, event: SignedOfferAcceptanceV1, policy: { policyId: string; documentHash: string }, key = randomUUID()) => {
+  const issue = async (service: PolicyFinance, event: SignedOfferAcceptanceV1, policy: { policyId: string; documentHash: string }, key = randomUUID(), traceId = randomUUID()) => {
     const actor = { clientId: event.payload.clientId, subjectToken: event.payload.subjectToken };
     const identity = `${policy.policyId}:${key}`;
     let challenge = challengeByCommand.get(identity);
@@ -76,7 +76,7 @@ try {
       } else challenge = { challengeId: '80000000-0000-4000-8000-000000000008', code: '000000' };
     }
     return service.issue({ actor, policyId: policy.policyId, documentHash: policy.documentHash, idempotencyKey: key,
-      challengeId: challenge.challengeId, code: challenge.code, traceId: randomUUID() });
+      challengeId: challenge.challengeId, code: challenge.code, traceId });
   };
   const denied = async (run: (traceId: string) => Promise<FinancialResult>, code: string) => {
     const traceId = randomUUID();
@@ -502,6 +502,30 @@ try {
   const expiredRefund = (await captures(expiredCharge.candidate.policyId, 'premium.refund_requested'))[0];
   assert.equal(expiredRefund.inputs.refundReason, 'expired_before_sign');
   assert.equal(expiredRefund.inputs.trigger, 'reconciliation');
+  await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'signature_failed');
+  const refundedCommandKey = await financialIntegrity.digest(JSON.stringify(['command-key.v1', expiredCharge.event.payload.clientId, expiredCharge.commandKey]));
+  const terminalRefund = (await db.query<{ result: Record<string, unknown> }>(
+    'SELECT result FROM policy.financial_commands WHERE actor_id=$1 AND idempotency_key=$2',
+    [expiredCharge.event.payload.clientId, refundedCommandKey])).rows[0].result;
+  assert.equal(terminalRefund.status, 'refunded');
+  await db.query('UPDATE policy.financial_commands SET result=$3::JSONB WHERE actor_id=$1 AND idempotency_key=$2',
+    [expiredCharge.event.payload.clientId, refundedCommandKey, JSON.stringify({ ...terminalRefund, documentHash: '0'.repeat(64) })]);
+  try {
+    await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'integrity_violation');
+  } finally {
+    await db.query('UPDATE policy.financial_commands SET result=$3::JSONB WHERE actor_id=$1 AND idempotency_key=$2',
+      [expiredCharge.event.payload.clientId, refundedCommandKey, JSON.stringify(terminalRefund)]);
+  }
+  await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'signature_failed');
+  assert.deepEqual(await stateOf(expiredCharge.candidate.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
+  const legacyRefundEvent = await acceptedOffer(), legacyRefundPolicy = await importOffer(legacyRefundEvent), legacyRefundKey = randomUUID();
+  const retryLegacyRefund = (service: PolicyFinance, traceId: string) => service.issueLegacy({ actor: legacyRefundEvent.payload,
+    policyId: legacyRefundPolicy.policyId, documentHash: legacyRefundPolicy.documentHash, idempotencyKey: legacyRefundKey, traceId });
+  const refusedLegacy = await retryLegacyRefund(new PolicyFinance({ ...base, signatures: { async sign() { return { status: 'failed' }; } } }), randomUUID());
+  assert.ok(refusedLegacy.status === 'denied' && refusedLegacy.error === 'signature_failed');
+  await recoverAll(finance);
+  await denied(traceId => retryLegacyRefund(finance, traceId), 'signature_failed');
+  assert.deepEqual(await stateOf(legacyRefundPolicy.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
   const refundChargeEvent = await acceptedOffer(), refundChargePolicy = await importOffer(refundChargeEvent);
   const refundChargeActor = { clientId: refundChargeEvent.payload.clientId, subjectToken: refundChargeEvent.payload.subjectToken };
   const refundChargeKey = randomUUID();
@@ -703,6 +727,7 @@ try {
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
       'signature_attempt_count_and_capture', 'three_wrong_codes_cancel_challenge', 'cancelled_and_expired_challenges_remain_unsigned',
+      'refunded_v1_v2_command_replay_preserves_failure', 'tampered_refunded_result_denied',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'v1_legacy_issue_and_replay', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'charge_retry_completes_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));

@@ -220,7 +220,9 @@ export class PolicyFinance {
         const previous = snapshot.command;
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
-          if (policy.status !== 'issued' || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+          if ((policy.status !== 'issued' && policy.status !== 'refunded')
+            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+          if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
         if (policy.status === 'refunded') return reject('signature_failed');
@@ -264,7 +266,9 @@ export class PolicyFinance {
         const previous = snapshot.command;
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
-          if (policy.status !== 'issued' || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+          if ((policy.status !== 'issued' && policy.status !== 'refunded')
+            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+          if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
         if (policy.status === 'refunded') return reject('signature_failed');

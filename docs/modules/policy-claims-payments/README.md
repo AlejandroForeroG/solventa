@@ -47,6 +47,8 @@ The web viewer presents a readable summary and then the complete canonical docum
 
 Policy/premium states must agree before an operation: pending permits no premium or a pending/declined premium; charged/refunding requires confirmed; refunded requires refunded; issued requires confirmed and the sealed signature. Confirmed/refunded references must match the deterministic mock operation identity. An unknown provider lookup can start a settlement only for a pending intent. A claimed local confirmation without matching provider proof, or an altered confirmation reference, is audited and rejected without a new charge. These checks also preserve an uncertain pending operation's legitimate lookup-based recovery.
 
+Both issuance versions validate a completed command against the current terminal policy. An issued result replays successfully; a matching refunded result returns `signature_failed`, allowing clients to read the confirmed refund without another charge or signature. A mismatched result remains an `integrity_violation`, including after autonomous refund reconciliation.
+
 ### Autonomous issuance recovery
 
 A client retry with its existing command identity still recovers immediately. Without one, the Worker's `scheduled` handler runs `PolicyFinance.reconcileIssuances` once per minute in local, dev and staging (prod has no trigger and financial mode stays disabled). It selects at most 25 policies whose latest policy or premium activity is older than two minutes, so an in-flight customer request finishes first:
