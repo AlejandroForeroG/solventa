@@ -659,6 +659,11 @@ describe('financial API client', () => {
       challengeId: challenge.challengeId, code: challenge.demoCode });
   });
 
+  it.each(['not-json', 'null', '[]', '"document"'])('rejects an invalid document object before it can reach the paged viewer: %s', async document => {
+    fetchMock(json(200, { ...pending, offerVersion: 1, synthetic: true, providerMode: 'mock', document }));
+    expect((await policyForAcceptance(acceptance)).kind).toBe('unavailable');
+  });
+
   it('accepts only a well-formed premium state with a receipt exactly when the provider acknowledged it', async () => {
     const { payment: _absent, ...withoutPayment } = pending;
     const body = { ...withoutPayment, offerVersion: 1, synthetic: true, providerMode: 'mock' };
