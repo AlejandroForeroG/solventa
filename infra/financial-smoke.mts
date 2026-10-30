@@ -59,8 +59,25 @@ try {
   const counts = async (tables: string[]) => { const result = []; for (const table of tables) result.push(await count(table)); return result; };
   const ok = (result: FinancialResult) => { assert.equal(result.status, 'ok', JSON.stringify(result)); if (result.status !== 'ok') throw new Error('unexpected_result'); return result; };
   const importOffer = async (event: SignedOfferAcceptanceV1) => ok(await finance.acceptOffer(event, randomUUID())).policy;
-  const issue = (service: PolicyFinance, event: SignedOfferAcceptanceV1, policy: { policyId: string; documentHash: string }, key = randomUUID()) => service.issue({
-    actor: { clientId: event.payload.clientId, subjectToken: event.payload.subjectToken }, policyId: policy.policyId, documentHash: policy.documentHash, idempotencyKey: key, traceId: randomUUID() });
+  const challengeByCommand = new Map<string, { challengeId: string; code: string }>();
+  const issue = async (service: PolicyFinance, event: SignedOfferAcceptanceV1, policy: { policyId: string; documentHash: string }, key = randomUUID(), traceId = randomUUID()) => {
+    const actor = { clientId: event.payload.clientId, subjectToken: event.payload.subjectToken };
+    const identity = `${policy.policyId}:${key}`;
+    let challenge = challengeByCommand.get(identity);
+    if (!challenge) {
+      const charged = await service.charge({ actor, policyId: policy.policyId, documentHash: policy.documentHash,
+        idempotencyKey: `charge-${policy.policyId}`, traceId: randomUUID() });
+      if (charged.status !== 'ok') return charged;
+      const started = await service.beginSignatureChallenge({ actor, policyId: policy.policyId, documentHash: policy.documentHash,
+        accepted: true, traceId: randomUUID() });
+      if (started.status === 'ok' && started.challenge) {
+        challenge = { challengeId: started.challenge.challengeId, code: started.challenge.demoCode };
+        challengeByCommand.set(identity, challenge);
+      } else challenge = { challengeId: '80000000-0000-4000-8000-000000000008', code: '000000' };
+    }
+    return service.issue({ actor, policyId: policy.policyId, documentHash: policy.documentHash, idempotencyKey: key,
+      challengeId: challenge.challengeId, code: challenge.code, traceId });
+  };
   const denied = async (run: (traceId: string) => Promise<FinancialResult>, code: string) => {
     const traceId = randomUUID();
     const before = await count('mock_gateway_operations');
@@ -79,6 +96,43 @@ try {
     assert.deepEqual((await db!.query('SELECT payment_id,operation,amount::STRING,currency,status,provider_reference FROM policy.mock_gateway_operations ORDER BY payment_id')).rows, effectsBefore,
       'a rejection must not change an already existing financial provider outcome');
   };
+
+  const attemptOffer = await acceptedOffer(), attemptPolicy = await importOffer(attemptOffer);
+  const attemptInput = { actor: attemptOffer.payload, policyId: attemptPolicy.policyId, documentHash: attemptPolicy.documentHash };
+  assert.equal(ok(await finance.charge({ ...attemptInput, idempotencyKey: randomUUID(), traceId: randomUUID() })).policy.status, 'charged');
+  const beginAttempt = async () => {
+    const challenge = ok(await finance.beginSignatureChallenge({ ...attemptInput, accepted: true, traceId: randomUUID() })).challenge;
+    assert.ok(challenge); return challenge;
+  };
+  const limitedChallenge = await beginAttempt();
+  const wrongCode = limitedChallenge.demoCode === '000000' ? '111111' : '000000';
+  for (let attempts = 1; attempts <= 3; attempts++) {
+    await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+      challengeId: limitedChallenge.challengeId, code: wrongCode, traceId }), 'authentication_failed');
+    const saved = (await db.query('SELECT attempts::INT4 AS attempts,status FROM policy.signature_challenges WHERE id=$1', [limitedChallenge.challengeId])).rows[0];
+    assert.deepEqual(saved, { attempts, status: attempts === 3 ? 'cancelled' : 'active' });
+    const failures = await captures(attemptPolicy.policyId, 'signature.challenge_failed');
+    assert.equal(failures.length, attempts);
+    assert.equal((failures.at(-1)!.inputs.challenge as { attempts: unknown }).attempts, attempts,
+      'failed authentication must persist the numeric attempt count in its decision capture');
+  }
+  await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: limitedChallenge.challengeId, code: limitedChallenge.demoCode, traceId }), 'challenge_invalid');
+  const cancelledChallenge = await beginAttempt();
+  ok(await finance.cancelSignatureChallenge({ actor: attemptInput.actor, policyId: attemptPolicy.policyId,
+    challengeId: cancelledChallenge.challengeId, traceId: randomUUID() }));
+  await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: cancelledChallenge.challengeId, code: cancelledChallenge.demoCode, traceId }), 'challenge_invalid');
+  const expiringChallenge = await beginAttempt();
+  const atChallengeExpiry = new PolicyFinance({ ...base, now: () => new Date(expiringChallenge.expiresAt) });
+  await denied(traceId => atChallengeExpiry.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: expiringChallenge.challengeId, code: expiringChallenge.demoCode, traceId }), 'challenge_expired');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [attemptPolicy.policyId])).rows[0].n, 0);
+  assert.equal(ok(await finance.get({ actor: attemptInput.actor, policyId: attemptPolicy.policyId, traceId: randomUUID() })).policy.status, 'charged');
+  const validChallenge = await beginAttempt();
+  assert.equal(ok(await finance.issue({ ...attemptInput, idempotencyKey: randomUUID(), challengeId: validChallenge.challengeId,
+    code: validChallenge.demoCode, traceId: randomUUID() })).policy.status, 'issued');
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.payments WHERE policy_id=$1 AND operation='premium'", [attemptPolicy.policyId])).rows[0].n, 1);
 
   const offer = await acceptedOffer();
   const policy = await importOffer(offer);
@@ -112,7 +166,7 @@ try {
   }
 
   await denied(traceId => finance.get({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, policyId: policy.policyId, traceId }), 'not_found');
-  await denied(traceId => finance.issue({ actor: offer.payload, policyId: policy.policyId, documentHash: '0'.repeat(64), idempotencyKey: randomUUID(), traceId }), 'document_mismatch');
+  await denied(traceId => finance.issue({ actor: offer.payload, policyId: policy.policyId, documentHash: '0'.repeat(64), idempotencyKey: randomUUID(), challengeId: '80000000-0000-4000-8000-000000000008', code: '000000', traceId }), 'document_mismatch');
   const altered = { ...offer, payload: { ...offer.payload, premium: '1.0000' } };
   await denied(traceId => finance.acceptOffer(altered, traceId), 'invalid_event');
   altered.signature = await financialIntegrity.digest(eventContent(altered));
@@ -167,7 +221,7 @@ try {
     { clientId: orphanOffer.payload.clientId, subjectToken: randomUUID() }]) {
     await denied(traceId => finance.get({ actor: foreignActor, policyId: orphanPolicy.policyId, traceId }), 'not_found');
     await denied(traceId => finance.issue({ actor: foreignActor, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
-      idempotencyKey: randomUUID(), traceId }), 'not_found');
+      idempotencyKey: randomUUID(), challengeId: '80000000-0000-4000-8000-000000000008', code: '000000', traceId }), 'not_found');
     await denied(traceId => finance.getByAcceptance({ actor: foreignActor, acceptanceId: orphanOffer.payload.acceptanceId, traceId }), 'not_found');
   }
   const pendingTrace = randomUUID();
@@ -178,7 +232,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE correlation_id=$1', [pendingTrace])).rows[0].n, 0,
     'polling an unimported acceptance must not publish a rejection');
   await denied(traceId => finance.issue({ actor: orphanOffer.payload, policyId: orphanPolicy.policyId, documentHash: orphanPolicy.documentHash,
-    idempotencyKey: randomUUID(), traceId }), 'integrity_violation');
+    idempotencyKey: randomUUID(), challengeId: '80000000-0000-4000-8000-000000000008', code: '000000', traceId }), 'integrity_violation');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.financial_payment_intents WHERE policy_id=$1', [orphanPolicy.policyId])).rows[0].n, 0,
     'an orphan payment must not be hidden by the absent intent or replaced by a new premium');
 
@@ -188,7 +242,9 @@ try {
   const beforeIntentFailure = await counts(intentTables);
   for (const table of ['financial_commands', 'payments', 'financial_payment_intents', 'audit_events', 'outbox_events']) {
     await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
-    try { assert.equal((await issue(finance, intentRollback, intentRollbackPolicy, intentRollbackKey)).status, 'unavailable'); }
+    try { assert.equal((await finance.charge({ actor: intentRollback.payload, policyId: intentRollbackPolicy.policyId,
+      documentHash: intentRollbackPolicy.documentHash, idempotencyKey: `charge-${intentRollbackPolicy.policyId}`,
+      traceId: randomUUID() })).status, 'unavailable'); }
     finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
     assert.deepEqual(await counts(intentTables), beforeIntentFailure,
       `a failed ${table} insert must roll back initial command, premium, immutable intent, audit and outbox before provider use`);
@@ -200,8 +256,8 @@ try {
   assert.equal((await issue(new PolicyFinance({ ...base, payments: noProofGateway }), noProofOffer, noProofPolicy, noProofKey)).status, 'unavailable');
   await db.query("UPDATE policy.policies SET status='charged' WHERE id=$1", [noProofPolicy.policyId]);
   await db.query("UPDATE policy.payments SET status='confirmed',provider_reference='MOCK-'||id::STRING WHERE policy_id=$1", [noProofPolicy.policyId]);
-  await denied(traceId => finance.issue({ actor: noProofOffer.payload, policyId: noProofPolicy.policyId, documentHash: noProofPolicy.documentHash,
-    idempotencyKey: noProofKey, traceId }), 'integrity_violation');
+  await denied(traceId => finance.charge({ actor: noProofOffer.payload, policyId: noProofPolicy.policyId, documentHash: noProofPolicy.documentHash,
+    idempotencyKey: `charge-${noProofPolicy.policyId}`, traceId }), 'integrity_violation');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id IN (SELECT id FROM policy.payments WHERE policy_id=$1)', [noProofPolicy.policyId])).rows[0].n, 0,
     'a forged charged/confirmed projection with no provider proof must never start a new charge');
   const declinedOffer = await acceptedOffer(); const declinedPolicy = await importOffer(declinedOffer); const declinedKey = randomUUID();
@@ -218,6 +274,13 @@ try {
   assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.requested'", [declinedPolicy.policyId])).rows[0].n, 1);
   assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.declined'", [declinedPolicy.policyId])).rows[0].n, 1);
   assert.equal(ok(await issue(finance, offer, policy, key)).policy.status, 'issued');
+  const legacyEvent = await acceptedOffer(), legacyPolicy = await importOffer(legacyEvent), legacyKey = randomUUID();
+  const legacyIssue = () => finance.issueLegacy({ actor: legacyEvent.payload, policyId: legacyPolicy.policyId,
+    documentHash: legacyPolicy.documentHash, idempotencyKey: legacyKey, traceId: randomUUID() });
+  assert.equal(ok(await legacyIssue()).policy.status, 'issued');
+  assert.equal(ok(await legacyIssue()).replayed, true);
+  assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [legacyPolicy.policyId])).rows[0].status, 'issued');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [legacyPolicy.policyId])).rows[0].n, 1);
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
   assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations']), financialCounts);
@@ -235,7 +298,7 @@ try {
   sameActorOffer.payload.subjectToken = offer.payload.subjectToken;
   sameActorOffer.signature = await financialIntegrity.digest(eventContent(sameActorOffer));
   const sameActorPolicy = await importOffer(sameActorOffer);
-  await denied(traceId => finance.issue({ actor: offer.payload, policyId: sameActorPolicy.policyId, documentHash: sameActorPolicy.documentHash, idempotencyKey: key, traceId }), 'idempotency_conflict');
+  await denied(traceId => finance.issue({ actor: offer.payload, policyId: sameActorPolicy.policyId, documentHash: sameActorPolicy.documentHash, idempotencyKey: key, challengeId: '80000000-0000-4000-8000-000000000008', code: '000000', traceId }), 'idempotency_conflict');
   const racing = await acceptedOffer(); const racingPolicy = await importOffer(racing); const racingKey = randomUUID();
   const race = await Promise.all(Array.from({ length: 4 }, () => issue(finance, racing, racingPolicy, racingKey)));
   assert.ok(race.every(result => result.status === 'ok'), JSON.stringify(race));
@@ -249,11 +312,13 @@ try {
   const recoveryOffer = await acceptedOffer(); const recoveryPolicy = await importOffer(recoveryOffer); const recoveryKey = randomUUID();
   assert.equal((await issue(new PolicyFinance({ ...base, payments: uncertainGateway }), recoveryOffer, recoveryPolicy, recoveryKey)).status, 'unavailable');
   await db.query("UPDATE policy.payments SET idempotency_key='altered' WHERE policy_id=$1", [recoveryPolicy.policyId]);
-  await denied(traceId => finance.issue({ actor: recoveryOffer.payload, policyId: recoveryPolicy.policyId, documentHash: recoveryPolicy.documentHash, idempotencyKey: recoveryKey, traceId }), 'integrity_violation');
+  await denied(traceId => finance.charge({ actor: recoveryOffer.payload, policyId: recoveryPolicy.policyId, documentHash: recoveryPolicy.documentHash,
+    idempotencyKey: `charge-${recoveryPolicy.policyId}`, traceId }), 'integrity_violation');
   await db.query("UPDATE policy.payments SET idempotency_key='initial-premium' WHERE policy_id=$1", [recoveryPolicy.policyId]);
   await assert.rejects(db.query('UPDATE policy.payments SET id=$2 WHERE policy_id=$1', [recoveryPolicy.policyId, randomUUID()]), error => (error as { code?: string }).code === '23503');
   await db.query('UPDATE policy.payments SET amount=1 WHERE policy_id=$1', [recoveryPolicy.policyId]);
-  await denied(traceId => finance.issue({ actor: recoveryOffer.payload, policyId: recoveryPolicy.policyId, documentHash: recoveryPolicy.documentHash, idempotencyKey: recoveryKey, traceId }), 'integrity_violation');
+  await denied(traceId => finance.charge({ actor: recoveryOffer.payload, policyId: recoveryPolicy.policyId, documentHash: recoveryPolicy.documentHash,
+    idempotencyKey: `charge-${recoveryPolicy.policyId}`, traceId }), 'integrity_violation');
   await db.query('UPDATE policy.payments SET amount=$2 WHERE policy_id=$1', [recoveryPolicy.policyId, recoveryOffer.payload.premium]);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), recoveryOffer, recoveryPolicy, recoveryKey)).policy.status, 'issued');
   assert.deepEqual((await captures(recoveryPolicy.policyId, 'premium.confirmed'))[0].sources.map(source => [source.operation, source.result]),
@@ -355,7 +420,7 @@ try {
       return work(new Proxy(tx, { get(target, key) {
         if (key === 'policy') return async (id: string) => {
           const locked = await target.policy(id);
-          if (transactionNumber === 3) finalLockClock = new Date(finalLockOffer.payload.expiresAt);
+          if (transactionNumber === 7) finalLockClock = new Date(finalLockOffer.payload.expiresAt);
           return locked;
         };
         const value = Reflect.get(target, key);
@@ -393,15 +458,16 @@ try {
   const recoverAll = (service: PolicyFinance) => service.reconcileIssuances(new Date(Date.now() + 60000), 100);
   const chargedWithoutIssuance = async () => {
     const event = await acceptedOffer(), candidate = await importOffer(event);
+    const commandKey = randomUUID();
     const lostEmission: SignatureProvider = { async sign(id, hash) {
       const signed = await signatureProvider.sign(id, hash);
       await db!.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy');
       return signed;
     } };
-    try { assert.equal((await issue(new PolicyFinance({ ...base, signatures: lostEmission }), event, candidate)).status, 'unavailable'); }
+    try { assert.equal((await issue(new PolicyFinance({ ...base, signatures: lostEmission }), event, candidate, commandKey)).status, 'unavailable'); }
     finally { await db!.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
     assert.equal((await stateOf(candidate.policyId)).status, 'charged');
-    return { event, candidate };
+    return { event, candidate, commandKey };
   };
   const stranded = await chargedWithoutIssuance();
   await recoverAll(finance);
@@ -423,18 +489,65 @@ try {
   assert.equal((await issue(new PolicyFinance({ ...base, payments: lostConfirmation }), unrecorded, unrecordedPolicy)).status, 'unavailable');
   assert.equal((await stateOf(unrecordedPolicy.policyId)).status, 'pending');
   await recoverAll(finance);
-  assert.deepEqual(await stateOf(unrecordedPolicy.policyId), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 });
+  assert.deepEqual(await stateOf(unrecordedPolicy.policyId), { status: 'charged', charges: 1, provider: 'confirmed', signatures: 0, issued: 0, open: 1 },
+    'charge reconciliation confirms payment without signing on behalf of the customer');
   const recoveredConfirmation = (await captures(unrecordedPolicy.policyId, 'premium.confirmed'))[0];
   assert.deepEqual(recoveredConfirmation.sources.map(source => [source.operation, source.result]), [['lookup', 'confirmed']]);
   assert.equal(recoveredConfirmation.inputs.trigger, 'reconciliation');
+  assert.equal(ok(await issue(finance, unrecorded, unrecordedPolicy)).policy.status, 'issued');
   const expiredCharge = await chargedWithoutIssuance();
   await recoverAll(new PolicyFinance({ ...base, now: () => new Date(expiredCharge.event.payload.expiresAt) }));
-  assert.deepEqual(await stateOf(expiredCharge.candidate.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 1 });
+  await recoverAll(finance);
+  assert.deepEqual(await stateOf(expiredCharge.candidate.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
   const expiredRefund = (await captures(expiredCharge.candidate.policyId, 'premium.refund_requested'))[0];
   assert.equal(expiredRefund.inputs.refundReason, 'expired_before_sign');
   assert.equal(expiredRefund.inputs.trigger, 'reconciliation');
+  await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'signature_failed');
+  const refundedCommandKey = await financialIntegrity.digest(JSON.stringify(['command-key.v1', expiredCharge.event.payload.clientId, expiredCharge.commandKey]));
+  const terminalRefund = (await db.query<{ result: Record<string, unknown> }>(
+    'SELECT result FROM policy.financial_commands WHERE actor_id=$1 AND idempotency_key=$2',
+    [expiredCharge.event.payload.clientId, refundedCommandKey])).rows[0].result;
+  assert.equal(terminalRefund.status, 'refunded');
+  await db.query('UPDATE policy.financial_commands SET result=$3::JSONB WHERE actor_id=$1 AND idempotency_key=$2',
+    [expiredCharge.event.payload.clientId, refundedCommandKey, JSON.stringify({ ...terminalRefund, documentHash: '0'.repeat(64) })]);
+  try {
+    await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'integrity_violation');
+  } finally {
+    await db.query('UPDATE policy.financial_commands SET result=$3::JSONB WHERE actor_id=$1 AND idempotency_key=$2',
+      [expiredCharge.event.payload.clientId, refundedCommandKey, JSON.stringify(terminalRefund)]);
+  }
+  await denied(traceId => issue(finance, expiredCharge.event, expiredCharge.candidate, expiredCharge.commandKey, traceId), 'signature_failed');
+  assert.deepEqual(await stateOf(expiredCharge.candidate.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
+  const legacyRefundEvent = await acceptedOffer(), legacyRefundPolicy = await importOffer(legacyRefundEvent), legacyRefundKey = randomUUID();
+  const retryLegacyRefund = (service: PolicyFinance, traceId: string) => service.issueLegacy({ actor: legacyRefundEvent.payload,
+    policyId: legacyRefundPolicy.policyId, documentHash: legacyRefundPolicy.documentHash, idempotencyKey: legacyRefundKey, traceId });
+  const refusedLegacy = await retryLegacyRefund(new PolicyFinance({ ...base, signatures: { async sign() { return { status: 'failed' }; } } }), randomUUID());
+  assert.ok(refusedLegacy.status === 'denied' && refusedLegacy.error === 'signature_failed');
+  await recoverAll(finance);
+  await denied(traceId => retryLegacyRefund(finance, traceId), 'signature_failed');
+  assert.deepEqual(await stateOf(legacyRefundPolicy.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
+  const refundChargeEvent = await acceptedOffer(), refundChargePolicy = await importOffer(refundChargeEvent);
+  const refundChargeActor = { clientId: refundChargeEvent.payload.clientId, subjectToken: refundChargeEvent.payload.subjectToken };
+  const refundChargeKey = randomUUID();
+  const chargeExpiring = (service: PolicyFinance) => service.charge({ actor: refundChargeActor, policyId: refundChargePolicy.policyId,
+    documentHash: refundChargePolicy.documentHash, idempotencyKey: refundChargeKey, traceId: randomUUID() });
+  assert.equal(ok(await chargeExpiring(finance)).policy.status, 'charged');
+  let refundUncertain = true;
+  const uncertainChargeRefund: PaymentGateway = { lookup: payment => gateway.lookup(payment), settle: payment => gateway.settle(payment),
+    async refund(payment) {
+      const result = await gateway.refund(payment);
+      if (refundUncertain) { refundUncertain = false; return { status: 'uncertain', reference: null }; }
+      return result;
+    } };
+  const expiredClock = () => new Date(refundChargeEvent.payload.expiresAt);
+  assert.equal((await chargeExpiring(new PolicyFinance({ ...base, now: expiredClock, payments: uncertainChargeRefund }))).status, 'unavailable');
+  assert.equal((await stateOf(refundChargePolicy.policyId)).status, 'refunding');
+  const recoveredChargeRefund = await chargeExpiring(new PolicyFinance({ ...base, now: expiredClock }));
+  assert.ok(recoveredChargeRefund.status === 'denied' && recoveredChargeRefund.error === 'signature_failed');
+  await recoverAll(finance);
+  assert.deepEqual(await stateOf(refundChargePolicy.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
   const raced = await chargedWithoutIssuance();
-  const [raceRecovery, raceRetry] = await Promise.all([recoverAll(finance), issue(finance, raced.event, raced.candidate)]);
+  const [raceRecovery, raceRetry] = await Promise.all([recoverAll(finance), issue(finance, raced.event, raced.candidate, raced.commandKey)]);
   assert.ok(raceRecovery.every(outcome => outcome.outcome !== 'unavailable'), JSON.stringify(raceRecovery));
   assert.equal(ok(raceRetry).policy.status, 'issued');
   assert.deepEqual(await stateOf(raced.candidate.policyId), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 },
@@ -461,8 +574,8 @@ try {
   await recoverAll(finance);
   assert.equal((await stateOf(aged[0])).charges, 0, 'recovery must not charge an unresolved intent the provider never received');
   assert.equal((await stateOf(aged[1])).charges, 0);
-  assert.deepEqual(await stateOf(aged[2]), { status: 'issued', charges: 1, provider: 'confirmed', signatures: 1, issued: 1, open: 0 },
-    'a provider charge with an unrecorded confirmation remains recoverable after more than a day');
+  assert.deepEqual(await stateOf(aged[2]), { status: 'charged', charges: 1, provider: 'confirmed', signatures: 0, issued: 0, open: 1 },
+    'a provider charge with an unrecorded confirmation remains recoverable after more than a day without signing');
 
   const flight = await acceptedOffer('flight_delay'); const flightPolicy = await importOffer(flight);
   assert.equal(ok(await issue(finance, flight, flightPolicy)).policy.status, 'issued');
@@ -567,7 +680,8 @@ try {
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
   const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>('SELECT event_type,payload FROM policy.outbox_events')).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
-    'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'financial.denied'];
+    'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'signature.challenge_created',
+    'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'financial.denied'];
   const expectedPaymentStatus: Record<string, string> = { 'premium.requested': 'pending', 'premium.declined': 'declined', 'premium.confirmed': 'confirmed',
     'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed' };
   for (const action of requiredActions) assert.ok(persisted.some(row => row.event_type === 'policy.' + action), 'missing persisted decision ' + action);
@@ -588,6 +702,13 @@ try {
       assert.deepEqual(contract.decision_capture, capture, 'contract and outbox must retain the same application decision');
       assert.equal(capture.sources[0].source, 'acquisition.offer-accepted.v1');
       assert.ok(capture.inputs.event && typeof capture.inputs.event === 'object');
+    } else if (action.startsWith('signature.')) {
+      assert.equal(capture.inputs.payment, undefined);
+      const challenge = capture.inputs.challenge as { accepted: boolean; attempts: unknown };
+      assert.equal(challenge.accepted, true);
+      assert.ok(typeof challenge.attempts === 'number' && Number.isInteger(challenge.attempts)
+        && challenge.attempts >= 0 && challenge.attempts <= 3, 'challenge history must retain a bounded numeric count');
+      assert.equal(JSON.stringify(capture).includes('demoCode'), false);
     } else {
       const operation = ['parametric.accepted', 'indemnity.confirmed'].includes(action) ? 'indemnity' : 'premium';
       const payment: { id: string; amount: string; currency: string; payment_key: string; request_hash: string } =
@@ -605,9 +726,11 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
+      'signature_attempt_count_and_capture', 'three_wrong_codes_cancel_challenge', 'cancelled_and_expired_challenges_remain_unsigned',
+      'refunded_v1_v2_command_replay_preserves_failure', 'tampered_refunded_result_denied',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'v1_legacy_issue_and_replay', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'charge_retry_completes_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {
   await db?.end();

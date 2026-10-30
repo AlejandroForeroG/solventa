@@ -17,9 +17,10 @@ import { parse } from 'yaml';
 const ajv = new Ajv({ strict: false, allErrors: true });
 addFormats(ajv);
 for (const name of ['common', 'offers', 'policies']) ajv.addSchema({ ...parse(readFileSync(`packages/contracts/openapi/v1/${name}.yaml`, 'utf8')), $id: `https://solventa.test/v1/${name}.yaml` });
-async function contractual(response: Response, domain: string, schema: string) {
+for (const name of ['common', 'policies']) ajv.addSchema({ ...parse(readFileSync(`packages/contracts/openapi/v2/${name}.yaml`, 'utf8')), $id: `https://solventa.test/v2/${name}.yaml` });
+async function contractual(response: Response, domain: string, schema: string, version = 'v1') {
   const body = await response.json();
-  const check = ajv.getSchema(`https://solventa.test/v1/${domain}.yaml#/components/schemas/${schema}`);
+  const check = ajv.getSchema(`https://solventa.test/${version}/${domain}.yaml#/components/schemas/${schema}`);
   assert.ok(check);
   assert.equal(check(body), true, JSON.stringify(check.errors));
   return body as Record<string, unknown>;
@@ -33,7 +34,7 @@ const terms: OfferTerms = { ...actor, offerId: id, offerVersion: 1, quoteId: 'CO
 const policy: PolicyView = { policyId: id, offerId: id, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
 const acceptance = { acceptanceId: id, offerId: id, eventId: id, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance' as const, synthetic: true as const };
 const unexpected = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
-const request = (path: string, body: string | undefined = '{}', headers: Record<string, string> = {}, method = 'POST') => new Request('https://web.example/api/v1' + path, { method, ...(body !== undefined && method !== 'GET' ? { body } : {}), headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic-sealed', origin: 'https://web.example', 'idempotency-key': 'synthetic-operation-1', 'x-trace-id': traceId, ...headers } });
+const request = (path: string, body: string | undefined = '{}', headers: Record<string, string> = {}, method = 'POST', version = 'v1') => new Request(`https://web.example/api/${version}` + path, { method, ...(body !== undefined && method !== 'GET' ? { body } : {}), headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic-sealed', origin: 'https://web.example', 'idempotency-key': 'synthetic-operation-1', 'x-trace-id': traceId, ...headers } });
 
 function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const calls: { operation: string; input: unknown }[] = [];
@@ -55,8 +56,15 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const finance: PolicyHttpDependencies['finance'] = {
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
+    beginSignatureChallenge: async input => { calls.push({ operation: 'challenge', input }); return { status: 'ok', replayed: false, policy,
+      challenge: { challengeId: id, expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }; },
+    cancelSignatureChallenge: async input => { calls.push({ operation: 'cancelChallenge', input }); return { status: 'ok', replayed: false, policy }; },
     issue: async input => { calls.push({ operation: 'issue', input });
       return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
+    issueLegacy: async input => { calls.push({ operation: 'issueLegacy', input });
+      return { status: 'ok', replayed: false, policy: { ...policy, status: 'issued' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
+    charge: async input => { calls.push({ operation: 'charge', input });
+      return { status: 'ok', replayed: false, policy: { ...policy, status: 'charged' }, payment: { status: 'confirmed', reference: 'MOCK-' + id } }; },
   };
   const policyApp = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance });
   const run = (req: Request, policyRoute = false) => (policyRoute ? policyApp : app).fetch(req, { APP_ENV: 'local' } as never);
@@ -150,12 +158,39 @@ test('acceptance returns 202 pending asynchronous issuance, and issue requires t
   assert.equal(pending.policyId, id);
   assert.equal('payment' in pending, false, 'no premium state before the customer confirms issuance');
   assert.deepEqual(calls.find(c => c.operation === 'policyGetByAcceptance')?.input, { actor, acceptanceId: id, traceId });
+  const challenge = await run(request(`/policies/${id}/signature-challenges`, JSON.stringify({ documentHash: policy.documentHash, accepted: true }), {}, 'POST', 'v2'), true);
+  assert.equal(challenge.status, 200);
+  const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash,
+    challengeId: id, code: '123456' }), {}, 'POST', 'v2'), true);
+  assert.equal(response.status, 200);
+  const issued = await contractual(response, 'policies', 'Policy', 'v2');
+  assert.equal(issued.status, 'issued');
+  assert.deepEqual(issued.payment, { status: 'confirmed', reference: 'MOCK-' + id });
+  assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1',
+    documentHash: policy.documentHash, challengeId: id, code: '123456', traceId });
+});
+
+test('charge accepts only the reviewed document and an idempotency key before signature', async () => {
+  const { calls, run } = setup();
+  const path = `/policies/${id}/charge`;
+  assert.equal((await run(request(path, JSON.stringify({ documentHash: policy.documentHash }), {}, 'POST', 'v2'), true)).status, 200);
+  assert.deepEqual(calls.find(call => call.operation === 'charge')?.input,
+    { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
+  const before = calls.length;
+  assert.equal((await run(request(path, JSON.stringify({ documentHash: policy.documentHash, amount: '1.0000' }), {}, 'POST', 'v2'), true)).status, 400);
+  assert.equal((await run(request(path, JSON.stringify({ documentHash: policy.documentHash }), { 'idempotency-key': '' }, 'POST', 'v2'), true)).status, 400);
+  assert.equal(calls.filter(call => call.operation === 'charge').length, 1);
+  assert.equal(calls.length, before + 2);
+});
+
+test('v1 issue retains the previous one-field request for already loaded clients', async () => {
+  const { calls, run } = setup();
   const response = await run(request(`/policies/${id}/issue`, JSON.stringify({ documentHash: policy.documentHash })), true);
   assert.equal(response.status, 200);
   const issued = await contractual(response, 'policies', 'Policy');
   assert.equal(issued.status, 'issued');
-  assert.deepEqual(issued.payment, { status: 'confirmed', reference: 'MOCK-' + id });
-  assert.deepEqual(calls.find(c => c.operation === 'issue')?.input, { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
+  assert.deepEqual(calls.find(call => call.operation === 'issueLegacy')?.input,
+    { actor, policyId: id, idempotencyKey: 'synthetic-operation-1', documentHash: policy.documentHash, traceId });
 });
 
 test('financial routes reach only their owner and retain credentials and safe failure traces', async () => {

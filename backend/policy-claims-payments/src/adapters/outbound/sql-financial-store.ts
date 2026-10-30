@@ -3,7 +3,7 @@ import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -59,6 +59,27 @@ const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
 
 class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
+  async createSignatureChallenge(challenge: SignatureChallenge): Promise<void> {
+    await this.db.query(`INSERT INTO policy.signature_challenges
+      (id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,0,'active')`,
+    [challenge.id, challenge.policyId, challenge.clientId, challenge.subjectToken, challenge.documentHash, challenge.codeHash, challenge.expiresAt]);
+  }
+  async signatureChallenge(id: string, actor: FinancialActor, policyId: string): Promise<SignatureChallenge | null> {
+    const row = (await this.db.query<{ id: string; policy_id: string; client_id: string; subject_token: string; document_hash: string;
+      code_hash: string; expires_at: Date; attempts: number; status: SignatureChallenge['status']; command_key: string | null }>(
+      `SELECT id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts::INT4 AS attempts,status,command_key
+       FROM policy.signature_challenges WHERE id=$1 AND policy_id=$2 AND client_id=$3 AND subject_token=$4 FOR UPDATE`,
+      [id, policyId, actor.clientId, actor.subjectToken])).rows[0];
+    return row ? { id: row.id, policyId: row.policy_id, clientId: row.client_id, subjectToken: row.subject_token,
+      documentHash: row.document_hash, codeHash: row.code_hash, expiresAt: row.expires_at.toISOString(),
+      attempts: row.attempts, status: row.status, commandKey: row.command_key } : null;
+  }
+  async updateSignatureChallenge(id: string, attempts: number, status: SignatureChallenge['status'], commandKey?: string): Promise<void> {
+    const result = await this.db.query(`UPDATE policy.signature_challenges SET attempts=$2,status=$3,command_key=$4 WHERE id=$1`,
+      [id, attempts, status, commandKey ?? null]);
+    if (result.rowCount !== 1) throw new InvalidFinancialRecord();
+  }
   async policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null> {
     const owned = actor ? ' AND f.client_id=$2 AND p.subject_token=$3' : '';
     return recordFrom((await this.db.query<RecordRow>(selectRecord() + ' WHERE p.id=$1' + owned + ' FOR UPDATE OF p',
@@ -285,20 +306,19 @@ export class SqlFinancialStore implements FinancialStore {
       // An unresolved intent can hold a provider charge regardless of its age. Refreshing selected activity rotates
       // bounded batches even when a provider remains unknown; it changes no financial state or customer command.
       const rows = (await db.query<{ id: string; client_id: string; subject_token: string; idempotency_key: string }>(`WITH candidates AS (
-        SELECT p.id,f.client_id,p.subject_token,cmd.idempotency_key,greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at)) AS last_changed
+        SELECT p.id,f.client_id,p.subject_token,cmd.idempotency_key,greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at)) AS last_changed,
+          cmd.created_at AS command_created_at
         FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id
         LEFT JOIN policy.financial_payment_intents i ON i.policy_id=p.id AND i.operation='premium'
         LEFT JOIN policy.payments pay ON pay.id=i.payment_id
-        JOIN LATERAL (SELECT c.idempotency_key FROM policy.financial_commands c
-          WHERE c.policy_id=p.id AND c.actor_id=f.client_id AND c.result IS NULL
-          ORDER BY c.created_at,c.idempotency_key LIMIT 1) cmd ON true
-        WHERE (p.status IN ('charged','refunding') OR (p.status='pending' AND pay.status='pending'))
+        JOIN policy.financial_commands cmd ON cmd.policy_id=p.id AND cmd.actor_id=f.client_id AND cmd.result IS NULL
+        WHERE (p.status IN ('charged','refunding','issued','refunded') OR (p.status='pending' AND pay.status='pending'))
           AND greatest(p.updated_at,coalesce(pay.updated_at,p.updated_at))<$1
-        ORDER BY last_changed,p.id LIMIT $2
+        ORDER BY last_changed,p.id,cmd.created_at DESC,cmd.idempotency_key LIMIT $2
       ), refreshed AS (
         UPDATE policy.policies p SET updated_at=now() FROM candidates c WHERE p.id=c.id RETURNING p.id
       ) SELECT c.id,c.client_id,c.subject_token,c.idempotency_key FROM candidates c JOIN refreshed r ON r.id=c.id
-        ORDER BY c.last_changed,c.id`, [staleBefore.toISOString(), limit])).rows;
+        ORDER BY c.last_changed,c.id,c.command_created_at DESC,c.idempotency_key`, [staleBefore.toISOString(), limit])).rows;
       return rows.map(row => ({ policyId: row.id, actor: { clientId: row.client_id, subjectToken: row.subject_token }, commandKey: row.idempotency_key }));
     });
   }

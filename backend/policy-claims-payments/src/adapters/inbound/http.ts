@@ -8,7 +8,12 @@ export type PolicyHttpDependencies = {
   finance: {
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
     getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult>;
-    issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string; traceId: string }): Promise<FinancialResult>;
+    issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string;
+      challengeId: string; code: string; traceId: string }): Promise<FinancialResult>;
+    issueLegacy(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string; traceId: string }): Promise<FinancialResult>;
+    charge(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string; traceId: string }): Promise<FinancialResult>;
+    beginSignatureChallenge(input: { actor: FinancialActor; policyId: string; documentHash: string; accepted: true; traceId: string }): Promise<FinancialResult>;
+    cancelSignatureChallenge(input: { actor: FinancialActor; policyId: string; challengeId: string; traceId: string }): Promise<FinancialResult>;
   };
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -37,8 +42,14 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   app.get('/health', (c) => c.json({ service: 'policy-claims-payments', status: 'alive' }));
   app.all('/api/v1/policies/:policyId', handler('policies:read'));
   app.all('/api/v1/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
-  app.all('/api/v1/policies/:policyId/issue', handler('policies:issue'));
-  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false) {
+  app.all('/api/v2/policies/:policyId', handler('policies:read'));
+  app.all('/api/v2/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
+  app.all('/api/v1/policies/:policyId/issue', handler('policies:issue', false, 'legacyIssue'));
+  app.all('/api/v2/policies/:policyId/issue', handler('policies:issue', false, 'issue'));
+  app.all('/api/v2/policies/:policyId/charge', handler('policies:issue', false, 'charge'));
+  app.all('/api/v2/policies/:policyId/signature-challenges', handler('policies:issue', false, 'challenge'));
+  app.all('/api/v2/policies/:policyId/signature-challenges/:challengeId/cancel', handler('policies:issue', false, 'cancel'));
+  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' = 'issue') {
     return async (c: import('hono').Context<{ Bindings: PolicyEnv }>) => {
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
@@ -75,11 +86,34 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         else {
           const body = await smallBody(c.req.raw);
           const idempotencyKey = c.req.header('idempotency-key') ?? '';
-          if (!record(body) || Object.keys(body).length !== 1 || typeof body.documentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.documentHash)
-            || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey)) return reply({ error: 'invalid_request' }, 400);
-          result = await deps.finance.issue({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash, traceId });
+          if (action === 'challenge') {
+            if (!record(body) || Object.keys(body).length !== 2 || typeof body.documentHash !== 'string'
+              || !/^[0-9a-f]{64}$/.test(body.documentHash) || body.accepted !== true) return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.beginSignatureChallenge({ actor: principal, policyId, documentHash: body.documentHash, accepted: true, traceId });
+          } else if (action === 'cancel') {
+            const challengeId = (c.req.param('challengeId') ?? '').toLowerCase();
+            if (!UUID.test(challengeId) || !record(body) || Object.keys(body).length !== 0) return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.cancelSignatureChallenge({ actor: principal, policyId, challengeId, traceId });
+          } else if (action === 'charge') {
+            if (!record(body) || Object.keys(body).length !== 1 || typeof body.documentHash !== 'string'
+              || !/^[0-9a-f]{64}$/.test(body.documentHash) || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey))
+              return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.charge({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash, traceId });
+          } else if (action === 'legacyIssue') {
+            if (!record(body) || Object.keys(body).length !== 1 || typeof body.documentHash !== 'string'
+              || !/^[0-9a-f]{64}$/.test(body.documentHash) || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey))
+              return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.issueLegacy({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash, traceId });
+          } else {
+            if (!record(body) || Object.keys(body).length !== 3 || typeof body.documentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.documentHash)
+              || typeof body.challengeId !== 'string' || !UUID.test(body.challengeId) || typeof body.code !== 'string' || !/^[0-9]{6}$/.test(body.code)
+              || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey)) return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.issue({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash,
+              challengeId: body.challengeId.toLowerCase(), code: body.code, traceId });
+          }
         }
-        if (result.status === 'ok') return reply({ ...result.policy, ...(result.payment ? { payment: result.payment } : {}), replayed: result.replayed }, 200);
+        if (result.status === 'ok') return reply({ ...result.policy, ...(result.payment ? { payment: result.payment } : {}),
+          ...(result.challenge ? { challenge: result.challenge } : {}), replayed: result.replayed }, 200);
         // Same opaque response as an absent resource; only a missing import skips the resource-denial record.
         if (result.status === 'denied' && result.error === 'policy_pending') return reply({ error: 'not_found' }, 404);
         if (result.httpStatus === 404 || result.httpStatus === 403) {

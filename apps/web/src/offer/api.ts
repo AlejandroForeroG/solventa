@@ -32,6 +32,7 @@ export type Policy = {
   replayed: boolean;
   traceId: string;
 };
+export type SignatureChallenge = { challengeId: string; expiresAt: string; demoCode: string };
 
 export type FinancialOutcome<T> =
   | { kind: 'ok'; value: T }
@@ -89,6 +90,9 @@ function asPolicy(value: unknown, expected: { offerId?: string; policyId?: strin
     || typeof value.replayed !== 'boolean' || !uuid(value.traceId)) return null;
   const payment = asPayment(value.payment);
   if (payment === undefined) return null;
+  try {
+    if (!isRecord(JSON.parse(value.document))) return null;
+  } catch { return null; }
   const policyId = value.policyId.toLowerCase();
   const offerId = value.offerId.toLowerCase();
   if ((expected.offerId && offerId !== expected.offerId) || (expected.policyId && policyId !== expected.policyId)) return null;
@@ -134,14 +138,41 @@ export const acceptOffer = (offerId: string, idempotencyKey: string, signal?: Ab
 export const policyForAcceptance = (acceptance: Acceptance, signal?: AbortSignal) =>
   send(`/api/v1/policies/by-acceptance/${encodeURIComponent(acceptance.acceptanceId)}/policy`, { signal }, body => asPolicy(body, { offerId: acceptance.offerId }), [200]);
 
-export const issuePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string, signal?: AbortSignal) =>
-  send(`/api/v1/policies/${encodeURIComponent(policy.policyId)}/issue`, post({ documentHash: policy.documentHash }, idempotencyKey, signal),
+const asChallenge = (body: unknown): SignatureChallenge | null => {
+  if (!isRecord(body) || !isRecord(body.challenge) || !uuid(body.challenge.challengeId)
+    || !instant(body.challenge.expiresAt) || typeof body.challenge.demoCode !== 'string'
+    || !/^[0-9]{6}$/.test(body.challenge.demoCode)) return null;
+  return { challengeId: body.challenge.challengeId.toLowerCase(), expiresAt: body.challenge.expiresAt, demoCode: body.challenge.demoCode };
+};
+
+export const beginSignatureChallenge = (policy: Pick<Policy, 'policyId' | 'documentHash'>, signal?: AbortSignal) =>
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/signature-challenges`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ documentHash: policy.documentHash, accepted: true }), signal },
+    asChallenge, [200]);
+
+export const cancelSignatureChallenge = (policyId: string, challengeId: string, signal?: AbortSignal) =>
+  send(`/api/v2/policies/${encodeURIComponent(policyId)}/signature-challenges/${encodeURIComponent(challengeId)}/cancel`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal },
+    body => asPolicy(body, { policyId }), [200]);
+
+export const issuePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string,
+  challengeId: string, code: string, signal?: AbortSignal) =>
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/issue`,
+    post({ documentHash: policy.documentHash, challengeId, code }, idempotencyKey, signal),
+    body => asPolicy(body, { policyId: policy.policyId }), [200]);
+
+export const chargePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string, signal?: AbortSignal) =>
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/charge`,
+    post({ documentHash: policy.documentHash }, idempotencyKey, signal),
     body => asPolicy(body, { policyId: policy.policyId }), [200]);
 
 export type FinancialApi = {
   createOffer: typeof createOffer;
   acceptOffer: typeof acceptOffer;
   policyForAcceptance: typeof policyForAcceptance;
+  beginSignatureChallenge: typeof beginSignatureChallenge;
+  cancelSignatureChallenge: typeof cancelSignatureChallenge;
   issuePolicy: typeof issuePolicy;
+  chargePolicy: typeof chargePolicy;
 };
-export const financialApi: FinancialApi = { createOffer, acceptOffer, policyForAcceptance, issuePolicy };
+export const financialApi: FinancialApi = { createOffer, acceptOffer, policyForAcceptance, beginSignatureChallenge, cancelSignatureChallenge, issuePolicy, chargePolicy };
