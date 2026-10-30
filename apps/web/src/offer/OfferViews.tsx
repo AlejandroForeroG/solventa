@@ -117,7 +117,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
           <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
           <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel} disabled={busy}>{t('policy.cancelSignature')}</button>
         </>}
-        {error && <p className="banner banner-error" role="alert">{t(`policy.challenge.${error}`)}</p>}
+        {(error || (challenge && secondsLeft === 0)) && <p className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
         </>}
         <p className="note">{t('policy.mock')}</p>
       </div>
