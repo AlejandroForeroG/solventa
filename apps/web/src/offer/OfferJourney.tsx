@@ -84,6 +84,7 @@ export function OfferJourney(props: {
   const issueChallengeId = useRef<string | null>(props.resume?.issue?.challengeId ?? null);
   const accepted = useRef<Acceptance | null>(null);
   const knownPolicyId = useRef<string | null>(null);
+  const signatureRecoveryRequired = useRef(false);
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   const say = (id: string, values?: Record<string, string>) => latest.current.announce(latest.current.intl.formatMessage({ id }, values));
   const api = () => latest.current.props.api ?? financialApi;
@@ -166,7 +167,9 @@ export function OfferJourney(props: {
             setPhase({ name: 'review', policy: outcome.value, documentChanged: true });
           }
           else if (outcome.value.status === 'charged' && outcome.value.payment?.status === 'confirmed') {
-            setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
+            if (signatureRecoveryRequired.current) {
+              setPhase({ name: 'recovering', policy: outcome.value, busy: false }); say('live.refunding');
+            } else setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
               : { name: 'charged', policy: outcome.value });
           }
           else if (outcome.value.payment?.status === 'pending' && chargeKeys.current.has(`${outcome.value.policyId}:${outcome.value.documentHash}`)) {
@@ -243,7 +246,7 @@ export function OfferJourney(props: {
         setPhase(recovering ? { name: 'recovering', policy, busy: false } : { name: 'signing', policy, busy: false, uncertain: true }); say(recovering ? 'live.refunding' : 'live.issueUncertain');
         return;
       }
-      if (outcome.kind === 'rejected' && outcome.code === 'offer_invalid') { expired(policy.offerId); return; }
+      if (outcome.kind === 'rejected' && outcome.code === 'offer_invalid') { await recoverSignature(); return; }
       if (outcome.kind === 'rejected' && outcome.code === 'document_mismatch') {
         setChecked(false);
         setChallenge(null);
@@ -300,6 +303,13 @@ export function OfferJourney(props: {
     } catch { /* aborted: the user left the screen */ }
   }
 
+  async function recoverSignature() {
+    signatureRecoveryRequired.current = true;
+    setChecked(false); setChallenge(null); setCode(''); issueChallengeId.current = null;
+    if (accepted.current) await waitForPolicy(accepted.current);
+    else fail('generic', 7);
+  }
+
   async function beginChallenge(policy: Policy, fromRetry = false) {
     const current = signal.current;
     if (!current || (!fromRetry && phase.name !== 'signing') || !checked || challengeBusy) return;
@@ -312,6 +322,7 @@ export function OfferJourney(props: {
         setPhase({ name: 'signing', policy, busy: false, uncertain: false });
         setChallenge(outcome.value); issueChallengeId.current = outcome.value.challengeId; setCode('');
       }
+      else if (outcome.kind === 'rejected' && outcome.code === 'offer_invalid') await recoverSignature();
       else if (outcome.kind === 'rejected') setChallengeError(outcome.code);
       else common(outcome, () => void beginChallenge(policy, true), 7);
     } finally { setChallengeBusy(false); }
