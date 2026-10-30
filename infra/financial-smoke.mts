@@ -97,6 +97,43 @@ try {
       'a rejection must not change an already existing financial provider outcome');
   };
 
+  const attemptOffer = await acceptedOffer(), attemptPolicy = await importOffer(attemptOffer);
+  const attemptInput = { actor: attemptOffer.payload, policyId: attemptPolicy.policyId, documentHash: attemptPolicy.documentHash };
+  assert.equal(ok(await finance.charge({ ...attemptInput, idempotencyKey: randomUUID(), traceId: randomUUID() })).policy.status, 'charged');
+  const beginAttempt = async () => {
+    const challenge = ok(await finance.beginSignatureChallenge({ ...attemptInput, accepted: true, traceId: randomUUID() })).challenge;
+    assert.ok(challenge); return challenge;
+  };
+  const limitedChallenge = await beginAttempt();
+  const wrongCode = limitedChallenge.demoCode === '000000' ? '111111' : '000000';
+  for (let attempts = 1; attempts <= 3; attempts++) {
+    await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+      challengeId: limitedChallenge.challengeId, code: wrongCode, traceId }), 'authentication_failed');
+    const saved = (await db.query('SELECT attempts::INT4 AS attempts,status FROM policy.signature_challenges WHERE id=$1', [limitedChallenge.challengeId])).rows[0];
+    assert.deepEqual(saved, { attempts, status: attempts === 3 ? 'cancelled' : 'active' });
+    const failures = await captures(attemptPolicy.policyId, 'signature.challenge_failed');
+    assert.equal(failures.length, attempts);
+    assert.equal((failures.at(-1)!.inputs.challenge as { attempts: unknown }).attempts, attempts,
+      'failed authentication must persist the numeric attempt count in its decision capture');
+  }
+  await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: limitedChallenge.challengeId, code: limitedChallenge.demoCode, traceId }), 'challenge_invalid');
+  const cancelledChallenge = await beginAttempt();
+  ok(await finance.cancelSignatureChallenge({ actor: attemptInput.actor, policyId: attemptPolicy.policyId,
+    challengeId: cancelledChallenge.challengeId, traceId: randomUUID() }));
+  await denied(traceId => finance.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: cancelledChallenge.challengeId, code: cancelledChallenge.demoCode, traceId }), 'challenge_invalid');
+  const expiringChallenge = await beginAttempt();
+  const atChallengeExpiry = new PolicyFinance({ ...base, now: () => new Date(expiringChallenge.expiresAt) });
+  await denied(traceId => atChallengeExpiry.issue({ ...attemptInput, idempotencyKey: randomUUID(),
+    challengeId: expiringChallenge.challengeId, code: expiringChallenge.demoCode, traceId }), 'challenge_expired');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [attemptPolicy.policyId])).rows[0].n, 0);
+  assert.equal(ok(await finance.get({ actor: attemptInput.actor, policyId: attemptPolicy.policyId, traceId: randomUUID() })).policy.status, 'charged');
+  const validChallenge = await beginAttempt();
+  assert.equal(ok(await finance.issue({ ...attemptInput, idempotencyKey: randomUUID(), challengeId: validChallenge.challengeId,
+    code: validChallenge.demoCode, traceId: randomUUID() })).policy.status, 'issued');
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.payments WHERE policy_id=$1 AND operation='premium'", [attemptPolicy.policyId])).rows[0].n, 1);
+
   const offer = await acceptedOffer();
   const policy = await importOffer(offer);
   const originalCounts = await counts(['policies', 'inbox_events', 'audit_events', 'outbox_events']);
@@ -620,7 +657,7 @@ try {
   const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>('SELECT event_type,payload FROM policy.outbox_events')).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'signature.challenge_created',
-    'signature.challenge_verified', 'financial.denied'];
+    'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'financial.denied'];
   const expectedPaymentStatus: Record<string, string> = { 'premium.requested': 'pending', 'premium.declined': 'declined', 'premium.confirmed': 'confirmed',
     'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed' };
   for (const action of requiredActions) assert.ok(persisted.some(row => row.event_type === 'policy.' + action), 'missing persisted decision ' + action);
@@ -643,7 +680,10 @@ try {
       assert.ok(capture.inputs.event && typeof capture.inputs.event === 'object');
     } else if (action.startsWith('signature.')) {
       assert.equal(capture.inputs.payment, undefined);
-      assert.equal((capture.inputs.challenge as { accepted: boolean }).accepted, true);
+      const challenge = capture.inputs.challenge as { accepted: boolean; attempts: unknown };
+      assert.equal(challenge.accepted, true);
+      assert.ok(typeof challenge.attempts === 'number' && Number.isInteger(challenge.attempts)
+        && challenge.attempts >= 0 && challenge.attempts <= 3, 'challenge history must retain a bounded numeric count');
       assert.equal(JSON.stringify(capture).includes('demoCode'), false);
     } else {
       const operation = ['parametric.accepted', 'indemnity.confirmed'].includes(action) ? 'indemnity' : 'premium';
@@ -662,6 +702,7 @@ try {
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
+      'signature_attempt_count_and_capture', 'three_wrong_codes_cancel_challenge', 'cancelled_and_expired_challenges_remain_unsigned',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
       'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'v1_legacy_issue_and_replay', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'charge_retry_completes_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
