@@ -485,10 +485,10 @@ test('signature cannot initiate a premium charge while payment remains pending',
 });
 
 async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
-  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
+  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'issue.v2' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
   const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
   const commandKey = await financialIntegrity.digest(randomUUID());
-  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v1', policy.clientId, policy.id,
+  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v2', policy.clientId, policy.id,
     options.commandDocumentHash ?? policy.documentHash]));
   let provider: 'unknown' | 'confirmed' | 'refunded' = options.provider;
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [], captures: FinancialDecisionCapture[] = [];

@@ -143,23 +143,23 @@ const asChallenge = (body: unknown): SignatureChallenge | null => {
 };
 
 export const beginSignatureChallenge = (policy: Pick<Policy, 'policyId' | 'documentHash'>, signal?: AbortSignal) =>
-  send(`/api/v1/policies/${encodeURIComponent(policy.policyId)}/signature-challenges`,
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/signature-challenges`,
     { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ documentHash: policy.documentHash, accepted: true }), signal },
     asChallenge, [200]);
 
 export const cancelSignatureChallenge = (policyId: string, challengeId: string, signal?: AbortSignal) =>
-  send(`/api/v1/policies/${encodeURIComponent(policyId)}/signature-challenges/${encodeURIComponent(challengeId)}/cancel`,
+  send(`/api/v2/policies/${encodeURIComponent(policyId)}/signature-challenges/${encodeURIComponent(challengeId)}/cancel`,
     { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal },
     body => asPolicy(body, { policyId }), [200]);
 
 export const issuePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string,
   challengeId: string, code: string, signal?: AbortSignal) =>
-  send(`/api/v1/policies/${encodeURIComponent(policy.policyId)}/issue`,
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/issue`,
     post({ documentHash: policy.documentHash, challengeId, code }, idempotencyKey, signal),
     body => asPolicy(body, { policyId: policy.policyId }), [200]);
 
 export const chargePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string, signal?: AbortSignal) =>
-  send(`/api/v1/policies/${encodeURIComponent(policy.policyId)}/charge`,
+  send(`/api/v2/policies/${encodeURIComponent(policy.policyId)}/charge`,
     post({ documentHash: policy.documentHash }, idempotencyKey, signal),
     body => asPolicy(body, { policyId: policy.policyId }), [200]);
 

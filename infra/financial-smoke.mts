@@ -237,6 +237,13 @@ try {
   assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.requested'", [declinedPolicy.policyId])).rows[0].n, 1);
   assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE resource_id=$1 AND action='premium.declined'", [declinedPolicy.policyId])).rows[0].n, 1);
   assert.equal(ok(await issue(finance, offer, policy, key)).policy.status, 'issued');
+  const legacyEvent = await acceptedOffer(), legacyPolicy = await importOffer(legacyEvent), legacyKey = randomUUID();
+  const legacyIssue = () => finance.issueLegacy({ actor: legacyEvent.payload, policyId: legacyPolicy.policyId,
+    documentHash: legacyPolicy.documentHash, idempotencyKey: legacyKey, traceId: randomUUID() });
+  assert.equal(ok(await legacyIssue()).policy.status, 'issued');
+  assert.equal(ok(await legacyIssue()).replayed, true);
+  assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [legacyPolicy.policyId])).rows[0].status, 'issued');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [legacyPolicy.policyId])).rows[0].n, 1);
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
   assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations']), financialCounts);
@@ -458,6 +465,26 @@ try {
   const expiredRefund = (await captures(expiredCharge.candidate.policyId, 'premium.refund_requested'))[0];
   assert.equal(expiredRefund.inputs.refundReason, 'expired_before_sign');
   assert.equal(expiredRefund.inputs.trigger, 'reconciliation');
+  const refundChargeEvent = await acceptedOffer(), refundChargePolicy = await importOffer(refundChargeEvent);
+  const refundChargeActor = { clientId: refundChargeEvent.payload.clientId, subjectToken: refundChargeEvent.payload.subjectToken };
+  const refundChargeKey = randomUUID();
+  const chargeExpiring = (service: PolicyFinance) => service.charge({ actor: refundChargeActor, policyId: refundChargePolicy.policyId,
+    documentHash: refundChargePolicy.documentHash, idempotencyKey: refundChargeKey, traceId: randomUUID() });
+  assert.equal(ok(await chargeExpiring(finance)).policy.status, 'charged');
+  let refundUncertain = true;
+  const uncertainChargeRefund: PaymentGateway = { lookup: payment => gateway.lookup(payment), settle: payment => gateway.settle(payment),
+    async refund(payment) {
+      const result = await gateway.refund(payment);
+      if (refundUncertain) { refundUncertain = false; return { status: 'uncertain', reference: null }; }
+      return result;
+    } };
+  const expiredClock = () => new Date(refundChargeEvent.payload.expiresAt);
+  assert.equal((await chargeExpiring(new PolicyFinance({ ...base, now: expiredClock, payments: uncertainChargeRefund }))).status, 'unavailable');
+  assert.equal((await stateOf(refundChargePolicy.policyId)).status, 'refunding');
+  const recoveredChargeRefund = await chargeExpiring(new PolicyFinance({ ...base, now: expiredClock }));
+  assert.ok(recoveredChargeRefund.status === 'denied' && recoveredChargeRefund.error === 'signature_failed');
+  await recoverAll(finance);
+  assert.deepEqual(await stateOf(refundChargePolicy.policyId), { status: 'refunded', charges: 1, provider: 'refunded', signatures: 0, issued: 0, open: 0 });
   const raced = await chargedWithoutIssuance();
   const [raceRecovery, raceRetry] = await Promise.all([recoverAll(finance), issue(finance, raced.event, raced.candidate, raced.commandKey)]);
   assert.ok(raceRecovery.every(outcome => outcome.outcome !== 'unavailable'), JSON.stringify(raceRecovery));
@@ -637,7 +664,7 @@ try {
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',
       'altered_event_authentication', 'same_event_changed_payload', 'expired_offer_denial', 'import_contract_inbox_audit_outbox_rollback', 'replay_integrity_revalidated', 'foreign_malformed_policy_remains_opaque', 'unimported_acceptance_pending_unaudited',
       'concurrent_redelivery_single_import', 'concurrent_rival_envelope_conflict', 'orphan_payment_denied', 'indemnity_claim_confirmation_and_premium_isolation', 'idempotent_charge_and_issuance', 'concurrent_retries', 'durable_provider_restart',
-      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
+      'uncertain_confirmation_reconciliation', 'premium_intent_audit_from_first_write', 'compound_initial_premium_rollback_per_table', 'premium_decline_audit_atomic', 'forged_confirmation_without_provider_proof_denied', 'altered_confirmation_reference_denied', 'immutable_provider_intent_identity', 'altered_payment_key_and_amount_denied', 'v1_legacy_issue_and_replay', 'confirmed_charge_then_emission_rollback_recovery', 'compound_confirmation_and_issuance_atomicity', 'signature_failure_refund', 'expired_signature_refund', 'expiry_after_final_lock_refund', 'autonomous_issuance_recovery', 'premium_state_read', 'autonomous_unrecorded_charge_recovery', 'autonomous_expired_charge_refund', 'charge_retry_completes_refund', 'recovery_racing_client_retry', 'persisted_signature_deadline_enforced', 'parametric_once', 'event_before_issuance_denied', 'issuance_timestamp_sealed', 'stored_policy_tamper', 'transactional_outbox_rollback', 'required_audit_failure_closed', 'runtime_audit_and_inbox_immutable'] }));
 } catch (error) { testFailure = error; throw error; }
 finally {
   await db?.end();

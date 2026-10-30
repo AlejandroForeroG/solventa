@@ -416,7 +416,7 @@ describe('SPA definitive offer and policy issuance', () => {
 
   test('confirms a charge before signing the reviewed document', async () => {
     pact.given('the accepted offer was imported').uponReceiving('a charge for the reviewed document')
-      .withRequest(post(`/api/v1/policies/${policyId}/charge`, offerKey, { documentHash }))
+      .withRequest(post(`/api/v2/policies/${policyId}/charge`, offerKey, { documentHash }))
       .willRespondWith({ status: 200, headers: jsonResponse, body: { ...policyBody('charged'),
         payment: { status: MatchersV3.equal('confirmed'), reference: MatchersV3.regex('^MOCK-[0-9a-f-]{36}$',
           'MOCK-60000000-0000-4000-8000-000000000006') } } });
@@ -428,7 +428,7 @@ describe('SPA definitive offer and policy issuance', () => {
 
   test('issues the reviewed document', async () => {
     pact.given('the accepted offer was imported').uponReceiving('an issuance of the reviewed document')
-      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
+      .withRequest(post(`/api/v2/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
       .willRespondWith({ status: 200, headers: jsonResponse, body: policyBody('issued') });
     await pact.executeTest(async server => {
       const outcome = await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey, challengeId, code));
@@ -438,13 +438,13 @@ describe('SPA definitive offer and policy issuance', () => {
 
   test('reports an uncertain issuance as unavailable', async () => {
     pact.given('the policy service is down').uponReceiving('an issuance while Policy is unavailable')
-      .withRequest(post(`/api/v1/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
+      .withRequest(post(`/api/v2/policies/${policyId}/issue`, offerKey, { documentHash, challengeId, code }))
       .willRespondWith({ status: 503 });
     await pact.executeTest(async server => assert.equal((await withServer(server.url, () => issuePolicy({ policyId, documentHash }, offerKey, challengeId, code))).kind, 'unavailable'));
   });
   test('requests a code for the reviewed document', async () => {
     pact.given('the accepted offer was imported').uponReceiving('a signature challenge for the reviewed document')
-      .withRequest({ method: 'POST', path: `/api/v1/policies/${policyId}/signature-challenges`,
+      .withRequest({ method: 'POST', path: `/api/v2/policies/${policyId}/signature-challenges`,
         headers: { 'content-type': 'application/json' }, body: { documentHash, accepted: true } })
       .willRespondWith({ status: 200, headers: jsonResponse, body: { ...policyBody('pending'),
         challenge: { challengeId: MatchersV3.equal(challengeId), expiresAt: instant('2026-10-15T00:05:00.000Z'),

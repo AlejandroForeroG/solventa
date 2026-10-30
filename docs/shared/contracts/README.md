@@ -8,7 +8,7 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
-The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI uses relative versioned servers (`/api/v1`, `/api/v2`) and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
 
 | Environment | API reference |
 |---|---|
@@ -56,7 +56,8 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
 | `openapi/v1/offers.yaml` | Owned profiled synthetic offers, preliminary status on degraded signals, explicit current risk consent, and asynchronous acceptance of definitive offers |
-| `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
+| `openapi/v1/policies.yaml` | Owned policy lookup and the original one-field combined mock issuance for already loaded web clients |
+| `openapi/v2/policies.yaml` | Separate premium charge, document-bound signature challenge and issuance; v1 remains available without a sunset date |
 | `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
 | `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
