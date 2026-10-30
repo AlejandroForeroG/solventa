@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { runtimeCoveragePlugins, captureRuntimeCoverage } from './support/runtime-coverage.mjs';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -86,7 +87,7 @@ test('a post-commit HTTP acceptance imports independently while its signed outbo
       builder.onResolve({filter:/^pg$/},()=>({path:'pg',namespace:'collaborator'}));
       builder.onLoad({filter:/.*/,namespace:'collaborator'},()=>({loader:'js',contents:
         "import {env} from 'cloudflare:workers';export class Client{on(){}async connect(){}async query(sql,args){return env.STATE.query(sql,args)}async end(){}}"}));
-    }}] });
+    }}, ...runtimeCoveragePlugins()] });
   const stateBundle = await build({stdin:{contents:stateSource,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:*']});
   const worker = (name, rpc) => ({name,modules:true,script:producer.outputFiles[0].text,compatibilityDate:config.compatibility_date,compatibilityFlags:config.compatibility_flags,
     bindings:{APP_ENV:'local',SIGNAL_PROVIDER:'direct_simulated',QUOTE_HMAC_KEY:'c'.repeat(64),FINANCIAL_PROVIDER_MODE:'mock',FINANCIAL_EVENT_KEY:'b'.repeat(64),ACQUISITION_DB:{connectionString:'postgresql://synthetic.invalid/unused'}},
@@ -95,7 +96,11 @@ test('a post-commit HTTP acceptance imports independently while its signed outbo
     {name:'state',modules:true,script:stateBundle.outputFiles[0].text,compatibilityDate:config.compatibility_date},
     {name:'receiver',modules:true,script:receiver,compatibilityDate:config.compatibility_date,serviceBindings:{STATE:'state'},
       queueConsumers:{events:{maxBatchSize:1,maxBatchTimeout:0,maxRetries:2}}}]}));
-  t.after(()=>runtime.dispose()); await runtime.ready;
+  t.after(async () => {
+    try { await captureRuntimeCoverage(runtime, ['producer', 'legacy']); }
+    finally { await runtime.dispose(); }
+  });
+  await runtime.ready;
   const state = await runtime.getWorker('state');
   const configure = async settings => {await state.fetch('http://state/configure',{method:'POST',body:JSON.stringify(settings)});};
   const snapshot = async () => (await state.fetch('http://state/')).json();
