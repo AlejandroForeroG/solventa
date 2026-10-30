@@ -622,7 +622,7 @@ test('policy reads expose the premium state and only an acknowledged synthetic r
   }
 });
 
-async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund') {
+async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund' | 'legacy_before_confirmation') {
   const { policy, payment, actor } = await stateFixture(moment === 'before_refund' ? 'charged' : 'pending', moment === 'before_refund' ? 'confirmed' : 'pending', { status: 'unknown', reference: null });
   const confirmed: Payment = { ...payment, status: 'confirmed', providerReference: 'MOCK-' + payment.id };
   const signedAt = '2026-10-16T02:01:00.000Z';
@@ -633,6 +633,9 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
   let transactions = 0;
   const commands: { actorId: string; key: string; policyId: string; requestHash: string; result: PolicyView | null }[] = [];
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [];
+  const challengeId = randomUUID();
+  const code = '123456';
+  const codeHash = await financialIntegrity.digest(JSON.stringify(['signature-code-v1', challengeId, code]));
   const tx = {
     async policy() {
       return transactions >= issuedFrom ? { policy: { ...policy, status: 'issued' as const }, premium: { ...confirmed }, signature: { ...signature } }
@@ -647,7 +650,11 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
     async setPolicyStatus() { actions.push('status'); },
     async audit(action: string) { actions.push(action); },
     async confirmPremium() { actions.push('premium.confirmed'); },
-    async completeIssuance() { actions.push('policy.issued'); }
+    async completeIssuance() { actions.push('policy.issued'); },
+    async signatureChallenge() { return { id: challengeId, policyId: policy.id, clientId: policy.clientId,
+      subjectToken: actor.subjectToken, documentHash: policy.documentHash, codeHash,
+      expiresAt: '2026-10-17T02:01:00.000Z', attempts: 0, status: 'active', commandKey: null }; },
+    async updateSignatureChallenge() {}
   } as unknown as FinancialTransaction;
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
     store: { ...unusedStoreReads, async transaction(work) { transactions++; return work(tx); }, async rejection(_id, _trace, code) { actions.push(code); } },
@@ -656,9 +663,16 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
       async refund() { calls.refund++; throw new Error('unexpected_refund'); } },
     signatures: { async sign() { calls.sign++; return { status: 'failed' }; } } });
   const idempotencyKey = randomUUID();
-  const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() });
+  const result = moment === 'before_confirmation'
+    ? await finance.charge({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() })
+    : moment === 'legacy_before_confirmation'
+    ? await finance.issueLegacy({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() })
+    : await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey,
+      challengeId, code, traceId: randomUUID() });
   const ownCommand = { actorId: policy.clientId, key: await financialIntegrity.digest(JSON.stringify(['command-key.v1', policy.clientId, idempotencyKey])),
-    policyId: policy.id, requestHash: await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, policy.documentHash])) };
+    policyId: policy.id, requestHash: await financialIntegrity.digest(JSON.stringify([
+      moment === 'before_confirmation' ? 'charge.v1' : moment === 'legacy_before_confirmation' ? 'issue.v1' : 'issue.v2',
+      policy.clientId, policy.id, policy.documentHash])) };
   return { result, calls, actions, commands, ownCommand, receipt: confirmed.providerReference };
 }
 
@@ -672,11 +686,20 @@ test('a policy issued by another request before this charge is confirmed is retu
   assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
 });
 
+test('a previously loaded v1 client retains its original issuance shape across a concurrent issue', async () => {
+  const { result, calls, actions, commands, ownCommand } = await issuedConcurrently('legacy_before_confirmation');
+  assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
+  assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
+  assert.deepEqual(actions, ['premium.confirmed']);
+  assert.ok(result.status === 'ok');
+  assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }]);
+});
+
 test('a signature refusal does not refund a charge that another request already issued', async () => {
   const { result, calls, actions, commands, ownCommand } = await issuedConcurrently('before_refund');
   assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
   assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
-  assert.deepEqual(actions, [], 'no refund intent is recorded for an issued policy');
+  assert.deepEqual(actions, ['signature.challenge_verified'], 'no refund intent is recorded for an issued policy');
   assert.ok(result.status === 'ok');
   assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
 });
