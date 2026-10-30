@@ -415,6 +415,44 @@ describe('definitive offer journey', () => {
     expect(api.issuePolicy).not.toHaveBeenCalled();
   });
 
+  it('prevents signing and cancellation from racing a pending signature', async () => {
+    let finish: (value: FinancialOutcome<Policy>) => void = () => {};
+    const api = stubs({ issuePolicy: vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await signFromReview(user);
+    const confirm = screen.getByRole('button', { name: 'Firmar póliza' });
+    const cancel = screen.getByRole('button', { name: 'Cancelar firma' });
+    expect(confirm).toBeDisabled();
+    expect(cancel).toBeDisabled();
+    expect(screen.getByLabelText('Código de autenticación')).toBeDisabled();
+    await user.click(confirm); await user.click(cancel);
+    expect(api.issuePolicy).toHaveBeenCalledTimes(1);
+    expect(api.cancelSignatureChallenge).not.toHaveBeenCalled();
+    await act(async () => { finish(ok(issued)); });
+    expect(await screen.findByRole('heading', { name: 'Póliza emitida' })).toBeInTheDocument();
+  });
+
+  it('prevents duplicate cancellation and signing until cancellation is confirmed', async () => {
+    let finish: (value: FinancialOutcome<Policy>) => void = () => {};
+    const api = stubs({ issuePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'authentication_failed' }),
+      cancelSignatureChallenge: vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await signFromReview(user);
+    const cancel = screen.getByRole('button', { name: 'Cancelar firma' });
+    await user.click(cancel);
+    expect(cancel).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    await user.click(cancel);
+    expect(api.cancelSignatureChallenge).toHaveBeenCalledTimes(1);
+    expect(api.issuePolicy).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(ok(charged)); });
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(screen.queryByLabelText('Código de autenticación')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Obtener código de prueba' })).toBeDisabled();
+  });
+
   it('keeps an uncertain signature retry inert while its request is in flight', async () => {
     let finish: (value: FinancialOutcome<Policy>) => void = () => {};
     const api = stubs({ issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
@@ -422,6 +460,8 @@ describe('definitive offer journey', () => {
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await signFromReview(user);
     const refresh = await screen.findByRole('button', { name: 'Actualizar estado' });
+    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancelar firma' })).toBeDisabled();
     await user.click(refresh);
     expect(refresh).toHaveAttribute('aria-disabled', 'true');
     await user.click(refresh); await user.click(refresh);
