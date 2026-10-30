@@ -638,6 +638,25 @@ describe('definitive offer journey', () => {
 });
 
 describe('quote flow continuation', () => {
+  it.each([
+    ['charged', 'Cobro confirmado'], ['refunding', 'Reverso pendiente'],
+    ['refunded', 'Cobro revertido'], ['issued', 'Póliza emitida']
+  ] as const)('discovers an authoritative %s purchase from a legacy draft after an upgrade', async (status, title) => {
+    window.sessionStorage.setItem('solventa.purchase-draft', JSON.stringify({ version: 1, savedAt: Date.now(), quoteId: quote.quoteId,
+      acceptance, issue: { policyId: pending.policyId, documentHash: pending.documentHash, key: '70000000-0000-4000-8000-000000000007' } }));
+    const financial = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok({ ...charged, status,
+      payment: status === 'refunded' ? { status: 'refunded', reference: receipt } : charged.payment })) });
+    render(wrap('es-CO', <QuoteFlow financial={financial as never} />));
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+    expect(financial.policyForAcceptance).toHaveBeenCalledWith(acceptance, expect.any(AbortSignal));
+    expect(financial.createOffer).not.toHaveBeenCalled();
+    expect(financial.acceptOffer).not.toHaveBeenCalled();
+    expect(financial.chargePolicy).not.toHaveBeenCalled();
+    expect(financial.issuePolicy).not.toHaveBeenCalled();
+    if (status === 'charged' || status === 'refunding') expect(readPurchaseDraft()).toEqual({ quoteId: quote.quoteId, acceptance, issue: null });
+    else await waitFor(() => expect(readPurchaseDraft()).toBeNull());
+  });
+
   it('opens a purchase interrupted by a reload on its policy, and sends the user to the form when leaving it', async () => {
     savePurchaseDraft({ quoteId: quote.quoteId, acceptance, issue: null });
     const financial = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok({ ...pending, payment: { status: 'declined', reference: null } })) });

@@ -45,4 +45,25 @@ describe('purchase draft', () => {
     expect(readPurchaseDraft()).toBeNull();
     expect(savePurchaseDraft(draft)).toBe(false);
   });
+
+  it('migrates a legacy issue to acceptance discovery without renewing its lifetime', () => {
+    const savedAt = Date.now();
+    const legacy = { ...draft, version: 1, savedAt, issue: { policyId: '30000000-0000-4000-8000-000000000003',
+      documentHash: 'a'.repeat(64), key: '70000000-0000-4000-8000-000000000007' } };
+    window.sessionStorage.setItem(KEY, JSON.stringify(legacy));
+    expect(readPurchaseDraft(savedAt + 20 * 60 * 1000)).toEqual({ ...draft, issue: null });
+    expect(JSON.parse(window.sessionStorage.getItem(KEY) ?? '{}').savedAt).toBe(savedAt);
+    expect(readPurchaseDraft(savedAt + 30 * 60 * 1000)).toBeNull();
+    expect(window.sessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('rejects altered legacy commands and explicitly invalid challenge identifiers', () => {
+    const legacy = { policyId: '30000000-0000-4000-8000-000000000003', documentHash: 'a'.repeat(64),
+      key: '70000000-0000-4000-8000-000000000007' };
+    for (const issue of [{ ...legacy, key: 'altered' }, { ...legacy, documentHash: 'invalid' },
+      { ...legacy, challengeId: null }, { ...legacy, challengeId: 'invalid' }]) {
+      window.sessionStorage.setItem(KEY, JSON.stringify({ ...draft, version: 1, savedAt: Date.now(), issue }));
+      expect(readPurchaseDraft()).toBeNull();
+    }
+  });
 });
