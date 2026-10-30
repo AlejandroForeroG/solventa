@@ -18,7 +18,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input)
     }).fetch(request, this.env, this.ctx);
-    if (new URL(request.url).pathname.startsWith('/api/v1/policies/')) {
+    if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {
       const placement = request.headers.get('cf-placement') ?? '';
       const traceId = response.headers.get('x-trace-id') ?? '';
       console.log(JSON.stringify({ event: 'financial_http_duration', environment: this.env.APP_ENV,

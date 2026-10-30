@@ -13,121 +13,6 @@ tags:
   - name: Policies
     description: Owner-authorized synthetic policies.
 paths:
-  /policies/{policyId}/charge:
-    post:
-      operationId: chargeOwnPolicy
-      summary: Confirm the mock premium for a reviewed policy before signing
-      tags: [Policies]
-      security:
-        - WebSession: []
-        - LocalWebSession: []
-      parameters:
-        - $ref: ./common.yaml#/components/parameters/TraceId
-        - name: policyId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [documentHash]
-              properties:
-                documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
-      responses:
-        "200":
-          description: The charged policy and one confirmed mock receipt; signing remains separate.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Policy' }
-        "400": { $ref: '#/components/responses/Invalid' }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "403": { $ref: '#/components/responses/Forbidden' }
-        "404": { $ref: '#/components/responses/NotFound' }
-        "405": { $ref: '#/components/responses/MethodNotAllowed' }
-        "409": { $ref: '#/components/responses/Conflict' }
-        "503": { $ref: '#/components/responses/Unavailable' }
-  /policies/{policyId}/signature-challenges:
-    post:
-      operationId: beginPolicySignatureChallenge
-      summary: Accept a reviewed charged policy document and request a simulated authentication code
-      tags: [Policies]
-      security:
-        - WebSession: []
-        - LocalWebSession: []
-      parameters:
-        - $ref: ./common.yaml#/components/parameters/TraceId
-        - name: policyId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [documentHash, accepted]
-              properties:
-                documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
-                accepted: { type: boolean, enum: [true] }
-      responses:
-        "200":
-          description: Short-lived simulated code for this owner and exact document after confirmed payment.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/SignatureChallengeResponse' }
-        "400": { $ref: '#/components/responses/Invalid' }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "403": { $ref: '#/components/responses/Forbidden' }
-        "404": { $ref: '#/components/responses/NotFound' }
-        "405": { $ref: '#/components/responses/MethodNotAllowed' }
-        "409": { $ref: '#/components/responses/Conflict' }
-        "503": { $ref: '#/components/responses/Unavailable' }
-  /policies/{policyId}/signature-challenges/{challengeId}/cancel:
-    post:
-      operationId: cancelPolicySignatureChallenge
-      summary: Cancel an unconsumed signature challenge
-      tags: [Policies]
-      security:
-        - WebSession: []
-        - LocalWebSession: []
-      parameters:
-        - $ref: ./common.yaml#/components/parameters/TraceId
-        - name: policyId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - name: challengeId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: false }
-      responses:
-        "200":
-          description: Challenge cancelled; policy remains unsigned.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Policy' }
-        "400": { $ref: '#/components/responses/Invalid' }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "403": { $ref: '#/components/responses/Forbidden' }
-        "404": { $ref: '#/components/responses/NotFound' }
-        "405": { $ref: '#/components/responses/MethodNotAllowed' }
-        "409": { $ref: '#/components/responses/Conflict' }
-        "503": { $ref: '#/components/responses/Unavailable' }
   /policies/{policyId}:
     get:
       operationId: getOwnPolicy
@@ -179,7 +64,7 @@ paths:
   /policies/{policyId}/issue:
     post:
       operationId: issueOwnPolicy
-      summary: Authenticate the reviewed charged document and issue a policy
+      summary: Confirm the reviewed document and issue a policy
       tags:
         - Policies
       security:
@@ -238,12 +123,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/Unavailable"
-      description: Requires a charged policy with confirmed premium, same-origin POST, an active challenge for the exact
-        documentHash returned by GET and its six-digit simulated code. Three
-        failed attempts cancel the challenge; expiry or cancellation blocks
-        issuance. A verified challenge is consumed with the
-        durable issuance command, so retries use the same command key and
-        challenge ID. The owner derives the premium and beneficiary from immutable
+      description: Requires same-origin POST and the exact documentHash returned by
+        GET. The owner derives the premium and beneficiary from immutable
         accepted terms; caller-supplied amounts, approvals and payment
         destinations are invalid. Stable provider keys and durable steps protect
         retries. A failed signature compensates a confirmed mock charge; an
@@ -322,11 +203,6 @@ components:
       in: cookie
       name: solventa-session
   schemas:
-    SignatureChallengeResponse:
-      allOf:
-        - $ref: '#/components/schemas/Policy'
-        - type: object
-          required: [challenge]
     Error:
       type: object
       additionalProperties: false
@@ -403,14 +279,6 @@ components:
             - mock
         payment:
           $ref: "#/components/schemas/PremiumPayment"
-        challenge:
-          type: object
-          additionalProperties: false
-          required: [challengeId, expiresAt, demoCode]
-          properties:
-            challengeId: { type: string, format: uuid }
-            expiresAt: { type: string, format: date-time }
-            demoCode: { type: string, pattern: '^[0-9]{6}$' }
         replayed:
           type: boolean
         traceId:
@@ -444,18 +312,10 @@ components:
       additionalProperties: false
       required:
         - documentHash
-        - challengeId
-        - code
       properties:
         documentHash:
           type: string
           pattern: ^[0-9a-f]{64}$
-        challengeId:
-          type: string
-          format: uuid
-        code:
-          type: string
-          pattern: ^[0-9]{6}$
   responses:
     Invalid:
       description: Invalid JSON, media type, resource identifier, unsupported field,

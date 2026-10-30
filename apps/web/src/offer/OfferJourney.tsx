@@ -217,7 +217,10 @@ export function OfferJourney(props: {
     const retrying = phase.name === 'signing' && !phase.busy && phase.uncertain;
     if (!current || (!recovering && !retrying && (phase.name !== 'signing' || phase.busy || !checked || !challenge || !/^[0-9]{6}$/.test(code)))) return;
     const activeChallengeId = challenge?.challengeId ?? issueChallengeId.current;
-    if (!activeChallengeId) return;
+    if (!activeChallengeId) {
+      if (recovering) void charge(policy);
+      return;
+    }
     const identity = `${policy.policyId}:${policy.documentHash}`;
     const key = issueKeys.current.get(identity) ?? newIdempotencyKey();
     issueKeys.current.set(identity, key);
@@ -297,24 +300,30 @@ export function OfferJourney(props: {
     } catch { /* aborted: the user left the screen */ }
   }
 
-  async function beginChallenge(policy: Policy) {
+  async function beginChallenge(policy: Policy, fromRetry = false) {
     const current = signal.current;
-    if (!current || phase.name !== 'signing' || !checked || challengeBusy) return;
+    if (!current || (!fromRetry && phase.name !== 'signing') || !checked || challengeBusy) return;
     setChallengeBusy(true);
     setChallengeError(null);
     try {
       const outcome = await api().beginSignatureChallenge(policy, current);
       if (current.aborted) return;
-      if (outcome.kind === 'ok') { setChallenge(outcome.value); issueChallengeId.current = outcome.value.challengeId; setCode(''); }
+      if (outcome.kind === 'ok') {
+        setPhase({ name: 'signing', policy, busy: false, uncertain: false });
+        setChallenge(outcome.value); issueChallengeId.current = outcome.value.challengeId; setCode('');
+      }
       else if (outcome.kind === 'rejected') setChallengeError(outcome.code);
-      else common(outcome, () => void beginChallenge(policy), 7);
+      else common(outcome, () => void beginChallenge(policy, true), 7);
     } finally { setChallengeBusy(false); }
   }
 
   async function cancelChallenge(policy: Policy) {
     if (!challenge || !signal.current) return;
     const outcome = await api().cancelSignatureChallenge(policy.policyId, challenge.challengeId, signal.current);
-    if (outcome.kind === 'ok') { setChallenge(null); issueChallengeId.current = null; setCode(''); setChecked(false); setChallengeError(null); }
+    if (outcome.kind === 'ok') {
+      setPhase({ name: 'signing', policy, busy: false, uncertain: false });
+      setChallenge(null); issueChallengeId.current = null; setCode(''); setChecked(false); setChallengeError(null);
+    }
     else if (outcome.kind === 'rejected') setChallengeError(outcome.code);
     else common(outcome, () => void cancelChallenge(policy), 7);
   }

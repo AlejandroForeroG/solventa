@@ -1,0 +1,574 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Policies
+  version: 2.0.0
+  description: Authenticated web-only academic financial flow. External data,
+    payment and signature providers are explicitly mocked; Solventa
+    authorization, owner transactions and idempotency remain real. Disabled in
+    production. Credentials, actor identifiers, approval and amounts cannot be
+    selected by clients. All responses are no-store and correlated.
+servers:
+  - url: /api/v2
+tags:
+  - name: Policies
+    description: Owner-authorized synthetic policies.
+paths:
+  /policies/{policyId}/charge:
+    post:
+      operationId: chargeOwnPolicy
+      summary: Confirm the mock premium for a reviewed policy before signing
+      tags: [Policies]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [documentHash]
+              properties:
+                documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
+      responses:
+        "200":
+          description: The charged policy and one confirmed mock receipt; signing remains separate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Policy' }
+        "400": { $ref: '#/components/responses/Invalid' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "405": { $ref: '#/components/responses/MethodNotAllowed' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /policies/{policyId}/signature-challenges:
+    post:
+      operationId: beginPolicySignatureChallenge
+      summary: Accept a reviewed charged policy document and request a simulated authentication code
+      tags: [Policies]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [documentHash, accepted]
+              properties:
+                documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
+                accepted: { type: boolean, enum: [true] }
+      responses:
+        "200":
+          description: Short-lived simulated code for this owner and exact document after confirmed payment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignatureChallengeResponse' }
+        "400": { $ref: '#/components/responses/Invalid' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "405": { $ref: '#/components/responses/MethodNotAllowed' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /policies/{policyId}/signature-challenges/{challengeId}/cancel:
+    post:
+      operationId: cancelPolicySignatureChallenge
+      summary: Cancel an unconsumed signature challenge
+      tags: [Policies]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: challengeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "200":
+          description: Challenge cancelled; policy remains unsigned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Policy' }
+        "400": { $ref: '#/components/responses/Invalid' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "405": { $ref: '#/components/responses/MethodNotAllowed' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /policies/{policyId}:
+    get:
+      operationId: getOwnPolicy
+      summary: Read owned policy and the document to review
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /policies/{policyId}/issue:
+    post:
+      operationId: issueOwnPolicy
+      summary: Authenticate the reviewed charged document and issue a policy
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueRequest"
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      description: Requires a charged policy with confirmed premium, same-origin POST, an active challenge for the exact
+        documentHash returned by GET and its six-digit simulated code. Three
+        failed attempts cancel the challenge; expiry or cancellation blocks
+        issuance. A verified challenge is consumed with the
+        durable issuance command, so retries use the same command key and
+        challenge ID. The owner derives the premium and beneficiary from immutable
+        accepted terms; caller-supplied amounts, approvals and payment
+        destinations are invalid. Stable provider keys and durable steps protect
+        retries. A failed signature compensates a confirmed mock charge; an
+        uncertain outcome is unavailable and must be reconciled, never blindly
+        charged again. Mock issuance is not legal insurance or real money
+        movement.
+        A signature_failed response can occur during a concurrent refund;
+        read the owned policy and require status refunded before confirming
+        compensation. Retry an uncertain operation with its original key.
+        After document_mismatch, reread and review the document before
+        submitting its current server-provided fingerprint.
+  /policies/by-acceptance/{acceptanceId}/policy:
+    get:
+      operationId: getOwnPolicyByAcceptance
+      summary: Resolve an owned acceptance to its policy
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: acceptanceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current or replayed result.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      description: Returns 404 until the signed acceptance event has been consumed, or
+        if the acceptance belongs to another user. No policy is created by this
+        query. Retry this read while issuance remains pending. An absent
+        pre-import row does not generate a financial rejection or a security
+        denial notification. An existing acceptance owned by another client or
+        subject produces the required financial and minimal security denial
+        audits without exposing its record. The public not_found response
+        remains indistinguishable; unavailable required auditing returns 503.
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+  schemas:
+    SignatureChallengeResponse:
+      allOf:
+        - $ref: '#/components/schemas/Policy'
+        - type: object
+          required: [challenge]
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+        traceId:
+          type: string
+          format: uuid
+    Policy:
+      type: object
+      additionalProperties: false
+      required:
+        - policyId
+        - offerId
+        - offerVersion
+        - status
+        - premium
+        - currency
+        - effectiveFrom
+        - effectiveUntil
+        - document
+        - documentHash
+        - synthetic
+        - providerMode
+        - replayed
+        - traceId
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        offerId:
+          type: string
+          format: uuid
+        offerVersion:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - pending
+            - charged
+            - issued
+            - refunding
+            - refunded
+        premium:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        currency:
+          type: string
+          enum:
+            - COP
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveUntil:
+          type: string
+          format: date-time
+        document:
+          type: string
+        documentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        synthetic:
+          type: boolean
+          enum:
+            - true
+        providerMode:
+          type: string
+          enum:
+            - mock
+        payment:
+          $ref: "#/components/schemas/PremiumPayment"
+        challenge:
+          type: object
+          additionalProperties: false
+          required: [challengeId, expiresAt, demoCode]
+          properties:
+            challengeId: { type: string, format: uuid }
+            expiresAt: { type: string, format: date-time }
+            demoCode: { type: string, pattern: '^[0-9]{6}$' }
+        replayed:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+    PremiumPayment:
+      type: object
+      additionalProperties: false
+      description: Current state of the policy's single premium charge with the
+        synthetic provider. Absent until the customer confirms issuance. A
+        declined premium is final for this policy. The reference is the
+        synthetic receipt and is present only once the provider confirmed the
+        charge; it is not a real payment receipt.
+      required:
+        - status
+        - reference
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - declined
+            - refunded
+        reference:
+          type: string
+          nullable: true
+          pattern: ^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+    IssueRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - documentHash
+        - challengeId
+        - code
+      properties:
+        documentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        challengeId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+  responses:
+    Invalid:
+      description: Invalid JSON, media type, resource identifier, unsupported field,
+        idempotency key or body exceeding 1024 bytes.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Invalid, expired or revoked user session.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Unauthorized Origin or missing consent/permission.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource is absent or owned by another user.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MethodNotAllowed:
+      description: Method not allowed.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Expired or altered resource, rejected decision or conflicting
+        idempotency payload.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Identity, storage or mock provider unavailable; no partial success
+        is declared.
+      headers:
+        X-Trace-Id:
+          schema:
+            type: string
+            format: uuid
+        Cache-Control:
+          schema:
+            type: string
+            enum:
+              - no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

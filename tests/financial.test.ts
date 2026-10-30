@@ -485,10 +485,10 @@ test('signature cannot initiate a premium charge while payment remains pending',
 });
 
 async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
-  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
+  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'issue.v2' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
   const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
   const commandKey = await financialIntegrity.digest(randomUUID());
-  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v1', policy.clientId, policy.id,
+  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v2', policy.clientId, policy.id,
     options.commandDocumentHash ?? policy.documentHash]));
   let provider: 'unknown' | 'confirmed' | 'refunded' = options.provider;
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [], captures: FinancialDecisionCapture[] = [];
@@ -622,7 +622,7 @@ test('policy reads expose the premium state and only an acknowledged synthetic r
   }
 });
 
-async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund') {
+async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund' | 'legacy_before_confirmation') {
   const { policy, payment, actor } = await stateFixture(moment === 'before_refund' ? 'charged' : 'pending', moment === 'before_refund' ? 'confirmed' : 'pending', { status: 'unknown', reference: null });
   const confirmed: Payment = { ...payment, status: 'confirmed', providerReference: 'MOCK-' + payment.id };
   const signedAt = '2026-10-16T02:01:00.000Z';
@@ -665,11 +665,14 @@ async function issuedConcurrently(moment: 'before_confirmation' | 'before_refund
   const idempotencyKey = randomUUID();
   const result = moment === 'before_confirmation'
     ? await finance.charge({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() })
+    : moment === 'legacy_before_confirmation'
+    ? await finance.issueLegacy({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey, traceId: randomUUID() })
     : await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey,
       challengeId, code, traceId: randomUUID() });
   const ownCommand = { actorId: policy.clientId, key: await financialIntegrity.digest(JSON.stringify(['command-key.v1', policy.clientId, idempotencyKey])),
     policyId: policy.id, requestHash: await financialIntegrity.digest(JSON.stringify([
-      moment === 'before_confirmation' ? 'charge.v1' : 'issue.v1', policy.clientId, policy.id, policy.documentHash])) };
+      moment === 'before_confirmation' ? 'charge.v1' : moment === 'legacy_before_confirmation' ? 'issue.v1' : 'issue.v2',
+      policy.clientId, policy.id, policy.documentHash])) };
   return { result, calls, actions, commands, ownCommand, receipt: confirmed.providerReference };
 }
 
@@ -681,6 +684,15 @@ test('a policy issued by another request before this charge is confirmed is retu
   assert.deepEqual(actions, [], 'no confirmation, issuance or refund decision is recorded twice');
   assert.ok(result.status === 'ok');
   assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
+});
+
+test('a previously loaded v1 client retains its original issuance shape across a concurrent issue', async () => {
+  const { result, calls, actions, commands, ownCommand } = await issuedConcurrently('legacy_before_confirmation');
+  assert.ok(result.status === 'ok' && result.policy.status === 'issued', JSON.stringify(result));
+  assert.deepEqual(calls, { settle: 0, refund: 0, sign: 1 });
+  assert.deepEqual(actions, ['premium.confirmed']);
+  assert.ok(result.status === 'ok');
+  assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }]);
 });
 
 test('a signature refusal does not refund a charge that another request already issued', async () => {

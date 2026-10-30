@@ -190,6 +190,54 @@ describe('definitive offer journey', () => {
     expect(api.issuePolicy).not.toHaveBeenCalled();
   });
 
+  it('recovers a charge refund without asking for a signature challenge', async () => {
+    const refunding = { ...charged, status: 'refunding' as const };
+    const refunded = { ...charged, status: 'refunded' as const, payment: { status: 'refunded' as const, reference: receipt } };
+    const api = stubs({ chargePolicy: vi.fn().mockResolvedValueOnce({ kind: 'rejected', code: 'signature_failed' })
+      .mockResolvedValueOnce({ kind: 'rejected', code: 'signature_failed' }),
+    policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce(ok(refunding)).mockResolvedValue(ok(refunded)) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: 'Verificar y recuperar operación' }));
+    expect(await screen.findByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
+    expect(api.chargePolicy).toHaveBeenCalledTimes(2);
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+    expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
+    expect(api.chargePolicy.mock.calls[0][1]).toBe(api.chargePolicy.mock.calls[1][1]);
+  });
+
+  it('restores the signature form after retrying an unavailable challenge', async () => {
+    const api = stubs({ beginSignatureChallenge: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(challenge)) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
+    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
+    await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByLabelText('Código de autenticación')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Firma electrónica' })).toBeInTheDocument();
+    expect(api.beginSignatureChallenge).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores the signature form after retrying an unavailable cancellation', async () => {
+    const api = stubs({ cancelSignatureChallenge: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(charged)) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
+    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancelar firma' }));
+    await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('heading', { name: 'Firma electrónica' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Obtener código de prueba' })).toBeInTheDocument();
+    expect(api.cancelSignatureChallenge).toHaveBeenCalledTimes(2);
+  });
+
   it('never shows the accepted 202 as an issued policy and offers a manual refresh when delivery is slow', async () => {
     const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue({ kind: 'notFound' }) });
     const { user } = journey(api);

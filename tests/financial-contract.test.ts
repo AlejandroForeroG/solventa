@@ -15,6 +15,7 @@ addFormats(ajv);
 const common = parse(read('openapi/v1/common.yaml'));
 ajv.addSchema({ ...common, $id: 'https://solventa.test/v1/common.yaml' });
 for (const domain of ['offers', 'policies']) ajv.addSchema({ ...parse(read(`openapi/v1/${domain}.yaml`)), $id: `https://solventa.test/v1/${domain}.yaml` });
+for (const domain of ['common', 'policies']) ajv.addSchema({ ...parse(read(`openapi/v2/${domain}.yaml`)), $id: `https://solventa.test/v2/${domain}.yaml` });
 const validate = (domain: string, schema: string, body: unknown) => {
   const check = ajv.getSchema(`https://solventa.test/v1/${domain}.yaml#/components/schemas/${schema}`);
   assert.ok(check);
@@ -51,12 +52,19 @@ test('the offer contract exposes preliminary profiling without changing the defi
 });
 
 test('issue contract rejects free amounts, approval and destinations', () => {
-  const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/IssueRequest');
+  const check = ajv.getSchema('https://solventa.test/v2/policies.yaml#/components/schemas/IssueRequest');
   assert.ok(check);
   const request = { documentHash: 'a'.repeat(64), challengeId: '80000000-0000-4000-8000-000000000008', code: '123456' };
   assert.equal(check(request), true);
   assert.equal(check({ documentHash: request.documentHash }), false);
   for (const extra of [{ amount: '1.0000' }, { approved: true }, { beneficiary: 'another-client' }]) assert.equal(check({ ...request, ...extra }), false);
+});
+
+test('v1 issue contract retains the reviewed hash without new required fields', () => {
+  const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/IssueRequest');
+  assert.ok(check);
+  assert.equal(check({ documentHash: 'a'.repeat(64) }), true);
+  assert.equal(check({ documentHash: 'a'.repeat(64), challengeId: '80000000-0000-4000-8000-000000000008' }), false);
 });
 
 test('signed event schema agrees with both consumer payload shapes without authorizing example signatures', () => {

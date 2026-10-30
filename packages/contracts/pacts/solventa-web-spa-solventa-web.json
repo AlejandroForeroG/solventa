@@ -19,7 +19,7 @@
           "idempotency-key": "22222222-2222-4222-8222-222222222222"
         },
         "method": "POST",
-        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/charge"
+        "path": "/api/v2/policies/30000000-0000-4000-8000-000000000003/charge"
       },
       "response": {
         "body": {
@@ -1747,7 +1747,7 @@
           "Content-Type": "application/json"
         },
         "method": "POST",
-        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/signature-challenges"
+        "path": "/api/v2/policies/30000000-0000-4000-8000-000000000003/signature-challenges"
       },
       "response": {
         "body": {
@@ -2163,7 +2163,7 @@
           "idempotency-key": "22222222-2222-4222-8222-222222222222"
         },
         "method": "POST",
-        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/issue"
+        "path": "/api/v2/policies/30000000-0000-4000-8000-000000000003/issue"
       },
       "response": {
         "body": {
@@ -2327,7 +2327,7 @@
           "idempotency-key": "22222222-2222-4222-8222-222222222222"
         },
         "method": "POST",
-        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/issue"
+        "path": "/api/v2/policies/30000000-0000-4000-8000-000000000003/issue"
       },
       "response": {
         "status": 503
