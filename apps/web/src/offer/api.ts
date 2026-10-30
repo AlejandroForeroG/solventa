@@ -90,6 +90,9 @@ function asPolicy(value: unknown, expected: { offerId?: string; policyId?: strin
     || typeof value.replayed !== 'boolean' || !uuid(value.traceId)) return null;
   const payment = asPayment(value.payment);
   if (payment === undefined) return null;
+  try {
+    if (!isRecord(JSON.parse(value.document))) return null;
+  } catch { return null; }
   const policyId = value.policyId.toLowerCase();
   const offerId = value.offerId.toLowerCase();
   if ((expected.offerId && offerId !== expected.offerId) || (expected.policyId && policyId !== expected.policyId)) return null;
