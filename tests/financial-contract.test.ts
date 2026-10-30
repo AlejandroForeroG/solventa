@@ -53,8 +53,10 @@ test('the offer contract exposes preliminary profiling without changing the defi
 test('issue contract rejects free amounts, approval and destinations', () => {
   const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/IssueRequest');
   assert.ok(check);
-  assert.equal(check({ documentHash: 'a'.repeat(64) }), true);
-  for (const extra of [{ amount: '1.0000' }, { approved: true }, { beneficiary: 'another-client' }]) assert.equal(check({ documentHash: 'a'.repeat(64), ...extra }), false);
+  const request = { documentHash: 'a'.repeat(64), challengeId: '80000000-0000-4000-8000-000000000008', code: '123456' };
+  assert.equal(check(request), true);
+  assert.equal(check({ documentHash: request.documentHash }), false);
+  for (const extra of [{ amount: '1.0000' }, { approved: true }, { beneficiary: 'another-client' }]) assert.equal(check({ ...request, ...extra }), false);
 });
 
 test('signed event schema agrees with both consumer payload shapes without authorizing example signatures', () => {

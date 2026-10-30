@@ -4,6 +4,189 @@
   },
   "interactions": [
     {
+      "description": "a charge for the reviewed document",
+      "providerStates": [
+        {
+          "name": "the accepted offer was imported"
+        }
+      ],
+      "request": {
+        "body": {
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "22222222-2222-4222-8222-222222222222"
+        },
+        "method": "POST",
+        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/charge"
+      },
+      "response": {
+        "body": {
+          "currency": "COP",
+          "document": "{\"synthetic\":true}",
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "effectiveFrom": "2026-10-15T00:00:00.000Z",
+          "effectiveUntil": "2027-10-15T00:00:00.000Z",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "offerVersion": 1,
+          "payment": {
+            "reference": "MOCK-60000000-0000-4000-8000-000000000006",
+            "status": "confirmed"
+          },
+          "policyId": "30000000-0000-4000-8000-000000000003",
+          "premium": "77760.0000",
+          "providerMode": "mock",
+          "replayed": false,
+          "status": "charged",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.document": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\{.+\\}$"
+                }
+              ]
+            },
+            "$.documentHash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.effectiveFrom": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.effectiveUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.offerVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.payment.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^MOCK-[0-9a-f-]{36}$"
+                }
+              ]
+            },
+            "$.payment.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.policyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.premium": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.providerMode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.replayed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a consent authorization",
       "providerStates": [
         {
@@ -1549,6 +1732,198 @@
       }
     },
     {
+      "description": "a signature challenge for the reviewed document",
+      "providerStates": [
+        {
+          "name": "the accepted offer was imported"
+        }
+      ],
+      "request": {
+        "body": {
+          "accepted": true,
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v1/policies/30000000-0000-4000-8000-000000000003/signature-challenges"
+      },
+      "response": {
+        "body": {
+          "challenge": {
+            "challengeId": "80000000-0000-4000-8000-000000000008",
+            "demoCode": "123456",
+            "expiresAt": "2026-10-15T00:05:00.000Z"
+          },
+          "currency": "COP",
+          "document": "{\"synthetic\":true}",
+          "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "effectiveFrom": "2026-10-15T00:00:00.000Z",
+          "effectiveUntil": "2027-10-15T00:00:00.000Z",
+          "offerId": "10000000-0000-4000-8000-000000000001",
+          "offerVersion": 1,
+          "policyId": "30000000-0000-4000-8000-000000000003",
+          "premium": "77760.0000",
+          "providerMode": "mock",
+          "replayed": false,
+          "status": "pending",
+          "synthetic": true,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.challenge.challengeId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.challenge.demoCode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.challenge.expiresAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.document": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\{.+\\}$"
+                }
+              ]
+            },
+            "$.documentHash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.effectiveFrom": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.effectiveUntil": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.offerId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.offerVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.policyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.premium": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^(0|[1-9][0-9]{0,14})\\.[0-9]{4}$"
+                }
+              ]
+            },
+            "$.providerMode": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.replayed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.synthetic": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "equality"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "an acceptance of an expired offer",
       "providerStates": [
         {
@@ -1779,6 +2154,8 @@
       ],
       "request": {
         "body": {
+          "challengeId": "80000000-0000-4000-8000-000000000008",
+          "code": "123456",
           "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
         "headers": {
@@ -1941,6 +2318,8 @@
       ],
       "request": {
         "body": {
+          "challengeId": "80000000-0000-4000-8000-000000000008",
+          "code": "123456",
           "documentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
         "headers": {

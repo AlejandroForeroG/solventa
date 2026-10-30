@@ -6,7 +6,7 @@ import Ajv from 'ajv';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import type { FinancialActor, PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
 import { eventContent, eventWithinIssuedCoverage, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, money, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
-import type { AcceptanceSnapshot, AcceptedPolicyLookup, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
+import type { AcceptanceSnapshot, AcceptedPolicyLookup, FinancialStore, FinancialTransaction, ImportedEvent, IssuanceCommit, Payment, PaymentGateway, SignatureChallenge, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
@@ -22,11 +22,66 @@ const readStore = (tx: Pick<FinancialTransaction, 'policy'>) => ({
   readPolicy: (id: string, actor: Parameters<FinancialStore['readPolicy']>[1]) => tx.policy(id, actor),
   readAcceptedPolicy: unusedStoreReads.readAcceptedPolicy
 });
+const challengeId = '80000000-0000-4000-8000-000000000008';
+const challengeCode = '123456';
+const challengeFor = async (policy: StoredPolicy) => ({ id: challengeId, policyId: policy.id, clientId: policy.clientId,
+  subjectToken: policy.subjectToken, documentHash: policy.documentHash,
+  codeHash: await financialIntegrity.digest(JSON.stringify(['signature-code-v1', challengeId, challengeCode])),
+  expiresAt: policy.offer.expiresAt, attempts: 0, status: 'active' as const, commandKey: null });
 
 test('financial amounts preserve DECIMAL(19,4) exactly without accepting floats, exponent or overflow', () => {
   for (const value of ['0.0001', '999999999999999.9999', '86400.0000']) assert.equal(money(value), true);
   for (const value of [86400, '86400', '1e4', '-1.0000', '01.0000', '0.0000', '1000000000000000.0000', '1.00001']) assert.equal(money(value), false);
   assert.equal(money('0.0000', false), true);
+});
+
+test('signature challenge binds owner and document, limits code attempts and blocks charge after cancellation or expiry', async () => {
+  const event = await acceptedOffer(), policy = await storedFrom(event, randomUUID());
+  policy.status = 'charged';
+  const premium: Payment = { id: randomUUID(), policyId: policy.id, operation: 'premium', amount: policy.premium,
+    currency: 'COP', key: 'initial-premium', hash: '', status: 'confirmed', providerReference: null };
+  premium.providerReference = 'MOCK-' + premium.id;
+  premium.hash = await financialIntegrity.digest(paymentContent(premium));
+  let clock = financialNow(), premiumStarts = 0;
+  const challenges = new Map<string, SignatureChallenge>();
+  const tx = {
+    async policy() { return { policy, premium, signature: null }; },
+    async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
+    async createSignatureChallenge(challenge: SignatureChallenge) { challenges.set(challenge.id, challenge); },
+    async signatureChallenge(id: string) { return challenges.get(id) ?? null; },
+    async updateSignatureChallenge(id: string, attempts: number, status: 'active' | 'cancelled' | 'consumed', commandKey?: string) {
+      const challenge = challenges.get(id); if (!challenge) throw new Error('missing_challenge');
+      challenges.set(id, { ...challenge, attempts, status, commandKey: commandKey ?? null });
+    },
+    async audit() {},
+    async beginPremium() { premiumStarts++; throw new Error('stop_before_provider'); }
+  } as unknown as FinancialTransaction;
+  const never = async (): Promise<never> => { throw new Error('provider_not_expected'); };
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: () => clock, newId: randomUUID,
+    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection() {} },
+    payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
+  const begin = () => finance.beginSignatureChallenge({ actor: event.payload, policyId: policy.id, documentHash: policy.documentHash,
+    accepted: true, traceId: randomUUID() });
+  const first = await begin(); assert.equal(first.status, 'ok');
+  if (first.status !== 'ok' || !first.challenge) throw new Error('challenge_missing');
+  const attempt = (id: string, code: string, actor = event.payload, hash = policy.documentHash) => finance.issue({ actor,
+    policyId: policy.id, documentHash: hash, challengeId: id, code, idempotencyKey: randomUUID(), traceId: randomUUID() });
+  assert.equal((await attempt(first.challenge.challengeId, first.challenge.demoCode, { ...event.payload, clientId: randomUUID() })).status, 'denied');
+  assert.equal((await attempt(first.challenge.challengeId, first.challenge.demoCode, event.payload, '0'.repeat(64))).status, 'denied');
+  for (let i = 0; i < 3; i++) {
+    const denied = await attempt(first.challenge.challengeId, '000000' === first.challenge.demoCode ? '111111' : '000000');
+    assert.ok(denied.status === 'denied' && denied.error === 'authentication_failed');
+  }
+  assert.equal(challenges.get(first.challenge.challengeId)?.status, 'cancelled');
+  assert.equal((await attempt(first.challenge.challengeId, first.challenge.demoCode)).status, 'denied');
+  const second = await begin(); if (second.status !== 'ok' || !second.challenge) throw new Error('challenge_missing');
+  await finance.cancelSignatureChallenge({ actor: event.payload, policyId: policy.id, challengeId: second.challenge.challengeId, traceId: randomUUID() });
+  assert.equal((await attempt(second.challenge.challengeId, second.challenge.demoCode)).status, 'denied');
+  const third = await begin(); if (third.status !== 'ok' || !third.challenge) throw new Error('challenge_missing');
+  clock = new Date(Date.parse(third.challenge.expiresAt));
+  const expired = await attempt(third.challenge.challengeId, third.challenge.demoCode);
+  assert.ok(expired.status === 'denied' && expired.error === 'challenge_expired');
+  assert.equal(premiumStarts, 0);
 });
 
 test('only a complete synthetic accepted offer from this environment reaches the policy boundary', async () => {
@@ -113,7 +168,8 @@ async function stateFixture(policyStatus: StoredPolicy['status'], paymentStatus:
   // Deliberately narrow unit fixture: SQL persistence and rollback are exercised by financial-smoke.mts.
   const tx = { async policy() { return { policy, premium: payment, signature: null }; },
     async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
-    async createCommand() {} } as unknown as FinancialTransaction;
+    async signatureChallenge() { return challengeFor(policy); }, async updateSignatureChallenge() {},
+    async createCommand() {}, async audit() {} } as unknown as FinancialTransaction;
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
     store: { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection() { rejected++; } },
     payments: { async lookup() { return { ...known, reference: known.reference === 'MOCK-confirmed' ? payment.providerReference : known.reference }; }, async settle() { settled++; return { status: 'uncertain', reference: null }; }, async refund() { throw new Error('unexpected_refund'); } },
@@ -135,28 +191,68 @@ test('a claimed confirmation cannot create a new charge or replace its provider 
     { status: 'refunded' as const, reference: 'MOCK-confirmed' }]) {
     const fixture = await stateFixture('charged', 'confirmed', known);
     const result = await fixture.finance.issue({ actor: fixture.actor, policyId: fixture.policy.id, documentHash: fixture.policy.documentHash,
-      idempotencyKey: randomUUID(), traceId: randomUUID() });
+      idempotencyKey: randomUUID(), challengeId, code: challengeCode, traceId: randomUUID() });
     assert.ok(result.status === 'denied' && result.error === 'integrity_violation');
     assert.deepEqual(fixture.counts(), { settled: 0, rejected: 1 });
   }
 });
 
+test('a confirmed charge returns the unsigned policy without invoking the signature provider', async () => {
+  const fixture = await stateFixture('charged', 'confirmed', { status: 'confirmed', reference: 'MOCK-confirmed' });
+  const result = await fixture.finance.charge({ actor: fixture.actor, policyId: fixture.policy.id,
+    documentHash: fixture.policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+  assert.ok(result.status === 'ok' && result.policy.status === 'charged');
+  if (result.status === 'ok') assert.equal(result.payment?.status, 'confirmed');
+  assert.deepEqual(fixture.counts(), { settled: 0, rejected: 0 });
+});
+
+test('charge confirms one pending premium and leaves signing for the later step', async () => {
+  const event = await acceptedOffer();
+  const policy = await storedFrom(event, randomUUID());
+  const payment: Payment = { id: randomUUID(), policyId: policy.id, operation: 'premium', amount: policy.premium,
+    currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
+  payment.hash = await financialIntegrity.digest(paymentContent(payment));
+  let settlements = 0, confirmations = 0, signatures = 0;
+  const reference = 'MOCK-' + payment.id;
+  const tx = {
+    async policy() { return { policy, premium: payment, signature: null }; },
+    async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
+    async createCommand() {},
+    async confirmPremium() { payment.status = 'confirmed'; payment.providerReference = reference; policy.status = 'charged'; confirmations++; }
+  } as unknown as FinancialTransaction;
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow,
+    newId: randomUUID, store: { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection() {} },
+    payments: { async lookup() { return { status: payment.status === 'confirmed' ? 'confirmed' as const : 'unknown' as const,
+      reference: payment.status === 'confirmed' ? reference : null }; },
+      async settle() { settlements++; return { status: 'confirmed', reference }; }, async refund() { throw new Error('unexpected_refund'); } },
+    signatures: { async sign() { signatures++; throw new Error('unexpected_signature'); } } });
+  const charge = () => finance.charge({ actor: event.payload, policyId: policy.id,
+    documentHash: policy.documentHash, idempotencyKey: 'one-charge', traceId: randomUUID() });
+  const first = await charge();
+  assert.ok(first.status === 'ok' && first.policy.status === 'charged' && first.payment?.reference === reference);
+  const second = await charge();
+  assert.ok(second.status === 'ok' && second.policy.status === 'charged');
+  assert.deepEqual({ settlements, confirmations, signatures }, { settlements: 1, confirmations: 1, signatures: 0 });
+});
+
 test('signature refusal and expiry while acquiring the final lock refund the fresh confirmed payment without issuing', async () => {
   for (const scenario of ['signature_refused', 'expired_after_final_lock'] as const) {
-    const fixture = await stateFixture('pending', 'pending', { status: 'unknown', reference: null });
+    const fixture = await stateFixture('charged', 'confirmed', { status: 'confirmed', reference: 'MOCK-confirmed' });
     const { policy, payment } = fixture;
     let clock = financialNow(), transactions = 0, refunds = 0, signatures = 0;
-    let externalStatus: 'unknown' | 'confirmed' | 'refunded' = 'unknown';
+    let externalStatus: 'unknown' | 'confirmed' | 'refunded' = 'confirmed';
     const actions: string[] = [];
     const captures: FinancialDecisionCapture[] = [];
     const tx = { async policy() {
       if (scenario === 'expired_after_final_lock' && transactions === 3) clock = new Date(policy.offer.expiresAt);
       return { policy: { ...policy }, premium: { ...payment }, signature: null };
     }, async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
+    async signatureChallenge() { return challengeFor(policy); }, async updateSignatureChallenge() {},
     async createCommand() {},
     async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
     async setPaymentStatus(_id: string, status: Payment['status'], reference: string | null) { payment.status = status; payment.providerReference = reference; },
     async audit(action: string, _id: string, _trace: string, _outcome: string, _actor: string, capture: FinancialDecisionCapture) {
+      if (action.startsWith('signature.')) return;
       actions.push(action); captures.push(capture);
     }, async confirmPremium(_policy: StoredPolicy, confirmed: Payment, _trace: string, capture: FinancialDecisionCapture) {
       payment.status = 'confirmed'; payment.providerReference = confirmed.providerReference; policy.status = 'charged';
@@ -170,11 +266,12 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
           refunds++; externalStatus = 'refunded'; return { status: 'refunded', reference: 'MOCK-' + payment.id }; } },
       signatures: { async sign(id, hash) { return scenario === 'signature_refused' ? { status: 'failed' } : {
         status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
-    const result = await finance.issue({ actor: fixture.actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+    const result = await finance.issue({ actor: fixture.actor, policyId: policy.id, documentHash: policy.documentHash,
+      idempotencyKey: randomUUID(), challengeId, code: challengeCode, traceId: randomUUID() });
     assert.ok(result.status === 'denied' && result.error === 'signature_failed', JSON.stringify(result));
     assert.equal(policy.status, 'refunded'); assert.equal(payment.status, 'refunded');
     assert.equal(refunds, 1); assert.equal(signatures, 0); assert.equal(actions.includes('policy.issued'), false);
-    assert.deepEqual(actions, ['premium.confirmed', 'premium.refund_requested', 'premium.refunded', 'signature_failed']);
+    assert.deepEqual(actions, ['premium.refund_requested', 'premium.refunded', 'signature_failed']);
     const validate = new Ajv({ allErrors: true }).compile(JSON.parse(readFileSync('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
     for (const capture of captures) {
       assert.equal(validate(capture), true, JSON.stringify(validate.errors));
@@ -190,10 +287,9 @@ test('signature refusal and expiry while acquiring the final lock refund the fre
       assert.equal(JSON.stringify(capture).includes(policy.clientId), false);
       assert.equal(JSON.stringify(capture).includes(policy.subjectToken), false);
     }
-    assert.deepEqual(captures[0].sources.map(source => [source.operation, source.result]), [['lookup', 'unknown'], ['settle', 'confirmed']]);
-    assert.equal(captures[1].inputs.refundReason, scenario === 'signature_refused' ? 'signature_refused' : 'expired_during_final_transaction');
-    assert.deepEqual(captures[1].sources.map(source => [source.operation, source.result]), [['sign', scenario === 'signature_refused' ? 'failed' : 'signed']]);
-    assert.deepEqual(captures[2].sources.map(source => [source.operation, source.result, source.reference]),
+    assert.equal(captures[0].inputs.refundReason, scenario === 'signature_refused' ? 'signature_refused' : 'expired_during_final_transaction');
+    assert.deepEqual(captures[0].sources.map(source => [source.operation, source.result]), [['sign', scenario === 'signature_refused' ? 'failed' : 'signed']]);
+    assert.deepEqual(captures[1].sources.map(source => [source.operation, source.result, source.reference]),
       [['lookup', 'confirmed', 'MOCK-' + payment.id], ['refund', 'refunded', 'MOCK-' + payment.id]]);
     const captured = JSON.stringify(captures);
     policy.offer.premium = '1.0000';
@@ -211,9 +307,10 @@ test('issuance requires the exact stored signature evidence before committing it
     const tx = {
       async policy() { return { policy: { ...policy }, premium: { ...payment }, signature: null }; },
       async issuanceSnapshot(id: string, actor: Parameters<FinancialTransaction['issuanceSnapshot']>[1], key: string) { assert.match(key, /^[a-f0-9]{64}$/); return { record: await tx.policy(id, actor), command: null }; },
+      async signatureChallenge() { return challengeFor(policy); }, async updateSignatureChallenge() {},
     async createCommand() {},
       async setPolicyStatus(_id: string, status: StoredPolicy['status']) { policy.status = status; },
-      async audit(action: string) { actions.push(action); },
+      async audit(action: string) { if (!action.startsWith('signature.')) actions.push(action); },
       async finishCommand() { completed++; },
       async completeIssuance(input: IssuanceCommit) {
         const { documentHash, receipt, signedAt, timeSeal } = input.signature;
@@ -234,7 +331,8 @@ test('issuance requires the exact stored signature evidence before committing it
       }, async rejection() { actions.push('denied'); } },
       payments: { async lookup() { return { status: 'confirmed', reference: payment.providerReference }; }, settle: never, refund: never },
       signatures: { async sign(id, hash) { return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
-    const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+    const result = await finance.issue({ actor, policyId: policy.id, documentHash: policy.documentHash,
+      idempotencyKey: randomUUID(), challengeId, code: challengeCode, traceId: randomUUID() });
     assert.equal(result.status, mode === 'stored' ? 'ok' : 'unavailable', JSON.stringify({ mode, result }));
     assert.equal(policy.status, mode === 'stored' ? 'issued' : 'charged');
     assert.deepEqual(actions, mode === 'stored' ? ['policy.issued'] : []);
@@ -360,10 +458,12 @@ test('a failed atomic import write is a technical failure, not a durable result 
 });
 
 
-test('a failed initial premium bundle never reaches a provider or creates an apparent successful issuance', async () => {
+test('signature cannot initiate a premium charge while payment remains pending', async () => {
   const event = await acceptedOffer(), policy = await storedFrom(event, randomUUID());
   let attempted = false, providers = 0;
   const tx = { async issuanceSnapshot() { return { record: { policy, premium: null, signature: null }, command: null }; },
+    async signatureChallenge() { return challengeFor(policy); }, async updateSignatureChallenge() {},
+    async audit() {},
     async beginPremium(input: Parameters<FinancialTransaction['beginPremium']>[0]) {
       attempted = true;
       assert.equal(input.policy.id, policy.id);
@@ -375,20 +475,21 @@ test('a failed initial premium bundle never reaches a provider or creates an app
     } } as unknown as FinancialTransaction;
   const never = async (): Promise<never> => { providers++; throw new Error('unexpected_provider_call'); };
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection() { throw new Error('unexpected_business_denial'); } },
+    store: { ...unusedStoreReads, async transaction(work) { return work(tx); }, async rejection() {} },
     payments: { lookup: never, settle: never, refund: never }, signatures: { sign: never } });
   const result = await finance.issue({ actor: event.payload, policyId: policy.id, documentHash: policy.documentHash,
-    idempotencyKey: randomUUID(), traceId: randomUUID() });
-  assert.equal(result.status, 'unavailable');
-  assert.equal(attempted, true);
+    idempotencyKey: randomUUID(), challengeId, code: challengeCode, traceId: randomUUID() });
+  assert.ok(result.status === 'denied' && result.error === 'challenge_invalid');
+  assert.equal(attempted, false);
   assert.equal(providers, 0);
 });
 
 async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
-  clock?: Date; commandDocumentHash?: string; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
+  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
   const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
   const commandKey = await financialIntegrity.digest(randomUUID());
-  const requestHash = await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, options.commandDocumentHash ?? policy.documentHash]));
+  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v1', policy.clientId, policy.id,
+    options.commandDocumentHash ?? policy.documentHash]));
   let provider: 'unknown' | 'confirmed' | 'refunded' = options.provider;
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [], captures: FinancialDecisionCapture[] = [];
   let completedKey: string | null = null;
@@ -423,6 +524,21 @@ async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; 
     signatures: { async sign(id, hash) { calls.sign++; options.onSign?.(policy); return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
   return { finance, store, policy, payment, calls, actions, captures, commandKey, completed: () => completedKey, candidatesRead: () => candidatesRead };
 }
+
+test('charge recovery never signs before step seven and refunds after the offer deadline', async () => {
+  const active = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed', commandKind: 'charge.v1' });
+  const [waiting] = await active.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(waiting.outcome, 'unchanged');
+  assert.equal(active.policy.status, 'charged');
+  assert.deepEqual(active.calls, { settle: 0, refund: 0, sign: 0 });
+
+  const expired = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed',
+    commandKind: 'charge.v1', clock: new Date('2026-10-16T02:15:00.000Z') });
+  const [recovered] = await expired.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(recovered.outcome, 'refunded');
+  assert.equal(expired.policy.status, 'refunded');
+  assert.deepEqual(expired.calls, { settle: 0, refund: 1, sign: 0 });
+});
 
 test('recovery issues a confirmed charge whose customer command stopped, without a new charge or a client retry', async () => {
   for (const [policyStatus, paymentStatus] of [['charged', 'confirmed'], ['pending', 'pending']] as const) {

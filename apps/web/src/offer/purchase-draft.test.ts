@@ -4,7 +4,8 @@ import { clearPurchaseDraft, readPurchaseDraft, savePurchaseDraft, type Purchase
 const draft: PurchaseDraft = {
   quoteId: 'COT-2026-08843',
   acceptance: { acceptanceId: '20000000-0000-4000-8000-000000000002', offerId: '10000000-0000-4000-8000-000000000001', acceptedAt: '2026-10-15T00:01:00.000Z', traceId: '50000000-0000-4000-8000-000000000002' },
-  issue: { policyId: '30000000-0000-4000-8000-000000000003', documentHash: 'a'.repeat(64), key: '70000000-0000-4000-8000-000000000007' }
+  issue: { policyId: '30000000-0000-4000-8000-000000000003', documentHash: 'a'.repeat(64), key: '70000000-0000-4000-8000-000000000007',
+    challengeId: '80000000-0000-4000-8000-000000000008' }
 };
 const KEY = 'solventa.purchase-draft';
 
