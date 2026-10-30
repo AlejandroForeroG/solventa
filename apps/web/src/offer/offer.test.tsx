@@ -207,6 +207,25 @@ describe('definitive offer journey', () => {
     expect(api.chargePolicy.mock.calls[0][1]).toBe(api.chargePolicy.mock.calls[1][1]);
   });
 
+  it('explains challenge expiry and allows a new attempt without issuing or charging again', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(challenge.expiresAt));
+    const api = stubs({ beginSignatureChallenge: vi.fn().mockResolvedValueOnce(ok(challenge))
+      .mockResolvedValue(ok({ ...challenge, expiresAt: new Date(Date.parse(challenge.expiresAt) + 60000).toISOString() })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await signFromReview(user);
+    expect(screen.getByRole('alert')).toHaveTextContent('El código expiró. Cancela este intento y solicita uno nuevo.');
+    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancelar firma' }));
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
+    await user.type(await screen.findByLabelText('Código de autenticación'), challenge.demoCode);
+    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeEnabled();
+    expect(api.chargePolicy).toHaveBeenCalledTimes(1);
+    expect(api.beginSignatureChallenge).toHaveBeenCalledTimes(2);
+  });
+
   it('restores the signature form after retrying an unavailable challenge', async () => {
     const api = stubs({ beginSignatureChallenge: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(challenge)) });
     const { user } = journey(api);
