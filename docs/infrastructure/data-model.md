@@ -6,7 +6,7 @@ Migrations implement architecture aggregates with UUIDs, timestamps, versions an
 |---|---|
 | identity | clients, external_identities, authentication_sessions, partners, partner_credentials, consents, consent_counters, registered_devices, identity_verifications, identity_verification_commands |
 | acquisition | quotes, quote_counters, risk_profiles, underwriting_decisions, offers, offer_revisions, signal_refresh_jobs, offer_contexts, offer_acceptances, offer_requests |
-| policy | policies, claims, indemnities, payments, evidence_metadata, financial_contracts, financial_commands, policy_signatures, mock_gateway_operations, financial_payment_intents |
+| policy | policies, claims, indemnities, payments, evidence_metadata, financial_contracts, financial_commands, policy_signatures, signature_challenges, mock_gateway_operations, financial_payment_intents |
 
 Each owner adds `audit_events`, `outbox_events` and `inbox_events`: 39 tables, plus three administrative `schema_migrations` ledgers and three migration-failure guards. An environment contains only migrations already applied there. No foreign keys cross schemas; external references are validated through a contract/event, never a query to another owner's tables.
 

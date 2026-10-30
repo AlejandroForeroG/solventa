@@ -55,7 +55,8 @@ test('transport caps match the owner and replace oversized bytes without forward
   for (const [path, limit, owner] of [
     ['/api/v1/consents', 4096, 'IDENTITY'], ['/api/v1/me/quotes', 16384, 'ACQUISITION'],
     ['/api/v1/quote-estimates', 16384, 'ACQUISITION'], ['/api/v1/offers', 1024, 'ACQUISITION'],
-    ['/api/v1/quotes/COT-2026-00001/offers', 1024, 'ACQUISITION'], ['/api/v1/policies/policy/issue', 1024, 'POLICY']
+    ['/api/v1/quotes/COT-2026-00001/offers', 1024, 'ACQUISITION'], ['/api/v1/policies/policy/issue', 1024, 'POLICY'],
+    ['/api/v2/policies/policy/issue', 1024, 'POLICY']
   ] as const) {
     let received = '';
     const payload = 'x'.repeat(limit);

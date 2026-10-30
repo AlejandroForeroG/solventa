@@ -8,4 +8,4 @@ export interface ApiVersion {
 }
 
 // A version is retired only if it carries a sunset date.
-export const apiVersions: readonly ApiVersion[] = [{ id: 'v1' }];
+export const apiVersions: readonly ApiVersion[] = [{ id: 'v1' }, { id: 'v2' }];

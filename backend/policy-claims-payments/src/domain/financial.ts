@@ -24,10 +24,12 @@ export type PolicyView = { policyId: string; offerId: string; offerVersion: numb
   document: string; documentHash: string; synthetic: true; providerMode: 'mock' };
 export type FinancialErrorCode = 'invalid_request' | 'invalid_event' | 'event_conflict' | 'offer_invalid'
   | 'forbidden' | 'not_found' | 'idempotency_conflict' | 'document_mismatch' | 'integrity_violation'
-  | 'policy_not_active' | 'event_not_covered' | 'signature_failed' | 'payment_declined' | 'policy_pending';
+  | 'policy_not_active' | 'event_not_covered' | 'signature_failed' | 'payment_declined' | 'policy_pending'
+  | 'challenge_invalid' | 'challenge_expired' | 'challenge_cancelled' | 'authentication_failed';
 // The premium's current state for the customer; it is not part of a stored command result.
 export type PaymentView = { status: 'pending' | 'confirmed' | 'declined' | 'refunded'; reference: string | null };
-export type FinancialResult = { status: 'ok'; replayed: boolean; policy: PolicyView; payment?: PaymentView }
+export type FinancialResult = { status: 'ok'; replayed: boolean; policy: PolicyView; payment?: PaymentView;
+  challenge?: { challengeId: string; expiresAt: string; demoCode: string } }
   | { status: 'denied'; error: FinancialErrorCode; httpStatus: 400 | 403 | 404 | 409; traceId: string }
   | { status: 'unavailable'; error: 'financial_unavailable'; httpStatus: 503; traceId: string };
 export class InvalidFinancialRecord extends Error {}

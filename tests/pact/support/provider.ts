@@ -175,7 +175,13 @@ function financialWorld(state: FinancialState): Partial<World> {
   const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance: {
     get: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
     getByAcceptance: async input => state.imported ? { status: 'ok', replayed: false, policy: financialPolicy } : { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: input.traceId },
-    issue: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }) } });
+    beginSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy,
+      challenge: { challengeId: '80000000-0000-4000-8000-000000000008', expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }),
+    cancelSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
+    charge: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'charged' },
+      payment: { status: 'confirmed', reference: 'MOCK-60000000-0000-4000-8000-000000000006' } }),
+    issue: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }),
+    issueLegacy: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }) } });
   const binding = (app: { request: (request: Request, init: undefined, env: unknown) => Response | Promise<Response> }, env: unknown): Binding =>
     ({ fetch: request => { const { pathname, search } = new URL(request.url); return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, env)); } });
   return { acquisition: binding(offers, { APP_ENV: 'dev' }), policy: binding(policy, { APP_ENV: 'dev' }), sessionCookie: financialCookie };

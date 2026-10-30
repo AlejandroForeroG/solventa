@@ -9,6 +9,8 @@ export type Payment = { id: string; policyId: string; operation: 'premium' | 'in
 export type Command = { policyId: string; requestHash: string; result: PolicyView | null };
 export type Inbox = { hash: string | null; policyId: string | null; outcome: string };
 export type Signature = { documentHash: string; receipt: string; signedAt: string; timeSeal: string | null };
+export type SignatureChallenge = { id: string; policyId: string; clientId: string; subjectToken: string; documentHash: string;
+  codeHash: string; expiresAt: string; attempts: number; status: 'active' | 'cancelled' | 'consumed'; commandKey: string | null };
 // Policy, premium and signature evidence from one database snapshot; writes must reread under their transaction lock.
 export type PolicyRecord = { policy: StoredPolicy; premium: Payment | null; signature: Signature | null };
 // A foreign acceptance carries no record: its evidence is never selected or decoded.
@@ -25,6 +27,9 @@ export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { k
 export interface FinancialTransaction {
   policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
   issuanceSnapshot(id: string, actor: FinancialActor, commandKey: string): Promise<{ record: PolicyRecord | null; command: Command | null }>;
+  createSignatureChallenge(challenge: SignatureChallenge): Promise<void>;
+  signatureChallenge(id: string, actor: FinancialActor, policyId: string): Promise<SignatureChallenge | null>;
+  updateSignatureChallenge(id: string, attempts: number, status: SignatureChallenge['status'], commandKey?: string): Promise<void>;
   beginPremium(input: PremiumStart): Promise<void>;
   setPolicyStatus(id: string, status: PolicyStatus): Promise<void>;
   createCommand(actorId: string, key: string, policyId: string, requestHash: string): Promise<void>;
