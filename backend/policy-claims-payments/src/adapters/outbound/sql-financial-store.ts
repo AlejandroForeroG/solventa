@@ -68,7 +68,7 @@ class SqlFinancialTransaction implements FinancialTransaction {
   async signatureChallenge(id: string, actor: FinancialActor, policyId: string): Promise<SignatureChallenge | null> {
     const row = (await this.db.query<{ id: string; policy_id: string; client_id: string; subject_token: string; document_hash: string;
       code_hash: string; expires_at: Date; attempts: number; status: SignatureChallenge['status']; command_key: string | null }>(
-      `SELECT id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts,status,command_key
+      `SELECT id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts::INT4 AS attempts,status,command_key
        FROM policy.signature_challenges WHERE id=$1 AND policy_id=$2 AND client_id=$3 AND subject_token=$4 FOR UPDATE`,
       [id, policyId, actor.clientId, actor.subjectToken])).rows[0];
     return row ? { id: row.id, policyId: row.policy_id, clientId: row.client_id, subjectToken: row.subject_token,
