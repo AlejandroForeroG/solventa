@@ -453,6 +453,18 @@ describe('definitive offer journey', () => {
     expect(screen.getByRole('button', { name: 'Obtener código de prueba' })).toBeDisabled();
   });
 
+  it('shows issuance confirmed by cancellation when another valid signature completed first', async () => {
+    const api = stubs({ issuePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'authentication_failed' }),
+      cancelSignatureChallenge: vi.fn().mockResolvedValue(ok(issued)) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await signFromReview(user);
+    await user.click(screen.getByRole('button', { name: 'Cancelar firma' }));
+    expect(await screen.findByRole('heading', { name: 'Póliza emitida' })).toBeInTheDocument();
+    expect(readPurchaseDraft()).toBeNull();
+    expect(api.issuePolicy).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps an uncertain signature retry inert while its request is in flight', async () => {
     let finish: (value: FinancialOutcome<Policy>) => void = () => {};
     const api = stubs({ issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })) });
