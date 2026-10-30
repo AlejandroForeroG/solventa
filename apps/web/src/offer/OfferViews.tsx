@@ -104,20 +104,20 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
           {t('policy.continueToPayment')}
         </button> : <>
         <div className="check review-check">
-          <input id="policy-review-cb" type="checkbox" checked={checked} disabled={page !== 2 || !!challenge} onChange={event => onCheck(event.target.checked)} />
+          <input id="policy-review-cb" type="checkbox" checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
           <label htmlFor="policy-review-cb">{t('policy.check')}</label>
         </div>
         {!challenge && <button type="button" className="btn btn-secondary review-confirm" onClick={onBegin} disabled={!checked || busy}>{t('policy.requestCode')}</button>}
         {challenge && <>
           <label className="section-label" htmlFor="policy-code">{t('policy.authCode')}</label>
-          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy}
             value={code} onChange={event => onCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
           <p className="note" role="status">{t('policy.demoCode', { code: challenge.demoCode })}</p>
           <p className="note mono">{t('policy.expiresIn', { time: `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}` })}</p>
-          <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={!checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
-          <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel}>{t('policy.cancelSignature')}</button>
+          <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
+          <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel} disabled={busy}>{t('policy.cancelSignature')}</button>
         </>}
-        {error && <p className="banner banner-error" role="alert">{t(`policy.challenge.${error}`)}</p>}
+        {(error || (challenge && secondsLeft === 0)) && <p className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
         </>}
         <p className="note">{t('policy.mock')}</p>
       </div>

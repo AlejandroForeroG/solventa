@@ -420,7 +420,7 @@ components:
       type: object
       additionalProperties: false
       description: Current state of the policy's single premium charge with the
-        synthetic provider. Absent until the customer confirms issuance. A
+        synthetic provider. Absent until the customer starts the separate charge. A
         declined premium is final for this policy. The reference is the
         synthetic receipt and is present only once the provider confirmed the
         charge; it is not a real payment receipt.

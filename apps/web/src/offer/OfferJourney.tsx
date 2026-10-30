@@ -215,7 +215,7 @@ export function OfferJourney(props: {
     const current = signal.current;
     const recovering = phase.name === 'recovering' && !phase.busy;
     const retrying = phase.name === 'signing' && !phase.busy && phase.uncertain;
-    if (!current || (!recovering && !retrying && (phase.name !== 'signing' || phase.busy || !checked || !challenge || !/^[0-9]{6}$/.test(code)))) return;
+    if (!current || current.aborted || challengeBusy || (!recovering && !retrying && (phase.name !== 'signing' || phase.busy || !checked || !challenge || !/^[0-9]{6}$/.test(code)))) return;
     const activeChallengeId = challenge?.challengeId ?? issueChallengeId.current;
     if (!activeChallengeId) {
       if (recovering) void charge(policy);
@@ -318,14 +318,24 @@ export function OfferJourney(props: {
   }
 
   async function cancelChallenge(policy: Policy) {
-    if (!challenge || !signal.current) return;
-    const outcome = await api().cancelSignatureChallenge(policy.policyId, challenge.challengeId, signal.current);
-    if (outcome.kind === 'ok') {
-      setPhase({ name: 'signing', policy, busy: false, uncertain: false });
-      setChallenge(null); issueChallengeId.current = null; setCode(''); setChecked(false); setChallengeError(null);
-    }
-    else if (outcome.kind === 'rejected') setChallengeError(outcome.code);
-    else common(outcome, () => void cancelChallenge(policy), 7);
+    const current = signal.current;
+    if (!challenge || !current || current.aborted || challengeBusy
+      || (phase.name === 'signing' && (phase.busy || phase.uncertain))) return;
+    setChallengeBusy(true);
+    try {
+      const outcome = await api().cancelSignatureChallenge(policy.policyId, challenge.challengeId, current);
+      if (current.aborted) return;
+      if (outcome.kind === 'ok') {
+        if (outcome.value.status === 'issued') {
+          setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); return;
+        }
+        setPhase({ name: 'signing', policy, busy: false, uncertain: false });
+        setChallenge(null); issueChallengeId.current = null; setCode(''); setChecked(false); setChallengeError(null);
+      }
+      else if (outcome.kind === 'rejected') setChallengeError(outcome.code);
+      else common(outcome, () => void cancelChallenge(policy), 7);
+    } catch { /* aborted: the user left the screen */ }
+    finally { setChallengeBusy(false); }
   }
 
   return <>
@@ -382,7 +392,7 @@ export function OfferJourney(props: {
       onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); }} />}
     {phase.name === 'signing' && <>
       <PolicyDocument heading={heading} policy={phase.policy} stage="sign" checked={checked} documentChanged={false}
-        challenge={challenge} code={code} busy={challengeBusy || phase.busy} error={challengeError}
+        challenge={challenge} code={code} busy={challengeBusy || phase.busy || phase.uncertain} error={challengeError}
         onCode={setCode} onCheck={setChecked} onBegin={() => void beginChallenge(phase.policy)}
         onCancel={() => void cancelChallenge(phase.policy)} onConfirm={() => void issue(phase.policy)} onContinue={() => {}} />
       {phase.uncertain && <div className="banner banner-error" role="alert">
