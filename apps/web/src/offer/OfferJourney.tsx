@@ -5,7 +5,7 @@ import { useAnnounce } from '../quote/Live';
 import { Stepper } from '../quote/Stepper';
 import type { Quote } from '../quote/api';
 import { financialApi, newIdempotencyKey, type Acceptance, type FinancialApi, type FinancialOutcome, type Offer, type Policy, type SignatureChallenge } from './api';
-import { ChargeConfirmed, ChargeDeclined, OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
+import { ChargeConfirmed, ChargeDeclined, ChargePending, OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
 import { clearPurchaseDraft, savePurchaseDraft, type PurchaseDraft } from './purchase-draft';
 
 type Step = 4 | 5 | 6 | 7;
@@ -17,6 +17,7 @@ type Phase =
   | { name: 'preparing'; acceptance: Acceptance; slow: boolean }
   | { name: 'review'; policy: Policy; documentChanged: boolean }
   | { name: 'awaitingPayment'; policy: Policy }
+  | { name: 'charging'; policy: Policy; busy: boolean; uncertain: boolean; key: string }
   | { name: 'charged'; policy: Policy }
   | { name: 'signing'; policy: Policy; busy: boolean; uncertain: boolean }
   | { name: 'chargeDeclined'; policy: Policy }
@@ -33,7 +34,7 @@ const DEFAULT_POLL: PollSchedule = { firstDelayMs: 50, maxDelayMs: 100, budgetMs
 function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
   if (phase.name === 'preparing' || phase.name === 'review') return 5;
-  if (['awaitingPayment', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
+  if (['awaitingPayment', 'charging', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
   if (['signing', 'issued', 'recovering', 'refunded'].includes(phase.name)) return 7;
   return 4;
 }
@@ -79,6 +80,7 @@ export function OfferJourney(props: {
   const createKey = useRef(newIdempotencyKey());
   const acceptKeys = useRef(new Map<string, string>());
   const issueKeys = useRef(new Map<string, string>());
+  const chargeKeys = useRef(new Map<string, string>());
   const issueChallengeId = useRef<string | null>(props.resume?.issue?.challengeId ?? null);
   const accepted = useRef<Acceptance | null>(null);
   const knownPolicyId = useRef<string | null>(null);
@@ -126,6 +128,7 @@ export function OfferJourney(props: {
     const resume = latest.current.props.resume;
     if (!resume) return create(current);
     if (resume.issue) issueKeys.current.set(`${resume.issue.policyId}:${resume.issue.documentHash}`, resume.issue.key);
+    if (resume.charge) chargeKeys.current.set(`${resume.charge.policyId}:${resume.charge.documentHash}`, resume.charge.key);
     return waitForPolicy(resume.acceptance);
   });
   useEffect(() => {
@@ -166,7 +169,10 @@ export function OfferJourney(props: {
             setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
               : { name: 'charged', policy: outcome.value });
           }
-          else if (outcome.value.payment?.status === 'pending') setPhase({ name: 'awaitingPayment', policy: outcome.value });
+          else if (outcome.value.payment?.status === 'pending' && chargeKeys.current.has(`${outcome.value.policyId}:${outcome.value.documentHash}`)) {
+            setPhase({ name: 'charging', policy: outcome.value, busy: false, uncertain: true,
+              key: chargeKeys.current.get(`${outcome.value.policyId}:${outcome.value.documentHash}`)! });
+          }
           else { setChallenge(null); setCode(''); issueChallengeId.current = null;
             setPhase(paymentAwaited ? { name: 'awaitingPayment', policy: outcome.value }
               : { name: 'review', policy: outcome.value, documentChanged });
@@ -216,7 +222,8 @@ export function OfferJourney(props: {
     const key = issueKeys.current.get(identity) ?? newIdempotencyKey();
     issueKeys.current.set(identity, key);
     if (accepted.current) savePurchaseDraft({ quoteId: quote.quoteId, acceptance: accepted.current,
-      issue: { policyId: policy.policyId, documentHash: policy.documentHash, key, challengeId: activeChallengeId } });
+      issue: { policyId: policy.policyId, documentHash: policy.documentHash, key, challengeId: activeChallengeId },
+      charge: { policyId: policy.policyId, documentHash: policy.documentHash, key: chargeKeys.current.get(identity) ?? newIdempotencyKey() } });
     setPhase(recovering ? { name: 'recovering', policy, busy: true } : { name: 'signing', policy, busy: true, uncertain: retrying });
     try {
       const outcome = await api().issuePolicy(policy, key, activeChallengeId, challenge ? code : '000000', current);
@@ -252,6 +259,41 @@ export function OfferJourney(props: {
         return;
       }
       fail('generic', 7);
+    } catch { /* aborted: the user left the screen */ }
+  }
+
+  async function charge(policy: Policy) {
+    const current = signal.current;
+    if (!current || (phase.name === 'charging' && phase.busy)) return;
+    const identity = `${policy.policyId}:${policy.documentHash}`;
+    const key = chargeKeys.current.get(identity) ?? newIdempotencyKey();
+    chargeKeys.current.set(identity, key);
+    if (accepted.current) savePurchaseDraft({ quoteId: quote.quoteId, acceptance: accepted.current, issue: null,
+      charge: { policyId: policy.policyId, documentHash: policy.documentHash, key } });
+    setPhase({ name: 'charging', policy, busy: true, uncertain: false, key });
+    try {
+      const outcome = await api().chargePolicy(policy, key, current);
+      if (current.aborted) return;
+      if (outcome.kind === 'unauthenticated' || outcome.kind === 'consentRequired') { common(outcome, () => {}, 6); return; }
+      if (outcome.kind === 'ok' && outcome.value.status === 'issued' && outcome.value.documentHash === policy.documentHash) {
+        setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); return;
+      }
+      if (outcome.kind === 'ok' && outcome.value.documentHash === policy.documentHash && outcome.value.status === 'charged'
+        && outcome.value.payment?.status === 'confirmed') { setPhase({ name: 'charged', policy: outcome.value }); return; }
+      if (outcome.kind === 'ok' || outcome.kind === 'unavailable') {
+        setPhase({ name: 'charging', policy, busy: false, uncertain: true, key }); return;
+      }
+      if (outcome.kind === 'rejected' && outcome.code === 'payment_declined') {
+        setPhase({ name: 'chargeDeclined', policy }); say('live.chargeDeclined'); return;
+      }
+      if (outcome.kind === 'rejected' && outcome.code === 'offer_invalid') { expired(policy.offerId); return; }
+      if (outcome.kind === 'rejected' && outcome.code === 'document_mismatch' && accepted.current) {
+        chargeKeys.current.delete(identity); await waitForPolicy(accepted.current, true); return;
+      }
+      if (outcome.kind === 'rejected' && outcome.code === 'signature_failed' && accepted.current) {
+        await waitForPolicy(accepted.current); return;
+      }
+      fail('generic', 6);
     } catch { /* aborted: the user left the screen */ }
   }
 
@@ -319,7 +361,9 @@ export function OfferJourney(props: {
       challenge={challenge} code={code} busy={challengeBusy} error={challengeError}
       onCode={setCode} onCheck={setChecked} onBegin={() => void beginChallenge(phase.policy)}
       onCancel={() => void cancelChallenge(phase.policy)} onConfirm={() => void issue(phase.policy)}
-      onContinue={() => { setPhase({ name: 'awaitingPayment', policy: phase.policy }); }} />}
+      onContinue={() => void charge(phase.policy)} />}
+    {phase.name === 'charging' && <ChargePending heading={heading} policy={phase.policy} idempotencyKey={phase.key}
+      busy={phase.busy} uncertain={phase.uncertain} onRefresh={() => void charge(phase.policy)} />}
     {phase.name === 'awaitingPayment' && <section className="step card">
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.pendingTitle')}</h1>
       <p>{t('charge.integrationPending')}</p>

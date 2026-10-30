@@ -10,6 +10,7 @@ export type PolicyHttpDependencies = {
     getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult>;
     issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string;
       challengeId: string; code: string; traceId: string }): Promise<FinancialResult>;
+    charge(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string; traceId: string }): Promise<FinancialResult>;
     beginSignatureChallenge(input: { actor: FinancialActor; policyId: string; documentHash: string; accepted: true; traceId: string }): Promise<FinancialResult>;
     cancelSignatureChallenge(input: { actor: FinancialActor; policyId: string; challengeId: string; traceId: string }): Promise<FinancialResult>;
   };
@@ -41,9 +42,10 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   app.all('/api/v1/policies/:policyId', handler('policies:read'));
   app.all('/api/v1/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
   app.all('/api/v1/policies/:policyId/issue', handler('policies:issue'));
+  app.all('/api/v1/policies/:policyId/charge', handler('policies:issue', false, 'charge'));
   app.all('/api/v1/policies/:policyId/signature-challenges', handler('policies:issue', false, 'challenge'));
   app.all('/api/v1/policies/:policyId/signature-challenges/:challengeId/cancel', handler('policies:issue', false, 'cancel'));
-  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'issue' | 'challenge' | 'cancel' = 'issue') {
+  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'issue' | 'charge' | 'challenge' | 'cancel' = 'issue') {
     return async (c: import('hono').Context<{ Bindings: PolicyEnv }>) => {
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
@@ -88,6 +90,11 @@ export function createHttp(deps?: PolicyHttpDependencies) {
             const challengeId = (c.req.param('challengeId') ?? '').toLowerCase();
             if (!UUID.test(challengeId) || !record(body) || Object.keys(body).length !== 0) return reply({ error: 'invalid_request' }, 400);
             result = await deps.finance.cancelSignatureChallenge({ actor: principal, policyId, challengeId, traceId });
+          } else if (action === 'charge') {
+            if (!record(body) || Object.keys(body).length !== 1 || typeof body.documentHash !== 'string'
+              || !/^[0-9a-f]{64}$/.test(body.documentHash) || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey))
+              return reply({ error: 'invalid_request' }, 400);
+            result = await deps.finance.charge({ actor: principal, policyId, idempotencyKey, documentHash: body.documentHash, traceId });
           } else {
             if (!record(body) || Object.keys(body).length !== 3 || typeof body.documentHash !== 'string' || !/^[0-9a-f]{64}$/.test(body.documentHash)
               || typeof body.challengeId !== 'string' || !UUID.test(body.challengeId) || typeof body.code !== 'string' || !/^[0-9]{6}$/.test(body.code)

@@ -158,6 +158,11 @@ export const issuePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, i
     post({ documentHash: policy.documentHash, challengeId, code }, idempotencyKey, signal),
     body => asPolicy(body, { policyId: policy.policyId }), [200]);
 
+export const chargePolicy = (policy: Pick<Policy, 'policyId' | 'documentHash'>, idempotencyKey: string, signal?: AbortSignal) =>
+  send(`/api/v1/policies/${encodeURIComponent(policy.policyId)}/charge`,
+    post({ documentHash: policy.documentHash }, idempotencyKey, signal),
+    body => asPolicy(body, { policyId: policy.policyId }), [200]);
+
 export type FinancialApi = {
   createOffer: typeof createOffer;
   acceptOffer: typeof acceptOffer;
@@ -165,5 +170,6 @@ export type FinancialApi = {
   beginSignatureChallenge: typeof beginSignatureChallenge;
   cancelSignatureChallenge: typeof cancelSignatureChallenge;
   issuePolicy: typeof issuePolicy;
+  chargePolicy: typeof chargePolicy;
 };
-export const financialApi: FinancialApi = { createOffer, acceptOffer, policyForAcceptance, beginSignatureChallenge, cancelSignatureChallenge, issuePolicy };
+export const financialApi: FinancialApi = { createOffer, acceptOffer, policyForAcceptance, beginSignatureChallenge, cancelSignatureChallenge, issuePolicy, chargePolicy };

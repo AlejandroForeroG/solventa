@@ -7,7 +7,7 @@ import { SUPPORTED_TERMS } from '../../apps/web/src/consent/wording';
 import { requestQuote, toRequestBody } from '../../apps/web/src/quote/api';
 import type { QuoteValues } from '../../apps/web/src/quote/api';
 import { requestEstimate } from '../../apps/web/src/quote/estimate-api';
-import { acceptOffer, beginSignatureChallenge, createOffer, issuePolicy, policyForAcceptance } from '../../apps/web/src/offer/api';
+import { acceptOffer, beginSignatureChallenge, chargePolicy, createOffer, issuePolicy, policyForAcceptance } from '../../apps/web/src/offer/api';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
 
 const consumerName = 'solventa-web-spa';
@@ -411,6 +411,18 @@ describe('SPA definitive offer and policy issuance', () => {
     await pact.executeTest(async server => {
       const outcome = await withServer(server.url, () => policyForAcceptance(acceptance));
       assert.ok(outcome.kind === 'ok' && outcome.value.status === 'pending' && outcome.value.documentHash === documentHash);
+    });
+  });
+
+  test('confirms a charge before signing the reviewed document', async () => {
+    pact.given('the accepted offer was imported').uponReceiving('a charge for the reviewed document')
+      .withRequest(post(`/api/v1/policies/${policyId}/charge`, offerKey, { documentHash }))
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { ...policyBody('charged'),
+        payment: { status: MatchersV3.equal('confirmed'), reference: MatchersV3.regex('^MOCK-[0-9a-f-]{36}$',
+          'MOCK-60000000-0000-4000-8000-000000000006') } } });
+    await pact.executeTest(async server => {
+      const outcome = await withServer(server.url, () => chargePolicy({ policyId, documentHash }, offerKey));
+      assert.ok(outcome.kind === 'ok' && outcome.value.status === 'charged');
     });
   });
 

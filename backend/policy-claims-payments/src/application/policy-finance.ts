@@ -163,6 +163,45 @@ export class PolicyFinance {
     });
   }
 
+  charge(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string; traceId: string }): Promise<FinancialResult> {
+    return this.run(input.traceId, async traceId => {
+      if (!validActor(input.actor) || !UUID.test(input.policyId) || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
+        || !HEX.test(input.documentHash)) return reject('invalid_request', 400);
+      const requestHash = await this.deps.integrity.digest(JSON.stringify(['charge.v1', input.actor.clientId, input.policyId, input.documentHash]));
+      const commandKey = await this.deps.integrity.digest(JSON.stringify(['command-key.v1', input.actor.clientId, input.idempotencyKey]));
+      const plan = await this.deps.store.transaction(async tx => {
+        const snapshot = await tx.issuanceSnapshot(input.policyId, input.actor, commandKey);
+        const { policy, premium } = await this.checked(snapshot.record, input.actor);
+        if (policy.documentHash !== input.documentHash) return reject('document_mismatch');
+        const previous = snapshot.command;
+        if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
+        if (policy.status === 'refunded' || policy.status === 'refunding') return reject('signature_failed');
+        if (policy.status === 'issued') {
+          if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
+          const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result);
+          return { policy, payment: premium, replayed: !!previous, completed: result };
+        }
+        if (previous?.result) return reject('integrity_violation');
+        let payment = premium;
+        if (!payment) {
+          if (this.deps.now().getTime() >= Date.parse(policy.offer.expiresAt)) return reject('offer_invalid');
+          payment = { id: this.deps.newId(), policyId: policy.id, operation: 'premium', amount: policy.premium,
+            currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
+          payment.hash = await this.deps.integrity.digest(paymentContent(payment));
+          await tx.beginPremium({ policy, payment, command: previous ? null : { key: commandKey, requestHash }, traceId,
+            capture: this.decision('premium.requested', traceId, policy, 'pending', { payment }) });
+        } else if (!previous) await tx.createCommand(input.actor.clientId, commandKey, policy.id, requestHash);
+        await this.checkPayment(payment, policy);
+        if (payment.status === 'declined') return reject('payment_declined');
+        return { policy, payment, replayed: !!previous, completed: null };
+      });
+      if (plan.completed) return { status: 'ok', replayed: plan.replayed, policy: plan.completed, ...paid(plan.payment) };
+      if (!plan.payment) throw new Error('financial_plan_unavailable');
+      return this.proceed({ actor: input.actor, policyId: input.policyId, documentHash: input.documentHash, commandKey, traceId },
+        plan.policy, plan.payment, plan.replayed, true);
+    });
+  }
+
   issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string;
     challengeId: string; code: string; traceId: string }): Promise<FinancialResult> {
     return this.run(input.traceId, async traceId => {
@@ -187,7 +226,7 @@ export class PolicyFinance {
           const result = view(policy); await tx.finishCommand(input.actor.clientId, commandKey, result);
           return { policy, payment: premium, replayed: !!previous, completed: result };
         }
-        if (policy.status !== 'charged' || premium?.status !== 'confirmed') return reject('challenge_invalid');
+        if (!previous && (policy.status !== 'charged' || premium?.status !== 'confirmed')) return reject('challenge_invalid');
         const challenge = await tx.signatureChallenge(input.challengeId, input.actor, policy.id);
         if (!challenge || challenge.documentHash !== policy.documentHash || challenge.status === 'cancelled') return { error: 'challenge_invalid' as const };
         if (challenge.status === 'active') {
@@ -237,23 +276,26 @@ export class PolicyFinance {
     const traceId = this.deps.newId();
     const result = await this.run(traceId, async () => {
       const { actor, policyId, commandKey } = candidate;
-      const plan = await this.deps.store.transaction(async (tx): Promise<{ policy: StoredPolicy; payment: Payment | null }> => {
+      const plan = await this.deps.store.transaction(async (tx): Promise<{ policy: StoredPolicy; payment: Payment | null; charge: boolean }> => {
         const snapshot = await tx.issuanceSnapshot(policyId, actor, commandKey);
         const { policy, premium } = await this.checked(snapshot.record, actor);
         // Recovery acts only on the customer's stored command for this exact reviewed document.
-        const requestHash = await this.deps.integrity.digest(JSON.stringify(['issue.v1', actor.clientId, policy.id, policy.documentHash]));
+        const issueHash = await this.deps.integrity.digest(JSON.stringify(['issue.v1', actor.clientId, policy.id, policy.documentHash]));
+        const chargeHash = await this.deps.integrity.digest(JSON.stringify(['charge.v1', actor.clientId, policy.id, policy.documentHash]));
         const command = snapshot.command;
-        if (!command || command.policyId !== policy.id || command.requestHash !== requestHash) return reject('integrity_violation');
-        if (policy.status === 'issued' && !command.result) await tx.finishCommand(actor.clientId, commandKey, view(policy));
-        if (command.result || policy.status === 'issued' || policy.status === 'refunded' || !premium || premium.status === 'declined') return { policy, payment: null };
-        return { policy, payment: premium };
+        if (!command || command.policyId !== policy.id || ![issueHash, chargeHash].includes(command.requestHash)) return reject('integrity_violation');
+        if ((policy.status === 'issued' || policy.status === 'refunded') && !command.result) await tx.finishCommand(actor.clientId, commandKey, view(policy));
+        if (command.result || policy.status === 'issued' || policy.status === 'refunded' || !premium || premium.status === 'declined')
+          return { policy, payment: null, charge: command.requestHash === chargeHash };
+        return { policy, payment: premium, charge: command.requestHash === chargeHash };
       });
       const { policy, payment } = plan;
       // A pending intent is only continued when the provider already holds its charge; recovery never starts a new one.
       if (!payment || (policy.status === 'pending' && (await this.deps.payments.lookup(payment)).status !== 'confirmed')) {
         unchanged = true; return { status: 'ok', replayed: true, policy: view(policy) };
       }
-      return this.proceed({ actor, policyId, documentHash: policy.documentHash, commandKey, traceId, trigger: 'reconciliation' }, policy, payment, true);
+      return this.proceed({ actor, policyId, documentHash: policy.documentHash, commandKey, traceId, trigger: 'reconciliation' },
+        policy, payment, true, plan.charge);
     });
     if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };
     if (result.status === 'denied') {
@@ -268,7 +310,7 @@ export class PolicyFinance {
   }
 
   // Continues a planned issuance from durable state: confirm the charge, then sign and issue, or compensate.
-  private async proceed(context: IssuanceContext, planned: StoredPolicy, payment: Payment, replayed: boolean): Promise<FinancialResult> {
+  private async proceed(context: IssuanceContext, planned: StoredPolicy, payment: Payment, replayed: boolean, stopAfterCharge = false): Promise<FinancialResult> {
     const { actor, policyId, documentHash, commandKey, traceId } = context;
     const by: FinancialEvidence = context.trigger ? { trigger: context.trigger } : {};
     const refund = async (reason: FinancialEvidence['refundReason'] = 'existing_refund_intent', sources: FinancialSource[] = []): Promise<FinancialResult> => {
@@ -342,6 +384,12 @@ export class PolicyFinance {
       return null;
     });
     if (completed) return { status: 'ok', replayed: true, policy: completed.result, ...paid(completed.premium) };
+    if (stopAfterCharge) {
+      if (this.deps.now().getTime() >= Date.parse(planned.offer.expiresAt)) return refund('expired_before_sign');
+      const charged = await this.deps.store.transaction(async tx => this.checked(await tx.policy(policyId, actor), actor));
+      if (charged.policy.status !== 'charged' || charged.premium?.status !== 'confirmed') return reject('integrity_violation');
+      return { status: 'ok', replayed, policy: view(charged.policy), ...paid(charged.premium) };
+    }
     const expiredBeforeSignature = this.deps.now().getTime() >= Date.parse(planned.offer.expiresAt);
     const signature = expiredBeforeSignature ? { status: 'failed' as const } : await this.deps.signatures.sign(policyId, documentHash);
     const signatureSources: FinancialSource[] = expiredBeforeSignature ? [] : [{ source: 'synthetic-signature-v1', capturedAt: this.deps.now().toISOString(),

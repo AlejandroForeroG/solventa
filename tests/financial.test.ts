@@ -197,6 +197,44 @@ test('a claimed confirmation cannot create a new charge or replace its provider 
   }
 });
 
+test('a confirmed charge returns the unsigned policy without invoking the signature provider', async () => {
+  const fixture = await stateFixture('charged', 'confirmed', { status: 'confirmed', reference: 'MOCK-confirmed' });
+  const result = await fixture.finance.charge({ actor: fixture.actor, policyId: fixture.policy.id,
+    documentHash: fixture.policy.documentHash, idempotencyKey: randomUUID(), traceId: randomUUID() });
+  assert.ok(result.status === 'ok' && result.policy.status === 'charged');
+  if (result.status === 'ok') assert.equal(result.payment?.status, 'confirmed');
+  assert.deepEqual(fixture.counts(), { settled: 0, rejected: 0 });
+});
+
+test('charge confirms one pending premium and leaves signing for the later step', async () => {
+  const event = await acceptedOffer();
+  const policy = await storedFrom(event, randomUUID());
+  const payment: Payment = { id: randomUUID(), policyId: policy.id, operation: 'premium', amount: policy.premium,
+    currency: 'COP', key: 'initial-premium', hash: '', status: 'pending', providerReference: null };
+  payment.hash = await financialIntegrity.digest(paymentContent(payment));
+  let settlements = 0, confirmations = 0, signatures = 0;
+  const reference = 'MOCK-' + payment.id;
+  const tx = {
+    async policy() { return { policy, premium: payment, signature: null }; },
+    async issuanceSnapshot() { return { record: await tx.policy(), command: null }; },
+    async createCommand() {},
+    async confirmPremium() { payment.status = 'confirmed'; payment.providerReference = reference; policy.status = 'charged'; confirmations++; }
+  } as unknown as FinancialTransaction;
+  const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: financialIntegrity, now: financialNow,
+    newId: randomUUID, store: { ...readStore(tx), async transaction(work) { return work(tx); }, async rejection() {} },
+    payments: { async lookup() { return { status: payment.status === 'confirmed' ? 'confirmed' as const : 'unknown' as const,
+      reference: payment.status === 'confirmed' ? reference : null }; },
+      async settle() { settlements++; return { status: 'confirmed', reference }; }, async refund() { throw new Error('unexpected_refund'); } },
+    signatures: { async sign() { signatures++; throw new Error('unexpected_signature'); } } });
+  const charge = () => finance.charge({ actor: event.payload, policyId: policy.id,
+    documentHash: policy.documentHash, idempotencyKey: 'one-charge', traceId: randomUUID() });
+  const first = await charge();
+  assert.ok(first.status === 'ok' && first.policy.status === 'charged' && first.payment?.reference === reference);
+  const second = await charge();
+  assert.ok(second.status === 'ok' && second.policy.status === 'charged');
+  assert.deepEqual({ settlements, confirmations, signatures }, { settlements: 1, confirmations: 1, signatures: 0 });
+});
+
 test('signature refusal and expiry while acquiring the final lock refund the fresh confirmed payment without issuing', async () => {
   for (const scenario of ['signature_refused', 'expired_after_final_lock'] as const) {
     const fixture = await stateFixture('charged', 'confirmed', { status: 'confirmed', reference: 'MOCK-confirmed' });
@@ -447,10 +485,11 @@ test('signature cannot initiate a premium charge while payment remains pending',
 });
 
 async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; paymentStatus: Payment['status']; provider: 'unknown' | 'confirmed';
-  clock?: Date; commandDocumentHash?: string; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
+  clock?: Date; commandDocumentHash?: string; commandKind?: 'issue.v1' | 'charge.v1'; enabled?: boolean; onSign?: (policy: StoredPolicy) => void }) {
   const { policy, payment } = await stateFixture(options.policyStatus, options.paymentStatus, { status: 'unknown', reference: null });
   const commandKey = await financialIntegrity.digest(randomUUID());
-  const requestHash = await financialIntegrity.digest(JSON.stringify(['issue.v1', policy.clientId, policy.id, options.commandDocumentHash ?? policy.documentHash]));
+  const requestHash = await financialIntegrity.digest(JSON.stringify([options.commandKind ?? 'issue.v1', policy.clientId, policy.id,
+    options.commandDocumentHash ?? policy.documentHash]));
   let provider: 'unknown' | 'confirmed' | 'refunded' = options.provider;
   const calls = { settle: 0, refund: 0, sign: 0 }, actions: string[] = [], captures: FinancialDecisionCapture[] = [];
   let completedKey: string | null = null;
@@ -485,6 +524,21 @@ async function recoveryFixture(options: { policyStatus: StoredPolicy['status']; 
     signatures: { async sign(id, hash) { calls.sign++; options.onSign?.(policy); return { status: 'signed', receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', id, hash])) }; } } });
   return { finance, store, policy, payment, calls, actions, captures, commandKey, completed: () => completedKey, candidatesRead: () => candidatesRead };
 }
+
+test('charge recovery never signs before step seven and refunds after the offer deadline', async () => {
+  const active = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed', commandKind: 'charge.v1' });
+  const [waiting] = await active.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(waiting.outcome, 'unchanged');
+  assert.equal(active.policy.status, 'charged');
+  assert.deepEqual(active.calls, { settle: 0, refund: 0, sign: 0 });
+
+  const expired = await recoveryFixture({ policyStatus: 'charged', paymentStatus: 'confirmed', provider: 'confirmed',
+    commandKind: 'charge.v1', clock: new Date('2026-10-16T02:15:00.000Z') });
+  const [recovered] = await expired.finance.reconcileIssuances(new Date(), 25);
+  assert.equal(recovered.outcome, 'refunded');
+  assert.equal(expired.policy.status, 'refunded');
+  assert.deepEqual(expired.calls, { settle: 0, refund: 1, sign: 0 });
+});
 
 test('recovery issues a confirmed charge whose customer command stopped, without a new charge or a client retry', async () => {
   for (const [policyStatus, paymentStatus] of [['charged', 'confirmed'], ['pending', 'pending']] as const) {

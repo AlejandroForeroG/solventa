@@ -11,6 +11,7 @@ export type PurchaseDraft = {
   quoteId: string;
   acceptance: Acceptance;
   issue: { policyId: string; documentHash: string; key: string; challengeId: string } | null;
+  charge?: { policyId: string; documentHash: string; key: string } | null;
 };
 
 export function clearPurchaseDraft() {
@@ -32,17 +33,24 @@ export function readPurchaseDraft(now = Date.now()): PurchaseDraft | null {
     const { acceptanceId, offerId, acceptedAt, traceId } = draft.acceptance;
     if (!uuid(acceptanceId) || !uuid(offerId) || !instant(acceptedAt) || !uuid(traceId)) { clearPurchaseDraft(); return null; }
     const acceptance = { acceptanceId, offerId, acceptedAt, traceId };
-    if (draft.issue === null) return { quoteId: draft.quoteId, acceptance, issue: null };
+    const charge = draft.charge == null ? null : draft.charge;
+    if (charge !== null && (!isRecord(charge) || !uuid(charge.policyId) || typeof charge.documentHash !== 'string'
+      || !HASH.test(charge.documentHash) || !uuid(charge.key))) { clearPurchaseDraft(); return null; }
+    const savedCharge = charge === null ? null : { policyId: charge.policyId as string, documentHash: charge.documentHash as string, key: charge.key as string };
+    if (draft.issue === null) return { quoteId: draft.quoteId, acceptance, issue: null,
+      ...(savedCharge ? { charge: savedCharge } : {}) };
     if (!isRecord(draft.issue)) { clearPurchaseDraft(); return null; }
     const { policyId, documentHash, key, challengeId } = draft.issue;
     if (!uuid(policyId) || typeof documentHash !== 'string' || !HASH.test(documentHash) || !uuid(key) || !uuid(challengeId)) { clearPurchaseDraft(); return null; }
-    return { quoteId: draft.quoteId, acceptance, issue: { policyId, documentHash, key, challengeId } };
+    return { quoteId: draft.quoteId, acceptance, issue: { policyId, documentHash, key, challengeId },
+      ...(savedCharge ? { charge: savedCharge } : {}) };
   } catch { clearPurchaseDraft(); return null; }
 }
 
 export function savePurchaseDraft(draft: PurchaseDraft): boolean {
   try {
-    window.sessionStorage.setItem(KEY, JSON.stringify({ version: 1, savedAt: Date.now(), quoteId: draft.quoteId, acceptance: draft.acceptance, issue: draft.issue }));
+    window.sessionStorage.setItem(KEY, JSON.stringify({ version: 1, savedAt: Date.now(), quoteId: draft.quoteId, acceptance: draft.acceptance, issue: draft.issue,
+      ...(draft.charge ? { charge: draft.charge } : {}) }));
     return true;
   } catch { return false; }
 }

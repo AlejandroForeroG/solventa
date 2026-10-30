@@ -13,6 +13,47 @@ tags:
   - name: Policies
     description: Owner-authorized synthetic policies.
 paths:
+  /policies/{policyId}/charge:
+    post:
+      operationId: chargeOwnPolicy
+      summary: Confirm the mock premium for a reviewed policy before signing
+      tags: [Policies]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [documentHash]
+              properties:
+                documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
+      responses:
+        "200":
+          description: The charged policy and one confirmed mock receipt; signing remains separate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Policy' }
+        "400": { $ref: '#/components/responses/Invalid' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "405": { $ref: '#/components/responses/MethodNotAllowed' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "503": { $ref: '#/components/responses/Unavailable' }
   /policies/{policyId}/signature-challenges:
     post:
       operationId: beginPolicySignatureChallenge

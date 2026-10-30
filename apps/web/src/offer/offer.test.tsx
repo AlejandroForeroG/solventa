@@ -34,6 +34,7 @@ function stubs(over: Partial<Record<keyof FinancialApi, Mock>> = {}): Record<key
     beginSignatureChallenge: vi.fn().mockResolvedValue(ok(challenge)),
     cancelSignatureChallenge: vi.fn().mockResolvedValue(ok(pending)),
     issuePolicy: vi.fn().mockResolvedValue(ok(issued)),
+    chargePolicy: vi.fn().mockResolvedValue(ok(charged)),
     ...over
   };
 }
@@ -49,7 +50,6 @@ function journey(api = stubs(), locale: Locale = 'es-CO', strict = false) {
 
 async function signFromReview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Continuar al cobro' }));
-  await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
   await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
   await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
   await user.click(screen.getByRole('checkbox'));
@@ -142,9 +142,8 @@ describe('definitive offer journey', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continuar al cobro' }));
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
-    expect(screen.getByText(/Aún no hay un cobro confirmado/)).toBeInTheDocument();
+    expect(api.chargePolicy).toHaveBeenCalledWith(pending, expect.any(String), expect.any(AbortSignal));
     expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
     expect(screen.getByText(receipt)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continuar a la firma' }));
@@ -166,15 +165,28 @@ describe('definitive offer journey', () => {
     await waitFor(() => expect(live()).toHaveTextContent('Póliza emitida una sola vez.'));
   });
 
-  it('keeps step 6 pending until the owner confirms payment', async () => {
-    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValue(ok(pending)) });
+  it('keeps step 6 pending until the charge command confirms payment', async () => {
+    const api = stubs({ chargePolicy: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(charged)) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
-    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
+    expect(await screen.findByRole('button', { name: 'Actualizar estado' })).toBeInTheDocument();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
-    expect(screen.getByText(/Aún no hay un cobro confirmado/)).toBeInTheDocument();
     expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
+    expect(await screen.findByRole('heading', { name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(api.chargePolicy.mock.calls[0][1]).toBe(api.chargePolicy.mock.calls[1][1]);
+  });
+
+  it('reads the durable refund state when the charge expires before signing', async () => {
+    const api = stubs({ chargePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'signature_failed' }),
+      policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValue(ok({ ...charged,
+        status: 'refunded', payment: { status: 'refunded', reference: receipt } })) });
+    const { user } = journey(api);
+    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
+    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    expect(await screen.findByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
     expect(api.issuePolicy).not.toHaveBeenCalled();
   });
 
@@ -271,7 +283,8 @@ describe('definitive offer journey', () => {
   it('requires a new review when the document changed', async () => {
     const changed = { ...charged, document: document + '\n', documentHash: 'b'.repeat(64) };
     const api = stubs({
-      policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce(ok(charged)).mockResolvedValue(ok(changed)),
+      policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValue(ok(changed)),
+      chargePolicy: vi.fn().mockImplementation(async (policy: Policy) => ok({ ...charged, document: policy.document, documentHash: policy.documentHash })),
       issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'rejected', code: 'document_mismatch' }).mockResolvedValue(ok({ ...changed, status: 'issued', payment: issued.payment }))
     });
     const { user } = journey(api);
@@ -280,7 +293,7 @@ describe('definitive offer journey', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Volvimos a consultar el documento');
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Firmar póliza' })).toBeNull();
-    expect(api.policyForAcceptance).toHaveBeenCalledTimes(3);
+    expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
     expect(screen.getByText(new RegExp(changed.documentHash))).toBeInTheDocument();
     await signFromReview(user);
     expect(await screen.findByRole('heading', { name: 'Póliza emitida' })).toBeInTheDocument();
@@ -290,7 +303,7 @@ describe('definitive offer journey', () => {
 
   it('does not claim a completed refund from signature_failed and recovers with the same operation key', async () => {
     const api = stubs({
-      policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce(ok(charged))
+      policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending))
         .mockResolvedValueOnce(ok({ ...charged, status: 'refunding' })).mockResolvedValue(ok({ ...charged, status: 'refunded', payment: { status: 'refunded', reference: receipt } })),
       issuePolicy: vi.fn().mockResolvedValueOnce({ kind: 'rejected', code: 'signature_failed' }).mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue({ kind: 'rejected', code: 'signature_failed' })
     });
@@ -330,12 +343,10 @@ describe('definitive offer journey', () => {
   });
 
   it('shows a declined charge as final for this policy and retries through a new offer with the same data', async () => {
-    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending))
-      .mockResolvedValue(ok({ ...pending, payment: { status: 'declined', reference: null } })) });
+    const api = stubs({ chargePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'payment_declined' }) });
     const { user, onRequote, container } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
-    await user.click(screen.getByRole('button', { name: 'Actualizar estado' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'El cobro no se pudo completar' })).toBeInTheDocument();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
     expect(screen.getByText('La póliza no se emitió y no se generó ningún cargo.')).toBeInTheDocument();
