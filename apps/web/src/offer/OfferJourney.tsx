@@ -326,6 +326,9 @@ export function OfferJourney(props: {
       const outcome = await api().cancelSignatureChallenge(policy.policyId, challenge.challengeId, current);
       if (current.aborted) return;
       if (outcome.kind === 'ok') {
+        if (outcome.value.status === 'issued') {
+          setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); return;
+        }
         setPhase({ name: 'signing', policy, busy: false, uncertain: false });
         setChallenge(null); issueChallengeId.current = null; setCode(''); setChecked(false); setChallengeError(null);
       }
