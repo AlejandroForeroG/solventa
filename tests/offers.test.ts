@@ -232,11 +232,19 @@ test('disabled provider mode never invokes sources or stores an offer', async ()
   assert.equal((await f.service.create(f.command)).status, 'unavailable');
   assert.equal(f.store.rows.size, 0);
 });
-test('deployed composition refuses production or any mode other than explicit mock', async () => {
-  for (const [APP_ENV, FINANCIAL_PROVIDER_MODE, FINANCIAL_EVENT_KEY] of [['prod', 'mock', 'x'.repeat(40)], ['dev', 'disabled', 'x'.repeat(40)], ['dev', 'mock', 'short']] as const) {
+test('deployed composition refuses unknown environments, non-mock modes and malformed keys', async () => {
+  for (const [APP_ENV, FINANCIAL_PROVIDER_MODE, FINANCIAL_EVENT_KEY] of [['prod', 'mock', 'x'.repeat(40)], ['unknown', 'mock', 'b'.repeat(64)], ['prod', 'disabled', 'b'.repeat(64)], ['dev', 'disabled', 'x'.repeat(40)], ['dev', 'mock', 'short']] as const) {
     const service = createOffers({ APP_ENV, FINANCIAL_PROVIDER_MODE, FINANCIAL_EVENT_KEY, ACQUISITION_DB: { connectionString: 'must-not-connect' } });
     assert.equal((await service.createFlight({ actor, flightReference: randomUUID(), idempotencyKey: 'test', traceId: randomUUID() })).status, 'unavailable');
   }
+});
+
+test('production mock composition still rejects expired authorization before persistence', async () => {
+  const service = createOffers({ APP_ENV: 'prod', FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: 'b'.repeat(64),
+    SIGNAL_PROVIDER: 'direct_simulated', ACQUISITION_DB: { connectionString: 'must-not-connect' } });
+  const result = await service.create({ actor, quoteId: 'COT-2026-00001', idempotencyKey: 'prod-denied', traceId: randomUUID(),
+    authorization: { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: '2000-01-01T00:00:00Z' } });
+  assert.equal(result.status, 'denied');
 });
 test('a late Queue acknowledgment cannot turn a timed-out publishing attempt into success', async () => {
   let acknowledge!: () => void;

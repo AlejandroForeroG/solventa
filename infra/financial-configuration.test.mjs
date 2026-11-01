@@ -8,12 +8,16 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { rootCertificates } from 'node:tls';
 
-test('financial credentials are optional, environment-bound and unavailable for production mocks', () => {
+test('financial credentials are optional and bound to the exact demo environment', () => {
   const key = 'a'.repeat(64);
   const configuration = (environment, secrets = { FINANCIAL_EVENT_KEY: key }) => JSON.stringify({ environment, secrets });
   for (const environment of ['dev', 'staging', 'prod']) assert.deepEqual(financialSecrets(environment, ''), { FINANCIAL_EVENT_KEY: '' });
-  for (const environment of ['dev', 'staging']) assert.deepEqual(financialSecrets(environment, configuration(environment)), { FINANCIAL_EVENT_KEY: key });
-  assert.throws(() => financialSecrets('prod', configuration('prod')));
+  for (const environment of ['dev', 'staging', 'prod']) {
+    assert.deepEqual(financialSecrets(environment, configuration(environment)), { FINANCIAL_EVENT_KEY: key });
+    for (const other of ['dev', 'staging', 'prod'].filter(value => value !== environment)) {
+      assert.throws(() => financialSecrets(environment, configuration(other)));
+    }
+  }
   assert.throws(() => financialSecrets('staging', configuration('dev')));
   assert.throws(() => financialSecrets('dev', configuration('dev', { FINANCIAL_EVENT_KEY: 'short' })));
   assert.throws(() => financialSecrets('dev', configuration('dev', { FINANCIAL_EVENT_KEY: key, unrelated: key })));
@@ -23,7 +27,7 @@ test('financial credentials are optional, environment-bound and unavailable for 
 test('CI restores financial keys without printing them and cleans only its selected environment', async () => {
   const script = fileURLToPath(new URL('./ci.mjs', import.meta.url));
   const key = 'b'.repeat(64);
-  for (const [environment, configuredEnvironment, accepted] of [['dev', 'dev', true], ['staging', 'dev', false], ['prod', 'prod', false]]) {
+  for (const [environment, configuredEnvironment, accepted] of [['dev', 'dev', true], ['staging', 'dev', false], ['prod', 'prod', true], ['prod', 'staging', false]]) {
     const directory = await mkdtemp(join(tmpdir(), 'solventa-financial-config-'));
     try {
       const runtime = 'a'.repeat(64);

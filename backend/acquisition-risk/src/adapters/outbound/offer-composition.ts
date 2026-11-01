@@ -16,6 +16,6 @@ export function createOffers(env: OfferEnvironment, background?: { waitUntil(wor
     provider: provider ?? { read: async () => { throw new ProviderFailure('unavailable'); } }, snapshots: new SqlSignalSnapshots(env.ACQUISITION_DB.connectionString),
     clock, timer: platformTimer, trace: new ConsoleDegradationTrace(), background });
   return new OfferService({ store: new SqlOfferStore(env.ACQUISITION_DB.connectionString, background), signals, flights: new MockFlightSchedule(), integrity: new HmacOfferIntegrity(env.FINANCIAL_EVENT_KEY ?? ''),
-    clock, environment: env.APP_ENV, enabled: ['local', 'dev', 'staging'].includes(env.APP_ENV) && env.FINANCIAL_PROVIDER_MODE === 'mock'
+    clock, environment: env.APP_ENV, enabled: ['local', 'dev', 'staging', 'prod'].includes(env.APP_ENV) && env.FINANCIAL_PROVIDER_MODE === 'mock'
       && provider !== null && /^[a-f0-9]{64}$/.test(env.FINANCIAL_EVENT_KEY ?? '') });
 }

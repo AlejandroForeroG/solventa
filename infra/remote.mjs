@@ -45,11 +45,9 @@ async function verifyResources(api) {
   if (!config.ssl.ca) throw Error('Remote TLS verification requires DATABASE_CA_FILE');
   const expectedCA = caFingerprint(config.ssl.ca);
   const verifiedCAs = new Set();
-  if (environment !== 'prod') {
-    const queues = await api('/queues?page=1&per_page=100');
-    for (const name of [`solventa-financial-events-${environment}`, `solventa-financial-events-dlq-${environment}`]) {
-      assert.ok(queues.some(queue => queue.queue_name === name), 'Provision the financial queue before deployment');
-    }
+  const queues = await api('/queues?page=1&per_page=100');
+  for (const name of [`solventa-financial-events-${environment}`, `solventa-financial-events-dlq-${environment}`]) {
+    assert.ok(queues.some(queue => queue.queue_name === name), 'Provision the financial queue before deployment');
   }
   for (const owner of owners) {
     const worker = JSON.parse(await readFile(`backend/${owner.name}/wrangler.jsonc`, 'utf8'));

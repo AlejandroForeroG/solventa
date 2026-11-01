@@ -102,13 +102,14 @@
     },
     "prod": {
       "name": "solventa-policy-claims-payments-prod",
+      "placement": { "region": "aws:us-east-1" },
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
         "APP_ENV": "prod",
-        "FINANCIAL_PROVIDER_MODE": "disabled"
+        "FINANCIAL_PROVIDER_MODE": "mock"
       },
-      "triggers": { "crons": [] },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -122,7 +123,13 @@
         }
       ],
       "queues": {
-        "consumers": []
+        "consumers": [{
+          "queue": "solventa-financial-events-prod",
+          "dead_letter_queue": "solventa-financial-events-dlq-prod",
+          "max_retries": 5,
+          "max_batch_size": 1,
+          "max_batch_timeout": 0
+        }]
       }
     }
   },

@@ -18,7 +18,7 @@ type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: str
 
 // Module scope keeps the publisher off the Service Binding RPC surface of the entrypoint class.
 async function publishAcceptedOffers(env: Env, ctx: ExecutionContext, trigger: 'acceptance' | 'schedule', eventId?: string): Promise<void> {
-  if (!['local', 'dev', 'staging'].includes(env.APP_ENV) || env.FINANCIAL_PROVIDER_MODE !== 'mock') return;
+  if (!['local', 'dev', 'staging', 'prod'].includes(env.APP_ENV) || env.FINANCIAL_PROVIDER_MODE !== 'mock') return;
   const key = env.FINANCIAL_EVENT_KEY;
   const queue = env.FINANCIAL_EVENTS;
   if (!queue || typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('financial_publisher_configuration_invalid');
@@ -47,7 +47,7 @@ export default class extends WorkerEntrypoint<Env> {
         // The committed event is already signed and durable. Import need not wait
         // for a separate outbox claim or Queue acknowledgement; neither delays HTTP.
         if (event && event.eventId === eventId && event.environment === this.env.APP_ENV
-          && ['local', 'dev', 'staging'].includes(this.env.APP_ENV) && this.env.FINANCIAL_PROVIDER_MODE === 'mock') this.ctx.waitUntil(new FinancialEventDelivery({ policy: this.env.POLICY_SERVICE,
+          && ['local', 'dev', 'staging', 'prod'].includes(this.env.APP_ENV) && this.env.FINANCIAL_PROVIDER_MODE === 'mock') this.ctx.waitUntil(new FinancialEventDelivery({ policy: this.env.POLICY_SERVICE,
           waitUntil: work => this.ctx.waitUntil(work), report: result => console.log(JSON.stringify({ event: 'financial_import_delivery', environment: this.env.APP_ENV, trigger: 'acceptance', ...result })) }).send(event));
         this.ctx.waitUntil(publishAcceptedOffers(this.env, this.ctx, 'acceptance', eventId).catch(() => {
           console.error(JSON.stringify({ event: 'financial_outbox_publication_failed', environment: this.env.APP_ENV, trigger: 'acceptance', code: 'publication_unavailable' }));

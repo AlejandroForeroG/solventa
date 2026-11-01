@@ -15,9 +15,15 @@ const traceId = '50000000-0000-4000-8000-000000000001';
 // the separate real SQL suites establish transaction and business invariants.
 const stateScript = `
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { HmacOfferIntegrity } from './backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
 let settings = {}, queries = [], access = [], finance = [], probes = [];
 export default class extends WorkerEntrypoint {
   async fetch(request) {
+    if (new URL(request.url).pathname === '/production-event') {
+      const { signature, ...unsigned } = this.env.PROD_EVENT;
+      const environment = new URL(request.url).searchParams.get('environment') === 'staging' ? 'staging' : 'prod';
+      return Response.json(await new HmacOfferIntegrity('c'.repeat(64)).sign({ ...unsigned, environment }));
+    }
     if (new URL(request.url).pathname === '/configure') {
       settings = await request.json(); queries = []; access = []; finance = []; probes = [];
     }
@@ -61,10 +67,10 @@ const caller = `export default { async fetch(request, env) {
   return Response.json(value);
 } };`;
 
-async function bundle(entry) {
+async function bundle(entry, realFinance = false) {
   return (await build({ entryPoints: [entry], bundle: true, write: false, format: 'esm', platform: 'neutral', external: ['cloudflare:*', 'node:*'],
     plugins: [{ name: 'explicit-runtime-collaborators', setup(builder) {
-      builder.onResolve({ filter: /^pg$|outbound\/database-probe$|adapters\/composition$/ }, args => ({
+      builder.onResolve({ filter: /^pg$|outbound\/database-probe$|adapters\/composition$/ }, args => realFinance && args.path.endsWith('adapters/composition') ? undefined : ({
         path: args.path === 'pg' ? 'pg' : args.path.endsWith('database-probe') ? 'probe' : 'finance', namespace: 'runtime-collaborator',
       }));
       builder.onLoad({ filter: /.*/, namespace: 'runtime-collaborator' }, args => ({ contents: collaborators[args.path], loader: 'js' }));
@@ -73,26 +79,34 @@ async function bundle(entry) {
 }
 
 test('financial entrypoints preserve authorization, owner bindings, cron failures and Queue retry semantics in workerd', { timeout: 30_000 }, async t => {
-  const [acquisition, policy] = await Promise.all(['acquisition-risk', 'policy-claims-payments'].map(name => bundle(`backend/${name}/src/index.ts`)));
+  const [acquisition, policy, realPolicy] = await Promise.all([bundle('backend/acquisition-risk/src/index.ts'),
+    bundle('backend/policy-claims-payments/src/index.ts'), bundle('backend/policy-claims-payments/src/index.ts', true)]);
+  const stateBundle = await build({ stdin: { contents: stateScript, resolveDir: process.cwd(), loader: 'ts' }, bundle: true,
+    write: false, format: 'esm', platform: 'neutral', external: ['cloudflare:*'] });
+  const productionEvent = JSON.parse(await readFile('packages/contracts/examples/financial.json', 'utf8')).event;
   const config = JSON.parse(await readFile('backend/acquisition-risk/wrangler.jsonc', 'utf8'));
   const worker = (name, script, overrides = {}) => ({ name, modules: true, script,
     unsafeDirectSockets: [{ host: '127.0.0.1', port: 0 }], compatibilityDate: config.compatibility_date, compatibilityFlags: config.compatibility_flags,
     bindings: { APP_ENV: 'local', FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: 'b'.repeat(64), QUOTE_HMAC_KEY: 'a'.repeat(64), SIGNAL_PROVIDER: 'direct_simulated',
-      ...(script === policy ? { POLICY_DB: { connectionString: 'postgresql://synthetic.invalid/policy' } }
+      ...(script === policy || script === realPolicy ? { POLICY_DB: { connectionString: 'postgresql://synthetic.invalid/policy' } }
         : { ACQUISITION_DB: { connectionString: 'postgresql://synthetic.invalid/acquisition' } }), ...overrides },
     serviceBindings: { IDENTITY_SERVICE: 'state', TEST_STATE: 'state' },
   });
   const runtime = new Miniflare(convertV4MiniflareOptions({ host: '127.0.0.1', port: 0, workers: [
     { ...worker('acquisition', acquisition), queueProducers: { FINANCIAL_EVENTS: 'financial' } },
     { ...worker('invalid', acquisition, { FINANCIAL_EVENT_KEY: 'invalid' }), queueProducers: { FINANCIAL_EVENTS: 'financial' } },
-    worker('disabled', acquisition, { APP_ENV: 'prod' }),
+    worker('disabled', acquisition, { APP_ENV: 'prod', FINANCIAL_PROVIDER_MODE: 'disabled' }),
+    { ...worker('prod-acquisition', acquisition, { APP_ENV: 'prod', FINANCIAL_EVENT_KEY: 'c'.repeat(64) }), queueProducers: { FINANCIAL_EVENTS: 'prod-financial' } },
+    worker('prod-policy', realPolicy, { APP_ENV: 'prod', FINANCIAL_EVENT_KEY: 'c'.repeat(64) }),
     { ...worker('policy', policy), queueConsumers: { financial: { maxBatchSize: 1, maxBatchTimeout: 0, maxRetries: 2 } } },
-    { name: 'state', modules: true, script: stateScript, compatibilityDate: config.compatibility_date },
+    { name: 'state', modules: true, script: stateBundle.outputFiles[0].text, compatibilityDate: config.compatibility_date, bindings: { PROD_EVENT: productionEvent } },
     { name: 'caller', modules: true, script: caller, compatibilityDate: config.compatibility_date,
       serviceBindings: { ACQUISITION: 'acquisition', POLICY: 'policy' } },
+    { name: 'prod-caller', modules: true, script: caller, compatibilityDate: config.compatibility_date,
+      serviceBindings: { ACQUISITION: 'prod-acquisition', POLICY: 'prod-policy' } },
   ] }));
   t.after(async () => {
-    try { await captureRuntimeCoverage(runtime, ['acquisition', 'invalid', 'disabled', 'policy']); }
+    try { await captureRuntimeCoverage(runtime, ['acquisition', 'invalid', 'disabled', 'policy', 'prod-acquisition', 'prod-policy']); }
     finally { await runtime.dispose(); }
   });
   await runtime.ready;
@@ -130,7 +144,7 @@ test('financial entrypoints preserve authorization, owner bindings, cron failure
     assert.equal((await (await rpc.fetch('http://rpc/acquisition')).json()).ready, false);
     assert.equal((await (await rpc.fetch('http://rpc/policy')).json()).ready, false);
   });
-  await t.test('cron rejects invalid configuration before SQL and preserves disabled production behavior', async () => {
+  await t.test('cron rejects invalid configuration before SQL and preserves explicitly disabled behavior', async () => {
     await configure({});
     assert.equal((await (await runtime.getWorker('invalid')).scheduled({ cron: '* * * * *' })).outcome, 'exception');
     assert.equal((await (await runtime.getWorker('disabled')).scheduled({ cron: '* * * * *' })).outcome, 'ok');
@@ -142,6 +156,35 @@ test('financial entrypoints preserve authorization, owner bindings, cron failure
     assert.deepEqual(published.finance, [], 'an empty outbox must not invoke Policy');
     await configure({ failQuery: true });
     assert.equal((await (await runtime.getWorker('acquisition')).scheduled({ cron: '* * * * *' })).outcome, 'exception');
+  });
+  await t.test('production demo cron runs the actual owner publisher and financial composition', async () => {
+    await configure({});
+    assert.equal((await (await runtime.getWorker('prod-acquisition')).scheduled({ cron: '* * * * *' })).outcome, 'ok');
+    const publication = await snapshot();
+    assert.ok(publication.queries.some(sql => sql.includes('UPDATE acquisition.outbox_events')));
+    assert.ok(publication.queries.every(sql => !sql.includes('policy.')));
+    await configure({});
+    assert.equal((await (await runtime.getWorker('prod-policy')).scheduled({ cron: '* * * * *' })).outcome, 'ok');
+    const recovery = await snapshot();
+    assert.ok(recovery.queries.some(sql => sql.includes('policy.policies')));
+    assert.ok(recovery.queries.every(sql => !sql.includes('acquisition.')));
+  });
+  await t.test('production Policy composition imports only a correctly bound production event', async () => {
+    const event = await (await state.fetch('http://state/production-event')).json();
+    const production = await runtime.getWorker('prod-caller');
+    await configure({});
+    const response = await production.fetch('http://rpc/accept', { method: 'POST', body: JSON.stringify(event) });
+    const result = await response.json();
+    assert.equal(result.status, 'denied');
+    assert.equal(result.error, 'integrity_violation', 'the empty SQL collaborator supplies no durable import receipt');
+    assert.ok((await snapshot()).queries.some(sql => sql.includes('INSERT INTO policy.policies')),
+      'valid production binding must reach its actual owner import adapter');
+    await configure({});
+    const foreign = await (await state.fetch('http://state/production-event?environment=staging')).json();
+    const rejected = await production.fetch('http://rpc/accept', { method: 'POST', body: JSON.stringify(foreign) });
+    assert.equal((await rejected.json()).error, 'invalid_event', 'a valid HMAC does not authorize another environment');
+    assert.ok((await snapshot()).queries.every(sql => !sql.includes('INSERT INTO policy.policies')),
+      'a foreign environment must not reach business persistence');
   });
   await t.test('acceptance RPC preserves a valid correlation and replaces invalid correlation IDs', async () => {
     await configure({});
