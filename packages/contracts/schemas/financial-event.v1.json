@@ -33,7 +33,8 @@
           "enum": [
             "local",
             "dev",
-            "staging"
+            "staging",
+            "prod"
           ]
         },
         "synthetic": {
@@ -203,7 +204,8 @@
           "enum": [
             "local",
             "dev",
-            "staging"
+            "staging",
+            "prod"
           ]
         },
         "synthetic": {

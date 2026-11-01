@@ -74,7 +74,21 @@ test('signed event schema agrees with both consumer payload shapes without autho
   const parametric = { ...examples.event, eventType: 'flight.delay_verified', payload: { policyId: examples.policy.policyId, flightReference: examples.offer.offerId, delayMinutes: 180 } };
   assert.equal(check(parametric), true, JSON.stringify(check.errors));
   assert.equal(isParametricEnvelope(parametric, 'local'), true);
-  for (const invalid of [{ ...examples.event, environment: 'prod' }, { ...examples.event, synthetic: false }, { ...examples.event, unexpected: 'personal data' }, { ...parametric, payload: { ...parametric.payload, payoutAmount: '1.0000' } }]) assert.equal(check(invalid), false);
+  for (const body of [examples.event, parametric]) {
+    assert.equal(check({ ...body, environment: 'prod' }), true, JSON.stringify(check.errors));
+  }
+  for (const invalid of [{ ...examples.event, environment: 'unknown' }, { ...examples.event, synthetic: false }, { ...examples.event, unexpected: 'personal data' }, { ...parametric, payload: { ...parametric.payload, payoutAmount: '1.0000' } }]) assert.equal(check(invalid), false);
+});
+
+test('production demo events retain their own environment and reject staging routing or keys', async () => {
+  const key = 'c'.repeat(64), producer = new HmacOfferIntegrity(key), consumer = new HmacFinancialIntegrity(key);
+  const { signature: _exampleSignature, ...unsigned } = examples.event;
+  const signed = await producer.sign({ ...unsigned, environment: 'prod' });
+  assert.equal(isOfferEnvelope(signed, 'prod'), true);
+  assert.equal(isOfferEnvelope(signed, 'staging'), false);
+  assert.equal(await consumer.verify(eventContent(signed), signed.signature), true);
+  assert.equal(await new HmacFinancialIntegrity('b'.repeat(64)).verify(eventContent(signed), signed.signature), false);
+  assert.equal(await consumer.verify(eventContent({ ...signed, environment: 'staging' }), signed.signature), false);
 });
 
 test('Acquisition signatures are verified by the actual Policy adapter and bind money and environment', async () => {
