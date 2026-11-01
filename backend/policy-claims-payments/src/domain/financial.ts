@@ -1,7 +1,7 @@
 export const FINANCIAL_RULE = 'academic-financial-1';
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const HEX = /^[0-9a-f]{64}$/;
-export type FinancialEnvironment = 'local' | 'dev' | 'staging';
+export type FinancialEnvironment = 'local' | 'dev' | 'staging' | 'prod';
 export type FinancialActor = { clientId: string; subjectToken: string };
 export type Coverage = { kind: 'mortgage_life'; sumInsured: string } | {
   kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string;

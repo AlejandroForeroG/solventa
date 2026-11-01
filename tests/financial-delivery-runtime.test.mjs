@@ -21,7 +21,8 @@ export default class extends WorkerEntrypoint {
     if (path === '/configure') {
       settings = await request.json(); status = settings.httpCase ? 'uncommitted' : 'pending'; queued = []; imported = []; committed = false; commitRequested = false; rpcAttempts = 0;
       const at = new Date().toISOString();
-      event = await new HmacOfferIntegrity('b'.repeat(64)).sign({version:1,eventType:'offer.accepted',eventId:crypto.randomUUID(),environment:'local',synthetic:true,
+      const key = settings.environment === 'prod' ? 'c'.repeat(64) : 'b'.repeat(64);
+      event = await new HmacOfferIntegrity(key).sign({version:1,eventType:'offer.accepted',eventId:crypto.randomUUID(),environment:settings.environment ?? 'local',synthetic:true,
         occurredAt:at,correlationId:crypto.randomUUID(),payload:{acceptanceId:crypto.randomUUID(),offerId:crypto.randomUUID(),offerVersion:1,
           clientId:crypto.randomUUID(),subjectToken:crypto.randomUUID(),product:'vida_hipotecario',premium:'10000.0000',currency:'COP',
           coverage:{kind:'mortgage_life',sumInsured:'100000000.0000'},effectiveFrom:at,effectiveUntil:'2027-10-27T00:00:00.000Z',
@@ -29,7 +30,7 @@ export default class extends WorkerEntrypoint {
       if (settings.tamper) event.payload.premium = '1.0000';
       const {acceptanceId,acceptedAt,...terms}=event.payload;
       ownedOffer={terms:{...terms,quoteId:'COT-2026-00001',synthetic:true,status:'definitive'},consentId:'CNS-2026-00001',consentVersion:1};
-      ownedOffer.seal=await new HmacOfferIntegrity('b'.repeat(64)).seal(ownedOffer.terms,ownedOffer);
+      ownedOffer.seal=await new HmacOfferIntegrity(key).seal(ownedOffer.terms,ownedOffer);
     }
     if (path === '/release') settings.blockRpc = false;
     if (path === '/release-commit') settings.blockCommit = false;
@@ -89,15 +90,18 @@ test('a post-commit HTTP acceptance imports independently while its signed outbo
         "import {env} from 'cloudflare:workers';export class Client{on(){}async connect(){}async query(sql,args){return env.STATE.query(sql,args)}async end(){}}"}));
     }}, ...runtimeCoveragePlugins()] });
   const stateBundle = await build({stdin:{contents:stateSource,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:*']});
-  const worker = (name, rpc) => ({name,modules:true,script:producer.outputFiles[0].text,compatibilityDate:config.compatibility_date,compatibilityFlags:config.compatibility_flags,
-    bindings:{APP_ENV:'local',SIGNAL_PROVIDER:'direct_simulated',QUOTE_HMAC_KEY:'c'.repeat(64),FINANCIAL_PROVIDER_MODE:'mock',FINANCIAL_EVENT_KEY:'b'.repeat(64),ACQUISITION_DB:{connectionString:'postgresql://synthetic.invalid/unused'}},
-    serviceBindings:{STATE:'state',IDENTITY_SERVICE:'receiver',...(rpc?{POLICY_SERVICE:'receiver'}:{})},queueProducers:{FINANCIAL_EVENTS:'events'}});
-  const runtime = new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:0,workers:[worker('producer',true),worker('legacy',false),
+  const worker = (name, rpc, environment = 'local') => ({name,modules:true,script:producer.outputFiles[0].text,compatibilityDate:config.compatibility_date,compatibilityFlags:config.compatibility_flags,
+    bindings:{APP_ENV:environment,SIGNAL_PROVIDER:'direct_simulated',QUOTE_HMAC_KEY:'c'.repeat(64),FINANCIAL_PROVIDER_MODE:'mock',FINANCIAL_EVENT_KEY:(environment === 'prod' ? 'c' : 'b').repeat(64),ACQUISITION_DB:{connectionString:'postgresql://synthetic.invalid/unused'}},
+    serviceBindings:{STATE:'state',IDENTITY_SERVICE:environment === 'prod' ? 'prod-receiver' : 'receiver',...(rpc?{POLICY_SERVICE:environment === 'prod' ? 'prod-receiver' : 'receiver'}:{})},
+    queueProducers:{FINANCIAL_EVENTS:environment === 'prod' ? 'prod-events' : 'events'}});
+  const runtime = new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:0,workers:[worker('producer',true),worker('legacy',false),worker('prod-producer',true,'prod'),
     {name:'state',modules:true,script:stateBundle.outputFiles[0].text,compatibilityDate:config.compatibility_date},
     {name:'receiver',modules:true,script:receiver,compatibilityDate:config.compatibility_date,serviceBindings:{STATE:'state'},
-      queueConsumers:{events:{maxBatchSize:1,maxBatchTimeout:0,maxRetries:2}}}]}));
+      queueConsumers:{events:{maxBatchSize:1,maxBatchTimeout:0,maxRetries:2}}},
+    {name:'prod-receiver',modules:true,script:receiver,compatibilityDate:config.compatibility_date,serviceBindings:{STATE:'state'},
+      queueConsumers:{'prod-events':{maxBatchSize:1,maxBatchTimeout:0,maxRetries:2}}}]}));
   t.after(async () => {
-    try { await captureRuntimeCoverage(runtime, ['producer', 'legacy']); }
+    try { await captureRuntimeCoverage(runtime, ['producer', 'legacy', 'prod-producer']); }
     finally { await runtime.dispose(); }
   });
   await runtime.ready;
@@ -148,5 +152,14 @@ test('a post-commit HTTP acceptance imports independently while its signed outbo
     const rejected=await snapshot();
     assert.equal(rejected.status,'dead_letter');
     assert.deepEqual(rejected.queued,[]);assert.deepEqual(rejected.imported,[]);
+  });
+  await t.test('production mock acceptance keeps the production namespace through Queue and private import', async () => {
+    await configure({httpCase:true,environment:'prod'});
+    const response=await accept('prod-producer');assert.equal(response.status,202);
+    const delivered=await until(value=>value.status==='published'&&value.queued.length===1&&value.imported.length===1);
+    assert.equal(delivered.committed,true);
+    assert.equal(delivered.event.environment,'prod');
+    assert.deepEqual(delivered.queued[0],delivered.event);
+    assert.deepEqual(delivered.imported[0],delivered.event);
   });
 });

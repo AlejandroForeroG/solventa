@@ -93,11 +93,11 @@
       "preview_urls": false,
       "vars": {
         "APP_ENV": "prod",
-        "FINANCIAL_PROVIDER_MODE": "disabled",
+        "FINANCIAL_PROVIDER_MODE": "mock",
         "SIGNAL_PROVIDER": "direct_simulated"
       },
-      "queues": { "producers": [] },
-      "triggers": { "crons": [] },
+      "queues": { "producers": [{ "binding": "FINANCIAL_EVENTS", "queue": "solventa-financial-events-prod" }] },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "ACQUISITION_DB",
@@ -108,7 +108,8 @@
         {
           "binding": "IDENTITY_SERVICE",
           "service": "solventa-identity-consent-ecosystem-prod"
-        }
+        },
+        { "binding": "POLICY_SERVICE", "service": "solventa-policy-claims-payments-prod" }
       ]
     }
   },
