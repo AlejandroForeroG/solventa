@@ -4,8 +4,12 @@ info:
   version: 1.0.0
   description: Authenticated web-only academic financial flow. External data,
     payment and signature providers are explicitly mocked; Solventa
-    authorization, owner transactions and idempotency remain real. Disabled in
-    production. Credentials, actor identifiers, approval and amounts cannot be
+    authorization, owner transactions and idempotency remain real. The isolated
+    production demo requires explicit FINANCIAL_PROVIDER_MODE=mock, a valid
+    environment-specific FINANCIAL_EVENT_KEY and separately provisioned production
+    bindings, queues and SQL. Missing or invalid configuration fails closed.
+    Synthetic results do not establish real payment settlement, legal external
+    signature or insurance coverage. Credentials, actor identifiers, approval and amounts cannot be
     selected by clients. All responses are no-store and correlated.
 servers:
   - url: /api/v1
