@@ -146,8 +146,8 @@ test('disabled configuration and failure to persist a required rejection both fa
 });
 
 test('the deployed financial composition rejects missing or malformed hexadecimal key custody', async () => {
-  for (const key of [undefined, '', 'a'.repeat(32), 'g'.repeat(64), 'A'.repeat(64)]) {
-    const finance = createPolicyFinance({ APP_ENV: 'dev', FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: key,
+  for (const [environment, key] of ['dev', 'prod'].flatMap(environment => [undefined, '', 'a'.repeat(32), 'g'.repeat(64), 'A'.repeat(64)].map(key => [environment, key] as const))) {
+    const finance = createPolicyFinance({ APP_ENV: environment, FINANCIAL_PROVIDER_MODE: 'mock', FINANCIAL_EVENT_KEY: key,
       POLICY_DB: { connectionString: 'unused' } });
     assert.equal((await finance.acceptOffer({}, randomUUID())).status, 'unavailable');
   }
