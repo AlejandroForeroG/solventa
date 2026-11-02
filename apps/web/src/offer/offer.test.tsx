@@ -73,7 +73,7 @@ describe('definitive offer journey', () => {
     const api = stubs({ createOffer: vi.fn(createOffer) });
     const { user, container, onRequote } = journey(api);
     const heading = await screen.findByRole('heading', { name: 'Oferta preliminar' });
-    expect(heading).toHaveFocus();
+    await waitFor(() => expect(heading).toHaveFocus());
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 4: Oferta');
     expect(screen.getByText(/Esta oferta no se puede aceptar/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aceptar oferta' })).toBeNull();
