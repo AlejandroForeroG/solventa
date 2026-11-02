@@ -60,5 +60,8 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "underwriting_audit_grants": [
+    "SELECT"
   ]
 }

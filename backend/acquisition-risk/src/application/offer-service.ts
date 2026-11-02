@@ -100,7 +100,7 @@ export class OfferService {
       coverage: { kind: 'flight_delay' as const, flightReference: input.flightReference, thresholdMinutes: 180 as const, payoutAmount: '100000.0000' as const },
       effectiveFrom: now.toISOString(), effectiveUntil: new Date(now.getTime() + 86400000).toISOString(), expiresAt: new Date(now.getTime() + 15 * 60000).toISOString(),
       ruleVersion: 'academic-flight-1', synthetic: true as const, status: 'definitive' as const };
-    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: input.traceId, inputs: { premium: terms.premium, payoutAmount: terms.coverage.payoutAmount, thresholdMinutes: 180 },
+    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: input.traceId, inputs: { flightReference: input.flightReference, scheduleAvailable: schedule.available, premium: terms.premium, payoutAmount: terms.coverage.payoutAmount, thresholdMinutes: 180 },
       sources: [{ source: 'mock:flight-schedule', capturedAt: schedule.capturedAt, quality: 'mock', degraded: false }], consent: { status: 'not_required' }, rule: { id: 'flight-underwriting', version: terms.ruleVersion }, outcome: 'accepted' };
     const stored = { terms, seal: await this.deps.integrity.seal(terms, { consentId: '', consentVersion: 0 }), consentId: '', consentVersion: 0 };
     const result = await this.deps.store.create({ actor: input.actor, quote: null, sourceReference: input.flightReference, requestIdentity, key: input.idempotencyKey, offer: stored, capture, traceId: input.traceId });

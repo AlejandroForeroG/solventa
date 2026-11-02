@@ -1,13 +1,13 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write';
+export type ApiOperation = 'underwriting-decisions:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
   find(provider: string, reference: string): Promise<PartnerCredential | null>;
 }
 export type PartnerActor = { kind: 'partner'; partnerId: string; credentialId: string; scopes: ApiOperation[] };
-export type UserActor = { kind: 'user'; channel: 'web' | 'mobile'; principal: Principal; operations: ApiOperation[] };
+export type UserActor = { kind: 'user'; channel: 'web' | 'mobile'; principal: Principal; operations: ApiOperation[]; authorizationExpiresAt?: string };
 export type AccessActor = PartnerActor | UserActor;
 export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed: true; actor: Actor } | {
   allowed: false;
@@ -15,7 +15,7 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write'];
+const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
 const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:'));
@@ -30,8 +30,12 @@ export function isApiOperation(value: unknown): value is ApiOperation {
 }
 
 // Identities reach this application only after cryptographic verification by an adapter.
+export interface AuditPermissions {
+  find(principal: Principal, identity: VerifiedIdentity): Promise<{ expiresAt: string } | null>;
+}
+
 export class ApiAccess {
-  constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions) {}
+  constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions, private readonly auditPermissions?: AuditPermissions) {}
 
   async partner(identity: PartnerIdentity, operation: string): Promise<AccessDecision<PartnerActor>> {
     if (!isApiOperation(operation)) return invalid;
@@ -52,6 +56,13 @@ export class ApiAccess {
     try {
       const principal = await this.sessions.find(identity);
       if (!principal) return unauthorized;
+      if (operation === 'underwriting-decisions:read') {
+        if (!this.auditPermissions) return forbidden;
+        const grant = await this.auditPermissions.find(principal, identity);
+        if (!grant) return forbidden;
+        if (!(Date.parse(grant.expiresAt) > Date.now()) || Date.parse(grant.expiresAt) > Date.now() + 5500) return unavailable;
+        return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation], authorizationExpiresAt: grant.expiresAt } };
+      }
       return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation] } };
     } catch { return unavailable; }
   }

@@ -1,3 +1,4 @@
+import { AuditWorkspace } from './audit/AuditWorkspace';
 import { brandAssets } from '@solventa/assets/web';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
@@ -45,7 +46,8 @@ function Shell() {
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   const [purchaseInProgress] = useState(() => readPurchaseDraft() !== null);
-  const isLanding = window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
+  const isAudit = window.location.pathname === '/auditoria';
+  const isLanding = !isAudit && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
     setSession(await fetchSession());
@@ -77,10 +79,21 @@ function Shell() {
         {session === 'anonymous' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
           if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
         }}>{t('session.title')}</a>}
+        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/auditoria">{t('audit.open')}</a>}
         {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
       </div>
     </header>
-    {isLanding ? <Landing sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
+    {isAudit ? (session === 'authenticated' && !busy
+      ? <AuditWorkspace onSessionLost={sessionLost} />
+      : <main className="access-panel">
+        <h1>{t('audit.open')}</h1>
+        {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>
+          : session === 'unavailable' ? <>
+            <p role="alert">{t('session.unavailable')}</p>
+            <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
+          </> : <a className="btn btn-primary" href="/auth/login">{t('session.title')}</a>}
+      </main>)
+      : isLanding ? <Landing sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>

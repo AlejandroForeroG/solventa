@@ -185,3 +185,5 @@ Per-decision capture creation, persistence and routing with headers are explaine
 ## TypeScript types from OpenAPI (pending)
 
 Types are not generated yet. Once endpoints exist, use `openapi-typescript` on each `openapi/v<N>/<domain>.yaml` spec to write `src/generated/v<N>.d.ts`, add a package `generate` script (as in `@solventa/assets`), commit sources/generated files together and make CI regenerate and fail on differences.
+
+The web-only underwriting audit contract is [OpenAPI v1](../../../packages/contracts/openapi/v1/underwriting-decisions.yaml), with [synthetic examples](../../../packages/contracts/examples/underwriting-audit.json). `tests/underwriting-audit.test.ts` validates actual handler output against these schemas. The SPA consumer and web provider Pact exercise list, detail, legacy gaps and access/storage failures. The owning [Acquisition guide](../../modules/acquisition-risk/underwriting-audit.md) defines historical reconstruction and authorization limits.

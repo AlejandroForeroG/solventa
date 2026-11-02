@@ -1,3 +1,4 @@
+import { auditWorld } from './audit';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -189,6 +190,10 @@ function financialWorld(state: FinancialState): Partial<World> {
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
+  'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),
+  'a customer without underwriting audit permission': () => auditWorld(origin, 'denied'),
+  'the underwriting audit store is unavailable': () => auditWorld(origin, 'unavailable'),
   ...Object.fromEntries((['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as VerificationStage[]).map(stage => [
     `a native identity verification in ${stage} state`, async () => {
       const world = await verificationPactWorld(stage);
