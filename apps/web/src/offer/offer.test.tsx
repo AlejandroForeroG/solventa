@@ -15,7 +15,7 @@ import { OfferJourney } from './OfferJourney';
 import { readPurchaseDraft, savePurchaseDraft } from './purchase-draft';
 
 const quote: Quote = { quoteId: 'COT-2026-08843', premiumMonthly: 86400, currency: 'COP', sumInsured: 320000000, termMonths: 180, validUntil: '2026-11-05T10:47:00-05:00', basis: 'minimum_data', ruleVersion: 'provisional-1', traceId: '7f3c2a9e-1b4d-4c8a-a0d1-e2f3a4b5c6d7' };
-const offer: Offer = { offerId: '10000000-0000-4000-8000-000000000001', offerVersion: 1, quoteId: quote.quoteId, premium: '77760.0000', currency: 'COP', sumInsured: '320000000.0000', effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', traceId: '50000000-0000-4000-8000-000000000001' };
+const offer: Offer = { status: 'definitive', offerId: '10000000-0000-4000-8000-000000000001', offerVersion: 1, quoteId: quote.quoteId, premium: '77760.0000', currency: 'COP', sumInsured: '320000000.0000', effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', traceId: '50000000-0000-4000-8000-000000000001' };
 const acceptance: Acceptance = { acceptanceId: '20000000-0000-4000-8000-000000000002', offerId: offer.offerId, acceptedAt: '2026-10-15T00:01:00.000Z', traceId: '50000000-0000-4000-8000-000000000002' };
 const document = '{"currency":"COP","offerId":"10000000-0000-4000-8000-000000000001","premium":"77760.0000","providerMode":"mock","synthetic":true}';
 const pending: Policy = { policyId: '30000000-0000-4000-8000-000000000003', offerId: offer.offerId, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: offer.effectiveFrom, effectiveUntil: offer.effectiveUntil, document, documentHash: 'a'.repeat(64), payment: null, replayed: false, traceId: '50000000-0000-4000-8000-000000000003' };
@@ -61,6 +61,55 @@ async function signFromReview(user: ReturnType<typeof userEvent.setup>) {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('definitive offer journey', () => {
+  it('requests a new evaluation after a valid preliminary result and keeps that command on an uncertain retry', async () => {
+    const { sumInsured, ...fields } = offer;
+    const response = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+    const definitive = { ...fields, product: 'vida_hipotecario', coverage: { kind: 'mortgage_life', sumInsured }, synthetic: true };
+    let finish: (response: Response) => void = () => {};
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(201, { ...definitive, status: 'preliminary' }))
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(response(201, definitive));
+    const api = stubs({ createOffer: vi.fn(createOffer) });
+    const { user, container, onRequote } = journey(api);
+    const heading = await screen.findByRole('heading', { name: 'Oferta preliminar' });
+    expect(heading).toHaveFocus();
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 4: Oferta');
+    expect(screen.getByText(/Esta oferta no se puede aceptar/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aceptar oferta' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'No pudimos completar la operación' })).toBeNull();
+    await waitFor(() => expect(live()).toHaveTextContent('Oferta preliminar.'));
+    expect(await axe(container)).toHaveNoViolations();
+
+    const evaluate = screen.getByRole('button', { name: 'Solicitar nueva evaluación' });
+    act(() => { fireEvent.click(evaluate); fireEvent.click(evaluate); });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const key = (index: number) => new Headers(fetch.mock.calls[index][1]?.headers).get('idempotency-key');
+    expect(key(1)).not.toBe(key(0));
+    expect(fetch.mock.calls[1][0]).toBe(fetch.mock.calls[0][0]);
+    await act(async () => { finish(response(503, { error: 'unavailable' })); });
+    await user.click(await screen.findByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('heading', { name: 'Oferta definitiva' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aceptar oferta' })).toBeEnabled();
+    expect(key(2)).toBe(key(1));
+    expect(onRequote).not.toHaveBeenCalled();
+    expect(api.acceptOffer).not.toHaveBeenCalled();
+    expect(api.chargePolicy).not.toHaveBeenCalled();
+    expect(api.issuePolicy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a repeated preliminary evaluation non-contractable in English', async () => {
+    const api = stubs({ createOffer: vi.fn().mockResolvedValue(ok({ ...offer, status: 'preliminary' })) });
+    const { user } = journey(api, 'en-US');
+    await screen.findByRole('heading', { name: 'Preliminary offer' });
+    await user.click(screen.getByRole('button', { name: 'Request a new evaluation' }));
+    expect(await screen.findByRole('heading', { name: 'Preliminary offer' })).toBeInTheDocument();
+    expect(api.createOffer.mock.calls[1][1]).not.toBe(api.createOffer.mock.calls[0][1]);
+    expect(screen.queryByRole('button', { name: 'Accept offer' })).toBeNull();
+    await waitFor(() => expect(live()).toHaveTextContent('Preliminary offer. It cannot be accepted.'));
+    expect(api.acceptOffer).not.toHaveBeenCalled();
+  });
+
   it('backs off unavailable reads and stops at the budget without repeating acceptance or declaring issuance', async () => {
     vi.useFakeTimers();
     try {
@@ -719,7 +768,12 @@ describe('financial API client', () => {
   delete (offerBody as Record<string, unknown>).sumInsured;
   const fetchMock = (response: Response) => vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
 
-  it('sends the key and an empty JSON body, and accepts only a valid owned definitive offer', async () => {
+  it('preserves a valid preliminary status instead of treating the degraded offer as an outage', async () => {
+    fetchMock(json(201, { ...offerBody, status: 'preliminary' }));
+    expect(await createOffer(quote.quoteId, 'preliminary-key')).toEqual(ok({ ...offer, status: 'preliminary' }));
+  });
+
+  it('sends the key and an empty JSON body, and accepts a valid owned definitive offer', async () => {
     const spy = fetchMock(json(201, offerBody));
     expect(await createOffer(quote.quoteId, 'key-1')).toEqual(ok(offer));
     const [path, init] = spy.mock.calls[0];
@@ -731,7 +785,7 @@ describe('financial API client', () => {
   it.each([
     ['another quote', { ...offerBody, quoteId: 'COT-2026-00001' }],
     ['a floating amount', { ...offerBody, premium: '77760.5' }],
-    ['a preliminary status', { ...offerBody, status: 'preliminary' }],
+    ['an unknown status', { ...offerBody, status: 'approved' }],
     ['a non-synthetic offer', { ...offerBody, synthetic: false }]
   ])('rejects %s as unavailable', async (_label, body) => {
     fetchMock(json(200, body, { 'x-trace-id': offer.traceId }));

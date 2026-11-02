@@ -15,7 +15,7 @@ function downloadDocument(policy: Policy) {
   URL.revokeObjectURL(url);
 }
 
-export function OfferCard({ heading, offer, accepting, onAccept, onBack }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; accepting: boolean; onAccept: () => void; onBack: () => void }) {
+export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
   const intl = useIntl();
   const { copDecimal, copDecimalAmount, dayMonthYear, dateTime } = useFormatters();
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
@@ -23,7 +23,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onBack }: { hea
     <div className="offer-grid">
       <div className="offer-card">
         <div className="offer-head">
-          <h1 ref={heading} tabIndex={-1} className="offer-label">{t('offer.label')}</h1>
+          <h1 ref={heading} tabIndex={-1} className="offer-label">{t(offer.status === 'preliminary' ? 'offer.preliminaryTitle' : 'offer.label')}</h1>
           <span className="offer-id">{offer.offerId}</span>
         </div>
         <p className="offer-caption">{t('offer.premium')}</p>
@@ -42,11 +42,13 @@ export function OfferCard({ heading, offer, accepting, onAccept, onBack }: { hea
           <li><span aria-hidden="true" className="mark mark-ok">✓</span>{t('offer.basisRule')}</li>
           <li><span aria-hidden="true" className="mark mark-no">!</span>{t('offer.basisMock')}</li>
         </ul>
-        <p className="note">{t('offer.nextSteps')}</p>
+        <p className="note">{t(offer.status === 'preliminary' ? 'offer.preliminaryDetail' : 'offer.nextSteps')}</p>
       </div>
     </div>
     <div className="actions">
-      <button type="button" className="btn btn-primary" onClick={onAccept} disabled={accepting}>{t(accepting ? 'offer.accepting' : 'offer.accept')}</button>
+      {offer.status === 'preliminary'
+        ? <button type="button" className="btn btn-primary" onClick={onReevaluate}>{t('offer.reevaluate')}</button>
+        : <button type="button" className="btn btn-primary" onClick={onAccept} disabled={accepting}>{t(accepting ? 'offer.accepting' : 'offer.accept')}</button>}
       <button type="button" className="btn btn-secondary" onClick={onBack} disabled={accepting}>{t('offer.back')}</button>
       <span className="note">{t('offer.expires', { date: dateTime(new Date(offer.expiresAt)) })}</span>
     </div>
