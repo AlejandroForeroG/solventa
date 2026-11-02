@@ -33,6 +33,21 @@ describe('protected underwriting audit workspace', () => {
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('ID de decisión, oferta o cotización')).toHaveValue('COT-2026-00001');
     expect(screen.getByLabelText('Resultado')).toHaveValue('declined');
+    await user.selectOptions(screen.getByLabelText('Producto'), 'flight_delay');
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } });
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-31' } });
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    await user.click(await screen.findByRole('button', { name: id }));
+    await screen.findByRole('heading', { name: 'Entradas conservadas' });
+    await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
+    expect(screen.getByLabelText('Producto')).toHaveValue('flight_delay');
+    expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
+    await user.click(screen.getByRole('button', { name: 'Limpiar' }));
+    for (const label of ['ID de decisión, oferta o cotización', 'Producto', 'Resultado', 'Desde', 'Hasta']) expect(screen.getByLabelText(label)).toHaveValue('');
+    await screen.findByRole('button', { name: id });
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions', expect.anything()));
+
   });
   it('shows incomplete historical captures without filling absent facts', async () => {
     const { identityVerified: _identity, ...inputs } = examples.detail.decision.inputs;
