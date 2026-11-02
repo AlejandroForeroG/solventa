@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
+import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -17,6 +18,32 @@ function serve(session: number) {
 
 beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
 afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
+
+describe('audit route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the audit route', async () => {
+    window.history.replaceState(null, '', '/auditoria'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Auditoría' });
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('unmounts protected content immediately while logout is pending or fails', async () => {
+    window.history.replaceState(null, '', '/auditoria');
+    let failLogout: () => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/logout') return new Promise((_resolve, reject) => { failLogout = () => reject(new Error('synthetic outage')); });
+      return json(auditExamples.page);
+    });
+    render(<App />); const user = userEvent.setup();
+    await screen.findByRole('button', { name: auditExamples.detail.decision.decisionId });
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    await act(async () => failLogout());
+    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+  });
+});
 
 describe('privacy dashboard in the application', () => {
   it.each([

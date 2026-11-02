@@ -6,6 +6,10 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Synthetic mortgage offer profiling consumes `ReadSignal`: it saves successful reads, replaces a failing source with a same-consent stored copy or conservative default, and persists degraded decisions as non-acceptable preliminary offers. Definitive offer acceptance and asynchronous publication remain under the explicit financial mock mode. Real provider access, dynamic simulated personas and general asynchronous signal refresh remain pending.
 
+## Historical underwriting audit
+
+Explicitly granted web auditors can list and inspect historical decisions through the [audit API and workspace](underwriting-audit.md). Identity owns the permission; Acquisition owns lookup, retained-rule reconstruction and durable read auditing. No current source or consent data is fetched to explain the past.
+
 ## Anonymous indicative calculator
 
 An estimate gateway outage returns 503 without any write. It can be retried as a new calculation, without an idempotency key; saved-quote write recovery instructions apply only to the authenticated quote entries.
@@ -238,6 +242,7 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 
 ## Documents
 
+- [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
 - [Contracts and decision capture](../../shared/contracts/README.md).
 - [Boundaries and communication](../../architecture.md).
