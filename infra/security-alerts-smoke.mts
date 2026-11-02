@@ -113,6 +113,23 @@ try {
     () => publish(deliver), result => result.claimed + result.deadLettered,
     { claimed: 0, accepted: 0, published: 0, retried: 0, deadLettered: 0, leaseLost: 0 });
 
+  // Rejected configuration must not acquire or mutate a durable event.
+  const untouchedId = await seed();
+  const untouched = await row(untouchedId);
+  const validClaim = { leaseOwner: randomUUID(), limit: 1, leaseMs: securityAlertPolicy.leaseMs, maxAttempts: securityAlertPolicy.maxAttempts };
+  for (const invalid of [{ leaseOwner: '' }, { limit: 0 }, { limit: securityAlertPolicy.batchSize + 1 },
+    { limit: 1.5 }, { leaseMs: 1 }, { maxAttempts: 1 }]) {
+    await assert.rejects(outbox.claim({ ...validClaim, ...invalid }), /^Error: invalid_security_alert_claim$/);
+  }
+  for (const delay of [999, 8_001, 1_000.5, NaN]) {
+    await assert.rejects(outbox.failed(untouchedId, validClaim.leaseOwner, delay), /^Error: invalid_security_alert_retry$/);
+  }
+  const afterInvalid = await row(untouchedId);
+  assert.deepEqual({ ...afterInvalid, observed_at: null }, { ...untouched, observed_at: null });
+  const unavailable = new SqlSecurityAlertOutbox('postgresql://synthetic:synthetic@127.0.0.1:1/unavailable');
+  await assert.rejects(unavailable.claim(validClaim), /^Error: security_alert_outbox_unavailable$/);
+  await empty();
+
   // Concurrent independent connections must never acquire the same unexpired lease.
   const seeded = [await seed(), await seed()];
   const firstOwner = randomUUID();

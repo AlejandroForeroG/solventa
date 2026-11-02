@@ -36,6 +36,16 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Identity onboarding
+
+The signed-in welcome action opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
+
+Revocation or expiry requires new explicit consent and an empty attempt. Pending operations retry the same key/body; a persisted evaluation resumes after restart. Refresh reads authoritative progress. Backgrounding, sign-out and account changes hide progress until authentication is revalidated. The adapter uses the existing serialized session execution port; tokens never enter UI state. No result grants contracting access or a legal certificate.
+
+The feature follows the existing card/theme and device language, requesting server consent in Spanish or English. Existing consent keeps its original wording/locale. See [Identity verification](../../modules/identity-consent-ecosystem/identity-verification.md) for API, migration, corpus, errors, concurrency, recovery and retention. The matching Identity migration/Worker must be available on the selected environment first; an older environment fails closed.
+
+Run `npm run test:identity-verification`, `npm run test:mobile`, `npm run test:pact` and `npm run check`. Consumer tests execute the real client against Identity handlers with explicit WorkOS/SQL doubles. The SQL suite uses a real local database. Neither establishes native/deployed validation: execute consent, three selections, approval/failure, retained-step retry, assistance, revocation, resume, language and expired-session paths on the dev build before completion.
+
 ## Connecting native login
 
 The native welcome/access UI centers a single white action card on a warm off-white canvas, without a separate logo or wordmark above it. Mint supporting surfaces and deep-green actions extend the existing mobile theme. The view has no promotional header card, channel badge, lock illustration or biometric footer. Primary biometric entry (when configured) and alternative primary login have distinct button hierarchy; authenticated device settings, pending logout and retry states use the same card. The expected `biometric_locked` state has no warning banner; actual authentication, biometric and connection failures remain visible. Progress stays inside the card, without exposing the account label before validation. The screen scrolls for small displays and larger accessibility text, respects safe areas and uses a dark system status bar. This is a presentation-only change: hosted WorkOS pages, session checks, token custody and biometric policy remain unchanged. The installed app icon is unchanged. No dashboard data or business capabilities are implied by this access view.

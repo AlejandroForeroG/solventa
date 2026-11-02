@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import type { SharedIdentityConnection } from './identity-sessions';
 import type { Principal } from '../../application/authentication';
 import { safeCode } from '../safe-code';
 import type { ConsentStore, GrantResult, NewConsent, RevokeResult } from '../../application/ports/consents';
@@ -23,13 +24,17 @@ const fromRow = (row: Row): Consent => ({
 });
 
 export class SqlConsents implements ConsentStore {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly shared?: SharedIdentityConnection) {}
 
   private async connect() {
+    if (this.shared) return this.shared.get();
     const client = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
     await client.connect();
     return client;
+  }
+  private async release(client: Client) {
+    if (!this.shared) await client.end().catch(() => {});
   }
 
   private async retrying<T>(operation: () => Promise<T>): Promise<T> {
@@ -77,14 +82,14 @@ export class SqlConsents implements ConsentStore {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
   async findGrant(principal: Principal, idempotencyKey: string, requestHash: string): Promise<GrantResult | null> {
     const client = await this.connect();
     try { return await this.findByKey(client, { clientId: principal.clientId, idempotencyKey, requestHash }); }
-    finally { await client.end().catch(() => {}); }
+    finally { await this.release(client); }
   }
 
   private async findByKey(client: Client, c: Pick<NewConsent, 'clientId' | 'idempotencyKey' | 'requestHash'>): Promise<GrantResult | null> {
@@ -111,7 +116,7 @@ export class SqlConsents implements ConsentStore {
       await this.auditExpired(client, principal.subjectToken, result.rows, now);
       return result.rows.map(fromRow);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -142,7 +147,7 @@ export class SqlConsents implements ConsentStore {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -152,7 +157,7 @@ export class SqlConsents implements ConsentStore {
       // There is no consent to point at, so the audit event refers to the request itself.
       await this.audit(client, principal.subjectToken, 'consent.declined', 'consent_request', traceId, traceId);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
     }
   }
 
@@ -171,7 +176,43 @@ export class SqlConsents implements ConsentStore {
       await this.auditExpired(client, subjectToken, rows, now);
       return rows.map(fromRow);
     } finally {
-      await client.end().catch(() => {});
+      await this.release(client);
+    }
+  }
+
+  // forSubject's two reads for every scope in one statement, so all scopes come from the same snapshot.
+  // Per scope it keeps the 20 newest usable consents and the newest matching record, which is used only
+  // to explain a denial when that scope has no usable consent.
+  async forSubjectScopes(subjectToken: string, purposeCode: string, scopes: readonly ScopeCode[], now: Date): Promise<ReadonlyMap<ScopeCode, Consent[]>> {
+    const client = await this.connect();
+    try {
+      const usable = 'c.revoked_at IS NULL AND c.expires_at > $4';
+      const result = await client.query<Row & { scope: ScopeCode; usable: boolean; latest: boolean }>(
+        `SELECT scope, usable, latest_rank = 1 AS latest, ${plain} FROM (
+           SELECT requested.scope, ${prefixed}, ${usable} AS usable,
+             row_number() OVER (PARTITION BY requested.scope, ${usable} ORDER BY c.granted_at DESC, c.id) AS usable_rank,
+             row_number() OVER (PARTITION BY requested.scope ORDER BY c.granted_at DESC, c.id) AS latest_rank
+           FROM unnest($3::STRING[]) AS requested (scope)
+           JOIN identity.consents c ON requested.scope = ANY(c.scopes)
+           JOIN identity.clients owner ON owner.id = c.client_id
+           WHERE owner.subject_token = $1 AND owner.status = 'active' AND c.purpose = $2 AND c.consent_code IS NOT NULL
+         ) ranked
+         WHERE (usable AND usable_rank <= 20) OR latest_rank = 1
+         ORDER BY scope, granted_at DESC, id`,
+        [subjectToken, purposeCode, scopes, now]);
+      const found = new Map<ScopeCode, Consent[]>();
+      const selected = new Map<string, Row>();
+      for (const scope of scopes) {
+        const matching = result.rows.filter(row => row.scope === scope);
+        const usableRows = matching.filter(row => row.usable);
+        const rows = usableRows.length ? usableRows : matching.filter(row => row.latest);
+        for (const row of rows) selected.set(row.id, row);
+        found.set(scope, rows.map(fromRow));
+      }
+      await this.auditExpired(client, subjectToken, [...selected.values()], now);
+      return found;
+    } finally {
+      await this.release(client);
     }
   }
 

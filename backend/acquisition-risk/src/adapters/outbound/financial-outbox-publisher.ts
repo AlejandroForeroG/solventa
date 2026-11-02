@@ -26,7 +26,8 @@ function envelope(value: unknown, environment: string): value is AcceptanceEvent
 
 export class FinancialOutboxPublisher {
   constructor(private readonly deps: { connectionString: string; queue: FinancialEventQueue; integrity: HmacOfferIntegrity; environment: string; sendDeadlineMs?: number }) {}
-  async publish(): Promise<{ claimed: number; published: number; deferred: number; deadLetter: number; oldestPendingAgeMs: number }> {
+  // `eventId` limits a run to one committed acceptance so an unrelated backlog cannot delay it; the cron passes none.
+  async publish(eventId?: string): Promise<{ claimed: number; published: number; deferred: number; deadLetter: number; oldestPendingAgeMs: number }> {
     const counts = { claimed: 0, published: 0, deferred: 0, deadLetter: 0, oldestPendingAgeMs: 0 };
     const client = new Client({ connectionString: this.deps.connectionString, connectionTimeoutMillis: 3000, query_timeout: 3000 });
     client.on('error', () => {});
@@ -34,10 +35,10 @@ export class FinancialOutboxPublisher {
     try {
       await client.connect();
       const claimed = await client.query<{ event_id: string; payload: unknown; attempts: string; correlation_id: string; aggregate_id: string }>(`UPDATE acquisition.outbox_events SET status='publishing',lease_owner=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1
-        WHERE event_id IN (SELECT event_id FROM acquisition.outbox_events WHERE event_type='offer.accepted' AND
+        WHERE event_id IN (SELECT event_id FROM acquisition.outbox_events WHERE event_type='offer.accepted' AND ($2::UUID IS NULL OR event_id=$2::UUID) AND
           ((status='pending' AND available_at<=now()) OR (status='publishing' AND lease_until<=now())) AND attempts<5 ORDER BY created_at LIMIT 10)
           AND ((status='pending' AND available_at<=now()) OR (status='publishing' AND lease_until<=now()))
-        RETURNING event_id,payload,attempts,correlation_id,aggregate_id`, [lease]);
+        RETURNING event_id,payload,attempts,correlation_id,aggregate_id`, [lease, eventId ?? null]);
       counts.claimed = claimed.rows.length;
       for (const row of claimed.rows) {
         let permanent = false;

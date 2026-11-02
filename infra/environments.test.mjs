@@ -68,10 +68,18 @@ test('private backends cannot enable a public preview', async () => {
 test('financial consumers and signatures stay within the selected environment', async () => {
   for (const mutate of [
     configs => { configs['policy-claims-payments'].env.dev.services[0].service = 'solventa-identity-consent-ecosystem-prod'; },
+    configs => { configs['acquisition-risk'].env.dev.services[1].service = 'solventa-policy-claims-payments-staging'; },
+    configs => { configs['acquisition-risk'].env.staging.services.pop(); },
+    configs => { configs['acquisition-risk'].env.prod.services[1].service = 'solventa-policy-claims-payments-staging'; },
     configs => { configs['acquisition-risk'].env.staging.queues.producers[0].queue = 'solventa-financial-events-dev'; },
     configs => { configs['policy-claims-payments'].env.staging.queues.consumers[0].dead_letter_queue = 'solventa-financial-events-dlq-dev'; },
-    configs => { configs['policy-claims-payments'].env.prod.vars.FINANCIAL_PROVIDER_MODE = 'mock'; },
+    configs => { configs['policy-claims-payments'].env.prod.vars.FINANCIAL_PROVIDER_MODE = 'live'; },
+    configs => { configs['acquisition-risk'].env.prod.queues.producers[0].queue = 'solventa-financial-events-staging'; },
+    configs => { configs['policy-claims-payments'].env.prod.queues.consumers[0].dead_letter_queue = 'solventa-financial-events-dlq-dev'; },
+    configs => { configs['policy-claims-payments'].env.prod.triggers.crons = []; },
     configs => { configs['policy-claims-payments'].env.dev.queues.consumers[0].max_batch_timeout = 5; },
+    configs => { configs['policy-claims-payments'].env.dev.queues.consumers[0].max_batch_size = 10; },
+    configs => { delete configs['policy-claims-payments'].env.staging.placement; },
   ]) {
     const configs = await configurations();
     mutate(configs);

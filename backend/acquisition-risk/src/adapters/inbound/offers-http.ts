@@ -1,10 +1,14 @@
 import type { Hono, Context } from 'hono';
 import { getCookie } from 'hono/cookie';
+import { DependencyTimings } from '../../application/dependency-timings';
 import type { OfferService } from '../../application/offer-service';
 import type { OfferAuthorization } from '../../domain/offer';
 import type { OfferTerms } from '../../domain/offer';
+import type { AcceptanceEvent } from '../../application/ports/offer-store';
 
-export type OffersHttpDependencies = { offers: Pick<OfferService, 'create' | 'createFlight' | 'get' | 'accept'>; authorizeFinancialAccess(input: unknown): Promise<unknown>; denyResourceAccess(input: unknown): Promise<unknown> };
+export type OffersHttpDependencies = { offers: Pick<OfferService, 'create' | 'createFlight' | 'get' | 'accept'>; authorizeFinancialAccess(input: unknown): Promise<unknown>; denyResourceAccess(input: unknown): Promise<unknown>;
+  // Starts background publication after a newly committed acceptance; it must not delay or change the response.
+  acceptanceCommitted?(eventId: string, event?: AcceptanceEvent): void };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 function publicOffer(terms: OfferTerms) {
@@ -36,18 +40,27 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
   app.all('/api/v1/offers/:offerId/accept', handler('offers:accept'));
   function handler(operation: 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept') {
     return async (c: Context<{ Bindings: AcquisitionEnv }>) => {
+      const startedAt = performance.now();
+      const timings = new DependencyTimings({ now: () => new Date() });
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
-      const reply = (body: Record<string, unknown>, status: 200 | 201 | 202 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
-        { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      let profileResult = 'unavailable';
+      let offerStatus: OfferTerms['status'] | null = null;
+      const reply = (body: Record<string, unknown>, status: 200 | 201 | 202 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => {
+        if (status === 503) profileResult = 'unavailable';
+        else if (status === 401 || status === 403) profileResult = 'denied';
+        else if (status === 400 || status === 405) profileResult = 'invalid';
+        return c.json({ ...body, traceId }, status,
+          { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      };
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const method = operation === 'offers:read' ? 'GET' : 'POST';
         if (c.req.method !== method) { c.header('Allow', method); return reply({ error: 'method_not_allowed' }, 405); }
         if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
-        const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method, requestOrigin: new URL(c.req.url).origin,
+        const decision = await timings.measure('identity_access', () => Promise.race([deps.authorizeFinancialAccess({ kind: 'web', operation, traceId, method: c.req.method, requestOrigin: new URL(c.req.url).origin,
           cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '', origin: c.req.header('origin') ?? '' }),
-        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]);
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]));
         if (!record(decision)) return reply({ error: 'access_unavailable' }, 503);
         if (decision.allowed !== true) {
           const { status, error } = decision;
@@ -85,14 +98,21 @@ export function mountOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps: Offer
         if (Object.keys(body).length !== 0) return reply({ error: 'invalid_request' }, 400);
         if (operation === 'offers:create') {
           if (!authorization) return reply({ error: 'access_unavailable' }, 503);
-          const result = await deps.offers.create({ actor, quoteId, authorization, idempotencyKey, traceId });
-          return result.status === 'created' || result.status === 'replayed' ? reply(publicOffer(result.offer), result.status === 'created' ? 201 : 200) : failure(result.status);
+          const result = await deps.offers.create({ actor, quoteId, authorization, idempotencyKey, traceId, timings });
+          profileResult = result.status;
+          offerStatus = result.status === 'created' || result.status === 'replayed' ? result.offer.status : null;
+          return result.status === 'created' || result.status === 'replayed' ? reply(publicOffer(result.offer), result.status === 'created' ? 201 : 200) : await failure(result.status);
         }
         const result = await deps.offers.accept({ actor, offerId, authorization, idempotencyKey, traceId });
+        if (result.status === 'created') {
+          try { deps.acceptanceCommitted?.(result.acceptance.eventId, result.committedEvent); } catch { console.error(JSON.stringify({ event: 'financial_publication_trigger_failed', traceId, code: 'publication_not_started' })); }
+        }
         return result.status === 'created' || result.status === 'replayed' ? reply({ ...result.acceptance }, result.status === 'created' ? 202 : 200) : failure(result.status);
       } catch { return reply({ error: 'financial_unavailable' }, 503); }
       finally {
         clearTimeout(timer);
+        if (operation === 'offers:create') console.log(JSON.stringify({ event: 'mortgage_offer_profiled', traceId, result: profileResult,
+          offerStatus, latencyMs: Math.round((performance.now() - startedAt) * 10) / 10, ...timings.summary() }));
         if (c.req.raw.body && !c.req.raw.bodyUsed) {
           await c.req.raw.body.cancel().catch(() => {
             console.error(JSON.stringify({ event: 'financial_body_cancel_failed', traceId, code: 'request_body_unavailable' }));

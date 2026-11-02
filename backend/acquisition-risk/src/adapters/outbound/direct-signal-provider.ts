@@ -56,8 +56,8 @@ const TRANSLATORS: Record<SignalScope, (body: unknown) => Signal> = {
 // Synthetic answers for one fictitious person, stamped with the query time; no real source is reached.
 function simulatedAnswer(scope: SignalScope, at: string): unknown {
   switch (scope) {
-    case 'income_obligations_12m': return { data: { incomeMonthlyCents: 450000000, obligationsMonthlyCents: 120000000, periodMonths: 12, asOf: at } };
-    case 'payment_history_score': return { consulta: { puntaje: 742, moras12m: 0, fechaConsulta: at } };
+    case 'income_obligations_12m': return { data: { incomeMonthlyCents: 800000000, obligationsMonthlyCents: 180000000, periodMonths: 12, asOf: at } };
+    case 'payment_history_score': return { consulta: { puntaje: 780, moras12m: 0, fechaConsulta: at } };
     case 'affiliation_regime': return { fechaCorte: at, afiliaciones: [{ subsistema: 'PENSION', regimen: 'RAIS', estado: 'ACTIVO' }, { subsistema: 'SALUD', regimen: 'CONTRIBUTIVO', estado: 'ACTIVO' }] };
     case 'identity_validation': return { estadoCedula: 'VIGENTE', fechaConsulta: at };
   }

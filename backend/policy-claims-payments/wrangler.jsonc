@@ -30,15 +30,18 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "triggers": { "crons": ["* * * * *"] },
   "env": {
     "dev": {
       "name": "solventa-policy-claims-payments-dev",
+      "placement": { "region": "aws:us-east-1" },
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
         "APP_ENV": "dev",
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -55,8 +58,8 @@
         "consumers": [
           {
             "max_retries": 5,
-            "max_batch_size": 10,
-            "max_batch_timeout": 1,
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
             "dead_letter_queue": "solventa-financial-events-dlq-dev",
             "queue": "solventa-financial-events-dev"
           }
@@ -65,12 +68,14 @@
     },
     "staging": {
       "name": "solventa-policy-claims-payments-staging",
+      "placement": { "region": "aws:us-east-1" },
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
         "APP_ENV": "staging",
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -87,8 +92,8 @@
         "consumers": [
           {
             "max_retries": 5,
-            "max_batch_size": 10,
-            "max_batch_timeout": 1,
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
             "dead_letter_queue": "solventa-financial-events-dlq-staging",
             "queue": "solventa-financial-events-staging"
           }
@@ -97,12 +102,14 @@
     },
     "prod": {
       "name": "solventa-policy-claims-payments-prod",
+      "placement": { "region": "aws:us-east-1" },
       "workers_dev": false,
       "preview_urls": false,
       "vars": {
         "APP_ENV": "prod",
-        "FINANCIAL_PROVIDER_MODE": "disabled"
+        "FINANCIAL_PROVIDER_MODE": "mock"
       },
+      "triggers": { "crons": ["* * * * *"] },
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -116,7 +123,13 @@
         }
       ],
       "queues": {
-        "consumers": []
+        "consumers": [{
+          "queue": "solventa-financial-events-prod",
+          "dead_letter_queue": "solventa-financial-events-dlq-prod",
+          "max_retries": 5,
+          "max_batch_size": 1,
+          "max_batch_timeout": 0
+        }]
       }
     }
   },
@@ -130,8 +143,8 @@
     "consumers": [
       {
         "max_retries": 5,
-        "max_batch_size": 10,
-            "max_batch_timeout": 1,
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
         "dead_letter_queue": "solventa-financial-events-dlq-local",
         "queue": "solventa-financial-events-local"
       }

@@ -1,0 +1,318 @@
+{
+  "formatVersion": "synthetic-kyc.v1",
+  "evaluationId": "11111111-1111-4111-8111-111111111111",
+  "cases": [
+    {
+      "name": "all checks pass",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "outcome": "approved",
+        "retainedSteps": [
+          "document",
+          "selfie",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "document does not pass",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "fail",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "outcome": "not_verified",
+        "retainedSteps": [
+          "selfie",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "selfie does not pass",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "fail",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "outcome": "not_verified",
+        "retainedSteps": [
+          "document",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "liveness does not pass",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "fail"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "outcome": "not_verified",
+        "retainedSteps": [
+          "document",
+          "selfie"
+        ]
+      }
+    },
+    {
+      "name": "screening requires review: match",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "match"
+      },
+      "expected": {
+        "outcome": "review",
+        "retainedSteps": [
+          "document",
+          "selfie",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "screening requires review: review",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "review"
+      },
+      "expected": {
+        "outcome": "review",
+        "retainedSteps": [
+          "document",
+          "selfie",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "selfie requires review",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "review",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "outcome": "review",
+        "retainedSteps": [
+          "document",
+          "liveness"
+        ]
+      }
+    },
+    {
+      "name": "missing result",
+      "response": null,
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "unsupported format",
+      "response": {
+        "formatVersion": "synthetic-kyc.v2",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "not a simulation",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": false,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "missing document result",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "unknown screening status",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "approved"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "unwanted personal data",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear",
+        "personalData": "synthetic-must-not-be-retained"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "impossible calendar date",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "11111111-1111-4111-8111-111111111111",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-02-30T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": false
+      }
+    },
+    {
+      "name": "another evaluation",
+      "response": {
+        "formatVersion": "synthetic-kyc.v1",
+        "evaluationId": "22222222-2222-4222-8222-222222222222",
+        "providerReference": "11111111-1111-4111-8111-111111111111",
+        "simulated": true,
+        "completedAt": "2026-10-21T15:00:00.000Z",
+        "checks": {
+          "document": "pass",
+          "selfie": "pass",
+          "liveness": "pass"
+        },
+        "screening": "clear"
+      },
+      "expected": {
+        "failure": "invalid_response",
+        "schemaValid": true
+      }
+    }
+  ]
+}

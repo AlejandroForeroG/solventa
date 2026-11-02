@@ -15,6 +15,7 @@ addFormats(ajv);
 const common = parse(read('openapi/v1/common.yaml'));
 ajv.addSchema({ ...common, $id: 'https://solventa.test/v1/common.yaml' });
 for (const domain of ['offers', 'policies']) ajv.addSchema({ ...parse(read(`openapi/v1/${domain}.yaml`)), $id: `https://solventa.test/v1/${domain}.yaml` });
+for (const domain of ['common', 'policies']) ajv.addSchema({ ...parse(read(`openapi/v2/${domain}.yaml`)), $id: `https://solventa.test/v2/${domain}.yaml` });
 const validate = (domain: string, schema: string, body: unknown) => {
   const check = ajv.getSchema(`https://solventa.test/v1/${domain}.yaml#/components/schemas/${schema}`);
   assert.ok(check);
@@ -25,17 +26,45 @@ test('financial examples match the public schemas and omit principal/provider cr
   validate('offers', 'Offer', examples.offer);
   validate('offers', 'Acceptance', examples.acceptance);
   validate('policies', 'Policy', examples.policy);
-  for (const body of [examples.offer, examples.acceptance, examples.policy]) {
+  validate('policies', 'Policy', examples.issuedPolicy);
+  for (const body of [examples.offer, examples.acceptance, examples.policy, examples.issuedPolicy]) {
     assert.equal('subjectToken' in body, false);
     assert.equal('clientId' in body, false);
   }
 });
 
+test('the premium state exposes only a synthetic provider receipt and no caller-controlled payment data', () => {
+  const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/Policy');
+  assert.ok(check);
+  const payment = examples.issuedPolicy.payment;
+  for (const accepted of [{ status: 'pending', reference: null }, { status: 'declined', reference: null }, payment]) {
+    assert.equal(check({ ...examples.issuedPolicy, payment: accepted }), true, JSON.stringify(check.errors));
+  }
+  for (const rejected of [{ status: 'confirmed' }, { ...payment, reference: 'REC-9931-2026' }, { ...payment, status: 'succeeded' },
+    { ...payment, amount: '1.0000' }, { ...payment, paymentMethod: 'Bancolombia 4471' }]) {
+    assert.equal(check({ ...examples.issuedPolicy, payment: rejected }), false, JSON.stringify(rejected));
+  }
+});
+
+test('the offer contract exposes preliminary profiling without changing the definitive example', () => {
+  validate('offers', 'Offer', { ...examples.offer, status: 'preliminary' });
+  assert.equal(examples.offer.status, 'definitive');
+});
+
 test('issue contract rejects free amounts, approval and destinations', () => {
+  const check = ajv.getSchema('https://solventa.test/v2/policies.yaml#/components/schemas/IssueRequest');
+  assert.ok(check);
+  const request = { documentHash: 'a'.repeat(64), challengeId: '80000000-0000-4000-8000-000000000008', code: '123456' };
+  assert.equal(check(request), true);
+  assert.equal(check({ documentHash: request.documentHash }), false);
+  for (const extra of [{ amount: '1.0000' }, { approved: true }, { beneficiary: 'another-client' }]) assert.equal(check({ ...request, ...extra }), false);
+});
+
+test('v1 issue contract retains the reviewed hash without new required fields', () => {
   const check = ajv.getSchema('https://solventa.test/v1/policies.yaml#/components/schemas/IssueRequest');
   assert.ok(check);
   assert.equal(check({ documentHash: 'a'.repeat(64) }), true);
-  for (const extra of [{ amount: '1.0000' }, { approved: true }, { beneficiary: 'another-client' }]) assert.equal(check({ documentHash: 'a'.repeat(64), ...extra }), false);
+  assert.equal(check({ documentHash: 'a'.repeat(64), challengeId: '80000000-0000-4000-8000-000000000008' }), false);
 });
 
 test('signed event schema agrees with both consumer payload shapes without authorizing example signatures', () => {
@@ -45,7 +74,21 @@ test('signed event schema agrees with both consumer payload shapes without autho
   const parametric = { ...examples.event, eventType: 'flight.delay_verified', payload: { policyId: examples.policy.policyId, flightReference: examples.offer.offerId, delayMinutes: 180 } };
   assert.equal(check(parametric), true, JSON.stringify(check.errors));
   assert.equal(isParametricEnvelope(parametric, 'local'), true);
-  for (const invalid of [{ ...examples.event, environment: 'prod' }, { ...examples.event, synthetic: false }, { ...examples.event, unexpected: 'personal data' }, { ...parametric, payload: { ...parametric.payload, payoutAmount: '1.0000' } }]) assert.equal(check(invalid), false);
+  for (const body of [examples.event, parametric]) {
+    assert.equal(check({ ...body, environment: 'prod' }), true, JSON.stringify(check.errors));
+  }
+  for (const invalid of [{ ...examples.event, environment: 'unknown' }, { ...examples.event, synthetic: false }, { ...examples.event, unexpected: 'personal data' }, { ...parametric, payload: { ...parametric.payload, payoutAmount: '1.0000' } }]) assert.equal(check(invalid), false);
+});
+
+test('production demo events retain their own environment and reject staging routing or keys', async () => {
+  const key = 'c'.repeat(64), producer = new HmacOfferIntegrity(key), consumer = new HmacFinancialIntegrity(key);
+  const { signature: _exampleSignature, ...unsigned } = examples.event;
+  const signed = await producer.sign({ ...unsigned, environment: 'prod' });
+  assert.equal(isOfferEnvelope(signed, 'prod'), true);
+  assert.equal(isOfferEnvelope(signed, 'staging'), false);
+  assert.equal(await consumer.verify(eventContent(signed), signed.signature), true);
+  assert.equal(await new HmacFinancialIntegrity('b'.repeat(64)).verify(eventContent(signed), signed.signature), false);
+  assert.equal(await consumer.verify(eventContent({ ...signed, environment: 'staging' }), signed.signature), false);
 });
 
 test('Acquisition signatures are verified by the actual Policy adapter and bind money and environment', async () => {

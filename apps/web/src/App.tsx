@@ -9,6 +9,7 @@ import { I18n, useLocale } from './i18n/I18n';
 import { locales } from './i18n/messages';
 import { LiveRegion, useAnnounce } from './quote/Live';
 import { QuoteFlow } from './quote/QuoteFlow';
+import { clearPurchaseDraft, readPurchaseDraft } from './offer/purchase-draft';
 import { Landing } from './landing/Landing';
 import { PublicQuoteFlow } from './quote/PublicQuoteFlow';
 import { clearEstimateDraft, readEstimateDraft, saveEstimateDraft } from './quote/estimate-draft';
@@ -43,7 +44,8 @@ function Shell() {
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
   const sessionLost = useCallback(() => setSession('anonymous'), []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
-  const isLanding = window.location.pathname !== '/cotizar' && !failed && !estimateDraft;
+  const [purchaseInProgress] = useState(() => readPurchaseDraft() !== null);
+  const isLanding = window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
     setSession(await fetchSession());
@@ -56,6 +58,7 @@ function Shell() {
   }, [session, announce, intl]);
   async function logout() {
     clearEstimateDraft();
+    clearPurchaseDraft();
     setEstimateDraft(null);
     setBusy(true);
     try {

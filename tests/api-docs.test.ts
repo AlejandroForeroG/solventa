@@ -89,3 +89,45 @@ test('bundled fonts and their license are public read-only assets with no-store 
   assert.equal((await worker.fetch(new Request('https://web.example/api/docs/fonts/unknown.woff2'), unknown.env)).status, 404);
   assert.equal(unknown.requests.length, 0);
 });
+
+test('only lowercase versioned JSON specifications are recognized', async () => {
+  const { env, requests } = environment('dev');
+  for (const path of ['/api/docs/v0/x.json', '/api/docs/v1/X.json', '/api/docs/v1/1x.json', '/api/docs/v1/x.yaml', '/api/docs/v1/a/b.json']) {
+    assert.equal((await worker.fetch(new Request(`https://web.example${path}`), env)).status, 404, path);
+  }
+  assert.equal(requests.length, 0, 'unrecognized paths never reach the asset binding');
+  assert.equal((await worker.fetch(new Request('https://web.example/api/docs/v12/some-domain.json'), env)).status, 200);
+});
+
+test('asset binding failures other than success are propagated with the documentation headers', async () => {
+  const env = { APP_ENV: 'dev', ASSETS: { fetch: async () => new Response('gone', { status: 500 }) } } as never;
+  const response = await worker.fetch(new Request('https://web.example/api/docs/catalog.json'), env);
+  assert.equal(response.status, 500);
+  assert.equal(await response.text(), 'gone');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-solventa-environment'), 'dev');
+});
+
+test('an asset served without a matching content type is reported as not found', async () => {
+  const withoutType = { APP_ENV: 'dev', ASSETS: { fetch: async () => new Response('bytes', { headers: { 'content-type': '' } }) } } as never;
+  assert.equal((await worker.fetch(new Request('https://web.example/api/docs/catalog.json'), withoutType)).status, 404);
+  const wrongType = environment('dev', 'text/html', '<html>Product application</html>');
+  assert.equal((await worker.fetch(new Request('https://web.example/api/docs/v1/quotes.json'), wrongType.env)).status, 404);
+});
+
+test('documentation responses always carry the security headers, including redirects and errors', async () => {
+  const { env } = environment('staging');
+  const responses = [
+    await worker.fetch(new Request('https://web.example/api/docs'), env),
+    await worker.fetch(new Request('https://web.example/api/docs/unknown'), env),
+    await worker.fetch(new Request('https://web.example/api/docs/', { method: 'DELETE' }), env),
+    await worker.fetch(new Request('https://web.example/api/docs/catalog.json', { method: 'HEAD' }), env),
+  ];
+  assert.deepEqual(responses.map(response => response.status), [308, 404, 405, 200]);
+  for (const response of responses) {
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+    assert.match(response.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+    assert.equal(response.headers.get('x-solventa-environment'), 'staging');
+  }
+});

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { runtimeCoveragePlugins, captureRuntimeCoverage } from './support/runtime-coverage.mjs';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -73,7 +74,8 @@ const aliases = {
     async published(id, owner) { return env.TEST_STATE.published(id, owner); }
     async failed(id, owner, delay) { return env.TEST_STATE.failed(id, owner, delay); }
   }`,
-  'sql-consents': `export class SqlConsents { async forSubject() { return []; } }`,
+  'sql-consents': `export class SqlConsents { async forSubject() { return []; } async forSubjectScopes() { return new Map(); } }`,
+  'sql-identity-verifications': `export class SqlIdentityVerifications { async execute() { throw Error('unexpected_verification_access'); } }`,
   'identity-sessions': `export class SqlIdentitySessions { async find() { return null; } }`,
   'partner-access': `export class SqlPartnerAccess { async find() { return null; } }`,
   'registered-devices': `export class SqlRegisteredDevices { async execute() { throw Error('unexpected_device_access'); } }`,
@@ -106,11 +108,11 @@ test('workerd executes real Identity security composition with explicit local SQ
     entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false,
     format: 'esm', platform: 'neutral', external: ['cloudflare:*', 'node:*'],
     plugins: [{ name: 'explicit-local-owner-and-provider-collaborators', setup(builder) {
-      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|identity-sessions|partner-access|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
+      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|identity-sessions|partner-access|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
         { path: args.path.split('/').at(-1), namespace: 'composition-collaborator' }
       ));
       builder.onLoad({ filter: /.*/, namespace: 'composition-collaborator' }, args => ({ contents: aliases[args.path], loader: 'js' }));
-    } }],
+    } }, ...runtimeCoveragePlugins()],
   });
   const email = { environment: 'local', from: 'security@example.invalid', to: 'operator@example.invalid' };
   const worker = (name, emailConfig) => ({
@@ -126,7 +128,10 @@ test('workerd executes real Identity security composition with explicit local SQ
     { name: 'caller', unsafeDirectSockets: [{ host: '127.0.0.1', port: 0 }], modules: true, script: rpcCaller,
       compatibilityDate: config.compatibility_date, serviceBindings: { IDENTITY: 'enabled' } },
   ] }));
-  t.after(() => runtime.dispose());
+  t.after(async () => {
+    try { await captureRuntimeCoverage(runtime, ['enabled', 'disabled', 'invalid']); }
+    finally { await runtime.dispose(); }
+  });
   await runtime.ready;
   const state = await runtime.getWorker('state');
   const enabled = await runtime.getWorker('enabled');

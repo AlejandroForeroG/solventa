@@ -42,24 +42,27 @@ export function validateEnvironments(configs, provisionedEnvironment) {
       ] : ['acquisition-risk', 'policy-claims-payments'].includes(name) ? [
         { binding: 'IDENTITY_SERVICE', service: `solventa-identity-consent-ecosystem-${environment}` },
       ] : [];
+      if (name === 'acquisition-risk') {
+        expectedServices.push({ binding: 'POLICY_SERVICE', service: `solventa-policy-claims-payments-${environment}` });
+      }
       assert.deepEqual(target.services ?? [], expectedServices);
       if (['acquisition-risk', 'policy-claims-payments'].includes(name)) {
-        assert.equal(target.vars.FINANCIAL_PROVIDER_MODE, environment === 'prod' ? 'disabled' : 'mock');
+        assert.equal(target.vars.FINANCIAL_PROVIDER_MODE, 'mock');
+        assert.deepEqual(target.triggers, { crons: ['* * * * *'] });
         const queues = target.queues ?? {};
         if (name === 'acquisition-risk') {
-          assert.deepEqual(queues.producers ?? [], environment === 'prod' ? [] : [
+          assert.deepEqual(queues.producers ?? [], [
             { binding: 'FINANCIAL_EVENTS', queue: `solventa-financial-events-${environment}` },
           ]);
         } else {
           const consumers = queues.consumers ?? [];
-          assert.equal(consumers.length, environment === 'prod' ? 0 : 1);
-          if (environment !== 'prod') {
-            assert.equal(consumers[0].queue, `solventa-financial-events-${environment}`);
-            assert.equal(consumers[0].dead_letter_queue, `solventa-financial-events-dlq-${environment}`);
-            assert.equal(consumers[0].max_retries, 5);
-            assert.equal(consumers[0].max_batch_size, 10);
-            assert.equal(consumers[0].max_batch_timeout, 1);
-          }
+          assert.equal(consumers.length, 1);
+          assert.equal(consumers[0].queue, `solventa-financial-events-${environment}`);
+          assert.equal(consumers[0].dead_letter_queue, `solventa-financial-events-dlq-${environment}`);
+          assert.equal(consumers[0].max_retries, 5);
+          assert.equal(consumers[0].max_batch_size, 1);
+          assert.equal(consumers[0].max_batch_timeout, 0);
+          assert.deepEqual(target.placement, { region: 'aws:us-east-1' });
         }
       }
       if (name === 'web') {

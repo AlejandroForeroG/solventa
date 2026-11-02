@@ -8,7 +8,7 @@ import { fetchService } from './service-fetch';
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 const offersPath = /^\/api\/v1\/offers(\/|$)/;
-const policiesPath = /^\/api\/v1\/policies(\/|$)/;
+const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';

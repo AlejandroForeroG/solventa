@@ -1,6 +1,6 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue';
+export type ApiOperation = 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -15,10 +15,11 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue'];
+const operations: readonly ApiOperation[] = ['quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
-const webUserOperations: readonly ApiOperation[] = operations;
+const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:'));
+const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'identity-verifications:read', 'identity-verifications:write'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
 const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
@@ -56,7 +57,7 @@ export class ApiAccess {
   }
   async mobileUser(identity: VerifiedIdentity, operation: string): Promise<AccessDecision<UserActor>> {
     if (!isApiOperation(operation)) return invalid;
-    if (operation !== 'quotes:create') return forbidden;
+    if (!mobileUserOperations.includes(operation)) return forbidden;
     if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) return unauthorized;
     try {
       const principal = await this.sessions.find(identity);

@@ -19,6 +19,7 @@ const es = {
   nativeOnly: 'El ingreso está disponible en la app nativa.',
   securePrompt: 'Confirma tu identidad para entrar a Solventa',
   actions: {
+    verifyIdentity: 'Verificar identidad',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
     enable: 'Activar huella o rostro', revoke: 'Revocar acceso de este dispositivo', retry: 'Reintentar conexión',
     retryLogout: 'Reintentar cierre', signOut: 'Cerrar sesión', cancel: 'Cancelar',
@@ -59,6 +60,7 @@ const en: typeof es = {
   nativeOnly: 'Sign-in is available in the native app.',
   securePrompt: 'Confirm your identity to access Solventa',
   actions: {
+    verifyIdentity: 'Verify identity',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
     enable: 'Enable fingerprint or face', revoke: 'Revoke access for this device', retry: 'Retry connection',
     retryLogout: 'Retry sign-out', signOut: 'Sign out', cancel: 'Cancel',

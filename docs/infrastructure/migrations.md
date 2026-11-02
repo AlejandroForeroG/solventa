@@ -71,6 +71,8 @@ The synthetic financial increment additionally requires Acquisition `0009_financ
 
 Restore `.env.infra.<environment>`, the CA and `infra/.local/runtime.<environment>.json` from custody. See [access and custody](README.md) and [read-only queries](read-only-sql.md). Never print administrative URLs or secrets. If users are provisioned without their runtime state, `runtime_state_missing` stops the process: restore the original rather than inventing passwords.
 
+The separate v2 policy charge/signature flow also requires Policy `0008_signature_challenges.sql` before its code is integrated in each environment. It adds owner- and document-bound challenges, hashed simulated codes, expiry, bounded attempts and a consumed-command constraint. Its runtime role receives only `SELECT`, `INSERT` and `UPDATE` on `signature_challenges`; the existing v1 issuance route remains compatible. Use the exact candidate's read-only migration plan and verify checksums, catalog and runtime grants after application.
+
 Before mutation, inspect ledger, catalog and guards through an administrative READ ONLY connection to the environment. Distinguish expected pending-migration differences from changed checksums, unexpected objects or partial execution. Do not use `schema-verify` as a preflight requiring the new version to be already applied: strict comparison is necessary **after** application.
 
 For SQL only, an operator uses these commands, one environment at a time according to authorization:

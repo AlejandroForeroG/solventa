@@ -50,5 +50,15 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "identity_verifications": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "identity_verification_commands": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }

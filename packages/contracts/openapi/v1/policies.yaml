@@ -4,8 +4,12 @@ info:
   version: 1.0.0
   description: Authenticated web-only academic financial flow. External data,
     payment and signature providers are explicitly mocked; Solventa
-    authorization, owner transactions and idempotency remain real. Disabled in
-    production. Credentials, actor identifiers, approval and amounts cannot be
+    authorization, owner transactions and idempotency remain real. The isolated
+    production demo requires explicit FINANCIAL_PROVIDER_MODE=mock, a valid
+    environment-specific FINANCIAL_EVENT_KEY and separately provisioned production
+    bindings, queues and SQL. Missing or invalid configuration fails closed.
+    Synthetic results do not establish real payment settlement, legal external
+    signature or insurance coverage. Credentials, actor identifiers, approval and amounts cannot be
     selected by clients. All responses are no-store and correlated.
 servers:
   - url: /api/v1
@@ -131,6 +135,11 @@ paths:
         uncertain outcome is unavailable and must be reconciled, never blindly
         charged again. Mock issuance is not legal insurance or real money
         movement.
+        A signature_failed response can occur during a concurrent refund;
+        read the owned policy and require status refunded before confirming
+        compensation. Retry an uncertain operation with its original key.
+        After document_mismatch, reread and review the document before
+        submitting its current server-provided fingerprint.
   /policies/by-acceptance/{acceptanceId}/policy:
     get:
       operationId: getOwnPolicyByAcceptance
@@ -181,7 +190,12 @@ paths:
           $ref: "#/components/responses/Unavailable"
       description: Returns 404 until the signed acceptance event has been consumed, or
         if the acceptance belongs to another user. No policy is created by this
-        query. Retry this read while issuance remains pending.
+        query. Retry this read while issuance remains pending. An absent
+        pre-import row does not generate a financial rejection or a security
+        denial notification. An existing acceptance owned by another client or
+        subject produces the required financial and minimal security denial
+        audits without exposing its record. The public not_found response
+        remains indistinguishable; unavailable required auditing returns 503.
 components:
   securitySchemes:
     WebSession:
@@ -267,11 +281,36 @@ components:
           type: string
           enum:
             - mock
+        payment:
+          $ref: "#/components/schemas/PremiumPayment"
         replayed:
           type: boolean
         traceId:
           type: string
           format: uuid
+    PremiumPayment:
+      type: object
+      additionalProperties: false
+      description: Current state of the policy's single premium charge with the
+        synthetic provider. Absent until the customer confirms issuance. A
+        declined premium is final for this policy. The reference is the
+        synthetic receipt and is present only once the provider confirmed the
+        charge; it is not a real payment receipt.
+      required:
+        - status
+        - reference
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - declined
+            - refunded
+        reference:
+          type: string
+          nullable: true
+          pattern: ^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
     IssueRequest:
       type: object
       additionalProperties: false

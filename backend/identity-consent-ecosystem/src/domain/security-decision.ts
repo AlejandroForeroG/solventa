@@ -1,6 +1,6 @@
 export const securityChannels = ['partner', 'web', 'mobile', 'internal'] as const;
 export const securityOperations = ['quotes:create', 'consents:read', 'consents:write', 'web:session', 'mobile:session', 'mobile:devices', 'consent:use',
-  'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue'] as const;
+  'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write'] as const;
 export const securityCauses = ['unauthorized', 'forbidden', 'consent_missing', 'consent_revoked', 'consent_expired', 'consent_invalid', 'consent_request_invalid'] as const;
 
 export type SecurityDenial = {

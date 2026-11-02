@@ -8,7 +8,7 @@ Stable boundary contracts: public API versioning, OpenAPI specifications and sch
 
 The public, read-only Scalar viewer is served by the web Worker at `/api/docs/`:
 
-The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI keeps relative `servers: /api/v1` and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
+The following canonical Custom Domain URLs require the [domain rollout](../../infrastructure/README.md#public-domains) to have completed. The previous exact workers.dev aliases remain available during transition. OpenAPI uses relative versioned servers (`/api/v1`, `/api/v2`) and the viewer uses its current origin; neither YAML nor generated JSON embeds an environment hostname.
 
 | Environment | API reference |
 |---|---|
@@ -55,14 +55,17 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
 | `schemas/decision-capture.v1.json` | Schema of data stored with each quote/decision to reconstruct it |
-| `openapi/v1/offers.yaml` | Owned definitive synthetic offers, explicit current risk consent for mortgage creation/acceptance, and asynchronous acceptance |
-| `openapi/v1/policies.yaml` | Owned policy lookup, reviewed document/hash and idempotent mock issuance; web sessions only |
+| `openapi/v1/offers.yaml` | Owned profiled synthetic offers, preliminary status on degraded signals, explicit current risk consent, and asynchronous acceptance of definitive offers |
+| `openapi/v1/policies.yaml` | Owned policy lookup and the original one-field combined mock issuance for already loaded web clients |
+| `openapi/v2/policies.yaml` | Separate premium charge, document-bound signature challenge and issuance; v1 remains available without a sunset date |
 | `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
 | `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
 | `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |
 | `examples/signal-providers.json` | Agreed corpus of answers from each simulated signal provider format, checked by `tests/signal-providers.test.ts` |
 | `pacts/*.json` | Consumer-driven Pact contracts, one file per consumer and provider pair |
+| `openapi/v1/identity-verifications.yaml`, `examples/identity-verifications.json` | Native onboarding, explicit 24-hour KYC consent, synthetic fixture selection, evaluation, retained progress, pending assistance, revocation and restart recovery; checked against real handlers and the mobile consumer adapter |
+| `src/identity-fixtures.ts`, `fixtures/identity/*.png` | Versioned synthetic corpus metadata and actual image files; server allowlist and mobile bundled previews, with file/hash verification |
 | `redocly.yaml` | OpenAPI lint rules |
 
 ## API versioning
@@ -123,7 +126,7 @@ Current corpus: the SPA (`solventa-web-spa`) against the web Worker (`solventa-w
 
 Provider states `no active session` and `authentication is not configured` run against the real Identity `createHttp()`, so those responses are the production ones. State `an active session` also runs the real Identity routes, with only the WorkOS adapter and the session store replaced through the `authentication` argument of `createHttp`, which only `src/index.ts` fills with the real adapters, because a valid session needs credentials and a database; the behavior of those two is covered by `tests/authentication.test.ts` and the SQL suites. The quote states run the real Acquisition handler and use case with the in-memory access and store used by the HTTP tests, so the response bodies and statuses are the production ones; the cookie value stands in for Identity's decision, whose verification is covered by the access suites. The state `the quote service is down` makes the Acquisition binding fail, which exercises the Worker's own 503. Verification adds the `Origin` header to POST requests and the session cookie to quote requests, as browsers do.
 
-The native consumer (`solventa-mobile`) now uses `apps/mobile/src/features/authentication/adapters/solventa-session.ts`. Its generation/comparison test covers configuration, session registration/inspection/logout, access probing and device registration/inspection/revocation against `solventa-web`. Provider states execute real Identity routes and device decisions with synthetic WorkOS/storage collaborators. Native secure storage, browser return and biometric prompts require separate device validation.
+The native consumer (`solventa-mobile`) uses the actual session adapter and `features/identity-verification/adapters/verification-api.ts`. Generation/comparison covers configuration, session/device lifecycle, access probing, onboarding terms/corpus/current states, explicit grant, step saving, evaluation, assisted request and revocation against `solventa-web`. Provider states execute real gateway/Identity routes with synthetic WorkOS/storage collaborators. SQL integrity and native secure storage, browser return, onboarding UI and biometric prompts require their separate validations.
 
 ### Pending coverage
 
@@ -159,10 +162,11 @@ External formats are boundary contracts too. Each one has a versioned schema or 
 |---|---|---|---|
 | ACORD Life inspired quote request and response | Schemas `v1`; message field `schemaVersion: "1"` | `backend/acquisition-risk/src/adapters/inbound/acord-life-quote.ts` | The schema verdict, the translated `QuoteRequest` or the errors with ACORD paths, and responses that validate against the response schema |
 | Direct signal sources and signal aggregator | Format version 1 of each provider | `backend/acquisition-risk/src/adapters/outbound/direct-signal-provider.ts`, `aggregator-signal-provider.ts` | Valid answers become the canonical signal; every other answer fails with its normalized code and one log line |
+| Synthetic identity verification | `synthetic-kyc.v1`, `identity-verification-provider.v1.json` | `backend/identity-consent-ecosystem/src/adapters/outbound/kyc-provider.ts` | Strict simulation marker, attempt binding, complete checks, valid dates, canonical outcomes and failures; not mounted on a route |
 
 The ACORD schemas are a synthetic subset inspired by ACORD Life, not the licensed standard. Consumers ignore unknown properties, so an optional field is a compatible change that keeps `v1`. Removing or renaming a field, changing its type or meaning, or tightening validation creates `acord-life-quote-request.v2.json` (and response) with `schemaVersion: "2"`; the adapter then reads both versions until `v1` is retired.
 
-The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Their external payment, signature and oracle protocols are explicit mocks; their owner SQL, event authentication and recovery checks do not establish a real provider integration. Neither a `ReadSignal` route nor an ACORD endpoint is enabled by publishing a schema or corpus.
+The synthetic financial HTTP/event contracts remain separate from the provider-format translators: `offers.yaml`, `policies.yaml`, `financial-event.v1.json` and `financial.json` are checked by `npm run test:financial`. Mortgage offer composition consumes those translators through `ReadSignal`, but no standalone signal route or ACORD endpoint is public. External payment, signature, signal and oracle protocols remain explicit simulations; owner SQL, event authentication and recovery checks do not establish a real provider integration.
 
 To change an integration contract:
 

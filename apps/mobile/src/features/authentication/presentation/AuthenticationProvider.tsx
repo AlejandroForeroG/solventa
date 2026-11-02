@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import React from 'react';
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import type { PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
@@ -52,4 +53,11 @@ export function useAuthentication() {
   const snapshot = useSyncExternalStore(authentication.subscribe, authentication.getSnapshot, authentication.getSnapshot);
   return { ...snapshot, signIn: authentication.signIn, signOut: authentication.signOut, retry: authentication.retry,
     cancel: authentication.cancel, enableBiometrics: authentication.enableBiometrics, unlock: authentication.unlock, revokeDevice: authentication.revokeDevice };
+}
+
+// An adapter/composition port, separate from the UI-safe authentication snapshot.
+export function useAuthenticatedSession() {
+  const authentication = useContext(Context);
+  if (!authentication) throw new Error('AuthenticationProvider is required');
+  return { execute: authentication.withSession, baseUrl: authentication.getApiBaseUrl() };
 }

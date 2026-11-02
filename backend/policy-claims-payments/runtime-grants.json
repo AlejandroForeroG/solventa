@@ -54,6 +54,11 @@
     "SELECT",
     "INSERT"
   ],
+  "signature_challenges": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
   "mock_gateway_operations": [
     "SELECT",
     "INSERT",

@@ -94,6 +94,642 @@
       }
     },
     {
+      "description": "mobile current verification approved",
+      "providerStates": [
+        {
+          "name": "a native identity verification in approved state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": {
+              "completedAt": "2026-10-21T15:00:00.000Z",
+              "failedSteps": [],
+              "outcome": "approved",
+              "providerVersion": "synthetic-kyc.v1",
+              "simulated": true
+            },
+            "retryAllowed": false,
+            "status": "approved",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "document-readable",
+                "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d",
+                "step": "document"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 6
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification assistance",
+      "providerStates": [
+        {
+          "name": "a native identity verification in assistance state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": {
+              "reference": "00000000-0000-4000-8000-000000000007",
+              "requestedAt": "2026-10-21T15:00:00.000Z",
+              "status": "pending"
+            },
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": {
+              "completedAt": "2026-10-21T15:00:00.000Z",
+              "failedSteps": [
+                "document"
+              ],
+              "outcome": "not_verified",
+              "providerVersion": "synthetic-kyc.v1",
+              "simulated": true
+            },
+            "retryAllowed": true,
+            "status": "not_verified",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 7
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification draft",
+      "providerStates": [
+        {
+          "name": "a native identity verification in draft state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": true,
+            "status": "draft",
+            "steps": [],
+            "version": 1
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification empty",
+      "providerStates": [
+        {
+          "name": "a native identity verification in empty state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": null
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification expired",
+      "providerStates": [
+        {
+          "name": "a native identity verification in expired state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "expired",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": false,
+            "status": "expired",
+            "steps": [],
+            "version": 5
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification not_verified",
+      "providerStates": [
+        {
+          "name": "a native identity verification in not_verified state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": true,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": {
+              "completedAt": "2026-10-21T15:00:00.000Z",
+              "failedSteps": [
+                "document"
+              ],
+              "outcome": "not_verified",
+              "providerVersion": "synthetic-kyc.v1",
+              "simulated": true
+            },
+            "retryAllowed": true,
+            "status": "not_verified",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 6
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification ready",
+      "providerStates": [
+        {
+          "name": "a native identity verification in ready state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": true,
+            "status": "draft",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "document-readable",
+                "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d",
+                "step": "document"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 4
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification revoked",
+      "providerStates": [
+        {
+          "name": "a native identity verification in revoked state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": "2026-10-21T15:00:00.000Z",
+              "status": "revoked",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": false,
+            "status": "revoked",
+            "steps": [],
+            "version": 5
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile current verification unavailable",
+      "providerStates": [
+        {
+          "name": "a native identity verification in unavailable state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": true,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": true,
+            "status": "unavailable",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "document-technical",
+                "sha256": "913a8e77fba8a001d75cd5780d7dc16b825cdf13ee9360e751c6128082fa6fce",
+                "step": "document"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 6
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile device DELETE",
       "providerStates": [
         {
@@ -200,6 +836,640 @@
             "id": "00000000-0000-4000-8000-000000000001",
             "installationId": "00000000-0000-4000-8000-000000000003",
             "status": "active"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity assisted request",
+      "providerStates": [
+        {
+          "name": "a native identity verification in not_verified state"
+        }
+      ],
+      "request": {
+        "body": {
+          "expectedVersion": 6
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "consumer-request"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/identity-verifications/00000000-0000-4000-8000-000000000004/assistance"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": {
+              "reference": "00000000-0000-4000-8000-000000000007",
+              "requestedAt": "2026-10-21T15:00:00.000Z",
+              "status": "pending"
+            },
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": {
+              "completedAt": "2026-10-21T15:00:00.000Z",
+              "failedSteps": [
+                "document"
+              ],
+              "outcome": "not_verified",
+              "providerVersion": "synthetic-kyc.v1",
+              "simulated": true
+            },
+            "retryAllowed": true,
+            "status": "not_verified",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 7
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity consent revocation",
+      "providerStates": [
+        {
+          "name": "a native identity verification in ready state"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "consumer-request"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/identity-verifications/00000000-0000-4000-8000-000000000004/revoke"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": "2026-10-21T15:00:00.000Z",
+              "status": "revoked",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": false,
+            "status": "revoked",
+            "steps": [],
+            "version": 5
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity document selection",
+      "providerStates": [
+        {
+          "name": "a native identity verification in draft state"
+        }
+      ],
+      "request": {
+        "body": {
+          "corpusVersion": "synthetic-identity.v1",
+          "expectedVersion": 1,
+          "reference": "document-readable",
+          "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "consumer-request"
+        },
+        "method": "PUT",
+        "path": "/api/v1/mobile/identity-verifications/00000000-0000-4000-8000-000000000004/steps/document"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": true,
+            "status": "draft",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "document-readable",
+                "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d",
+                "step": "document"
+              }
+            ],
+            "version": 2
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity evaluation",
+      "providerStates": [
+        {
+          "name": "a native identity verification in ready state"
+        }
+      ],
+      "request": {
+        "body": {
+          "expectedVersion": 4
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "consumer-request"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/identity-verifications/00000000-0000-4000-8000-000000000004/evaluate"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": {
+              "completedAt": "2026-10-21T15:00:00.000Z",
+              "failedSteps": [],
+              "outcome": "approved",
+              "providerVersion": "synthetic-kyc.v1",
+              "simulated": true
+            },
+            "retryAllowed": false,
+            "status": "approved",
+            "steps": [
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "document-readable",
+                "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d",
+                "step": "document"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "selfie-matched",
+                "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+                "step": "selfie"
+              },
+              {
+                "corpusVersion": "synthetic-identity.v1",
+                "reference": "liveness-passed",
+                "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+                "step": "liveness"
+              }
+            ],
+            "version": 6
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity explicit grant",
+      "providerStates": [
+        {
+          "name": "a native identity verification in empty state"
+        }
+      ],
+      "request": {
+        "body": {
+          "locale": "es-CO",
+          "textVersion": 1
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "consumer-request"
+        },
+        "method": "POST",
+        "path": "/api/v1/mobile/identity-verifications"
+      },
+      "response": {
+        "body": {
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "verification": {
+            "assistance": null,
+            "assistanceAllowed": false,
+            "consent": {
+              "expiresAt": "2026-10-22T15:00:00.000Z",
+              "grantedAt": "2026-10-21T15:00:00.000Z",
+              "id": "00000000-0000-4000-8000-000000000005",
+              "locale": "es-CO",
+              "purpose": "identity_verification",
+              "revokedAt": null,
+              "status": "active",
+              "textVersion": 1
+            },
+            "createdAt": "2026-10-21T15:00:00.000Z",
+            "expiresAt": "2026-10-22T15:00:00.000Z",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "pendingEvaluation": null,
+            "result": null,
+            "retryAllowed": true,
+            "status": "draft",
+            "steps": [],
+            "version": 1
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "mobile identity fixture corpus",
+      "providerStates": [
+        {
+          "name": "a native identity verification in empty state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications/fixtures"
+      },
+      "response": {
+        "body": {
+          "fixtures": [
+            {
+              "assetPath": "fixtures/identity/document-readable.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Readable document",
+                "es-CO": "Documento legible"
+              },
+              "reference": "document-readable",
+              "sha256": "b3e265d3da719c16ddbc34d1b9a7ea081933875959fd662fa9a3a0e33823896d",
+              "step": "document"
+            },
+            {
+              "assetPath": "fixtures/identity/document-unreadable.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Unreadable document",
+                "es-CO": "Documento ilegible"
+              },
+              "reference": "document-unreadable",
+              "sha256": "221ea5ed8bc598fec2009f637bc675cf3dcca04a097bb6bebe154080ac17d686",
+              "step": "document"
+            },
+            {
+              "assetPath": "fixtures/identity/document-technical.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Document: technical failure",
+                "es-CO": "Documento: fallo técnico"
+              },
+              "reference": "document-technical",
+              "sha256": "913a8e77fba8a001d75cd5780d7dc16b825cdf13ee9360e751c6128082fa6fce",
+              "step": "document"
+            },
+            {
+              "assetPath": "fixtures/identity/selfie-matched.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Matching selfie",
+                "es-CO": "Selfie coincidente"
+              },
+              "reference": "selfie-matched",
+              "sha256": "f223bcbd2516379f9d8d9f4c054dbfdcf0cd04c663bedeb6ac0af91cb4322dbf",
+              "step": "selfie"
+            },
+            {
+              "assetPath": "fixtures/identity/selfie-mismatched.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Nonmatching selfie",
+                "es-CO": "Selfie no coincidente"
+              },
+              "reference": "selfie-mismatched",
+              "sha256": "4514a02c0abfddd70c0fdc2ed8492e19df2ddcc87b231c3dd2aad8eb7aaa05ed",
+              "step": "selfie"
+            },
+            {
+              "assetPath": "fixtures/identity/selfie-review.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Selfie for review",
+                "es-CO": "Selfie para revisión"
+              },
+              "reference": "selfie-review",
+              "sha256": "89a85e729fc3f5606064c5977bef3b591dbbaaab046c1798757dcb15624034d5",
+              "step": "selfie"
+            },
+            {
+              "assetPath": "fixtures/identity/liveness-passed.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Passing liveness sample",
+                "es-CO": "Prueba de vida válida"
+              },
+              "reference": "liveness-passed",
+              "sha256": "af97903666956d3ad463a1b9a391c6ce04f533e56c4a40f6f74e2362f48a8a5b",
+              "step": "liveness"
+            },
+            {
+              "assetPath": "fixtures/identity/liveness-failed.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Failing liveness sample",
+                "es-CO": "Prueba de vida fallida"
+              },
+              "reference": "liveness-failed",
+              "sha256": "287ac71f2d8a65736985b6dc3fe488e5799ecdce09787e2a5725983dc4201f5c",
+              "step": "liveness"
+            },
+            {
+              "assetPath": "fixtures/identity/liveness-screening-match.png",
+              "corpusVersion": "synthetic-identity.v1",
+              "labels": {
+                "en-US": "Simulated AML match",
+                "es-CO": "Coincidencia AML simulada"
+              },
+              "reference": "liveness-screening-match",
+              "sha256": "cc5534c4b4f362afe2f4514788f2d9ae50063410e50dbb49d6c7fd4d73b1a8a6",
+              "step": "liveness"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity terms en-US",
+      "providerStates": [
+        {
+          "name": "a native identity verification in empty state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications/terms",
+        "query": {
+          "locale": [
+            "en-US"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "terms": {
+            "corpusVersion": "synthetic-identity.v1",
+            "locale": "en-US",
+            "purpose": "identity_verification",
+            "simulated": true,
+            "textVersion": 1,
+            "validityHours": 24,
+            "wording": "I authorize Solventa to process the selected synthetic files for a simulated KYC/AML verification. Consent and progress are valid for 24 hours for this attempt. I may revoke consent; after revocation or expiry, steps cannot be evaluated or reused. Only references, hashes and minimal audit history are retained, without personal files or a legal certificate. The result does not itself grant permission to contract.",
+            "wordingHash": "a7a4488e2052cbcd918fb6470ca56306f2f088ea766754e7387da8621e40f0c6"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile identity terms es-CO",
+      "providerStates": [
+        {
+          "name": "a native identity verification in empty state"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/mobile/identity-verifications/terms",
+        "query": {
+          "locale": [
+            "es-CO"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "terms": {
+            "corpusVersion": "synthetic-identity.v1",
+            "locale": "es-CO",
+            "purpose": "identity_verification",
+            "simulated": true,
+            "textVersion": 1,
+            "validityHours": 24,
+            "wording": "Autorizo a Solventa a procesar los archivos sintéticos seleccionados para una verificación KYC/AML simulada. El consentimiento y el avance son válidos por 24 horas para este intento. Puedo revocarlo; al revocar o vencer no se podrán evaluar ni reutilizar los pasos. Solo se conservan referencias, hashes e historial mínimo de auditoría, sin archivos personales ni constancia legal. El resultado no habilita por sí solo la contratación.",
+            "wordingHash": "7b14f29427348c99cc27f345ff286ed1775fa7ee4f49a3ea1d315444ecf29d55"
           },
           "traceId": "00000000-0000-4000-8000-000000000002"
         },

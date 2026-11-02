@@ -4,7 +4,7 @@ The public home page introduces Solventa's mortgage life calculator, lists the i
 
 The landing creates no quote, reads no consent terms and submits no customer information. Session checking and the existing header sign-in/sign-out remain available. `/cotizar` retains the existing access, session recovery, quote and privacy states; an `auth=failed` return also opens that journey so its error remains visible. No OAuth callback, API contract, consent rule or contracting step changes in this increment.
 
-A valid same-tab estimate draft also opens the journey at `/`, allowing the existing OAuth callback to resume the quote directly instead of showing the landing. The draft is still consumed only by the existing authenticated handoff. Root visits without a draft show the landing for signed-in visitors too; the primary link opens their protected quote form.
+A valid same-tab estimate draft also opens the journey at `/`, allowing the existing OAuth callback to resume the quote directly instead of showing the landing. The draft is still consumed only by the existing authenticated handoff. A signed-in purchase interrupted by a reload also opens the journey at `/`, so it resumes at its policy; see [definitive offer and policy journey](README.md#definitive-offer-and-policy-journey). Root visits without either draft show the landing for signed-in visitors too; the primary link opens their protected quote form.
 
 If session checking fails on the landing, a visible error offers a retry while the quote entry remains usable. The header shows sign-in only after confirming an anonymous session; loading or an unavailable session is not treated as anonymous. A successful retry restores the appropriate header action without leaving the landing.
 

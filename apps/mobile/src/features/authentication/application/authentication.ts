@@ -34,6 +34,34 @@ export class Authentication {
     return () => { this.listeners.delete(listener); };
   };
 
+  getApiBaseUrl = () => this.deps.baseUrl;
+
+  // Feature composition may use this port; credentials never enter a screen or observable snapshot.
+  withSession = <T>(operation: (accessToken: string) => Promise<T>): Promise<T> => {
+    const expected = this.snapshot.status === 'authenticated' ? this.snapshot.principal : null;
+    const version = this.lockVersion;
+    const eligible = () => Boolean(expected && this.foreground && !this.logoutRequested && version === this.lockVersion
+      && this.snapshot.status === 'authenticated' && this.snapshot.principal?.clientId === expected.clientId
+      && this.snapshot.principal?.subjectToken === expected.subjectToken && this.record?.session?.phase === 'active');
+    if (!eligible()) return Promise.reject(new AuthFailure('unauthorized'));
+    const next = this.queue.then(async () => {
+      if (!eligible()) throw new AuthFailure('unauthorized');
+      try {
+        const result = await this.request(token => {
+          if (!eligible()) throw new AuthFailure('unauthorized');
+          return operation(token);
+        });
+        if (!eligible()) throw new AuthFailure('unavailable');
+        return result;
+      } catch (error) {
+        if (error instanceof AuthFailure && eligible()) await this.handleFailure(error);
+        throw error;
+      }
+    });
+    this.queue = next.then(() => undefined, () => undefined);
+    return next;
+  };
+
   private publish(snapshot: AuthSnapshot) {
     if (this.logoutRequested && snapshot.status === 'authenticated') return;
     if (!this.foreground && snapshot.status === 'authenticated') {
