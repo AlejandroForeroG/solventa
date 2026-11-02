@@ -238,6 +238,7 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 
 ## Documents
 
+- [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
 - [Contracts and decision capture](../../shared/contracts/README.md).
 - [Boundaries and communication](../../architecture.md).

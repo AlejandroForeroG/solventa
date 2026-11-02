@@ -1,7 +1,7 @@
-import { monthlyPremium, ratePpm, RULE_VERSION } from './quote';
+import { evaluateMortgageV1, MORTGAGE_RATING_VERSION, MORTGAGE_UNDERWRITING_VERSION } from './mortgage-rules';
 import type { Signal, SignalScope, SignalSubstitute } from './signal';
 
-export const UNDERWRITING_VERSION = 'academic-mortgage-1';
+export const UNDERWRITING_VERSION = MORTGAGE_UNDERWRITING_VERSION;
 export const OFFER_TTL_MS = 15 * 60 * 1000;
 export function offerRequestIdentity(product: 'vida_hipotecario' | 'flight_delay', sourceReference: string): string {
   return JSON.stringify([product, sourceReference]);
@@ -21,7 +21,8 @@ export type OfferSignalSource = { scope: SignalScope; quality: 'live' | SignalSu
   failure?: OfferSignalFailure; substitute?: SignalSubstitute; confidence: number };
 export type OfferCapture = {
   schemaVersion: 1; contractVersion: 'v1'; correlationId: string;
-  inputs: { amount: number; termMonths: number; ageYears: number; debtRatioPpm: number; paymentScore: number; adjustmentPpm: number; baseRatePpm: number; baseRuleVersion: string };
+  inputs: { amount: number; termMonths: number; ageYears: number; debtRatioPpm: number; paymentScore: number; adjustmentPpm: number; baseRatePpm: number; baseRuleVersion: string;
+    monthlyIncomeCop?: number; monthlyObligationsCop?: number; identityVerified?: boolean; affiliationActive?: boolean };
   sources: { source: string; capturedAt: string; quality: 'mock' | 'live' | SignalSubstitute; degraded: boolean;
     failure?: OfferSignalFailure; substitute?: SignalSubstitute; confidence?: number }[];
   consent: { status: 'verified'; id: string; version: number };
@@ -42,15 +43,15 @@ export function underwrite(quote: OfferQuote, signals: Signal[], authorization: 
     || typeof debt !== 'number' || !Number.isSafeInteger(debt) || debt < 0
     || typeof score !== 'number' || !Number.isSafeInteger(score) || score < 0 || score > 1000
     || typeof identity.verified !== 'boolean' || typeof affiliation.active !== 'boolean') return null;
-  const debtRatioPpm = Number(BigInt(debt) * 1000000n / BigInt(income));
-  if (!Number.isSafeInteger(debtRatioPpm)) return null;
-  // Financial boundaries use DECIMAL(19,4): no more than fifteen whole-currency digits.
-  const accepted = quote.amount <= 999999999999999 && identity.verified && affiliation.active && score >= 600 && debtRatioPpm <= 500000;
-  const adjustmentPpm = score >= 750 && debtRatioPpm <= 300000 ? 900000 : 1000000;
+  const evaluated = evaluateMortgageV1({ amount: quote.amount, termMonths: quote.termMonths, ageYears: quote.ageYears,
+    monthlyIncomeCop: income, monthlyObligationsCop: debt, paymentScore: score, identityVerified: identity.verified, affiliationActive: affiliation.active });
+  if (!evaluated) return null;
+  const { accepted, debtRatioPpm, adjustmentPpm, baseRatePpm } = evaluated;
   const preliminary = provenance?.some(source => source.degraded) ?? false;
   const capture: OfferCapture = {
     schemaVersion: 1, contractVersion: 'v1', correlationId: traceId,
-    inputs: { amount: quote.amount, termMonths: quote.termMonths, ageYears: quote.ageYears, debtRatioPpm, paymentScore: score, adjustmentPpm, baseRatePpm: ratePpm(quote.ageYears), baseRuleVersion: RULE_VERSION },
+    inputs: { amount: quote.amount, termMonths: quote.termMonths, ageYears: quote.ageYears, debtRatioPpm, paymentScore: score, adjustmentPpm, baseRatePpm, baseRuleVersion: MORTGAGE_RATING_VERSION,
+      monthlyIncomeCop: income, monthlyObligationsCop: debt, identityVerified: identity.verified, affiliationActive: affiliation.active },
     sources: signals.map(s => {
       const observed = provenance?.find(source => source.scope === s.scope);
       return observed ? { source: `signal:${s.scope}`, capturedAt: s.capturedAt, quality: observed.quality, degraded: observed.degraded,
@@ -60,9 +61,7 @@ export function underwrite(quote: OfferQuote, signals: Signal[], authorization: 
     consent: { status: 'verified', id: authorization.consentId, version: authorization.textVersion },
     rule: { id: 'mortgage-underwriting', version: UNDERWRITING_VERSION }, outcome: preliminary ? 'preliminary' : accepted ? 'accepted' : 'declined'
   };
-  const premium = (BigInt(monthlyPremium(quote.amount, quote.ageYears)) * BigInt(adjustmentPpm) + 500000n) / 1000000n;
-  if (premium < 1n) return null;
-  return { accepted, preliminary, premium: `${premium}.0000`, capture };
+  return { accepted, preliminary, premium: evaluated.premium, capture };
 }
 
 export function offerTerms(quote: OfferQuote, actor: OfferActor, id: string, premium: string, now: Date, consentExpiry: string, status: OfferTerms['status'] = 'definitive'): OfferTerms {

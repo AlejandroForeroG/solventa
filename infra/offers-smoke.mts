@@ -15,6 +15,7 @@ import { ReadSignal } from '../backend/acquisition-risk/src/application/read-sig
 import type { SignalProvider } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 import { SqlSignalSnapshots } from '../backend/acquisition-risk/src/adapters/outbound/sql-signal-snapshots';
 import { platformTimer } from '../backend/acquisition-risk/src/adapters/outbound/degradation-log';
+import { reconstructMortgageDecision } from '../backend/acquisition-risk/src/domain/reconstruct-mortgage-decision';
 
 // Real local owner SQL; Identity and external data sources are explicit stand-ins.
 const config = await settings('local');
@@ -73,6 +74,17 @@ try {
   const command = { actor, authorization, quoteId: quote.quote.quoteId, idempotencyKey: randomUUID(), traceId: trace() };
   const created = await service.create(command); assert.equal(created.status, 'created'); if (created.status !== 'created') throw Error('offer failed');
   assert.equal(created.offer.status, 'definitive');
+  const storedCapture = (await admin.query(`SELECT d.input_snapshot FROM acquisition.underwriting_decisions d
+    JOIN acquisition.offers o ON o.decision_id=d.id WHERE o.id=$1`, [created.offer.offerId])).rows[0].input_snapshot;
+  const reconstructed = reconstructMortgageDecision(storedCapture);
+  assert.equal(reconstructed.status, 'reconstructed');
+  if (reconstructed.status !== 'reconstructed') throw Error('stored mortgage reconstruction failed');
+  assert.equal(reconstructed.calculatedPremium, created.offer.premium);
+  assert.equal(reconstructed.inputs.identityVerified, true);
+  assert.equal(reconstructed.inputs.affiliationActive, true);
+  assert.equal(reconstructed.inputs.monthlyIncomeCop, 8000000);
+  assert.equal(reconstructed.inputs.monthlyObligationsCop, 1800000);
+  assert.equal(reconstructed.consent.id, authorization.consentId);
   assert.equal((await admin.query("SELECT count(*)::INT4 AS n FROM acquisition.risk_profiles WHERE subject_token=$1 AND consent_reference=$2 AND purpose='risk_profiling'", [actor.subjectToken, authorization.consentId])).rows[0].n, 4);
   assert.equal((await service.create(command)).status, 'replayed');
   assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
@@ -182,6 +194,11 @@ try {
   const preliminaryCapture = (await admin.query(`SELECT d.outcome,d.input_snapshot FROM acquisition.underwriting_decisions d
     JOIN acquisition.offers o ON o.decision_id=d.id WHERE o.id=$1 AND o.status='preliminary'`, [preliminary.offer.offerId])).rows[0];
   assert.equal(preliminaryCapture.outcome, 'preliminary');
+  const reconstructedPreliminary = reconstructMortgageDecision(preliminaryCapture.input_snapshot);
+  assert.equal(reconstructedPreliminary.status, 'reconstructed');
+  if (reconstructedPreliminary.status !== 'reconstructed') throw Error('stored preliminary reconstruction failed');
+  assert.equal(reconstructedPreliminary.outcome, 'preliminary');
+  assert.equal(reconstructedPreliminary.calculatedPremium, preliminary.offer.premium);
   assert.deepEqual(preliminaryCapture.input_snapshot.sources.find((source: { degraded: boolean }) => source.degraded), {
     source: 'signal:payment_history_score', capturedAt: preliminaryCapture.input_snapshot.sources[1].capturedAt,
     quality: 'stored_copy', degraded: true, confidence: 60, failure: 'unavailable', substitute: 'stored_copy'
@@ -209,6 +226,14 @@ try {
     (SELECT count(*)::INT4 FROM acquisition.offer_contexts ctx WHERE ctx.client_id=r.client_id AND ctx.idempotency_key=r.idempotency_key) AS offers
     FROM acquisition.offer_requests r WHERE r.client_id=$1 AND r.idempotency_key=$2`, [actor.clientId, declineCommand.idempotencyKey])).rows[0];
   assert.deepEqual(declineEffects, { outcome: 'declined', decisions: 1, audit: 1, outbox: 1, offers: 0 });
+  const declinedCapture = (await admin.query(`SELECT d.input_snapshot FROM acquisition.underwriting_decisions d
+    JOIN acquisition.offer_requests r ON r.decision_id=d.id WHERE r.client_id=$1 AND r.idempotency_key=$2`, [actor.clientId, declineCommand.idempotencyKey])).rows[0].input_snapshot;
+  const reconstructedDecline = reconstructMortgageDecision(declinedCapture);
+  assert.equal(reconstructedDecline.status, 'reconstructed');
+  if (reconstructedDecline.status !== 'reconstructed') throw Error('stored decline reconstruction failed');
+  assert.equal(reconstructedDecline.outcome, 'declined');
+  assert.equal(reconstructedDecline.checks.debtRatioWithinLimit, false);
+  assert.equal(reconstructedDecline.inputs.monthlyObligationsCop, 5000000);
   // Runtime INSERT is allowed, but inconsistent accepted/declined references are rejected by the new table.
   const declineDecision = (await admin.query('SELECT decision_id FROM acquisition.offer_requests WHERE client_id=$1 AND idempotency_key=$2', [actor.clientId, declineCommand.idempotencyKey])).rows[0].decision_id;
   await assert.rejects(admin.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
