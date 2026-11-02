@@ -4,6 +4,7 @@ import { useFormatters } from '../i18n/I18n';
 import { getAuditDecision, listAuditDecisions, type AuditDetail, type AuditOutcome, type AuditPage } from './api';
 import './audit.css';
 
+const emptyFilters = () => ({ reference: '', product: '', outcome: '', from: '', to: '' });
 type Data = { kind: 'page'; page: AuditPage } | { kind: 'detail'; detail: AuditDetail };
 type State = { kind: 'loading' | 'hidden' } | { kind: 'ready'; data: Data } | Exclude<AuditOutcome<never>, { kind: 'ok' }>;
 export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
@@ -11,6 +12,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const format = useFormatters();
   const t = (key: string) => intl.formatMessage({ id: `audit.${key}`, defaultMessage: key });
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState(emptyFilters);
   const [selection, setSelection] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -69,16 +71,18 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
       <div className="audit-heading"><div><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <p className="mono audit-id">{detail.decisionId}</p>}<p className="note audit-mode">{t('simulated')}</p></div>
         {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}>{t(exporting ? 'exporting' : 'export')}</button>}
       </div>
-      {!selection && <form className="audit-filters" onSubmit={event => {
-        event.preventDefault(); const data = new FormData(event.currentTarget); const params = new URLSearchParams();
-        for (const [key, value] of data) if (typeof value === 'string' && value.trim()) params.set(key, value.trim());
+      {!selection && <form className="audit-filters" onReset={event => {
+        event.preventDefault(); setFilters(emptyFilters()); setQuery(''); setRefresh(value => value + 1);
+      }} onSubmit={event => {
+        event.preventDefault(); const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(filters)) if (value.trim()) params.set(key, value.trim());
         setQuery(params.toString()); setRefresh(value => value + 1);
       }}>
-        <div className="field audit-reference"><label htmlFor="audit-reference">{t('reference')}</label><input id="audit-reference" name="reference" defaultValue={new URLSearchParams(query).get('reference') ?? ''} maxLength={64} autoComplete="off" /></div>
-        <div className="field"><label htmlFor="audit-product">{t('product')}</label><select id="audit-product" name="product" defaultValue={new URLSearchParams(query).get('product') ?? ''}><option value="">{t('all')}</option>{['vida_hipotecario', 'flight_delay'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
-        <div className="field"><label htmlFor="audit-outcome">{t('outcome')}</label><select id="audit-outcome" name="outcome" defaultValue={new URLSearchParams(query).get('outcome') ?? ''}><option value="">{t('all')}</option>{['accepted', 'declined', 'preliminary'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
-        {['from', 'to'].map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><input type="date" id={`audit-${key}`} name={key} defaultValue={new URLSearchParams(query).get(key) ?? ''} /></div>)}
-        <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="reset" onClick={() => { setQuery(''); setRefresh(value => value + 1); }}>{t('reset')}</button></div>
+        <div className="field audit-reference"><label htmlFor="audit-reference">{t('reference')}</label><input id="audit-reference" name="reference" value={filters.reference} onChange={event => setFilters(current => ({ ...current, reference: event.target.value }))} maxLength={64} autoComplete="off" /></div>
+        <div className="field"><label htmlFor="audit-product">{t('product')}</label><select id="audit-product" name="product" value={filters.product} onChange={event => setFilters(current => ({ ...current, product: event.target.value }))}><option value="">{t('all')}</option>{['vida_hipotecario', 'flight_delay'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
+        <div className="field"><label htmlFor="audit-outcome">{t('outcome')}</label><select id="audit-outcome" name="outcome" value={filters.outcome} onChange={event => setFilters(current => ({ ...current, outcome: event.target.value }))}><option value="">{t('all')}</option>{['accepted', 'declined', 'preliminary'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
+        {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><input type="date" id={`audit-${key}`} name={key} value={filters[key]} onChange={event => setFilters(current => ({ ...current, [key]: event.target.value }))} /></div>)}
+        <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="reset">{t('reset')}</button></div>
       </form>}
       {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
         <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}>{t('retry')}</button>}
