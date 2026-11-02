@@ -118,6 +118,35 @@ test('every normalized provider failure on any scope produces a non-acceptable p
     assert.equal(f.store.rows.size, 1); assert.equal(f.store.declines, 0); assert.equal(f.store.events.length, 0);
   }
 });
+test('a new evaluation reads recovered sources while replay keeps the original preliminary offer immutable', async () => {
+  const f = fixture(), original = f.deps.provider.read.bind(f.deps.provider);
+  let recovered = false, calls = 0;
+  f.deps.provider.read = async (subject, scope, trace) => {
+    calls++;
+    if (!recovered && scope === 'payment_history_score') throw new ProviderFailure('unavailable');
+    return original(subject, scope, trace);
+  };
+  const preliminary = await f.service.create(f.command);
+  assert.equal(preliminary.status, 'created');
+  if (preliminary.status !== 'created') throw Error('expected a stored degraded result');
+  assert.equal(preliminary.offer.status, 'preliminary');
+  const beforeRecovery = calls;
+  recovered = true;
+  const replay = await f.service.create(f.command);
+  assert.equal(replay.status, 'replayed');
+  if (replay.status !== 'replayed') throw Error('expected immutable replay');
+  assert.deepEqual(replay.offer, preliminary.offer);
+  assert.equal(calls, beforeRecovery);
+  const fresh = await f.service.create({ ...f.command, idempotencyKey: 'reevaluate-after-recovery' });
+  assert.equal(fresh.status, 'created');
+  if (fresh.status !== 'created') throw Error('expected a fresh evaluation');
+  assert.equal(fresh.offer.status, 'definitive');
+  assert.notEqual(fresh.offer.offerId, preliminary.offer.offerId);
+  assert.ok(calls > beforeRecovery);
+  assert.equal((await f.service.accept({ ...f.command, offerId: preliminary.offer.offerId, idempotencyKey: 'reject-old-preliminary' })).status, 'conflict');
+  assert.equal(f.store.events.length, 0);
+});
+
 test('a current same-consent snapshot is used for a preliminary offer and records reduced confidence', async () => {
   const f = fixture();
   const first = await f.service.create(f.command); assert.equal(first.status, 'created');

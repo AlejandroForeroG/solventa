@@ -78,6 +78,7 @@ export function OfferJourney(props: {
   const signal = useRef<AbortSignal | null>(null);
   // One key per command and resource: repeated clicks, retries and lost responses replay the same server operation.
   const createKey = useRef(newIdempotencyKey());
+  const reevaluationInFlight = useRef(false);
   const acceptKeys = useRef(new Map<string, string>());
   const issueKeys = useRef(new Map<string, string>());
   const chargeKeys = useRef(new Map<string, string>());
@@ -88,11 +89,12 @@ export function OfferJourney(props: {
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   const say = (id: string, values?: Record<string, string>) => latest.current.announce(latest.current.intl.formatMessage({ id }, values));
   const api = () => latest.current.props.api ?? financialApi;
+  const currentOfferId = phase.name === 'offer' ? phase.offer.offerId : null;
 
   useEffect(() => {
     heading.current?.focus();
     if (SETTLED.includes(phase.name)) clearPurchaseDraft();
-  }, [phase.name]);
+  }, [phase.name, currentOfferId]);
 
   // Shared handling for responses that end a step the same way everywhere. Returns true when it changed the screen.
   function common(outcome: FinancialOutcome<unknown>, retry: () => void, step: Step): boolean {
@@ -115,11 +117,19 @@ export function OfferJourney(props: {
       if (current.aborted || common(outcome, () => void create(current), 4)) return;
       if (outcome.kind === 'ok') {
         setPhase({ name: 'offer', offer: outcome.value, accepting: false });
-        say('live.offerReady', { premium: latest.current.copDecimal(outcome.value.premium) });
+        say(outcome.value.status === 'preliminary' ? 'live.offerPreliminary' : 'live.offerReady', { premium: latest.current.copDecimal(outcome.value.premium) });
       } else if (outcome.kind === 'rejected' && outcome.code === 'declined') { setPhase({ name: 'declined' }); say('live.offerDeclined'); }
       else if (outcome.kind === 'rejected' && outcome.code === 'expired') expired();
       else fail('generic', 4);
     } catch { /* aborted: the user left the screen */ }
+  }
+
+  function reevaluate() {
+    const current = signal.current;
+    if (!current || current.aborted || phase.name !== 'offer' || phase.offer.status !== 'preliminary' || reevaluationInFlight.current) return;
+    reevaluationInFlight.current = true;
+    createKey.current = newIdempotencyKey();
+    void create(current).finally(() => { reevaluationInFlight.current = false; });
   }
 
   // Each mount owns its controller, so StrictMode's effect replay never reuses an aborted signal.
@@ -198,7 +208,7 @@ export function OfferJourney(props: {
 
   async function accept(offer: Offer) {
     const current = signal.current;
-    if (!current || phase.name !== 'offer' || phase.accepting) return;
+    if (!current || phase.name !== 'offer' || offer.status !== 'definitive' || phase.accepting) return;
     const key = acceptKeys.current.get(offer.offerId) ?? newIdempotencyKey();
     acceptKeys.current.set(offer.offerId, key);
     setPhase({ name: 'offer', offer, accepting: true });
@@ -355,7 +365,7 @@ export function OfferJourney(props: {
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.loading')}</h1>
       <p>{t('offer.loadingDetail')}</p>
     </section>}
-    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onBack={onBack} />}
+    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
     {phase.name === 'declined' && <section className="step card declined-card">
       <header className="consent-head"><h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.declinedTitle')}</h1></header>
       <div className="declined-body">
