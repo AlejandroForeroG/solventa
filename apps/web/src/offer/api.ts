@@ -4,6 +4,7 @@ import { fetchWithSession } from '../session-fetch';
 export type Offer = {
   offerId: string;
   offerVersion: 1;
+  status: 'preliminary' | 'definitive';
   quoteId: string;
   premium: string;
   currency: 'COP';
@@ -61,8 +62,8 @@ function asOffer(value: unknown, quoteId: string): Offer | null {
     || value.coverage.kind !== 'mortgage_life' || typeof value.coverage.sumInsured !== 'string' || !MONEY.test(value.coverage.sumInsured)
     || !instant(value.effectiveFrom) || !instant(value.effectiveUntil) || !instant(value.expiresAt)
     || typeof value.ruleVersion !== 'string' || !/^academic-[a-z0-9-]+$/.test(value.ruleVersion)
-    || value.synthetic !== true || value.status !== 'definitive' || !uuid(value.traceId)) return null;
-  return { offerId: value.offerId.toLowerCase(), offerVersion: 1, quoteId, premium: value.premium, currency: 'COP', sumInsured: value.coverage.sumInsured,
+    || value.synthetic !== true || (value.status !== 'definitive' && value.status !== 'preliminary') || !uuid(value.traceId)) return null;
+  return { offerId: value.offerId.toLowerCase(), offerVersion: 1, status: value.status, quoteId, premium: value.premium, currency: 'COP', sumInsured: value.coverage.sumInsured,
     effectiveFrom: value.effectiveFrom, effectiveUntil: value.effectiveUntil, expiresAt: value.expiresAt, ruleVersion: value.ruleVersion, traceId: value.traceId };
 }
 
