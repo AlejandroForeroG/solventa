@@ -185,5 +185,5 @@ test('web explains the native-only flow and disables sign-in', () => {
 test('an authenticated account retains the existing identity-verification entry', () => {
   render('authenticated');
   press('verifyIdentity');
-  assert.deepEqual(routes, ['/identity-verification']);
+  assert.deepEqual(routes, ['./identity-verification']);
 });
