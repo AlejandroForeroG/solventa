@@ -1,3 +1,5 @@
+import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
+import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
@@ -453,5 +455,47 @@ describe('SPA definitive offer and policy issuance', () => {
       const outcome = await withServer(server.url, () => beginSignatureChallenge({ policyId, documentHash }));
       assert.ok(outcome.kind === 'ok' && outcome.value.challengeId === challengeId);
     });
+  });
+});
+
+
+describe('SPA historical underwriting audit', () => {
+  test('lists historical decisions for an explicitly granted auditor', async () => {
+    pact.given('an explicitly granted underwriting auditor').uponReceiving('a historical underwriting list')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like(auditExamples.page) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await listAuditDecisions(new URLSearchParams(), new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.items[0].decisionId, auditExamples.detail.decision.decisionId);
+    }));
+  });
+  test('reads the retained rule, inputs, sources and consent', async () => {
+    pact.given('an explicitly granted underwriting auditor').uponReceiving('a historical underwriting reconstruction')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + auditExamples.detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(auditExamples.detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(auditExamples.detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.reconstruction.status, 'reconstructed');
+    }));
+  });
+  test('shows historical gaps without synthesized facts', async () => {
+    const { identityVerified: _identity, ...inputs } = auditExamples.detail.decision.inputs;
+    const detail = { ...auditExamples.detail, decision: { ...auditExamples.detail.decision, inputs, reconstruction: { status: 'incomplete_capture', missing: ['inputs.identityVerified'] } } };
+    pact.given('an auditor reading an incomplete historical decision').uponReceiving('an incomplete historical underwriting reconstruction')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.deepEqual(result.value.reconstruction.missing, ['inputs.identityVerified']);
+    }));
+  });
+  for (const [state, status, error, expected] of [
+    ['a customer without underwriting audit permission', 403, 'forbidden', 'forbidden'],
+    ['the underwriting audit store is unavailable', 503, 'audit_unavailable', 'unavailable']
+  ] as const) test('does not expose underwriting data: ' + expected, async () => {
+    pact.given(state).uponReceiving('an underwriting audit request resulting in ' + expected)
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions', headers: { accept: 'application/json' } })
+      .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await listAuditDecisions(new URLSearchParams(), new AbortController().signal)).kind, expected)));
   });
 });

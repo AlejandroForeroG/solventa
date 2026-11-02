@@ -42,7 +42,7 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
         try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
         catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
       }
-      const response = isQuotesPath(path) || offersPath.test(path) ? await forwardToAcquisition(request, env, headers)
+      const response = isQuotesPath(path) || offersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);

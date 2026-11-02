@@ -1,0 +1,106 @@
+{
+  "page": {
+    "items": [
+      {
+        "decisionId": "90000000-0000-4000-8000-000000000001",
+        "decidedAt": "2026-10-16T10:00:00.000Z",
+        "outcome": "accepted",
+        "ruleVersion": "academic-mortgage-1",
+        "contractVersion": "v1",
+        "correlationId": "90000000-0000-4000-8000-000000000005",
+        "quoteId": "COT-2026-00001",
+        "product": "vida_hipotecario"
+      }
+    ],
+    "next": null,
+    "traceId": "90000000-0000-4000-8000-000000000005"
+  },
+  "detail": {
+    "decision": {
+      "decisionId": "90000000-0000-4000-8000-000000000001",
+      "decidedAt": "2026-10-16T10:00:00.000Z",
+      "outcome": "accepted",
+      "ruleVersion": "academic-mortgage-1",
+      "contractVersion": "v1",
+      "correlationId": "90000000-0000-4000-8000-000000000005",
+      "quoteId": "COT-2026-00001",
+      "product": "vida_hipotecario",
+      "inputs": {
+        "amount": 320000000,
+        "termMonths": 180,
+        "ageYears": 35,
+        "debtRatioPpm": 250000,
+        "paymentScore": 780,
+        "adjustmentPpm": 900000,
+        "baseRatePpm": 270,
+        "baseRuleVersion": "provisional-1",
+        "monthlyIncomeCop": 8000000,
+        "monthlyObligationsCop": 2000000,
+        "identityVerified": true,
+        "affiliationActive": true
+      },
+      "sources": [
+        {
+          "source": "mock:income_obligations_12m",
+          "capturedAt": "2026-10-16T10:00:00.000Z",
+          "quality": "mock",
+          "degraded": false
+        },
+        {
+          "source": "mock:payment_history_score",
+          "capturedAt": "2026-10-16T10:00:00.000Z",
+          "quality": "mock",
+          "degraded": false
+        },
+        {
+          "source": "mock:affiliation_regime",
+          "capturedAt": "2026-10-16T10:00:00.000Z",
+          "quality": "mock",
+          "degraded": false
+        },
+        {
+          "source": "mock:identity_validation",
+          "capturedAt": "2026-10-16T10:00:00.000Z",
+          "quality": "mock",
+          "degraded": false
+        }
+      ],
+      "consent": {
+        "status": "verified",
+        "id": "CNS-2026-00001",
+        "version": 1
+      },
+      "rule": {
+        "id": "mortgage-underwriting",
+        "version": "academic-mortgage-1"
+      },
+      "model": {
+        "status": "not_used"
+      },
+      "reconstruction": {
+        "status": "reconstructed",
+        "missing": [],
+        "calculatedPremium": "77760.0000",
+        "checks": {
+          "amountWithinLimit": true,
+          "identityVerified": true,
+          "affiliationActive": true,
+          "paymentScoreSufficient": true,
+          "debtRatioWithinLimit": true,
+          "discountApplied": true
+        }
+      },
+      "revisions": [
+        {
+          "offerId": "90000000-0000-4000-8000-000000000002",
+          "version": 1,
+          "premium": "77760.0000",
+          "currency": "COP",
+          "validFrom": "2026-10-16T10:00:00.000Z",
+          "expiresAt": "2026-10-17T10:00:00.000Z"
+        }
+      ]
+    },
+    "traceId": "90000000-0000-4000-8000-000000000005"
+  }
+}

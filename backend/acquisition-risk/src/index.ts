@@ -1,5 +1,7 @@
 /// <reference path="../worker-configuration.d.ts" />
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { AuditDecisions } from './application/audit-decisions';
+import { SqlAuditDecisions } from './adapters/outbound/sql-audit-decisions';
 import { createHttp } from './adapters/inbound/http';
 import { CreateQuote } from './application/create-quote';
 import { EstimateQuote } from './application/estimate-quote';
@@ -40,7 +42,10 @@ export default class extends WorkerEntrypoint<Env> {
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
-    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+    return createHttp({ quotes,
+      audit: { decisions: new AuditDecisions(new SqlAuditDecisions(this.env.ACQUISITION_DB.connectionString), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       // Queue publication keeps its independent lease and minute-cron recovery.
       acceptanceCommitted: (eventId, event) => {

@@ -39,3 +39,5 @@ This directory contains the product's current technical documentation. Its organ
 Mandatory rules are in [AGENTS.md](../AGENTS.md#required-documentation). Find the existing module and topic first; update its guide in the same branch and PR that changes behavior. Create a document only for a new topic, inside its module, and link it from the module index.
 
 Each topic has one authoritative explanation. README files beside code link to these guides. Document shared changes once in their cross-cutting guide and link it from affected modules. Git preserves history: keep the current behavior, remove obsolete instructions and do not create copies per branch, feature, sprint or environment. Each PR links the guides it creates or updates on its source branch.
+
+Historical underwriting lookup: [Acquisition audit API and workspace](modules/acquisition-risk/underwriting-audit.md).
