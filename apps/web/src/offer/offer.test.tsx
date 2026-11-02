@@ -441,33 +441,44 @@ describe('definitive offer journey', () => {
   });
 
   it('keeps an expired charged purchase recoverable through read and refund outages with its original charge key', async () => {
-    const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce({ kind: 'unavailable' })
-      .mockResolvedValueOnce(ok(charged)).mockResolvedValue(ok({ ...charged, status: 'refunded', payment: { status: 'refunded', reference: receipt } })),
-    beginSignatureChallenge: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'offer_invalid' }),
-    chargePolicy: vi.fn().mockResolvedValueOnce(ok(charged)).mockResolvedValueOnce({ kind: 'unavailable' })
-      .mockResolvedValue({ kind: 'rejected', code: 'signature_failed' }) });
-    const { user, onRequote } = journey(api);
-    await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
-    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
-    await user.click(screen.getByRole('checkbox'));
-    const original = readPurchaseDraft();
-    await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
-    await user.click(await screen.findByRole('button', { name: 'Actualizar estado' }));
-    expect(await screen.findByRole('heading', { name: 'Reverso pendiente' })).toBeInTheDocument();
-    expect(readPurchaseDraft()).toEqual(original);
-    expect(screen.queryByRole('button', { name: 'Recotizar ahora' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Verificar y recuperar operación' }));
-    await user.click(await screen.findByRole('button', { name: 'Actualizar estado' }));
-    expect(await screen.findByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
-    expect(new Set(api.chargePolicy.mock.calls.map(call => call[1])).size).toBe(1);
-    expect(api.chargePolicy).toHaveBeenCalledTimes(3);
-    expect(api.issuePolicy).not.toHaveBeenCalled();
-    expect(api.beginSignatureChallenge).toHaveBeenCalledTimes(1);
-    expect(api.acceptOffer).toHaveBeenCalledTimes(1);
-    expect(onRequote).not.toHaveBeenCalled();
-    await waitFor(() => expect(readPurchaseDraft()).toBeNull());
+    vi.useFakeTimers();
+    try {
+      const api = stubs({ policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce({ kind: 'unavailable' })
+        .mockResolvedValueOnce(ok(charged)).mockResolvedValue(ok({ ...charged, status: 'refunded', payment: { status: 'refunded', reference: receipt } })),
+      beginSignatureChallenge: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'offer_invalid' }),
+      chargePolicy: vi.fn().mockResolvedValueOnce(ok(charged)).mockResolvedValueOnce({ kind: 'unavailable' })
+        .mockResolvedValue({ kind: 'rejected', code: 'signature_failed' }) });
+      const { onRequote, unmount } = journey(api);
+      const click = async (name: string) => {
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name })); });
+      };
+      await act(async () => {});
+      await click('Aceptar oferta');
+      await click('Continuar al cobro');
+      await click('Continuar a la firma');
+      await click('Página siguiente');
+      await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+      const original = readPurchaseDraft();
+      await click('Obtener código de prueba');
+      await act(async () => { await vi.advanceTimersByTimeAsync(49); });
+      expect(screen.queryByRole('button', { name: 'Actualizar estado' })).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      await click('Actualizar estado');
+      expect(screen.getByRole('heading', { name: 'Reverso pendiente' })).toBeInTheDocument();
+      expect(readPurchaseDraft()).toEqual(original);
+      expect(screen.queryByRole('button', { name: 'Recotizar ahora' })).toBeNull();
+      await click('Verificar y recuperar operación');
+      await click('Actualizar estado');
+      expect(screen.getByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
+      expect(new Set(api.chargePolicy.mock.calls.map(call => call[1])).size).toBe(1);
+      expect(api.chargePolicy).toHaveBeenCalledTimes(3);
+      expect(api.issuePolicy).not.toHaveBeenCalled();
+      expect(api.beginSignatureChallenge).toHaveBeenCalledTimes(1);
+      expect(api.acceptOffer).toHaveBeenCalledTimes(1);
+      expect(onRequote).not.toHaveBeenCalled();
+      expect(readPurchaseDraft()).toBeNull();
+      unmount();
+    } finally { vi.useRealTimers(); }
   });
 
   it('does not claim a completed refund from signature_failed and recovers with the same operation key', async () => {
