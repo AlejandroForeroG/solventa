@@ -191,6 +191,7 @@ function financialWorld(state: FinancialState): Partial<World> {
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
+  'an auditor reconstructing the retained original mock contract': () => auditWorld(origin, 'recovered'),
   'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),
   'a customer without underwriting audit permission': () => auditWorld(origin, 'denied'),
   'the underwriting audit store is unavailable': () => auditWorld(origin, 'unavailable'),

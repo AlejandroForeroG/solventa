@@ -9,6 +9,8 @@ import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application
 import { SqlAuditDecisions } from '../backend/acquisition-risk/src/adapters/outbound/sql-audit-decisions';
 import { AuditDecisions } from '../backend/acquisition-risk/src/application/audit-decisions';
 import { historicalMortgage } from '../tests/support/audit-fixtures';
+import type { OfferCapture } from '../backend/acquisition-risk/src/domain/offer';
+import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 
 const config = await settings('local');
 const state = JSON.parse(await readFile('infra/.local/runtime.local.json', 'utf8'));
@@ -83,9 +85,41 @@ try {
   assert.equal(incomplete, 1);
   const absentTrace = reader(); assert.equal(await audit.get(randomUUID(), absentTrace), null);
   assert.equal((await db.query('SELECT outcome FROM acquisition.audit_events WHERE correlation_id=$1', [absentTrace.traceId])).rows[0].outcome, 'not_found');
+
+  const quoteId = randomUUID(), profiledDecisionId = randomUUID();
+  const oldCapture = structuredClone(fixture.snapshot) as OfferCapture;
+  for (const field of ['monthlyIncomeCop', 'monthlyObligationsCop', 'identityVerified', 'affiliationActive'] as const) delete oldCapture.inputs[field];
+  for (const source of oldCapture.sources) { source.source = source.source.replace('mock:', 'signal:'); source.quality = 'live'; source.confidence = 100; }
+  await db.query(`INSERT INTO acquisition.quotes (id,subject_token,partner_id,client_id,idempotency_key,request_hash,normalized_request,rule_version,status,correlation_id,quote_code)
+    VALUES ($1,$2,NULL,$3,'historical-profile-fixture',$4,'{}','provisional-1','completed',$5,'COT-2026-99999')`,
+  [quoteId, principal.subjectToken, principal.clientId, 'a'.repeat(64), fixture.correlationId]);
+  await db.query(`INSERT INTO acquisition.underwriting_decisions (id,quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id,decided_at)
+    VALUES ($1,$2,$3,'v1','accepted',$4,$4,$5,$6)`, [profiledDecisionId, quoteId, fixture.ruleVersion, JSON.stringify(oldCapture), fixture.correlationId, fixture.decidedAt]);
+  const facts = { income_obligations_12m: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 2000000 }, payment_history_score: { score: 780 },
+    affiliation_regime: { active: true }, identity_validation: { verified: true } };
+  const ownerProfiles = new Set<string>();
+  for (const scope of SIGNAL_SCOPES) {
+    for (const foreign of [false, true]) {
+      const profileId = randomUUID(); if (!foreign) ownerProfiles.add(profileId);
+      const signal = { scope, capturedAt: fixture.decidedAt, data: foreign ? { monthlyIncomeCop: 1, monthlyObligationsCop: 1, score: 1, verified: false, active: false } : facts[scope] };
+      await db.query(`INSERT INTO acquisition.risk_profiles (id,version,subject_token,source,captured_at,expires_at,quality,purpose,consent_id,consent_reference,consent_version,signals,correlation_id)
+        VALUES ($1,1,$2,$3,$4,$5,'provider','risk_profiling',NULL,'CNS-2026-00001',1,$6,$7)`,
+      [profileId, foreign ? randomUUID() : principal.subjectToken, scope, fixture.decidedAt, '2026-10-16T10:02:00.000Z', JSON.stringify(signal), fixture.correlationId]);
+    }
+  }
+  const recovered = await audit.get(profiledDecisionId, reader());
+  assert.equal(recovered?.reconstruction.status, 'reconstructed');
+  assert.equal(recovered?.inputs.monthlyIncomeCop, 8000000); assert.equal(recovered?.inputs.monthlyObligationsCop, 2000000);
+  assert.equal(recovered?.inputEvidence.length, 4); assert.ok(recovered?.inputEvidence.every(e => e.kind === 'retained_profile' && ownerProfiles.has(e.reference)));
+  assert.equal(recovered?.quoteId, 'COT-2026-99999');
+  assert.deepEqual((await db.query('SELECT input_snapshot FROM acquisition.underwriting_decisions WHERE id=$1', [profiledDecisionId])).rows[0].input_snapshot, oldCapture);
+
   const before = (await db.query('SELECT count(*)::INT4 AS count FROM acquisition.audit_events')).rows[0].count;
   await db.query('REVOKE INSERT ON acquisition.audit_events FROM solventa_local_acquisition');
-  try { await assert.rejects(audit.get(fixture.decisionId, reader()), /permission|privilege/i); }
+  try {
+    await assert.rejects(audit.get(fixture.decisionId, reader()), /permission|privilege/i);
+    await assert.rejects(audit.get(profiledDecisionId, reader()), /permission|privilege/i);
+  }
   finally { await db.query('GRANT INSERT ON acquisition.audit_events TO solventa_local_acquisition'); }
   assert.equal((await db.query('SELECT count(*)::INT4 AS count FROM acquisition.audit_events')).rows[0].count, before);
   const identityRuntimeUrl = new URL(runtime.identity);
@@ -111,7 +145,7 @@ try {
   await changeAuditGrant(db, 'local', 'grant', expired);
   await db.query("UPDATE identity.underwriting_audit_grants SET granted_at=now()-INTERVAL '2 days', expires_at=now()-INTERVAL '1 day' WHERE id=$1", [expired.grantId]);
   assert.equal(await permissions.find(principal, identity), null);
-  console.log(JSON.stringify({ environment: 'local', status: 'passed', decisions: 23, cases: ['runtime-isolation', 'explicit-grant', 'revoke', 'expiry', 'session-binding', 'suspension', 'stable-pagination', 'date-filter', 'immutable-revision', 'legacy-gap', 'durable-read-audit', 'audit-failure-closed'], providerMode: 'mock' }));
+  console.log(JSON.stringify({ environment: 'local', status: 'passed', decisions: 24, cases: ['runtime-isolation', 'explicit-grant', 'revoke', 'expiry', 'session-binding', 'suspension', 'stable-pagination', 'date-filter', 'immutable-revision', 'legacy-gap', 'retained-profile-recovery', 'foreign-profile-exclusion', 'original-capture-preserved', 'durable-read-audit', 'audit-failure-closed'], providerMode: 'mock' }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);

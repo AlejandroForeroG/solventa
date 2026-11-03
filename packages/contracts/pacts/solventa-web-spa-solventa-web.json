@@ -834,6 +834,7 @@
             "correlationId": "90000000-0000-4000-8000-000000000005",
             "decidedAt": "2026-10-16T10:00:00.000Z",
             "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [],
             "inputs": {
               "adjustmentPpm": 900000,
               "affiliationActive": true,
@@ -1537,6 +1538,153 @@
           }
         },
         "status": 403
+      }
+    },
+    {
+      "description": "a recovered historical underwriting reconstruction with provenance",
+      "providerStates": [
+        {
+          "name": "an auditor reconstructing the retained original mock contract"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions/90000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "decision": {
+            "consent": {
+              "id": "CNS-2026-00001",
+              "status": "verified",
+              "version": 1
+            },
+            "contractVersion": "v1",
+            "correlationId": "90000000-0000-4000-8000-000000000005",
+            "decidedAt": "2026-10-16T10:00:00.000Z",
+            "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [
+              {
+                "field": "inputs.monthlyIncomeCop",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.monthlyObligationsCop",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.identityVerified",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.affiliationActive",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              }
+            ],
+            "inputs": {
+              "adjustmentPpm": 900000,
+              "affiliationActive": true,
+              "ageYears": 35,
+              "amount": 320000000,
+              "baseRatePpm": 270,
+              "baseRuleVersion": "provisional-1",
+              "debtRatioPpm": 225000,
+              "identityVerified": true,
+              "monthlyIncomeCop": 8000000,
+              "monthlyObligationsCop": 1800000,
+              "paymentScore": 780,
+              "termMonths": 180
+            },
+            "model": {
+              "status": "not_used"
+            },
+            "outcome": "accepted",
+            "product": "vida_hipotecario",
+            "quoteId": "COT-2026-00001",
+            "reconstruction": {
+              "calculatedPremium": "77760.0000",
+              "checks": {
+                "affiliationActive": true,
+                "amountWithinLimit": true,
+                "debtRatioWithinLimit": true,
+                "discountApplied": true,
+                "identityVerified": true,
+                "paymentScoreSufficient": true
+              },
+              "missing": [],
+              "status": "reconstructed"
+            },
+            "revisions": [
+              {
+                "currency": "COP",
+                "expiresAt": "2026-10-17T10:00:00.000Z",
+                "offerId": "90000000-0000-4000-8000-000000000002",
+                "premium": "77760.0000",
+                "validFrom": "2026-10-16T10:00:00.000Z",
+                "version": 1
+              }
+            ],
+            "rule": {
+              "id": "mortgage-underwriting",
+              "version": "academic-mortgage-1"
+            },
+            "ruleVersion": "academic-mortgage-1",
+            "sources": [
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:income_obligations_12m"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:payment_history_score"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:affiliation_regime"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:identity_validation"
+              }
+            ]
+          },
+          "traceId": "90000000-0000-4000-8000-000000000005"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       }
     },
     {
@@ -2342,6 +2490,7 @@
             "correlationId": "90000000-0000-4000-8000-000000000005",
             "decidedAt": "2026-10-16T10:00:00.000Z",
             "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [],
             "inputs": {
               "adjustmentPpm": 900000,
               "affiliationActive": true,

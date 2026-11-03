@@ -3,14 +3,14 @@ import { mountAuditDecisions } from '../../../backend/acquisition-risk/src/adapt
 import { AuditDecisions } from '../../../backend/acquisition-risk/src/application/audit-decisions';
 import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
-import { auditIds, historicalMortgage } from '../../support/audit-fixtures';
+import { auditIds, historicalMortgage, historicalMockMortgage } from '../../support/audit-fixtures';
 
-export function auditWorld(origin: string, state: 'granted' | 'legacy' | 'denied' | 'unavailable') {
+export function auditWorld(origin: string, state: 'granted' | 'legacy' | 'recovered' | 'denied' | 'unavailable') {
   const cookie = 'synthetic-audit-session';
   const principal = { clientId: auditIds.client, subjectToken: auditIds.subject };
   const identity = { providerSubject: cookie, sessionReference: cookie, emailVerified: true };
   const app = new Hono<{ Bindings: AcquisitionEnv }>();
-  const stored = historicalMortgage();
+  const stored = state === 'recovered' ? historicalMockMortgage() : historicalMortgage();
   if (state === 'legacy') {
     const snapshot = JSON.parse(JSON.stringify(stored.snapshot)); delete snapshot.inputs.identityVerified;
     stored.snapshot = snapshot;
