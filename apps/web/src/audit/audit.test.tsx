@@ -18,7 +18,7 @@ describe('protected underwriting audit workspace', () => {
     const fetch = vi.fn().mockImplementation(async (url: string) => response(url.includes('/' + id) ? examples.detail : examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: id }));
-    expect(await screen.findByRole('heading', { name: 'Entradas conservadas' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Entradas de la decisión' })).toBeVisible();
     expect(screen.getByText('8.000.000')).toBeVisible(); expect(screen.getByText('Puntaje mínimo de 600')).toBeVisible();
     expect(screen.getByText('No se utilizó modelo')).toBeVisible();
     expect(screen.getByText('CNS-2026-00001 / 1')).toBeVisible();
@@ -29,7 +29,7 @@ describe('protected underwriting audit workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions?reference=COT-2026-00001&outcome=declined', expect.objectContaining({ cache: 'no-store' })));
     await user.click(await screen.findByRole('button', { name: id }));
-    await screen.findByRole('heading', { name: 'Entradas conservadas' });
+    await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('ID de decisión, oferta o cotización')).toHaveValue('COT-2026-00001');
     expect(screen.getByLabelText('Resultado')).toHaveValue('declined');
@@ -38,7 +38,7 @@ describe('protected underwriting audit workspace', () => {
     fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-31' } });
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
     await user.click(await screen.findByRole('button', { name: id }));
-    await screen.findByRole('heading', { name: 'Entradas conservadas' });
+    await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('Producto')).toHaveValue('flight_delay');
     expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
@@ -57,6 +57,18 @@ describe('protected underwriting audit workspace', () => {
     expect(await screen.findByText('Captura histórica incompleta')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Datos faltantes' })).toBeVisible();
     expect(screen.queryByText('Coincide con la regla conservada')).toBeNull();
+  });
+  it('distinguishes a recovered source profile from a historical mock artifact in the decision inputs', async () => {
+    const detail = { ...examples.detail, decision: { ...examples.detail.decision, inputEvidence: [
+      { field: 'inputs.monthlyIncomeCop', kind: 'retained_profile', reference: '90000000-0000-4000-8000-000000000100', version: '1', capturedAt: examples.detail.decision.decidedAt },
+      { field: 'inputs.affiliationActive', kind: 'historical_mock', reference: 'legacy-mock-risk-1', version: '689304a8458ee32e112fd52497488c7ce1170c73' }
+    ] } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response(detail)));
+    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    expect(await screen.findByRole('heading', { name: 'Origen de las entradas recuperadas' })).toBeVisible();
+    expect(screen.getByRole('cell', { name: 'Perfil conservado' })).toBeVisible();
+    expect(screen.getByRole('cell', { name: 'Artefacto simulado histórico' })).toBeVisible();
+    expect(screen.getByRole('cell', { name: 'legacy-mock-risk-1' })).toBeVisible();
   });
   it('handles empty results and supports the English catalogue', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ items: [], next: null, traceId })));
@@ -81,7 +93,7 @@ describe('protected underwriting audit workspace', () => {
     await userEvent.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     await screen.findByRole('button', { name: id });
     await act(async () => resolve(response(examples.detail)));
-    expect(screen.queryByRole('heading', { name: 'Entradas conservadas' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Entradas de la decisión' })).toBeNull();
   });
   it('rechecks permission before export and does not download when access is revoked', async () => {
     const create = vi.fn(); vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create }));
@@ -102,11 +114,22 @@ describe('protected underwriting audit workspace', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => response(url.endsWith(id) ? examples.detail : examples.page)));
     const view = show(); await screen.findByRole('button', { name: id });
     expect(await axe(view.container)).toHaveNoViolations();
-    await userEvent.click(screen.getByRole('button', { name: id })); await screen.findByRole('heading', { name: 'Entradas conservadas' });
+    await userEvent.click(screen.getByRole('button', { name: id })); await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     expect(await axe(view.container)).toHaveNoViolations();
   });
 });
 describe('audit HTTP response boundary', () => {
+  it('accepts the previous response without evidence and rejects malformed recovery provenance', async () => {
+    const { inputEvidence: _evidence, ...previous } = examples.detail.decision;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ...examples.detail, decision: previous })));
+    expect((await getAuditDecision(id, new AbortController().signal)).kind).toBe('ok');
+    for (const inputEvidence of [[{ field: 'inputs.privateToken', kind: 'retained_profile', reference: 'x', version: '1' }],
+      [{ field: 'inputs.monthlyIncomeCop', kind: 'current_provider', reference: 'x', version: '1' }],
+      [{ field: 'inputs.monthlyIncomeCop', kind: 'retained_profile', reference: 'x', version: '1', capturedAt: 'invalid' }]]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ...examples.detail, decision: { ...previous, inputEvidence } })));
+      expect((await getAuditDecision(id, new AbortController().signal)).kind).toBe('unavailable');
+    }
+  });
   it('rejects malformed success responses and a detail for another decision', async () => {
     for (const body of [{ ...examples.detail, decision: { ...examples.detail.decision, decisionId: examples.detail.traceId } }, { ...examples.detail, decision: { ...examples.detail.decision, sources: [{}] } }]) {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(body)));

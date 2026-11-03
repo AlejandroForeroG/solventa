@@ -10,7 +10,9 @@ export const auditEs = {
 
   'audit.decision': 'Decisión', 'audit.date': 'Fecha (Bogotá)', 'audit.rule': 'Regla aplicada', 'audit.version': 'Versión', 'audit.quote': 'Cotización', 'audit.trace': 'Correlación',
 
-  'audit.inputs': 'Entradas conservadas', 'audit.sources': 'Fuentes de la decisión', 'audit.source': 'Fuente', 'audit.quality': 'Calidad', 'audit.captured': 'Captura', 'audit.degraded': 'Sustitución',
+  'audit.inputs': 'Entradas de la decisión', 'audit.sources': 'Fuentes de la decisión', 'audit.source': 'Fuente', 'audit.quality': 'Calidad', 'audit.captured': 'Captura', 'audit.degraded': 'Sustitución',
+  'audit.inputEvidence': 'Origen de las entradas recuperadas', 'audit.inputField': 'Entrada', 'audit.evidenceReference': 'Registro o artefacto',
+  'audit.evidence.retained_profile': 'Perfil conservado', 'audit.evidence.historical_mock': 'Artefacto simulado histórico', 'audit.evidence.offer_revision': 'Revisión de oferta',
 
   'audit.consent': 'Consentimiento en la decisión', 'audit.historicalConsent': 'Referencia histórica. No acredita un consentimiento vigente.',
 
@@ -57,7 +59,9 @@ export const auditEn: Record<keyof typeof auditEs, string> = {
 
   'audit.decision': 'Decision', 'audit.date': 'Date (Bogotá)', 'audit.rule': 'Applied rule', 'audit.version': 'Version', 'audit.quote': 'Quote', 'audit.trace': 'Correlation',
 
-  'audit.inputs': 'Retained inputs', 'audit.sources': 'Decision sources', 'audit.source': 'Source', 'audit.quality': 'Quality', 'audit.captured': 'Captured', 'audit.degraded': 'Substitution',
+  'audit.inputs': 'Decision inputs', 'audit.sources': 'Decision sources', 'audit.source': 'Source', 'audit.quality': 'Quality', 'audit.captured': 'Captured', 'audit.degraded': 'Substitution',
+  'audit.inputEvidence': 'Recovered input provenance', 'audit.inputField': 'Input', 'audit.evidenceReference': 'Record or artifact',
+  'audit.evidence.retained_profile': 'Retained profile', 'audit.evidence.historical_mock': 'Historical mock artifact', 'audit.evidence.offer_revision': 'Offer revision',
 
   'audit.consent': 'Consent at decision time', 'audit.historicalConsent': 'Historical reference. It does not establish current consent.',
 

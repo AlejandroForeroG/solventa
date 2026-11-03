@@ -8,7 +8,7 @@ Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health`
 
 ## Historical underwriting audit
 
-Explicitly granted web auditors can list and inspect historical decisions through the [audit API and workspace](underwriting-audit.md). Identity owns the permission; Acquisition owns lookup, retained-rule reconstruction and durable read auditing. No current source or consent data is fetched to explain the past.
+Explicitly granted web auditors can list and inspect historical decisions through the [audit API and workspace](underwriting-audit.md). Identity owns the permission; Acquisition owns lookup, retained-rule reconstruction and durable read auditing. Omitted inputs may be recovered from matching immutable profiles or the retained original fixed mock contract, with per-field provenance. No current source or consent data is fetched and original captures remain unchanged.
 
 ## Anonymous indicative calculator
 

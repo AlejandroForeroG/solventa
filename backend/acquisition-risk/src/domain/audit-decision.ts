@@ -1,8 +1,9 @@
 import { reconstructMortgageDecision } from './reconstruct-mortgage-decision';
+import { recoverUnderwritingInputs, type InputEvidence, type RetainedRiskProfile } from './retained-underwriting-inputs';
 
 export type AuditSummary = { decisionId: string; decidedAt: string; outcome: string; ruleVersion: string; contractVersion: string; correlationId: string; quoteId: string | null; product: string | null };
 export type AuditRevision = { offerId: string; version: number; premium: string; currency: string; coverage: unknown; validFrom: string; expiresAt: string };
-export type HistoricalDecision = AuditSummary & { snapshot: unknown; revisions: AuditRevision[] };
+export type HistoricalDecision = AuditSummary & { snapshot: unknown; revisions: AuditRevision[]; profiles?: RetainedRiskProfile[] };
 export type AuditSource = { source: string; capturedAt: string; quality: string; degraded: boolean; confidence?: number; failure?: string; substitute?: string };
 export type AuditDetail = AuditSummary & {
   inputs: Record<string, string | number | boolean>;
@@ -11,6 +12,7 @@ export type AuditDetail = AuditSummary & {
   rule: { id: string; version: string } | null;
   model: { status: 'not_used' | 'recorded' | 'unknown'; id?: string; version?: string };
   reconstruction: { status: string; missing: string[]; calculatedPremium?: string; checks?: Record<string, boolean> };
+  inputEvidence: InputEvidence[];
   revisions: (Omit<AuditRevision, 'coverage'> & { flightReference?: string })[];
 };
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -20,8 +22,9 @@ const inputKeys = ['amount', 'termMonths', 'ageYears', 'monthlyIncomeCop', 'mont
 
 // Historical lookup exposes only the retained decision contract, never arbitrary stored JSON.
 export function explainDecision(decision: HistoricalDecision): AuditDetail {
-  const { snapshot, revisions, ...summary } = decision;
-  const capture = record(snapshot) ? snapshot : {};
+  const { snapshot, revisions, profiles, ...summary } = decision;
+  const recovered = recoverUnderwritingInputs(snapshot, profiles ?? [], revisions, decision.decidedAt);
+  const capture = record(recovered.snapshot) ? recovered.snapshot : {};
   const inputs: AuditDetail['inputs'] = {};
   if (record(capture.inputs)) for (const [key, value] of Object.entries(capture.inputs)) if (inputKeys.includes(key) && primitive(value)) inputs[key] = value;
   const sources: AuditSource[] = [];
@@ -41,7 +44,7 @@ export function explainDecision(decision: HistoricalDecision): AuditDetail {
     ? { status: 'recorded', id: capture.model.id, version: capture.model.version } : { status: 'unknown' };
   let reconstruction: AuditDetail['reconstruction'] = { status: rule ? 'unsupported_rule' : 'invalid_capture', missing: [] };
   if (rule?.id === 'mortgage-underwriting') {
-    const result = reconstructMortgageDecision(snapshot);
+    const result = reconstructMortgageDecision(recovered.snapshot);
     reconstruction = result.status === 'reconstructed' ? { status: result.status, missing: [], calculatedPremium: result.calculatedPremium, checks: result.checks }
       : { status: result.status, missing: result.status === 'incomplete_capture' ? result.missing : [] };
     if (rule.version === 'academic-mortgage-1' && capture.model === undefined) model.status = 'not_used';
@@ -58,7 +61,9 @@ export function explainDecision(decision: HistoricalDecision): AuditDetail {
   if (reconstruction.status === 'reconstructed' && (capture.outcome !== decision.outcome || rule?.version !== decision.ruleVersion
     || capture.contractVersion !== decision.contractVersion || capture.correlationId !== decision.correlationId
     || revisions.some(revision => revision.premium !== reconstruction.calculatedPremium || revision.currency !== 'COP'))) reconstruction = { status: 'inconsistent_capture', missing: [] };
+  if (recovered.conflict) reconstruction = { status: 'inconsistent_capture', missing: [] };
   return { ...summary, inputs, sources, consent, rule, model, reconstruction,
+    inputEvidence: recovered.evidence,
     revisions: revisions.map(({ coverage, ...revision }) => ({ ...revision, ...(record(coverage) && coverage.kind === 'flight_delay' && typeof coverage.flightReference === 'string'
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(coverage.flightReference) ? { flightReference: coverage.flightReference } : {}) })) };
 }
