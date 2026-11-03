@@ -33,6 +33,8 @@ import { IdentityVerifications } from './application/identity-verifications';
 import { SqlIdentityVerifications } from './adapters/outbound/sql-identity-verifications';
 import { SyntheticVerificationCorpus, syntheticKycSource } from './adapters/outbound/synthetic-identity-verification';
 import { KycProvider } from './adapters/outbound/kyc-provider';
+import { NotificationPreferences } from './application/notification-preferences';
+import { SqlNotificationPreferences } from './adapters/outbound/sql-notification-preferences';
 
 function securityFor(env: IdentityEnv) {
   return new SecurityDecisions(new SqlSecurityDecisions(env.IDENTITY_DB.connectionString), () => crypto.randomUUID());
@@ -110,6 +112,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         provider: new KycProvider(syntheticKycSource, 2500), corpus: new SyntheticVerificationCorpus(),
         integrity: new HmacIntegrity(this.env.CONSENT_SEAL_KEY ?? ''), platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
       }),
+      notificationPreferences: new NotificationPreferences(new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString)),
       verificationAccess: (identity, operation) => new ApiAccess(new SqlPartnerAccess(this.env.IDENTITY_DB.connectionString),
         new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)).mobileUser(identity, operation),
       mobile: config ? {
