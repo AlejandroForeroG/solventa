@@ -58,6 +58,7 @@ export function WelcomeScreen() {
             </>}
             {authenticated && <>
               <Action label={copy.actions.verifyIdentity} onPress={() => router.push('/identity-verification' as Href)} />
+              <Action variant="secondary" label={copy.actions.notificationPreferences} onPress={() => router.push('/notification-preferences' as Href)} />
               {auth.email && <View style={styles.account}><Text style={styles.accountLabel}>{copy.currentAccount}</Text>
                 <Text selectable style={styles.email}>{auth.email}</Text></View>}
               <View style={styles.biometricStatus}>
