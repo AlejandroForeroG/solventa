@@ -8,6 +8,7 @@ export type AuditDetail = AuditSummary & {
   rule: { id: string; version: string } | null;
   model: { status: 'not_used' | 'recorded' | 'unknown'; id?: string; version?: string };
   reconstruction: { status: string; missing: string[]; calculatedPremium?: string; checks?: Record<string, boolean> };
+  inputEvidence?: { field: string; kind: 'retained_profile' | 'historical_mock' | 'offer_revision'; reference: string; version: string; capturedAt?: string }[];
   revisions: { offerId: string; version: number; premium: string; currency: string; validFrom: string; expiresAt: string; flightReference?: string }[];
 };
 export type AuditPage = { items: AuditSummary[]; next: string | null };
@@ -38,6 +39,10 @@ function detail(v: unknown): v is AuditDetail {
     || !Array.isArray(r.missing) || r.missing.length > 30 || !r.missing.every(text)
     || (r.calculatedPremium !== undefined && !money(r.calculatedPremium))
     || (r.checks !== undefined && (!record(r.checks) || Object.keys(r.checks).length > 30 || !Object.values(r.checks).every(x => typeof x === 'boolean')))) return false;
+  if (v.inputEvidence !== undefined && (!Array.isArray(v.inputEvidence) || v.inputEvidence.length > 8 || !v.inputEvidence.every(e => record(e)
+    && typeof e.field === 'string' && /^inputs\.(monthlyIncomeCop|monthlyObligationsCop|paymentScore|identityVerified|affiliationActive|flightReference|scheduleAvailable)$/.test(e.field)
+    && ['retained_profile', 'historical_mock', 'offer_revision'].includes(String(e.kind)) && text(e.reference) && text(e.version)
+    && (e.capturedAt === undefined || instant(e.capturedAt))))) return false;
   return Array.isArray(v.revisions) && v.revisions.length <= 100 && v.revisions.every(r => record(r) && uuid(r.offerId) && typeof r.version === 'number'
     && Number.isSafeInteger(r.version) && r.version > 0 && money(r.premium) && typeof r.currency === 'string' && /^[A-Z]{3}$/.test(r.currency) && instant(r.validFrom) && instant(r.expiresAt) && (r.flightReference === undefined || uuid(r.flightReference)));
 }

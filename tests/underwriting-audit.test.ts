@@ -4,9 +4,12 @@ import { Hono } from 'hono';
 import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
 import { authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { AuditDecisions } from '../backend/acquisition-risk/src/application/audit-decisions';
-import { explainDecision } from '../backend/acquisition-risk/src/domain/audit-decision';
+import { explainDecision, type HistoricalDecision } from '../backend/acquisition-risk/src/domain/audit-decision';
+import type { OfferCapture } from '../backend/acquisition-risk/src/domain/offer';
+import type { RetainedRiskProfile } from '../backend/acquisition-risk/src/domain/retained-underwriting-inputs';
+import { SIGNAL_SCOPES } from '../backend/acquisition-risk/src/domain/signal';
 import { auditQuery, mountAuditDecisions } from '../backend/acquisition-risk/src/adapters/inbound/audit-decisions-http';
-import { auditIds, historicalMortgage } from './support/audit-fixtures';
+import { auditIds, historicalMortgage, historicalMockMortgage } from './support/audit-fixtures';
 import worker from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
@@ -123,6 +126,8 @@ test('actual list, detail and error responses and committed examples match the p
   };
   const examples = JSON.parse(readFileSync('packages/contracts/examples/underwriting-audit.json', 'utf8'));
   check('Page', examples.page); check('Detail', examples.detail);
+  check('Detail', examples.recoveredDetail);
+  check('Detail', { decision: explainDecision(profiledHistory()), traceId: auditIds.trace });
   for (const [path, expected] of [['', 'Page'], ['/' + auditIds.decision, 'Detail'], ['/' + auditIds.client, 'Error'], ['?limit=999', 'Error']]) {
     const response = await http().app.request('http://localhost:8787/api/v1/underwriting-decisions' + path, {}, { APP_ENV: 'local' } as AcquisitionEnv);
     check(expected, await response.json());
@@ -148,4 +153,93 @@ test('grant administration rejects indefinite, excessive, malformed and ambiguou
   for (const change of [{ expiresAt: '2099-01-01T00:00:00.000Z' }, { expiresAt: new Date(Date.now() - 10000).toISOString() }, { expiresAt: '2026-02-30T10:00:00.000Z' }, { clientId: 'x' }, { operatorReference: 'root' }, { scopes: ['*'] }]) assert.throws(() => validateAuditGrantInput('local', 'grant', { ...grant, ...change }));
   assert.throws(() => validateAuditGrantInput('other', 'grant', grant));
   assert.throws(() => validateAuditGrantInput('local', 'revoke', grant));
+});
+
+function profiledHistory(): HistoricalDecision & { snapshot: OfferCapture; profiles: RetainedRiskProfile[] } {
+  const decision = historicalMortgage();
+  const snapshot = structuredClone(decision.snapshot) as OfferCapture;
+  for (const field of ['monthlyIncomeCop', 'monthlyObligationsCop', 'identityVerified', 'affiliationActive'] as const) delete snapshot.inputs[field];
+  const facts: Record<string, Record<string, number | boolean>> = {
+    income_obligations_12m: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 2000000 }, payment_history_score: { score: 780 },
+    affiliation_regime: { active: true }, identity_validation: { verified: true }
+  };
+  const profiles: RetainedRiskProfile[] = snapshot.sources.map((source, index) => {
+    const scope = SIGNAL_SCOPES.find(scope => source.source === `mock:${scope}`);
+    if (!scope) throw new Error('invalid_profile_fixture_scope');
+    source.source = `signal:${scope}`; source.quality = 'live';
+    return { id: `90000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`, version: 1, scope, capturedAt: source.capturedAt,
+      expiresAt: '2026-10-16T10:02:00.000Z', consentId: snapshot.consent.id, consentVersion: snapshot.consent.version,
+      correlationId: snapshot.correlationId, signalScope: scope, signalCapturedAt: source.capturedAt, values: facts[scope] };
+  });
+  return { ...decision, snapshot, profiles };
+}
+
+test('matching retained profiles recover omitted historical facts with per-field provenance and no capture mutation', () => {
+  const record = profiledHistory(), original = JSON.stringify(record.snapshot);
+  const detail = explainDecision(record);
+  assert.equal(detail.reconstruction.status, 'reconstructed');
+  assert.equal(detail.inputs.monthlyIncomeCop, 8000000); assert.equal(detail.inputs.monthlyObligationsCop, 2000000);
+  assert.equal(detail.inputs.identityVerified, true); assert.equal(detail.inputs.affiliationActive, true);
+  assert.equal(detail.inputEvidence.length, 4); assert.ok(detail.inputEvidence.every(evidence => evidence.kind === 'retained_profile'));
+  assert.equal(detail.reconstruction.calculatedPremium, record.revisions[0].premium);
+  assert.equal(detail.consent?.id, record.snapshot.consent.id); assert.equal(detail.model.status, 'not_used');
+  assert.equal(JSON.stringify(record.snapshot), original); assert.equal('profiles' in detail, false); assert.equal('snapshot' in detail, false);
+});
+
+test('profile recovery refuses a different consent, live request, timestamp, scope or original validity window', () => {
+  const record = profiledHistory();
+  for (const change of [{ consentId: 'CNS-2026-00999' }, { consentVersion: 2 }, { correlationId: auditIds.client },
+    { capturedAt: '2026-10-16T09:59:00.000Z' }, { signalCapturedAt: '2026-10-16T09:59:00.000Z' },
+    { signalScope: 'other' }, { expiresAt: '2026-10-16T09:59:59.000Z' }]) {
+    const detail = explainDecision({ ...record, profiles: record.profiles.map(profile => profile.scope === 'income_obligations_12m' ? { ...profile, ...change } : profile) });
+    assert.equal(detail.reconstruction.status, 'incomplete_capture', JSON.stringify(change));
+    assert.equal(detail.inputs.monthlyIncomeCop, undefined); assert.equal(detail.inputs.monthlyObligationsCop, undefined);
+  }
+});
+
+test('conflicting archived source copies fail reconstruction without returning invented or partial recovered inputs', () => {
+  const record = profiledHistory();
+  const profile = record.profiles.find(profile => profile.scope === 'income_obligations_12m');
+  assert.ok(profile);
+  const detail = explainDecision({ ...record, profiles: [...record.profiles, { ...profile, id: auditIds.offer, values: { monthlyIncomeCop: 8000000, monthlyObligationsCop: 3000000 } }] });
+  assert.equal(detail.reconstruction.status, 'inconsistent_capture'); assert.deepEqual(detail.inputEvidence, []);
+  assert.equal(detail.inputs.monthlyIncomeCop, undefined);
+});
+
+test('historical stored copies use the original matching profile without requiring its old request to equal the decision request', () => {
+  const record = profiledHistory();
+  for (const source of record.snapshot.sources) Object.assign(source, { quality: 'stored_copy', degraded: true, substitute: 'stored_copy', failure: 'timeout', confidence: 60 });
+  record.snapshot.outcome = 'preliminary';
+  const detail = explainDecision({ ...record, outcome: 'preliminary', profiles: record.profiles.map(profile => ({ ...profile, correlationId: auditIds.offer })) });
+  assert.equal(detail.reconstruction.status, 'reconstructed'); assert.equal(detail.outcome, 'preliminary');
+  assert.equal(detail.inputEvidence.length, 4); assert.ok(detail.sources.every(source => source.quality === 'stored_copy'));
+});
+
+test('the exact legacy fixed mock contract is replayed as a historical artifact rather than presented as captured data', () => {
+  const record = historicalMockMortgage(), snapshot = structuredClone(record.snapshot) as OfferCapture;
+  const original = JSON.stringify(snapshot), detail = explainDecision({ ...record, snapshot });
+  assert.equal(detail.reconstruction.status, 'reconstructed'); assert.equal(detail.inputs.monthlyObligationsCop, 1800000);
+  assert.equal(detail.inputEvidence.length, 4); assert.ok(detail.inputEvidence.every(evidence => evidence.kind === 'historical_mock'
+    && evidence.reference === 'legacy-mock-risk-1' && evidence.version === '689304a8458ee32e112fd52497488c7ce1170c73'));
+  assert.equal(JSON.stringify(snapshot), original);
+  for (const change of [{ paymentScore: 500 }, { debtRatioPpm: 250000 }]) {
+    assert.equal(explainDecision({ ...record, snapshot: { ...snapshot, inputs: { ...snapshot.inputs, ...change } } }).reconstruction.status, 'incomplete_capture');
+  }
+  snapshot.sources[0].source = 'mock:unversioned-other';
+  assert.equal(explainDecision({ ...record, snapshot }).reconstruction.status, 'incomplete_capture');
+});
+
+test('legacy flight input provenance separates an immutable flight reference from fixed historical schedule replay', () => {
+  const original = historicalMortgage();
+  const snapshot = { schemaVersion: 1, contractVersion: 'v1', correlationId: original.correlationId,
+    inputs: { premium: '10000.0000', payoutAmount: '100000.0000', thresholdMinutes: 180 },
+    sources: [{ source: 'mock:flight-schedule', capturedAt: original.decidedAt, quality: 'mock', degraded: false }],
+    consent: { status: 'not_required' }, rule: { id: 'flight-underwriting', version: 'academic-flight-1' }, outcome: 'accepted' };
+  const revision = { ...original.revisions[0], premium: '10000.0000', coverage: { kind: 'flight_delay', flightReference: auditIds.offer, thresholdMinutes: 180, payoutAmount: '100000.0000' } };
+  const record = { ...original, snapshot, quoteId: null, ruleVersion: 'academic-flight-1', product: 'flight_delay', revisions: [revision] };
+  const detail = explainDecision(record);
+  assert.equal(detail.reconstruction.status, 'reconstructed'); assert.equal(detail.inputs.flightReference, auditIds.offer);
+  assert.equal(detail.inputs.scheduleAvailable, true); assert.deepEqual(detail.inputEvidence.map(e => e.kind), ['offer_revision', 'historical_mock']);
+  assert.equal(explainDecision({ ...record, revisions: [] }).reconstruction.status, 'incomplete_capture');
+  assert.equal(explainDecision({ ...record, revisions: [revision, { ...revision, offerId: auditIds.client, coverage: { ...revision.coverage, flightReference: auditIds.client } }] }).reconstruction.status, 'inconsistent_capture');
 });

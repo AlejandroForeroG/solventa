@@ -1,8 +1,9 @@
 import { Client } from 'pg';
 import type { AuditDecisionStore, AuditQuery, AuditReader } from '../../application/audit-decisions';
 import type { AuditSummary, HistoricalDecision, AuditRevision } from '../../domain/audit-decision';
+import { retainedProfileRequest, type RetainedRiskProfile } from '../../domain/retained-underwriting-inputs';
 
-type Row = { id: string; decided_at: Date; outcome: string; rule_version: string; contract_version: string; correlation_id: string; quote_code: string | null; product: string | null; input_snapshot: unknown };
+type Row = { id: string; decided_at: Date; outcome: string; rule_version: string; contract_version: string; correlation_id: string; quote_code: string | null; product: string | null; input_snapshot: unknown; subject_token?: string };
 const product = `CASE WHEN d.input_snapshot->'rule'->>'id' = 'mortgage-underwriting' THEN 'vida_hipotecario' WHEN d.input_snapshot->'rule'->>'id' = 'flight-underwriting' THEN 'flight_delay' ELSE NULL END`;
 const projection = `d.id, d.decided_at, d.outcome, d.rule_version, d.contract_version, d.correlation_id, q.quote_code, ${product} AS product`;
 const summary = (r: Row): AuditSummary => ({ decisionId: r.id, decidedAt: r.decided_at.toISOString(), outcome: r.outcome, ruleVersion: r.rule_version, contractVersion: r.contract_version, correlationId: r.correlation_id, quoteId: r.quote_code, product: r.product });
@@ -30,14 +31,32 @@ export class SqlAuditDecisions implements AuditDecisionStore {
   }
   async get(id: string, reader: AuditReader): Promise<HistoricalDecision | null> {
     return this.read(reader, id, 'underwriting_decision', async client => {
-      const result = await client.query<Row>(`SELECT ${projection}, d.input_snapshot FROM acquisition.underwriting_decisions d LEFT JOIN acquisition.quotes q ON q.id = d.quote_id WHERE d.id = $1`, [id]);
+      const result = await client.query<Row>(`SELECT ${projection}, d.input_snapshot, q.subject_token FROM acquisition.underwriting_decisions d LEFT JOIN acquisition.quotes q ON q.id = d.quote_id WHERE d.id = $1`, [id]);
       const row = result.rows[0];
       if (!row) return null;
       const revisions = await client.query<{ offer_id: string; version: string; premium: string; currency: string; coverages: unknown; valid_from: Date; expires_at: Date }>(
         'SELECT offer_id, version, premium::STRING, currency, coverages, valid_from, expires_at FROM acquisition.offer_revisions WHERE decision_id = $1 ORDER BY offer_id, version LIMIT 101', [id]);
       if (revisions.rows.length > 100) throw new Error('audit_revision_limit');
       const mapped: AuditRevision[] = revisions.rows.map(r => ({ offerId: r.offer_id, version: Number(r.version), premium: r.premium, currency: r.currency, coverage: r.coverages, validFrom: r.valid_from.toISOString(), expiresAt: r.expires_at.toISOString() }));
-      return { ...summary(row), snapshot: row.input_snapshot, revisions: mapped };
+      const request = retainedProfileRequest(row.input_snapshot, row.decided_at.toISOString());
+      const profiles: RetainedRiskProfile[] = [];
+      if (request && row.subject_token) {
+        const retained = await client.query<{ id: string; version: string; source: string; captured_at: Date; expires_at: Date; consent_reference: string; consent_version: string; correlation_id: string; signal_scope: string | null; signal_captured_at: string | null; values: unknown }>(
+          `SELECT id,version,source,captured_at,expires_at,COALESCE(consent_reference,consent_id::STRING) AS consent_reference,consent_version,correlation_id,
+            signals->>'scope' AS signal_scope,signals->>'capturedAt' AS signal_captured_at,
+            jsonb_build_object('monthlyIncomeCop',signals->'data'->'monthlyIncomeCop','monthlyObligationsCop',signals->'data'->'monthlyObligationsCop',
+              'score',signals->'data'->'score','verified',signals->'data'->'verified','active',signals->'data'->'active') AS values
+           FROM acquisition.risk_profiles WHERE subject_token=$1 AND purpose='risk_profiling'
+            AND COALESCE(consent_reference,consent_id::STRING)=$2 AND consent_version=$3
+            AND source=ANY($4::STRING[]) AND captured_at=ANY($5::TIMESTAMPTZ[]) ORDER BY id,version LIMIT 21`,
+          [row.subject_token, request.consentId, request.consentVersion, request.scopes, request.capturedAt]);
+        if (retained.rows.length > 20) throw new Error('audit_profile_limit');
+        for (const profile of retained.rows) profiles.push({ id: profile.id, version: Number(profile.version), scope: profile.source,
+          capturedAt: profile.captured_at.toISOString(), expiresAt: profile.expires_at.toISOString(), consentId: profile.consent_reference,
+          consentVersion: Number(profile.consent_version), correlationId: profile.correlation_id,
+          signalScope: profile.signal_scope ?? '', signalCapturedAt: profile.signal_captured_at ?? '', values: profile.values });
+      }
+      return { ...summary(row), snapshot: row.input_snapshot, revisions: mapped, profiles };
     });
   }
   private async read<T>(reader: AuditReader, resourceId: string, resourceType: string, lookup: (client: Client) => Promise<T>): Promise<T> {

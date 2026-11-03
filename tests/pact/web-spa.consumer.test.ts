@@ -478,6 +478,21 @@ describe('SPA historical underwriting audit', () => {
       assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.reconstruction.status, 'reconstructed');
     }));
   });
+  test('preserves recovered input provenance across the SPA and gateway contract', async () => {
+    const detail = auditExamples.recoveredDetail;
+    pact.given('an auditor reconstructing the retained original mock contract').uponReceiving('a recovered historical underwriting reconstruction with provenance')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok');
+      if (result.kind === 'ok') {
+        assert.equal(result.value.reconstruction.status, 'reconstructed');
+        assert.equal(result.value.inputEvidence?.length, 4);
+        assert.ok(result.value.inputEvidence?.every(e => e.kind === 'historical_mock' && e.reference === 'legacy-mock-risk-1'));
+      }
+    }));
+  });
   test('shows historical gaps without synthesized facts', async () => {
     const { identityVerified: _identity, ...inputs } = auditExamples.detail.decision.inputs;
     const detail = { ...auditExamples.detail, decision: { ...auditExamples.detail.decision, inputs, reconstruction: { status: 'incomplete_capture', missing: ['inputs.identityVerified'] } } };
