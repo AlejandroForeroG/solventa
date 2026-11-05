@@ -10,6 +10,7 @@ let hardware = true;
 let enrolled = true;
 let level = 3;
 let readFails = false;
+let deleteIgnored = false;
 let markerValue = '';
 
 mock.module('expo-secure-store', { namedExports: {
@@ -20,7 +21,7 @@ mock.module('expo-secure-store', { namedExports: {
     return secure.get(key) ?? null;
   },
   async setItemAsync(key: string, value: string, options: Options) { calls.push({ operation: 'write', key, options }); secure.set(key, value); },
-  async deleteItemAsync(key: string, options: Options) { calls.push({ operation: 'remove', key, options }); secure.delete(key); },
+  async deleteItemAsync(key: string, options: Options) { calls.push({ operation: 'remove', key, options }); if (!deleteIgnored) secure.delete(key); },
   async isAvailableAsync() { return available; },
   canUseBiometricAuthentication() { return biometricCapable; },
 } });
@@ -94,4 +95,28 @@ test('cancelled or failed device authentication releases nothing', async () => {
   readFails = true;
   await assert.rejects(adapter.protectedPolicyCache.read(owner), (error: unknown) => error instanceof Error && error.message === 'locked');
   readFails = false;
+});
+
+test('removal is verified: a delete the keychain silently refused is reported, never treated as cleared', async () => {
+  await adapter.protectedPolicyCache.save(owner, [source]);
+  await adapter.protectedPolicyCache.clear();
+  assert.equal(secure.has('solventa.policies.v1'), false);
+
+  await adapter.protectedPolicyCache.save(owner, [source]);
+  deleteIgnored = true;
+  await assert.rejects(adapter.protectedPolicyCache.clear(), (error: unknown) => error instanceof Error && error.message === 'not_removed');
+  readFails = true;
+  await assert.rejects(adapter.protectedPolicyCache.clear(), (error: unknown) => error instanceof Error && error.message === 'not_removed');
+  readFails = false;
+  deleteIgnored = false;
+  await adapter.protectedPolicyCache.clear();
+  assert.equal(secure.has('solventa.policies.v1'), false);
+});
+
+test('clearing without native custody has nothing to remove and does not fail sign-out', async () => {
+  available = false;
+  calls.length = 0;
+  await adapter.protectedPolicyCache.clear();
+  assert.equal(calls.length, 0);
+  available = true;
 });

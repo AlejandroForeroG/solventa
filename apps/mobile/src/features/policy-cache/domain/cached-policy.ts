@@ -12,7 +12,7 @@ export type CachedPolicy = {
 
 export type PolicySnapshot = { syncedAt: number; policies: CachedPolicy[] };
 
-export type PolicyCacheFailureKind = 'unavailable' | 'locked' | 'invalid_policy' | 'too_large';
+export type PolicyCacheFailureKind = 'unavailable' | 'locked' | 'invalid_policy' | 'too_large' | 'not_removed';
 
 export class PolicyCacheFailure extends Error {
   constructor(public readonly kind: PolicyCacheFailureKind) {

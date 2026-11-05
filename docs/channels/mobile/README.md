@@ -258,5 +258,6 @@ SecureStore is meant for small values. If the offline wallet needs more than six
 4. Logout, including offline logout, empties the cache before the remote revocation finishes.
 5. A reinstall (iOS Keychain survival) and a backup restore do not bring the snapshot back.
 6. A device without enrolled strong biometrics stores nothing and the wallet explains why.
+7. Force the Android commit to fail (full storage) and confirm the cache is missing or older after a restart, with its own sync date, and that a refused iOS removal during logout keeps sign-out pending instead of completing it.
 
 A build, export or unit test result is not evidence for these checks.
