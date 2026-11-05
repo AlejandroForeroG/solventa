@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { randomUUID } from 'expo-crypto';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -94,7 +95,7 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
       try { setPermission(await requestPushPermission()); } catch { setPermission(false); }
     }
   }
-  async function save(command = pending ?? (saved && draft ? { matrix: draft, version: saved.version, key: crypto.randomUUID() } : undefined)) {
+  async function save(command = pending ?? (saved && draft ? { matrix: draft, version: saved.version, key: randomUUID() } : undefined)) {
     if (!command || busy) return;
     setBusy(true); setError(undefined); setNotice(false); setPending(command);
     try {
