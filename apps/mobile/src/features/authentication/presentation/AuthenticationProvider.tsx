@@ -10,6 +10,7 @@ import { parseCallback } from '../adapters/callback';
 import { biometricVault, secureTokenStore } from '../adapters/secure-token-store';
 import { createSessionApi } from '../adapters/solventa-session';
 import { workosIdentity } from '../adapters/workos';
+import { protectedPolicyCache } from '../../policy-cache/adapters/secure-policy-store';
 
 const Context = createContext<Authentication | null>(null);
 
@@ -19,7 +20,7 @@ export function AuthenticationProvider({ children }: PropsWithChildren) {
     return new Authentication({
       baseUrl, store: secureTokenStore, identity: workosIdentity,
       api: createSessionApi(baseUrl), browser: authBrowser, now: Date.now, parseCallback,
-      biometrics: biometricVault,
+      biometrics: biometricVault, policyCache: protectedPolicyCache,
     });
   });
 

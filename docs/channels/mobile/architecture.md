@@ -93,6 +93,25 @@ Detailed endpoints, error schemas, validation rules and device-registration requ
 
 No fingerprint, face template, device passcode or biometric sensor data enters the application or backend. The server device registration does not attest that a biometric prompt ran. Exact freshness, renewal, account-switching and reinstall rules are maintained in the [mobile lifecycle guide](README.md#biometric-activation-and-access).
 
+## Protected local data
+
+The `policy-cache` capability is the only place where business data rests on the device. It stores a minimal snapshot of the owner's policies and nothing else.
+
+| Layer | Implementation | Responsibility |
+|---|---|---|
+| Domain | `domain/cached-policy.ts` | The allowed fields, the failure kinds and the size bounds |
+| Application | `application/protected-policy-cache.ts` | Minimization, owner and installation binding, validation on save and read, over a `ProtectedStore` port |
+| Adapter | `adapters/secure-policy-store.ts` | Expo SecureStore with device authentication on every read and write, under its own key |
+
+Rules that every local data store in the channel follows:
+
+- **Minimum data.** The cache copies six fields from a policy (`policyId`, `status`, `premium`, `currency`, `effectiveFrom`, `effectiveUntil`) plus the sync time. The reviewed document, its hash, offer and payment data, trace identifiers and provider flags never reach storage. Input is projected field by field and validated, so an extra field on the source object cannot leak.
+- **Encrypted and gated by the device.** The value lives in SecureStore with `requireAuthentication`, `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` and the key `solventa.policies.v1`, separate from the credential records. Android Keystore or the iOS Keychain encrypts it, and each read prompts for strong biometrics. A device without native custody or enrolled strong biometrics gets no cache at all: there is no unprotected fallback.
+- **Bound to the owner and the installation.** The snapshot carries the installation UUID and the pseudonymous owner. A snapshot of another account, another installation (including an iOS Keychain record that survived a reinstall) or an unknown format is discarded and removed, never shown.
+- **Bounded.** At most six policies and 1800 bytes, because some iOS releases reject keychain values near 2048 bytes. A larger need requires a different design (see the README), not a larger limit.
+- **Cleared with the session.** `Authentication` clears the cache when logout starts, even if remote revocation is still pending, when credentials are discarded after a denied session, and when the environment changes. Cancelling a new login keeps it, because the previous owner is still the owner.
+- **Cache is not authorization.** Showing cached data never grants business access. The server still decides, and cached data is shown as stored data with its sync time, never as online information.
+
 ## Localization and appearance
 
 `shared/i18n/messages.ts` holds matching Spanish/English catalogs and a pure language resolver. `device-language.ts` reads Expo Localization; `use-app-messages.ts` reacts to device/browser language changes and foreground return. The first supported preferred language wins, with Spanish as fallback. There is no in-app selector or stored language override.
@@ -114,6 +133,7 @@ The [testing guide](../../testing.md) defines the evidence expected at each boun
 
 - [`mobile-channel-authentication.test.ts`](../../../tests/mobile-channel-authentication.test.ts): coordinator behavior, callback validation, HTTP boundaries and public SDK behavior with synthetic dependencies.
 - [`mobile-biometric-authentication.test.ts`](../../../tests/mobile-biometric-authentication.test.ts): credential custody, installation/account isolation, biometric/lifecycle recovery and revocation invariants through injected dependencies.
+- [`mobile-policy-cache.test.ts`](../../../tests/mobile-policy-cache.test.ts) and [`mobile-policy-store.test.mts`](../../../tests/mobile-policy-store.test.mts): minimization, owner and installation isolation, size bounds and the native custody options with injected Expo modules.
 - [`mobile-localization.test.ts`](../../../tests/mobile-localization.test.ts): preference ordering, fallback, catalog completeness and native language metadata.
 - [`mobile.consumer.test.ts`](../../../tests/pact/mobile.consumer.test.ts): the real mobile HTTP caller and its generated consumer contract; provider verification is separate from physical-device behavior.
 

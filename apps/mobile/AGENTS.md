@@ -43,3 +43,17 @@ Docs: https://docs.expo.dev/eas/index.md
 ## Product documentation
 
 Follow the mandatory documentation rules in the root [AGENTS.md](../../AGENTS.md#required-documentation). Update the existing [mobile guide](../../docs/channels/mobile/README.md) in the same branch and PR for every feature or change to documented behavior. Link to the owning backend module for shared rules and contracts.
+
+## Data stored on the device
+
+Read the [protected local data guide](../../docs/channels/mobile/README.md#protected-local-data) and its [architecture rules](../../docs/channels/mobile/architecture.md#protected-local-data) before storing anything on the phone.
+
+- Business data may rest on the device only through `src/features/policy-cache` (or a feature built the same way). Never use `AsyncStorage`, plain files, logs, URLs or persisted React state for it.
+- Store the minimum: project the source object field by field, validate each value and drop everything else. Documents, hashes, payment data, trace ids and provider flags stay on the server. A new stored field needs a test, a size check and a documented reason.
+- Use SecureStore with `requireAuthentication`, `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` and a key of its own. If strong biometrics or native custody are missing, store nothing; there is no unprotected fallback. Every read must go through the device prompt.
+- Bind each record to the installation UUID and to the pseudonymous owner, and discard it when either differs. Reuse `src/shared/native` (`installationMarker`, `strongBiometricsAvailable`) instead of copying that logic.
+- Clear local data when logout starts, when credentials are discarded and when the environment changes. `Authentication` receives the store through its `policyCache` dependency; a new store joins that clearing path, not a parallel one. Cancelling a new login must not clear data of the current owner.
+- SecureStore values are small (about 2048 bytes on some iOS releases). Do not raise the policy limits; for larger data keep a key in SecureStore and encrypt a private file, as described in the guide, with the same rules.
+- Cached data is stored data: show its sync date, keep it visibly apart from online data and never let it enable contracting, payment or any action the server must authorize.
+- Tests with mocked Expo modules do not prove native protection. Say so, and list the device checks from the guide that were not run.
+

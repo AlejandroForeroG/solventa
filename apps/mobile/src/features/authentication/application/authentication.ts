@@ -9,6 +9,7 @@ type Dependencies = {
   api: SessionApi;
   browser: AuthBrowser;
   biometrics?: BiometricVault;
+  policyCache?: { clear(): Promise<void> };
   now: () => number;
   parseCallback: (url: string) => OAuthCallback;
 };
@@ -98,12 +99,14 @@ export class Authentication {
       if (binding.baseUrl !== this.deps.baseUrl) {
         await this.deps.biometrics?.clear();
         await this.deps.store.write(emptyRecord());
+        await this.deps.policyCache?.clear();
       }
     }
     const record = await this.deps.store.read();
     const context = record.session ?? record.transaction;
     if (context && context.baseUrl !== this.deps.baseUrl) {
       await this.save(emptyRecord());
+      await this.deps.policyCache?.clear();
     } else {
       this.record = record;
     }
@@ -112,6 +115,8 @@ export class Authentication {
   private async save(record: AuthRecord) {
     if (record.session?.phase !== 'active') this.warmSession = false;
     if (record.session?.phase === 'logout') record = { ...record, session: { ...record.session, email: undefined } };
+    // Offline data must not outlive the session: clear it when logout starts, not after remote confirmation.
+    if (record.session?.phase === 'logout') await this.deps.policyCache?.clear();
     await this.deps.store.write(record);
     this.record = record;
   }
@@ -130,6 +135,7 @@ export class Authentication {
       try {
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
+        await this.deps.policyCache?.clear();
         this.device = undefined;
         this.primaryAuthenticated = false;
       } catch {
@@ -204,6 +210,7 @@ export class Authentication {
         else {
           await this.deps.biometrics?.clear();
           await this.deps.store.write(emptyRecord());
+          await this.deps.policyCache?.clear();
         }
         this.record = emptyRecord();
         this.device = undefined;
@@ -356,6 +363,7 @@ export class Authentication {
       if (!this.record?.session) {
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
+        await this.deps.policyCache?.clear();
         this.device = undefined;
         this.primaryAuthenticated = false;
         this.logoutRequested = false;

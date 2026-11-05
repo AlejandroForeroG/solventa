@@ -222,3 +222,41 @@ Failures while fetching configuration, generating PKCE or saving the OAuth trans
 Regression tests also cover same-account alternative entry with replacement tokens, browser cancellation/restart, pre-browser configuration/PKCE/storage recovery, rejected exchanges, foreign-account isolation, logout/revocation preference cleanup, legacy-marker upgrade and failed regular-record cleanup during suspension. Native acceptance must separately check WorkOS alternative entry, the new confirmation, background/cold restart and biometric re-entry; an earlier native result does not validate this changed path.
 
 The [Bruno collection](../../../tools/bruno/solventa/README.md#native-connection) independently checks the backend connection after obtaining a user token securely. Deploy/HTTP verification and native validation are separate evidence.
+
+## Protected local data
+
+Design and rules are in the [architecture guide](architecture.md#protected-local-data). This section is the operating guide for anyone adding a screen that reads or writes data on the device.
+
+### What exists and what does not
+
+- `protectedPolicyCache` (`src/features/policy-cache/adapters/secure-policy-store.ts`) offers `save(owner, policies)`, `read(owner)` and `clear()`. `save` accepts the policy objects returned by the policies API and keeps only the allowed fields; `read` returns `{ syncedAt, policies }` or `null`.
+- `Authentication` already clears it on logout, denied credentials and environment change. A new screen does not need to do that.
+- **Nothing calls `save` or `read` yet.** The wallet screen, the offline read and the synchronization belong to the offline-wallet stories. Until they use it, the cache is tested but not wired to a journey. The policies API (`/api/v1/policies/{policyId}`) is a web-session endpoint and has no list endpoint for the native app, so the mobile contract for fetching policies must be defined before the cache can be fed.
+
+### What you can and cannot do
+
+| Allowed | Not allowed |
+|---|---|
+| Keep the allowed policy fields, with `syncedAt`, in `protectedPolicyCache` | Store the policy document, its hash, payment data, trace ids or any field outside `CachedPolicy` |
+| Show cached data after the user passes the device biometric prompt | Show cached data without that prompt, or before the user is signed in |
+| Label cached data with its sync date and distinguish it from online data | Present cached data as current, or let it enable an action that needs the server (contracting, payment, claims) |
+| Store a small non-sensitive UI preference outside the cache | Put business data in `AsyncStorage`, files, logs, query strings or React state that is persisted |
+| Add a field to `CachedPolicy` with a test, a size check and a documented reason | Raise `maxCachedPolicies` or `maxSnapshotBytes` without redesigning the storage |
+| Keep working offline when the prompt is cancelled (show the empty or locked state) | Fall back to unprotected storage when biometrics are unavailable |
+
+### Larger or new data
+
+SecureStore is meant for small values. If the offline wallet needs more than six policies or more bytes (coverages, contacts, credentials), do not enlarge the keychain value. Keep a random key in SecureStore under `requireAuthentication` and encrypt a file in the app's private storage with it, binding the file to the installation UUID and owner as `policy-cache` does. That needs an encryption library chosen against the Expo SDK 57 documentation, a new development build and its own tests, and it must keep the same rules: minimum data, device authentication on read, owner and installation binding, clearing with the session.
+
+### Verification
+
+`tests/mobile-policy-cache.test.ts`, `tests/mobile-policy-store.test.mts` and the new cases in `tests/mobile-channel-authentication.test.ts` run in `npm run check`. They use in-memory and mocked Expo modules, so they do not establish the native behavior. On a real Android and a real iOS device, check separately:
+
+1. After `save`, the data cannot be read without the biometric prompt, including right after unlocking the phone.
+2. Cancelling the prompt returns the locked state and shows nothing.
+3. Adding or removing a fingerprint or face invalidates the key; the cache reads as empty and the app asks to sync again.
+4. Logout, including offline logout, empties the cache before the remote revocation finishes.
+5. A reinstall (iOS Keychain survival) and a backup restore do not bring the snapshot back.
+6. A device without enrolled strong biometrics stores nothing and the wallet explains why.
+
+A build, export or unit test result is not evidence for these checks.
