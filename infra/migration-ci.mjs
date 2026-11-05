@@ -7,7 +7,8 @@ import { remoteEnvironments } from './environments.mjs';
 export function migrationConfiguration(environment, variables) {
   assert.ok(remoteEnvironments.includes(environment));
   assert.equal(variables.GITHUB_REF_NAME, environment);
-  const { DATABASE_HOST: host, DATABASE_PORT: port = '26257', DATABASE_CA_PEM: ca, RUNTIME_STATE_JSON: runtime, MIGRATION_DATABASE_URL: value } = variables;
+  const { DATABASE_HOST: host, DATABASE_PORT: configuredPort, DATABASE_CA_PEM: ca, RUNTIME_STATE_JSON: runtime, MIGRATION_DATABASE_URL: value } = variables;
+  const port = configuredPort || '26257';
   for (const [name, entry] of Object.entries({ DATABASE_HOST: host, DATABASE_CA_PEM: ca, RUNTIME_STATE_JSON: runtime, MIGRATION_DATABASE_URL: value })) {
     if (!entry) throw Object.assign(Error('Missing migration configuration'), { code: `missing_${name}` });
   }
