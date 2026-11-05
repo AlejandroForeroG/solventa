@@ -63,5 +63,8 @@
   ],
   "underwriting_audit_grants": [
     "SELECT"
+  ],
+  "claims_access_grants": [
+    "SELECT"
   ]
 }
