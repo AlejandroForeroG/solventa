@@ -88,6 +88,7 @@ function isOwner(value: unknown): value is CacheOwner {
 
 export class ProtectedPolicyCache {
   private unlocked = false;
+  private tail: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly deps: Dependencies) {}
 
@@ -101,7 +102,18 @@ export class ProtectedPolicyCache {
     this.unlocked = false;
   }
 
-  async save(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
+  // Storage work runs one operation at a time in call order, so a clear that starts while a save is writing always runs after it.
+  private serialized<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.tail.then(work, work);
+    this.tail = next.catch(() => undefined);
+    return next;
+  }
+
+  save(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
+    return this.serialized(() => this.write(owner, sources));
+  }
+
+  private async write(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
     if (!isOwner(owner)) throw new PolicyCacheFailure('invalid_policy');
     if (sources.length > maxCachedPolicies) throw new PolicyCacheFailure('too_large');
     const snapshot: PolicySnapshot = { syncedAt: this.deps.now(), policies: sources.map(minimizePolicy) };
@@ -112,7 +124,11 @@ export class ProtectedPolicyCache {
   }
 
   // A snapshot of another installation, owner or format is discarded, never shown.
-  async read(owner: CacheOwner): Promise<PolicySnapshot | null> {
+  read(owner: CacheOwner): Promise<PolicySnapshot | null> {
+    return this.serialized(() => this.load(owner));
+  }
+
+  private async load(owner: CacheOwner): Promise<PolicySnapshot | null> {
     if (!this.unlocked) throw new PolicyCacheFailure('locked');
     const value = await this.deps.store.read();
     if (value === null) return null;
@@ -121,9 +137,10 @@ export class ProtectedPolicyCache {
     return snapshot;
   }
 
+  // Locking is immediate; the removal waits for any save or read already in flight.
   clear(): Promise<void> {
     this.lock();
-    return this.deps.store.remove();
+    return this.serialized(() => this.deps.store.remove());
   }
 
   private async parse(value: string, owner: CacheOwner): Promise<PolicySnapshot | null> {

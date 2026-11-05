@@ -6,7 +6,7 @@ export type WalletSnapshot =
   | { status: 'locked'; failure?: 'denied' | 'no_device_lock' }
   | { status: 'loading' }
   | { status: 'ready'; source: WalletSource; syncedAt: number; policies: CachedPolicy[]; hasMore: boolean; stored: boolean }
-  | { status: 'failed'; failure: 'unavailable' | 'no_copy' | 'unauthorized' };
+  | { status: 'failed'; failure: 'unavailable' | 'no_copy' | 'unauthorized' | 'invalid_response' };
 
 export type PolicyApiFailureKind = 'unavailable' | 'invalid_response';
 

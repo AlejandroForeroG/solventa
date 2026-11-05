@@ -56,6 +56,8 @@ export class PolicyWallet {
       if (generation !== this.generation) return;
       if (error instanceof AuthFailure) { this.publish({ status: 'failed', failure: 'unauthorized' }); return; }
       if (!(error instanceof PolicyApiFailure)) { this.publish({ status: 'failed', failure: 'unavailable' }); return; }
+      // Only an outage falls back to the stored copy. A malformed or incompatible answer stays a failure, so it is never reported as lost connectivity.
+      if (error.kind === 'invalid_response') { this.publish({ status: 'failed', failure: 'invalid_response' }); return; }
       await this.showStoredCopy(generation);
     }
   }

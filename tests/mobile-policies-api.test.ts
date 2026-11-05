@@ -46,6 +46,8 @@ test('a malformed answer is a contract violation and never reaches the wallet as
     'not json', [], { policies: 'x', hasMore: false, traceId }, { policies: [], traceId }, { policies: [], hasMore: false },
     { policies: [], hasMore: false, traceId: 'not-a-uuid' }, { policies: Array.from({ length: 7 }, () => summary()), hasMore: false, traceId },
     { policies: [summary({ premium: 'free' })], hasMore: false, traceId }, { policies: [summary({ product: 'auto' })], hasMore: false, traceId },
+    ...['pending', 'charged', 'refunding', 'refunded', 'unknown'].map(status => ({ policies: [summary({ status })], hasMore: false, traceId })),
+    { policies: [(({ status: _status, ...rest }) => rest)(summary())], hasMore: false, traceId }, { policies: [null], hasMore: false, traceId },
   ];
   for (const body of bodies) {
     await assert.rejects(api(() => json(body)).list(), error => error instanceof PolicyApiFailure && error.kind === 'invalid_response', JSON.stringify(body).slice(0, 60));
