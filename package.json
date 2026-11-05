@@ -30,7 +30,7 @@
     "test:architecture": "node --test tools/architecture.test.mjs",
     "build:dev": "npm run build:dev --workspaces --if-present",
     "test:infra": "node infra/smoke.mjs",
-    "test:database": "node --test infra/database.test.mjs",
+    "test:database": "node --test infra/database.test.mjs infra/migrations.test.mjs",
     "test:schema": "node infra/schema-smoke.mjs",
     "infra:local:schema-verify": "node infra/schema-verify.mjs local",
     "infra:dev:schema-verify": "node infra/schema-verify.mjs dev",
@@ -76,7 +76,8 @@
     "pact:update": "node tools/update-pacts.mjs",
     "test:identity-verification:sql": "tsx infra/identity-verifications-smoke.mts",
     "test:notification-preferences": "tsx --test tests/notification-preferences.test.ts",
-    "test:notification-preferences:sql": "tsx infra/notification-preferences-smoke.mts"
+    "test:notification-preferences:sql": "tsx infra/notification-preferences-smoke.mts",
+    "db:migrations": "node infra/migrations.mjs"
   },
   "devDependencies": {
     "@pact-foundation/pact": "^17.1.4",
