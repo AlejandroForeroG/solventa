@@ -32,7 +32,15 @@ export const securePolicyStore: ProtectedStore = {
     await assertNativeProtection();
     await SecureStore.setItemAsync(key, value, options());
   },
-  remove: () => SecureStore.deleteItemAsync(key, options()),
+  async remove() {
+    if (!await SecureStore.isAvailableAsync()) return;
+    await SecureStore.deleteItemAsync(key, options());
+    // The native delete does not report a refused removal on iOS. A surviving item would ask for authentication here, so a read that is not empty or is rejected means the data is still there.
+    let survivor: string | null;
+    try { survivor = await SecureStore.getItemAsync(key, options()); }
+    catch { throw new PolicyCacheFailure('not_removed'); }
+    if (survivor !== null) throw new PolicyCacheFailure('not_removed');
+  },
 };
 
 export const protectedPolicyCache = new ProtectedPolicyCache({
