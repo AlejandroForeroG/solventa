@@ -2,6 +2,7 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
+import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
 import type { VerificationCommand } from '../../apps/mobile/src/features/identity-verification/application/ports';
 import examples from '../../packages/contracts/examples/identity-verifications.json';
@@ -115,3 +116,16 @@ for (const method of ['POST', 'GET', 'DELETE'] as const) {
     });
   });
 }
+
+test('mobile lists its own issued policies through the public gateway', async () => {
+  const policy = { policyId: '30000000-0000-4000-8000-000000000003', product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
+    effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+  pact.given('a native session with an issued policy').uponReceiving('mobile own policy list')
+    .withRequest({ method: 'GET', path: '/api/v1/policies', headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { policies: [policy], hasMore: false, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    const api = createPoliciesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') }, (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
+    const { status: _status, ...kept } = policy;
+    assert.deepEqual(await api.list(), { policies: [kept], hasMore: false });
+  });
+});

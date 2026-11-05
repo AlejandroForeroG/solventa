@@ -11,8 +11,9 @@ import { PolicyFinance } from '../backend/policy-claims-payments/src/application
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from './financial-fixtures';
 import { createPolicyFinance } from '../backend/policy-claims-payments/src/adapters/composition';
 
-const unusedStoreReads: Pick<FinancialStore, 'readPolicy' | 'readAcceptedPolicy' | 'importAcceptance' | 'issuanceCandidates'> = {
+const unusedStoreReads: Pick<FinancialStore, 'readPolicy' | 'readOwnPolicies' | 'readAcceptedPolicy' | 'importAcceptance' | 'issuanceCandidates'> = {
   async readPolicy() { throw new Error('unexpected_policy_read'); },
+  async readOwnPolicies() { throw new Error('unexpected_policy_list'); },
   async issuanceCandidates() { throw new Error('unexpected_recovery_scan'); },
   async readAcceptedPolicy() { throw new Error('unexpected_acceptance_read'); },
   async importAcceptance() { throw new Error('unexpected_import'); }
@@ -702,4 +703,76 @@ test('a signature refusal does not refund a charge that another request already 
   assert.deepEqual(actions, ['signature.challenge_verified'], 'no refund intent is recorded for an issued policy');
   assert.ok(result.status === 'ok');
   assert.deepEqual(commands, [{ ...ownCommand, result: result.policy }], 'this request creates and completes its own command with the existing issuance');
+});
+
+async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay', owner?: { clientId: string; subjectToken: string }) {
+  const event = await acceptedOffer(product);
+  if (owner) Object.assign(event.payload, owner);
+  const policy = await storedFrom(event, randomUUID());
+  policy.status = 'issued';
+  const premium: Payment = { id: randomUUID(), policyId: policy.id, operation: 'premium', key: 'initial-premium', amount: policy.premium,
+    currency: 'COP', hash: '', status: 'confirmed', providerReference: null };
+  premium.providerReference = 'MOCK-' + premium.id;
+  premium.hash = await financialIntegrity.digest(paymentContent(premium));
+  const signedAt = financialNow().toISOString();
+  return { policy, premium, signature: {
+    documentHash: policy.documentHash, signedAt, receipt: await financialIntegrity.digest(JSON.stringify(['mock-signature-v1', policy.id, policy.documentHash])),
+    timeSeal: await financialIntegrity.digest(issuanceTimeContent(policy.id, policy.documentHash, signedAt)) } };
+}
+const listFinance = (records: Awaited<ReturnType<typeof issuedRecord>>[], rejected: string[] = []) => new PolicyFinance({ enabled: true, environment: 'local',
+  integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+  store: { ...unusedStoreReads, async readOwnPolicies(_actor, limit) { return records.slice(0, limit); }, async rejection(_id, _trace, cause) { rejected.push(cause); } },
+  payments: { lookup: async () => { throw new Error('unexpected_provider_call'); }, settle: async () => { throw new Error('unexpected_provider_call'); }, refund: async () => { throw new Error('unexpected_provider_call'); } },
+  signatures: { sign: async () => { throw new Error('unexpected_provider_call'); } } });
+
+test('the native policy list exposes the product, validity and coverage of issued policies, never the document, hash or payment', async () => {
+  const mortgage = await issuedRecord('vida_hipotecario');
+  const flight = await issuedRecord('flight_delay', { clientId: mortgage.policy.clientId, subjectToken: mortgage.policy.subjectToken });
+  const actor = { clientId: mortgage.policy.clientId, subjectToken: mortgage.policy.subjectToken };
+  const result = await listFinance([mortgage, flight]).listOwn({ actor, traceId: randomUUID() });
+  assert.ok(result.status === 'ok');
+  assert.equal(result.hasMore, false);
+  assert.deepEqual(result.policies, [
+    { policyId: mortgage.policy.id, product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
+      effectiveFrom: mortgage.policy.effectiveFrom, effectiveUntil: mortgage.policy.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } },
+    { policyId: flight.policy.id, product: 'flight_delay', status: 'issued', premium: '10000.0000', currency: 'COP',
+      effectiveFrom: flight.policy.effectiveFrom, effectiveUntil: flight.policy.effectiveUntil, coverage: flight.policy.offer.coverage },
+  ]);
+  const serialized = JSON.stringify(result);
+  for (const secret of ['document', 'documentHash', 'payment', 'receipt', 'timeSeal', 'offerId']) assert.ok(!serialized.includes(secret), secret);
+});
+
+test('the native policy list is bounded and reports that more exist', async () => {
+  const first = await issuedRecord('vida_hipotecario');
+  const actor = { clientId: first.policy.clientId, subjectToken: first.policy.subjectToken };
+  const rest = await Promise.all(Array.from({ length: 6 }, () => issuedRecord('vida_hipotecario', actor)));
+  const result = await listFinance([first, ...rest]).listOwn({ actor, traceId: randomUUID() });
+  assert.ok(result.status === 'ok');
+  assert.equal(result.policies.length, 6);
+  assert.equal(result.hasMore, true);
+});
+
+test('the native policy list rejects a tampered or foreign record instead of listing it', async () => {
+  const record = await issuedRecord('vida_hipotecario');
+  const actor = { clientId: record.policy.clientId, subjectToken: record.policy.subjectToken };
+  const rejected: string[] = [];
+  const tampered = { ...record, policy: { ...record.policy, premium: '1.0000' } };
+  const result = await listFinance([tampered], rejected).listOwn({ actor, traceId: randomUUID() });
+  assert.ok(result.status === 'denied' && result.error === 'integrity_violation');
+  assert.deepEqual(rejected, ['integrity_violation']);
+  const foreign = await listFinance([record]).listOwn({ actor: { ...actor, subjectToken: randomUUID() }, traceId: randomUUID() });
+  assert.ok(foreign.status === 'denied' && foreign.error === 'not_found');
+});
+
+test('the native policy list validates the actor and fails closed when financial processing is disabled', async () => {
+  const finance = listFinance([]);
+  const invalid = await finance.listOwn({ actor: { clientId: 'x', subjectToken: 'y' }, traceId: randomUUID() });
+  assert.ok(invalid.status === 'denied' && invalid.httpStatus === 400);
+  const empty = await finance.listOwn({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, traceId: randomUUID() });
+  assert.deepEqual(empty, { status: 'ok', policies: [], hasMore: false });
+  const disabled = new PolicyFinance({ enabled: false, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
+    store: { ...unusedStoreReads, async rejection() {} }, payments: { lookup: async () => { throw new Error('x'); }, settle: async () => { throw new Error('x'); }, refund: async () => { throw new Error('x'); } },
+    signatures: { sign: async () => { throw new Error('x'); } } });
+  const result = await disabled.listOwn({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, traceId: randomUUID() });
+  assert.ok(result.status === 'unavailable');
 });

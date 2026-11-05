@@ -281,6 +281,17 @@ try {
   assert.equal(ok(await legacyIssue()).replayed, true);
   assert.equal((await db.query('SELECT status FROM policy.policies WHERE id=$1', [legacyPolicy.policyId])).rows[0].status, 'issued');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_signatures WHERE policy_id=$1', [legacyPolicy.policyId])).rows[0].n, 1);
+  // The native wallet list returns only the caller's issued policies, with the sealed coverage and none of the document or payment evidence.
+  const legacyList = await finance.listOwn({ actor: legacyEvent.payload, traceId: randomUUID() });
+  assert.ok(legacyList.status === 'ok');
+  assert.deepEqual(legacyList.policies.map(item => item.policyId), [legacyPolicy.policyId]);
+  assert.equal(legacyList.policies[0].product, legacyEvent.payload.product);
+  assert.deepEqual(legacyList.policies[0].coverage, legacyEvent.payload.coverage);
+  assert.ok(!JSON.stringify(legacyList).includes('documentHash'));
+  const ownerList = await finance.listOwn({ actor: offer.payload, traceId: randomUUID() });
+  assert.ok(ownerList.status === 'ok' && ownerList.policies.map(item => item.policyId).includes(policy.policyId) && !ownerList.policies.some(item => item.policyId === legacyPolicy.policyId));
+  const unissuedList = await finance.listOwn({ actor: declinedOffer.payload, traceId: randomUUID() });
+  assert.deepEqual(unissuedList, { status: 'ok', policies: [], hasMore: false });
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
   assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations']), financialCounts);
@@ -412,7 +423,7 @@ try {
   const finalLockOffer = await acceptedOffer(); const finalLockPolicy = await importOffer(finalLockOffer);
   let finalLockClock = financialNow(), finalTransactions = 0;
   const finalLockStore: FinancialStore = {
-    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readOwnPolicies: (actor, limit) => store.readOwnPolicies(actor, limit), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
     importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), rejection: (id, trace, cause, capture) => store.rejection(id, trace, cause, capture),
     issuanceCandidates: (staleBefore, limit) => store.issuanceCandidates(staleBefore, limit),
     transaction: work => store.transaction(tx => {
@@ -666,7 +677,7 @@ try {
   finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
   assert.equal(await count('policies'), beforeRollback, 'business effect must roll back when its outbox insert fails');
   const brokenStore: FinancialStore = {
-    readPolicy: (id, actor) => store.readPolicy(id, actor), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
+    readPolicy: (id, actor) => store.readPolicy(id, actor), readOwnPolicies: (actor, limit) => store.readOwnPolicies(actor, limit), readAcceptedPolicy: (id, actor) => store.readAcceptedPolicy(id, actor),
     importAcceptance: (policy, event, trace, capture) => store.importAcceptance(policy, event, trace, capture), transaction: work => store.transaction(work),
     issuanceCandidates: (staleBefore, limit) => store.issuanceCandidates(staleBefore, limit), async rejection() { throw new Error('sql_unavailable'); } };
   assert.equal((await new PolicyFinance({ ...base, store: brokenStore }).acceptOffer({}, randomUUID())).status, 'unavailable');

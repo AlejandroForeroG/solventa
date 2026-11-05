@@ -93,6 +93,31 @@ Detailed endpoints, error schemas, validation rules and device-registration requ
 
 No fingerprint, face template, device passcode or biometric sensor data enters the application or backend. The server device registration does not attest that a biometric prompt ran. Exact freshness, renewal, account-switching and reinstall rules are maintained in the [mobile lifecycle guide](README.md#biometric-activation-and-access).
 
+## Policy wallet and protected local data
+
+Two capabilities cooperate. `policy-wallet` reads the customer's own issued policies and presents them; `policy-cache` is the only place where business data rests on the device. Both depend on ports, with real adapters injected in the composition (`adapters/create-policy-wallet.ts`).
+
+| Layer | Wallet (`policy-wallet`) | Cache (`policy-cache`) |
+|---|---|---|
+| Domain | Wallet states, `PolicyApiFailure`, validity and reference rules | Allowed fields, failure kinds and size bounds |
+| Application | `PolicyWallet`: unlock, load, fall back to the stored copy, lock; ports `PoliciesApi` and `WalletCache` | `ProtectedPolicyCache`: minimization, owner and installation binding, unlock gate, over `ProtectedStore` and `DeviceAuthentication` |
+| Adapters | `policies-api.ts`: bearer `GET /api/v1/policies` with validation | `secure-policy-store.ts` (Expo SecureStore) and `device-authentication.ts` (Expo Local Authentication) |
+| Presentation | `WalletScreen`, formatting and messages | none |
+
+The server stays the source of truth. The wallet shows the online answer as current and, only when the request fails, the stored copy with its own synchronization date. It never falls back to the copy after an authentication failure, and no stored value can authorize an action.
+
+Rules that every local data store in the channel follows:
+
+- **Minimum data.** The cache keeps `policyId`, `product`, `premium`, `currency`, the validity instants, the sealed coverage and the sync time. The reviewed document, its hash, offer and payment data, trace identifiers, provider flags, holder name and document number never reach storage. Input is projected field by field and validated, so an extra field cannot leak, and a contract violation is rejected instead of stored.
+- **Encrypted at rest, gated by the device.** The value lives in SecureStore under its own key `solventa.policies.v1` with `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY`, so Keystore or Keychain encrypts it with a key readable only while the device is unlocked. Reading requires `ProtectedPolicyCache.unlock()`, which runs the system prompt: strong biometrics or the device code. The cache is locked again when the wallet closes or the app goes to the background. A device with no screen lock or no native custody gets no cache and no unprotected fallback.
+- **Why the prompt is not a key attribute.** The credential records require strong biometrics in the key itself. The wallet accepts the device code too, which SecureStore cannot express as a key attribute, so the application enforces the prompt. That is a weaker guarantee against a compromised device and is documented as such.
+- **Bound to the owner and the installation.** The snapshot carries the installation UUID and the pseudonymous owner. A snapshot of another account, another installation (including an iOS Keychain record that survived a reinstall) or an unknown format is discarded and removed, never shown.
+- **Compact and bounded.** Policies are encoded as arrays, at most six and 1800 bytes, because some iOS releases reject keychain values near 2048 bytes. A larger need requires a different design (see the README), not a larger limit.
+- **Cleared with the session.** `Authentication` clears the cache when logout starts, even if remote revocation is still pending, when credentials are discarded after a denied session, when the environment changes and when a different account is confirmed after an alternative sign-in. The cache is cleared before the credential record is removed, so a failed cleanup leaves the record that lets the next attempt clean again. Cancelling a new login keeps it, because the previous owner is still the owner.
+- **Removal is verified, writes are not.** The native SecureStore delete does not report a refused removal on iOS, so `remove` reads the key afterwards and any surviving value fails the clearing and blocks sign-out for a retry. A write cannot be verified without an extra read. On Android a failed `commit()` is not reported by SecureStore 57, so a snapshot may be missing or stale after a restart; the wallet then shows it empty or as the older copy with its own sync date, never more data than was stored.
+- **Operations are serialized.** Save, read and clear run one at a time in call order, so a clear that starts while a save is still writing always runs after it. Locking is immediate, and a read queued behind a clear finds the cache locked.
+- **Cache is not authorization.** Showing cached data never grants business access. The server still decides, and cached data is shown as stored data with its sync time, never as online information.
+
 ## Localization and appearance
 
 `shared/i18n/messages.ts` holds matching Spanish/English catalogs and a pure language resolver. `device-language.ts` reads Expo Localization; `use-app-messages.ts` reacts to device/browser language changes and foreground return. The first supported preferred language wins, with Spanish as fallback. There is no in-app selector or stored language override.
@@ -114,6 +139,8 @@ The [testing guide](../../testing.md) defines the evidence expected at each boun
 
 - [`mobile-channel-authentication.test.ts`](../../../tests/mobile-channel-authentication.test.ts): coordinator behavior, callback validation, HTTP boundaries and public SDK behavior with synthetic dependencies.
 - [`mobile-biometric-authentication.test.ts`](../../../tests/mobile-biometric-authentication.test.ts): credential custody, installation/account isolation, biometric/lifecycle recovery and revocation invariants through injected dependencies.
+- [`mobile-policy-cache.test.ts`](../../../tests/mobile-policy-cache.test.ts) and [`mobile-policy-store.test.mts`](../../../tests/mobile-policy-store.test.mts): minimization, compact encoding, owner and installation isolation, the unlock gate, size bounds and the native custody options with injected Expo modules.
+- [`mobile-policy-wallet.test.ts`](../../../tests/mobile-policy-wallet.test.ts) and [`mobile-policies-api.test.ts`](../../../tests/mobile-policies-api.test.ts): the wallet coordinator (locked, online, stored copy, failures, late responses) and the policies HTTP adapter.
 - [`mobile-localization.test.ts`](../../../tests/mobile-localization.test.ts): preference ordering, fallback, catalog completeness and native language metadata.
 - [`mobile.consumer.test.ts`](../../../tests/pact/mobile.consumer.test.ts): the real mobile HTTP caller and its generated consumer contract; provider verification is separate from physical-device behavior.
 

@@ -8,7 +8,7 @@ The Worker owns its `policy` schema, runtime role and Hyperdrive. Its academic f
 
 ## Financial HTTP flow
 
-All routes below enter through the web Worker and require the existing sealed web session. Identity verifies the operation, local session and Origin for each write through one `authorizeFinancialAccessV1` RPC. Partner bearer tokens and native credentials do not authorize these web financial operations. Unknown fields are rejected without echo; errors contain only `error` and `traceId`. Responses include `Cache-Control: no-store`, `X-Trace-Id` and `X-Content-Type-Options: nosniff`. API version retirement headers remain applied by the gateway.
+All routes below enter through the web Worker and require the existing sealed web session, except `GET /api/v1/policies`, which serves the native wallet with a bearer token (see [native policy list](#native-policy-list)). Identity verifies the operation, local session and Origin for each write through one `authorizeFinancialAccessV1` RPC. Partner bearer tokens and native credentials do not authorize these web financial operations. Unknown fields are rejected without echo; errors contain only `error` and `traceId`. Responses include `Cache-Control: no-store`, `X-Trace-Id` and `X-Content-Type-Options: nosniff`. API version retirement headers remain applied by the gateway.
 
 1. Accept an immutable definitive offer in [Acquisition](../acquisition-risk/README.md#definitive-synthetic-offers). Its 202 response means `pending_issuance`, not a confirmed charge or policy.
 2. Read `GET /api/v1/policies/by-acceptance/{acceptanceId}/policy` until the owner's signed outbox event has been consumed. A missing, pending or foreign acceptance returns the same opaque 404. Before import, an absent row is an internal pending result and does not create a financial rejection or security-denial alert on each poll. An existing foreign policy still follows the audited denial path. Authentication/authorization always precedes this lookup. The query never creates a policy and returns the full document once available.
@@ -22,6 +22,18 @@ The previous `POST /api/v1/policies/{policyId}/issue` continues accepting only `
 Policy reads and issuance responses include an optional `payment` object when a premium intent exists: `status` is the single premium's `pending`, `confirmed`, `declined` or `refunded` state, and `reference` is the synthetic provider receipt (`MOCK-<payment UUID>`), present only for `confirmed` or `refunded`. It is read from the same integrity-checked snapshot as the policy, without another query, and is never stored in the command result, so replays of commands completed before this field existed still match. It carries no amount, payment method or destination: the amount is the policy `premium`.
 
 Issuance derives money and ownership from the stored, integrity-checked acceptance. The signature endpoint accepts only a previously charged policy. Its recovery machinery handles both new charge commands and older combined issuance commands. Unresolved charged premiums are refunded after offer expiry. A failed synthetic signature compensates a confirmed mock charge. An uncertain signature result returns 503 and must be reconciled using the same operation identity. Different payloads under an existing key conflict. The returned policy identifies `synthetic: true` and `providerMode: mock`.
+
+### Native policy list
+
+`GET /api/v1/policies` lists the caller's own **issued** policies for the native wallet. It is the only financial route a native user can use, and it only reads:
+
+- Authentication is `Authorization: Bearer <user access token>`; a cookie is ignored and a missing or malformed header is 401 before any RPC. Policy calls `authorizeFinancialAccessV1` with `{ kind: 'mobile', token, operation: 'policies:read', traceId }` and accepts only a native `user` actor whose operations include `policies:read`; any other actor shape is 503.
+- The owner comes from the verified principal. The store query filters by client, subject token and `status = 'issued'`, newest validity first, and `PolicyFinance.listOwn` runs the same integrity checks as the single-policy read (sealed terms, document, premium, signature and time seal) for every row. A failed check is `409 integrity_violation`, never a partial list.
+- The answer is `{ policies, hasMore, traceId }` with at most six `PolicySummary` items (`policyId`, `product`, `status`, `premium`, `currency`, `effectiveFrom`, `effectiveUntil`, `coverage`). `coverage` is the sealed offer's `mortgage_life` sum insured or the `flight_delay` flight, threshold and payout. The reviewed document, its hash, offer identifiers, payment and signature evidence are never returned. `hasMore` reports older issued policies beyond the six.
+- Pending, charged, refunding and refunded policies belong to the purchase flow and are not listed. There are no deductibles, holder name, document number or contact data in the policy model, so none is returned; the wallet does not invent them.
+- No resource denial is recorded: the query is scoped to the caller, so there is no foreign resource to hide.
+
+The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) documents `listOwnPolicies`; `tests/financial.test.ts`, `tests/financial-http.test.ts`, `tests/financial-access.test.ts` and the native Pact interaction cover it, and `infra/financial-smoke.mts` covers the SQL ownership and status filter.
 
 ### Decision: charge before issuance
 
