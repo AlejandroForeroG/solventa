@@ -84,6 +84,12 @@ test('migration credentials reject crossed branches, databases, endpoints and TL
   ]) assert.throws(() => migrationConfiguration('staging', { ...variables(), ...changed }));
 });
 
+test('an omitted or empty Environment port uses the existing CockroachDB default', () => {
+  for (const port of [undefined, '']) {
+    assert.equal(migrationConfiguration('staging', { ...variables(), DATABASE_PORT: port }).url.port, '26257');
+  }
+});
+
 test('CI restores and removes only its own migration files without logging credentials', async () => {
   const script = fileURLToPath(new URL('./migration-ci.mjs', import.meta.url));
   const directory = await mkdtemp(join(tmpdir(), 'solventa-migrations-'));
