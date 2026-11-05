@@ -38,6 +38,7 @@
         }
       ],
       "expo-web-browser",
+      "expo-notifications",
       ["expo-localization", { "supportedLocales": ["es", "en"] }]
     ],
     "locales": {

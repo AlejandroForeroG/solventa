@@ -21,6 +21,7 @@ const es = {
   policyCachePrompt: 'Confirma tu identidad para ver tus pólizas',
   actions: {
     verifyIdentity: 'Verificar identidad',
+    notificationPreferences: 'Preferencias de avisos',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
     enable: 'Activar huella o rostro', revoke: 'Revocar acceso de este dispositivo', retry: 'Reintentar conexión',
     retryLogout: 'Reintentar cierre', signOut: 'Cerrar sesión', cancel: 'Cancelar',
@@ -63,6 +64,7 @@ const en: typeof es = {
   policyCachePrompt: 'Confirm your identity to view your policies',
   actions: {
     verifyIdentity: 'Verify identity',
+    notificationPreferences: 'Notification preferences',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
     enable: 'Enable fingerprint or face', revoke: 'Revoke access for this device', retry: 'Retry connection',
     retryLogout: 'Retry sign-out', signOut: 'Sign out', cancel: 'Cancel',

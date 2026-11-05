@@ -36,6 +36,14 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Notification preferences
+
+After sign-in, the welcome screen opens `/notification-preferences`. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
+
+The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission; if denied, the saved choice remains visible but the UI says push is not operational and offers a Settings shortcut. This uses `expo-notifications` in an Expo development build. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
+
+Run `npm run test:notification-preferences`, mobile lint and types, and `npm run check`. On Android and iOS, test initial permission, denial, return from Settings, save/retry/conflict, sign-out and account switching with a development build. Keep mobile and Identity on matching revisions; the route fails closed against an older backend.
+
 ## Identity onboarding
 
 The signed-in welcome action opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
