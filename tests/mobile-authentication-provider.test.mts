@@ -57,6 +57,8 @@ mock.module(new URL('../adapters/auth-browser.ts', presentation).href, { namedEx
 mock.module(new URL('../adapters/callback.ts', presentation).href, { namedExports: { parseCallback: () => null } });
 mock.module(new URL('../adapters/secure-token-store.ts', presentation).href,
   { namedExports: { biometricVault: { kind: 'vault' }, secureTokenStore: { kind: 'store' } } });
+mock.module(new URL('../../policy-cache/adapters/secure-policy-store.ts', presentation).href,
+  { namedExports: { protectedPolicyCache: { kind: 'policy-cache' } } });
 mock.module(new URL('../adapters/solventa-session.ts', presentation).href,
   { namedExports: { createSessionApi: (baseUrl: string) => ({ baseUrl }) } });
 mock.module(new URL('../adapters/workos.ts', presentation).href, { namedExports: { workosIdentity: { kind: 'identity' } } });
@@ -69,6 +71,7 @@ test('provider restores, completes callbacks, locks on background and removes na
   process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.test';
   provider.AuthenticationProvider({ children: 'content' });
   assert.equal(constructorOptions?.baseUrl, 'https://api.example.test');
+  assert.deepEqual(constructorOptions?.policyCache, { kind: 'policy-cache' });
   const cleanup = effects.shift()?.();
   await flush();
   assert.ok(calls.includes('restore'));
