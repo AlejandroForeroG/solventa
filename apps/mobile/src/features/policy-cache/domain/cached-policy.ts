@@ -1,13 +1,18 @@
-export type PolicyStatus = 'pending' | 'charged' | 'issued' | 'refunding' | 'refunded';
+export type PolicyProduct = 'vida_hipotecario' | 'flight_delay';
+
+export type PolicyCoverage =
+  | { kind: 'mortgage_life'; sumInsured: string }
+  | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string };
 
 // The only policy fields that may rest on the device. The reviewed document, its hash, offer, payment and trace data stay on the server.
 export type CachedPolicy = {
   policyId: string;
-  status: PolicyStatus;
+  product: PolicyProduct;
   premium: string;
   currency: 'COP';
   effectiveFrom: string;
   effectiveUntil: string;
+  coverage: PolicyCoverage;
 };
 
 export type PolicySnapshot = { syncedAt: number; policies: CachedPolicy[] };
@@ -21,6 +26,6 @@ export class PolicyCacheFailure extends Error {
   }
 }
 
-// Keychain values can be rejected above roughly 2048 bytes on some iOS releases, so the snapshot is bounded below that.
+// Keychain values can be rejected above roughly 2048 bytes on some iOS releases, so the encoded snapshot is bounded below that.
 export const maxCachedPolicies = 6;
 export const maxSnapshotBytes = 1800;

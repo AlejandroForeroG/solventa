@@ -1,5 +1,5 @@
 import { PolicyCacheFailure, maxCachedPolicies, maxSnapshotBytes } from '../domain/cached-policy';
-import type { CachedPolicy, PolicySnapshot, PolicyStatus } from '../domain/cached-policy';
+import type { CachedPolicy, PolicyCoverage, PolicyProduct, PolicySnapshot } from '../domain/cached-policy';
 
 export type CacheOwner = { clientId: string; subjectToken: string };
 
@@ -9,38 +9,76 @@ export interface ProtectedStore {
   remove(): Promise<void>;
 }
 
+// Resolves when the user passes the device's own authentication (biometrics or the device code) and rejects with a PolicyCacheFailure otherwise.
+export interface DeviceAuthentication {
+  authenticate(): Promise<void>;
+}
+
 type Dependencies = {
   store: ProtectedStore;
   installationId: () => Promise<string>;
+  authentication: DeviceAuthentication;
   now: () => number;
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const statuses: readonly PolicyStatus[] = ['pending', 'charged', 'issued', 'refunding', 'refunded'];
 const premium = /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/;
-const isoInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const products: readonly PolicyProduct[] = ['vida_hipotecario', 'flight_delay'];
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PolicyCacheFailure('invalid_policy');
   return value as Record<string, unknown>;
 }
 
-function instant(value: unknown): string {
-  if (typeof value !== 'string' || !isoInstant.test(value) || Number.isNaN(Date.parse(value))) throw new PolicyCacheFailure('invalid_policy');
+function text(value: unknown, pattern: RegExp): string {
+  if (typeof value !== 'string' || !pattern.test(value)) throw new PolicyCacheFailure('invalid_policy');
   return value;
+}
+
+// Only the exact UTC form the server writes is accepted, so the compact encoding restores the same string.
+function instant(value: unknown): string {
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value)) || new Date(Date.parse(value)).toISOString() !== value) throw new PolicyCacheFailure('invalid_policy');
+  return value;
+}
+
+function coverageOf(product: PolicyProduct, value: unknown): PolicyCoverage {
+  const data = record(value);
+  if (product === 'vida_hipotecario' && data.kind === 'mortgage_life') return { kind: 'mortgage_life', sumInsured: text(data.sumInsured, premium) };
+  if (product === 'flight_delay' && data.kind === 'flight_delay') {
+    const { thresholdMinutes } = data;
+    if (typeof thresholdMinutes !== 'number' || !Number.isSafeInteger(thresholdMinutes) || thresholdMinutes < 1) throw new PolicyCacheFailure('invalid_policy');
+    return { kind: 'flight_delay', flightReference: text(data.flightReference, uuid), thresholdMinutes, payoutAmount: text(data.payoutAmount, premium) };
+  }
+  throw new PolicyCacheFailure('invalid_policy');
 }
 
 // Copies only the allowed fields: anything else on the source object never reaches storage.
 export function minimizePolicy(source: unknown): CachedPolicy {
   const data = record(source);
-  const { policyId, status, currency } = data;
-  if (typeof policyId !== 'string' || !uuid.test(policyId)) throw new PolicyCacheFailure('invalid_policy');
-  if (!statuses.includes(status as PolicyStatus)) throw new PolicyCacheFailure('invalid_policy');
-  if (typeof data.premium !== 'string' || !premium.test(data.premium) || currency !== 'COP') throw new PolicyCacheFailure('invalid_policy');
+  const product = data.product as PolicyProduct;
+  if (!products.includes(product) || data.currency !== 'COP') throw new PolicyCacheFailure('invalid_policy');
   return {
-    policyId, status: status as PolicyStatus, premium: data.premium, currency,
-    effectiveFrom: instant(data.effectiveFrom), effectiveUntil: instant(data.effectiveUntil),
+    policyId: text(data.policyId, uuid), product, premium: text(data.premium, premium), currency: 'COP',
+    effectiveFrom: instant(data.effectiveFrom), effectiveUntil: instant(data.effectiveUntil), coverage: coverageOf(product, data.coverage),
   };
+}
+
+// Arrays instead of objects keep six policies far below the keychain size limit.
+function encodePolicy(policy: CachedPolicy): unknown[] {
+  const common = [policy.policyId, policy.coverage.kind === 'mortgage_life' ? 0 : 1, policy.premium, Date.parse(policy.effectiveFrom), Date.parse(policy.effectiveUntil)];
+  return policy.coverage.kind === 'mortgage_life' ? [...common, policy.coverage.sumInsured]
+    : [...common, policy.coverage.flightReference, policy.coverage.thresholdMinutes, policy.coverage.payoutAmount];
+}
+
+function decodePolicy(value: unknown): CachedPolicy {
+  if (!Array.isArray(value) || value.length < 6) throw new PolicyCacheFailure('invalid_policy');
+  const [policyId, code, amount, from, until, ...rest] = value;
+  if (typeof from !== 'number' || typeof until !== 'number') throw new PolicyCacheFailure('invalid_policy');
+  const effective = { effectiveFrom: new Date(from).toISOString(), effectiveUntil: new Date(until).toISOString() };
+  if (code === 0 && rest.length === 1) return minimizePolicy({ policyId, product: 'vida_hipotecario', premium: amount, currency: 'COP', ...effective, coverage: { kind: 'mortgage_life', sumInsured: rest[0] } });
+  if (code === 1 && rest.length === 3) return minimizePolicy({ policyId, product: 'flight_delay', premium: amount, currency: 'COP', ...effective,
+    coverage: { kind: 'flight_delay', flightReference: rest[0], thresholdMinutes: rest[1], payoutAmount: rest[2] } });
+  throw new PolicyCacheFailure('invalid_policy');
 }
 
 function isOwner(value: unknown): value is CacheOwner {
@@ -49,20 +87,49 @@ function isOwner(value: unknown): value is CacheOwner {
 }
 
 export class ProtectedPolicyCache {
+  private unlocked = false;
+  private tail: Promise<unknown> = Promise.resolve();
+
   constructor(private readonly deps: Dependencies) {}
 
-  async save(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
+  // Opening the cache asks for the device authentication; the wallet locks it again when it is closed or backgrounded.
+  async unlock(): Promise<void> {
+    await this.deps.authentication.authenticate();
+    this.unlocked = true;
+  }
+
+  lock(): void {
+    this.unlocked = false;
+  }
+
+  // Storage work runs one operation at a time in call order, so a clear that starts while a save is writing always runs after it.
+  private serialized<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.tail.then(work, work);
+    this.tail = next.catch(() => undefined);
+    return next;
+  }
+
+  save(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
+    return this.serialized(() => this.write(owner, sources));
+  }
+
+  private async write(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
     if (!isOwner(owner)) throw new PolicyCacheFailure('invalid_policy');
     if (sources.length > maxCachedPolicies) throw new PolicyCacheFailure('too_large');
     const snapshot: PolicySnapshot = { syncedAt: this.deps.now(), policies: sources.map(minimizePolicy) };
-    const value = JSON.stringify({ version: 1, installationId: await this.deps.installationId(), owner, snapshot });
+    const value = JSON.stringify({ v: 2, i: await this.deps.installationId(), o: [owner.clientId, owner.subjectToken], t: snapshot.syncedAt, p: snapshot.policies.map(encodePolicy) });
     if (new TextEncoder().encode(value).length > maxSnapshotBytes) throw new PolicyCacheFailure('too_large');
     await this.deps.store.write(value);
     return snapshot;
   }
 
-  // Reading asks for device authentication. A snapshot of another installation, owner or format is discarded, never shown.
-  async read(owner: CacheOwner): Promise<PolicySnapshot | null> {
+  // A snapshot of another installation, owner or format is discarded, never shown.
+  read(owner: CacheOwner): Promise<PolicySnapshot | null> {
+    return this.serialized(() => this.load(owner));
+  }
+
+  private async load(owner: CacheOwner): Promise<PolicySnapshot | null> {
+    if (!this.unlocked) throw new PolicyCacheFailure('locked');
     const value = await this.deps.store.read();
     if (value === null) return null;
     const snapshot = await this.parse(value, owner);
@@ -70,20 +137,20 @@ export class ProtectedPolicyCache {
     return snapshot;
   }
 
+  // Locking is immediate; the removal waits for any save or read already in flight.
   clear(): Promise<void> {
-    return this.deps.store.remove();
+    this.lock();
+    return this.serialized(() => this.deps.store.remove());
   }
 
   private async parse(value: string, owner: CacheOwner): Promise<PolicySnapshot | null> {
     try {
       const data = record(JSON.parse(value));
-      const stored = data.owner as CacheOwner;
-      if (data.version !== 1 || data.installationId !== await this.deps.installationId()
-        || !isOwner(stored) || stored.clientId !== owner.clientId || stored.subjectToken !== owner.subjectToken) return null;
-      const saved = record(data.snapshot);
-      if (typeof saved.syncedAt !== 'number' || !Number.isSafeInteger(saved.syncedAt) || !Array.isArray(saved.policies)
-        || saved.policies.length > maxCachedPolicies) return null;
-      return { syncedAt: saved.syncedAt, policies: saved.policies.map(minimizePolicy) };
+      const stored = data.o;
+      if (data.v !== 2 || data.i !== await this.deps.installationId() || !Array.isArray(stored)
+        || stored[0] !== owner.clientId || stored[1] !== owner.subjectToken) return null;
+      if (typeof data.t !== 'number' || !Number.isSafeInteger(data.t) || !Array.isArray(data.p) || data.p.length > maxCachedPolicies) return null;
+      return { syncedAt: data.t, policies: data.p.map(decodePolicy) };
     } catch {
       return null;
     }

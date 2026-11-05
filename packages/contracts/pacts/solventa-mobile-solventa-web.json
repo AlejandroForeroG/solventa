@@ -1575,6 +1575,60 @@
       }
     },
     {
+      "description": "mobile own policy list",
+      "providerStates": [
+        {
+          "name": "a native session with an issued policy"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies"
+      },
+      "response": {
+        "body": {
+          "hasMore": false,
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000003",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile register",
       "providerStates": [
         {
