@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Solventa API - Policies
   version: 1.0.0
-  description: Authenticated web-only academic financial flow. External data,
+  description: Authenticated academic financial flow. Buying and issuing are web-only; the native app only reads its own issued policies. External data,
     payment and signature providers are explicitly mocked; Solventa
     authorization, owner transactions and idempotency remain real. The isolated
     production demo requires explicit FINANCIAL_PROVIDER_MODE=mock, a valid
@@ -17,6 +17,52 @@ tags:
   - name: Policies
     description: Owner-authorized synthetic policies.
 paths:
+  /policies:
+    get:
+      operationId: listOwnPolicies
+      summary: List the caller's own issued policies for the native wallet
+      description: Native read-only route. The owner comes from the verified user
+        access token, never from a parameter. It returns at most six issued
+        policies, newest validity first, with the product, validity, premium and
+        coverage; hasMore reports that older ones exist. The reviewed document,
+        its hash and payment data are not returned. The device keeps a protected
+        copy for offline use and treats it as stale, never as the contractual
+        source.
+      tags:
+        - Policies
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        "200":
+          description: The owner's issued policies, possibly none.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyList"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /policies/{policyId}:
     get:
       operationId: getOwnPolicy
@@ -206,6 +252,11 @@ components:
       type: apiKey
       in: cookie
       name: solventa-session
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS AuthKit user access token of a registered native session. Never a refresh token, M2M token or web cookie.
   schemas:
     Error:
       type: object
@@ -216,6 +267,100 @@ components:
       properties:
         error:
           type: string
+        traceId:
+          type: string
+          format: uuid
+    PolicyCoverage:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - sumInsured
+          properties:
+            kind:
+              type: string
+              enum:
+                - mortgage_life
+            sumInsured:
+              type: string
+              pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - flightReference
+            - thresholdMinutes
+            - payoutAmount
+          properties:
+            kind:
+              type: string
+              enum:
+                - flight_delay
+            flightReference:
+              type: string
+              format: uuid
+            thresholdMinutes:
+              type: integer
+              minimum: 1
+            payoutAmount:
+              type: string
+              pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+    PolicySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - policyId
+        - product
+        - status
+        - premium
+        - currency
+        - effectiveFrom
+        - effectiveUntil
+        - coverage
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        product:
+          type: string
+          enum:
+            - vida_hipotecario
+            - flight_delay
+        status:
+          type: string
+          enum:
+            - issued
+        premium:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        currency:
+          type: string
+          enum:
+            - COP
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveUntil:
+          type: string
+          format: date-time
+        coverage:
+          $ref: "#/components/schemas/PolicyCoverage"
+    PolicyList:
+      type: object
+      additionalProperties: false
+      required:
+        - policies
+        - hasMore
+        - traceId
+      properties:
+        policies:
+          type: array
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/PolicySummary"
+        hasMore:
+          type: boolean
         traceId:
           type: string
           format: uuid

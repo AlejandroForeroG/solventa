@@ -245,6 +245,15 @@ export class SqlFinancialStore implements FinancialStore {
     return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
       + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
   }
+  readOwnPolicies(actor: FinancialActor, limit: number): Promise<PolicyRecord[]> {
+    return this.connection(async db => (await db.query<RecordRow>(selectRecord()
+      + " WHERE f.client_id=$1 AND p.subject_token=$2 AND p.status='issued' ORDER BY p.effective_until DESC,p.id LIMIT $3",
+    [actor.clientId, actor.subjectToken, limit])).rows.map(row => {
+      const record = recordFrom([row]);
+      if (!record) throw new InvalidFinancialRecord();
+      return record;
+    }));
+  }
   readAcceptedPolicy(id: string, actor: FinancialActor): Promise<AcceptedPolicyLookup> {
     return this.connection(async db => {
       // Only owned evidence is selected; existence of a foreign acceptance comes from the same statement snapshot.
