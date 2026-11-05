@@ -1,35 +1,28 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 
-type Options = { requireAuthentication?: boolean; keychainService?: string; keychainAccessible?: string; authenticationPrompt?: string };
+type Options = { requireAuthentication?: boolean; keychainService?: string; keychainAccessible?: string };
+type Prompt = { promptMessage?: string; biometricsSecurityLevel?: string; disableDeviceFallback?: boolean };
 const secure = new Map<string, string>();
 const calls: Array<{ operation: string; key: string; options: Options }> = [];
+const prompts: Prompt[] = [];
 let available = true;
-let biometricCapable = true;
-let hardware = true;
-let enrolled = true;
-let level = 3;
-let readFails = false;
+let level = 1;
+let authenticationSucceeds = true;
 let deleteIgnored = false;
 let markerValue = '';
 
 mock.module('expo-secure-store', { namedExports: {
   WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: 'device-only',
-  async getItemAsync(key: string, options: Options) {
-    calls.push({ operation: 'read', key, options });
-    if (readFails) throw new Error('authentication canceled');
-    return secure.get(key) ?? null;
-  },
+  async getItemAsync(key: string, options: Options) { calls.push({ operation: 'read', key, options }); return secure.get(key) ?? null; },
   async setItemAsync(key: string, value: string, options: Options) { calls.push({ operation: 'write', key, options }); secure.set(key, value); },
   async deleteItemAsync(key: string, options: Options) { calls.push({ operation: 'remove', key, options }); if (!deleteIgnored) secure.delete(key); },
   async isAvailableAsync() { return available; },
-  canUseBiometricAuthentication() { return biometricCapable; },
 } });
 mock.module('expo-local-authentication', { namedExports: {
-  SecurityLevel: { BIOMETRIC_STRONG: 3 },
-  async hasHardwareAsync() { return hardware; },
-  async isEnrolledAsync() { return enrolled; },
+  SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
   async getEnrolledLevelAsync() { return level; },
+  async authenticateAsync(options: Prompt) { prompts.push(options); return { success: authenticationSucceeds }; },
 } });
 mock.module('expo-crypto', { namedExports: { randomUUID: () => '10000000-0000-4000-8000-000000000001' } });
 mock.module('expo-file-system', { namedExports: {
@@ -48,53 +41,54 @@ const adapter = (imported.default ?? imported) as typeof import('../apps/mobile/
 
 const owner = { clientId: '00000000-0000-4000-8000-000000000001', subjectToken: '00000000-0000-4000-8000-000000000002' };
 const source = {
-  policyId: '20000000-0000-4000-8000-000000000001', status: 'issued', premium: '1250000.0000', currency: 'COP',
-  effectiveFrom: '2026-11-01T00:00:00.000Z', effectiveUntil: '2027-11-01T00:00:00.000Z',
+  policyId: '20000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', premium: '86400.0000', currency: 'COP',
+  effectiveFrom: '2026-10-16T02:00:00.000Z', effectiveUntil: '2027-10-16T02:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' },
 };
+const failure = (kind: string) => (error: unknown) => error instanceof Error && error.message === kind;
 
-test('every read and write requires device authentication with its own key and device-only passcode custody', async () => {
-  calls.length = 0;
+test('the value is stored under its own device-only key and the device authentication, not the key, gates each opening', async () => {
+  calls.length = 0; prompts.length = 0;
   await adapter.protectedPolicyCache.save(owner, [source]);
+  assert.equal(prompts.length, 0, 'saving never prompts');
+  await assert.rejects(adapter.protectedPolicyCache.read(owner), failure('locked'));
+  await adapter.protectedPolicyCache.unlock();
   assert.equal((await adapter.protectedPolicyCache.read(owner))?.policies.length, 1);
-  const touched = calls.filter(call => call.key === 'solventa.policies.v1');
-  assert.deepEqual(touched.map(call => call.operation), ['write', 'read']);
-  for (const call of touched) {
-    assert.equal(call.options.requireAuthentication, true);
+  assert.deepEqual(prompts, [{ promptMessage: 'Desbloquea para ver tus pólizas', biometricsSecurityLevel: 'strong', disableDeviceFallback: false }]);
+  for (const call of calls) {
+    assert.equal(call.key, 'solventa.policies.v1', 'the cache never touches the credential records');
     assert.equal(call.options.keychainService, 'solventa.policies.v1');
     assert.equal(call.options.keychainAccessible, 'device-only');
-    assert.equal(call.options.authenticationPrompt, 'Confirma tu identidad para ver tus pólizas');
+    assert.equal(call.options.requireAuthentication, undefined);
   }
-  assert.ok(calls.every(call => call.key === 'solventa.policies.v1'), 'the cache never touches the credential records');
 });
 
-test('without strong biometrics or native custody nothing is written and nothing is read', async () => {
+test('without a device lock or native custody nothing is written and nothing is read', async () => {
   const cases: Array<[string, () => void, () => void]> = [
     ['no native store', () => { available = false; }, () => { available = true; }],
-    ['no biometric capability', () => { biometricCapable = false; }, () => { biometricCapable = true; }],
-    ['no hardware', () => { hardware = false; }, () => { hardware = true; }],
-    ['not enrolled', () => { enrolled = false; }, () => { enrolled = true; }],
-    ['weak enrollment', () => { level = 2; }, () => { level = 3; }],
+    ['no device lock', () => { level = 0; }, () => { level = 1; }],
   ];
   for (const [name, degrade, restore] of cases) {
     degrade();
-    calls.length = 0;
-    secure.clear();
-    await assert.rejects(adapter.protectedPolicyCache.save(owner, [source]), (error: unknown) => error instanceof Error && error.message === 'unavailable', name);
-    await assert.rejects(adapter.protectedPolicyCache.read(owner), (error: unknown) => error instanceof Error && error.message === 'unavailable', name);
+    calls.length = 0; secure.clear();
+    await assert.rejects(adapter.protectedPolicyCache.save(owner, [source]), failure('unavailable'), name);
+    await assert.rejects(adapter.securePolicyStore.write('value'), failure('unavailable'), name);
+    await assert.rejects(adapter.securePolicyStore.read(), failure('unavailable'), name);
     assert.equal(calls.length, 0, `${name}: no storage call`);
-    await assert.rejects(adapter.securePolicyStore.write('value'), (error: unknown) => error instanceof Error && error.message === 'unavailable', name);
-    await assert.rejects(adapter.securePolicyStore.read(), (error: unknown) => error instanceof Error && error.message === 'unavailable', name);
-    assert.equal(calls.length, 0, `${name}: the store itself refuses direct access`);
     assert.equal(secure.size, 0, `${name}: no unprotected fallback`);
     restore();
   }
+  level = 0;
+  await assert.rejects(adapter.protectedPolicyCache.unlock(), failure('unavailable'));
+  level = 1;
 });
 
-test('cancelled or failed device authentication releases nothing', async () => {
+test('a cancelled or failed device authentication keeps the cache locked', async () => {
   await adapter.protectedPolicyCache.save(owner, [source]);
-  readFails = true;
-  await assert.rejects(adapter.protectedPolicyCache.read(owner), (error: unknown) => error instanceof Error && error.message === 'locked');
-  readFails = false;
+  adapter.protectedPolicyCache.lock();
+  authenticationSucceeds = false;
+  await assert.rejects(adapter.protectedPolicyCache.unlock(), failure('locked'));
+  await assert.rejects(adapter.protectedPolicyCache.read(owner), failure('locked'));
+  authenticationSucceeds = true;
 });
 
 test('removal is verified: a delete the keychain silently refused is reported, never treated as cleared', async () => {
@@ -104,10 +98,7 @@ test('removal is verified: a delete the keychain silently refused is reported, n
 
   await adapter.protectedPolicyCache.save(owner, [source]);
   deleteIgnored = true;
-  await assert.rejects(adapter.protectedPolicyCache.clear(), (error: unknown) => error instanceof Error && error.message === 'not_removed');
-  readFails = true;
-  await assert.rejects(adapter.protectedPolicyCache.clear(), (error: unknown) => error instanceof Error && error.message === 'not_removed');
-  readFails = false;
+  await assert.rejects(adapter.protectedPolicyCache.clear(), failure('not_removed'));
   deleteIgnored = false;
   await adapter.protectedPolicyCache.clear();
   assert.equal(secure.has('solventa.policies.v1'), false);

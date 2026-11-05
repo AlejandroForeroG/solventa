@@ -18,7 +18,7 @@ const es = {
   pendingLogout: 'El acceso está bloqueado hasta confirmar el cierre remoto.',
   nativeOnly: 'El ingreso está disponible en la app nativa.',
   securePrompt: 'Confirma tu identidad para entrar a Solventa',
-  policyCachePrompt: 'Confirma tu identidad para ver tus pólizas',
+  policyCachePrompt: 'Desbloquea para ver tus pólizas',
   actions: {
     verifyIdentity: 'Verificar identidad',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
@@ -60,7 +60,7 @@ const en: typeof es = {
   pendingLogout: 'Access is blocked until remote sign-out is confirmed.',
   nativeOnly: 'Sign-in is available in the native app.',
   securePrompt: 'Confirm your identity to access Solventa',
-  policyCachePrompt: 'Confirm your identity to view your policies',
+  policyCachePrompt: 'Unlock to view your policies',
   actions: {
     verifyIdentity: 'Verify identity',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
