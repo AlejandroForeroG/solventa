@@ -97,16 +97,16 @@ export class Authentication {
     const binding = await this.deps.biometrics?.info();
     if (binding) {
       if (binding.baseUrl !== this.deps.baseUrl) {
+        await this.deps.policyCache?.clear();
         await this.deps.biometrics?.clear();
         await this.deps.store.write(emptyRecord());
-        await this.deps.policyCache?.clear();
       }
     }
     const record = await this.deps.store.read();
     const context = record.session ?? record.transaction;
     if (context && context.baseUrl !== this.deps.baseUrl) {
-      await this.save(emptyRecord());
       await this.deps.policyCache?.clear();
+      await this.save(emptyRecord());
     } else {
       this.record = record;
     }
@@ -133,9 +133,10 @@ export class Authentication {
     }
     if (failure.kind === 'unauthorized') {
       try {
+        // Clear offline data first: if this fails the session record remains, so a retry cleans again.
+        await this.deps.policyCache?.clear();
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
-        await this.deps.policyCache?.clear();
         this.device = undefined;
         this.primaryAuthenticated = false;
       } catch {
@@ -208,9 +209,9 @@ export class Authentication {
       if (binding || this.snapshot.status === 'locked') {
         if (binding?.baseUrl === this.deps.baseUrl) await this.deps.biometrics?.suspend();
         else {
+          await this.deps.policyCache?.clear();
           await this.deps.biometrics?.clear();
           await this.deps.store.write(emptyRecord());
-          await this.deps.policyCache?.clear();
         }
         this.record = emptyRecord();
         this.device = undefined;
@@ -361,9 +362,9 @@ export class Authentication {
     this.publish({ status: 'logoutPending' });
     return this.run(async () => {
       if (!this.record?.session) {
+        await this.deps.policyCache?.clear();
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
-        await this.deps.policyCache?.clear();
         this.device = undefined;
         this.primaryAuthenticated = false;
         this.logoutRequested = false;
@@ -437,6 +438,7 @@ export class Authentication {
       await vault.commit(device, this.deps.baseUrl, principal);
     } else if (binding?.suspended && vault) {
       if (binding.owner?.clientId !== principal.clientId || binding.owner.subjectToken !== principal.subjectToken) {
+        await this.deps.policyCache?.clear();
         await vault.clear();
       } else if (this.primaryAuthenticated && this.foreground && !this.logoutRequested) {
         await this.activateBiometrics(principal, vault);

@@ -622,3 +622,18 @@ test('cancelling a new login attempt keeps the offline policy data of the existi
   assert.equal(f.auth.getSnapshot().status, 'signedOut');
   assert.equal(clears, 0);
 });
+
+test('a failed offline data cleanup after denied credentials is retried instead of leaving the data behind', async () => {
+  let clears = 0;
+  let failing = true;
+  const f = fixture(sessionRecord(), { clear: async () => { if (failing) throw new Error('synthetic_storage_failure'); clears++; } });
+  f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
+  await f.auth.restore();
+  assert.equal(f.auth.getSnapshot().status, 'blocked');
+  assert.equal(f.saved().session?.phase, 'active', 'the record that allows a retry is kept');
+  failing = false;
+  await f.auth.restore();
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.equal(clears, 1);
+  assert.deepEqual(f.saved(), emptyRecord());
+});
