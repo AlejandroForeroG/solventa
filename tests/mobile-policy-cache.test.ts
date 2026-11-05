@@ -152,3 +152,31 @@ test('an empty cache reads as empty without removing anything, and an empty list
   await f.cache.save(owner, []);
   assert.deepEqual(await f.cache.read(owner), { syncedAt: now, policies: [] });
 });
+
+test('a clear that starts while a save is writing runs after it, so no data outlives the session', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let value: string | null = null;
+  const cache = new ProtectedPolicyCache({
+    store: { read: async () => value, write: async next => { await gate; value = next; }, remove: async () => { value = null; } },
+    installationId: async () => installation, now: () => now, authentication: { authenticate: async () => {} },
+  });
+  const saving = cache.save(owner, [mortgage()]);
+  const clearing = cache.clear();
+  release();
+  await Promise.all([saving, clearing]);
+  assert.equal(value, null, 'the write finished first and the removal ran after it');
+  await assert.rejects(cache.read(owner), error => error instanceof PolicyCacheFailure && error.kind === 'locked');
+});
+
+test('a failed save does not block later operations and a read never runs ahead of a pending clear', async () => {
+  const f = fixture();
+  await assert.rejects(f.cache.save(owner, [mortgage(1, { premium: 'free' })]), error => error instanceof PolicyCacheFailure);
+  await f.cache.save(owner, [mortgage()]);
+  await f.cache.unlock();
+  const clearing = f.cache.clear();
+  const reading = f.cache.read(owner);
+  await clearing;
+  await assert.rejects(reading, error => error instanceof PolicyCacheFailure && error.kind === 'locked');
+  assert.equal(f.state.value, null);
+});
