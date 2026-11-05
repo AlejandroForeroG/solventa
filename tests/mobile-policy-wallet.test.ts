@@ -97,6 +97,15 @@ test('a revoked or denied session never falls back to the stored copy', async ()
   assert.deepEqual(f.wallet.getSnapshot(), { status: 'failed', failure: 'unavailable' });
 });
 
+test('a malformed or incompatible answer stays a failure and is never shown as lost connectivity', async () => {
+  const f = fixture();
+  await f.wallet.unlock();
+  f.wallet.lock();
+  f.state.listing = () => Promise.reject(new PolicyApiFailure('invalid_response'));
+  await f.wallet.unlock();
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'failed', failure: 'invalid_response' });
+});
+
 test('an owner with no policies gets an empty list and an empty copy', async () => {
   const f = fixture();
   f.state.listing = () => Promise.resolve({ policies: [], hasMore: false });

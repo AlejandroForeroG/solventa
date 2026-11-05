@@ -16,7 +16,11 @@ function parse(raw: string): { policies: ReturnType<typeof minimizePolicy>[]; ha
   if (!Array.isArray(policies) || policies.length > maxCachedPolicies || typeof hasMore !== 'boolean' || typeof traceId !== 'string' || !uuid.test(traceId)) {
     throw new PolicyApiFailure('invalid_response');
   }
-  return { policies: policies.map(policy => minimizePolicy(policy)), hasMore, traceId };
+  // The list route returns issued policies only. Anything else is a contract violation: projecting it would drop its status and present unfinished or refunded coverage as active.
+  return { policies: policies.map(policy => {
+    if (!policy || typeof policy !== 'object' || (policy as Record<string, unknown>).status !== 'issued') throw new PolicyApiFailure('invalid_response');
+    return minimizePolicy(policy);
+  }), hasMore, traceId };
 }
 
 export function createPoliciesApi(baseUrl: string, session: AuthenticatedSession, request: typeof fetch = fetch): PoliciesApi {
