@@ -13,8 +13,10 @@ import type { SecurityDecisions } from '../../application/security-decisions';
 import type { IdentityVerifications } from '../../application/identity-verifications';
 import { mountIdentityVerifications } from './identity-verifications-http';
 import type { VerificationAccess } from './identity-verifications-http';
+import type { NotificationPreferences } from '../../application/notification-preferences';
+import { mountNotificationPreferences } from './notification-preferences-http';
 
-export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null; devices?: RegisteredDevices; security?: Pick<SecurityDecisions, 'deny'>; verifications?: IdentityVerifications; verificationAccess?: VerificationAccess }) {
+export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null; devices?: RegisteredDevices; security?: Pick<SecurityDecisions, 'deny'>; verifications?: IdentityVerifications; verificationAccess?: VerificationAccess; notificationPreferences?: NotificationPreferences }) {
   const app = new Hono<{ Bindings: IdentityEnv }>();
   app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'alive' }));
   mountAuthentication(app, deps.authentication, deps.security);
@@ -22,6 +24,7 @@ export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authe
   mountMobileAuthentication(app, deps.mobile ?? null, deps.authorizeApiAccess, deps.security);
   mountRegisteredDevices(app, deps.mobile ?? null, deps.devices, deps.security);
   mountIdentityVerifications(app, { mobile: deps.mobile ?? null, application: deps.verifications, authorize: deps.verificationAccess, security: deps.security });
+  mountNotificationPreferences(app, { mobile: deps.mobile ?? null, application: deps.notificationPreferences, authorize: deps.verificationAccess, security: deps.security });
   if (deps.consents) mountConsents(app, { authorizeApiAccess: deps.authorizeApiAccess, consents: deps.consents });
   app.onError((_, c) => c.json({ error: 'service_unavailable' }, 503));
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
