@@ -1,5 +1,5 @@
-import { canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
-import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyView } from '../domain/financial';
+import { MAX_LISTED_POLICIES, canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
+import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyListResult, PolicySummary, PolicyView } from '../domain/financial';
 import type { FinancialDependencies, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
 import { financialDecision, financialEventSource, financialRejection, gatewaySource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
@@ -11,6 +11,11 @@ const reject = (code: FinancialErrorCode, httpStatus: 400 | 403 | 404 | 409 = 40
 const view = (policy: StoredPolicy): PolicyView => ({ policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
   status: policy.status, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
   effectiveUntil: policy.effectiveUntil, document: policy.document, documentHash: policy.documentHash, synthetic: true, providerMode: 'mock' });
+const summary = (policy: StoredPolicy): PolicySummary => {
+  if (policy.status !== 'issued') throw new InvalidFinancialRecord();
+  return { policyId: policy.id, product: policy.offer.product, status: 'issued', premium: policy.premium, currency: 'COP',
+    effectiveFrom: policy.effectiveFrom, effectiveUntil: policy.effectiveUntil, coverage: policy.offer.coverage };
+};
 // Only a provider-acknowledged premium exposes its synthetic receipt reference.
 const paid = (premium: Payment | null): { payment?: PaymentView } => premium ? { payment: { status: premium.status,
   reference: premium.status === 'confirmed' || premium.status === 'refunded' ? premium.providerReference : null } } : {};
@@ -21,7 +26,7 @@ export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refu
 export class PolicyFinance {
   constructor(private readonly deps: FinancialDependencies) {}
 
-  private async run(trace: string, operation: (traceId: string) => Promise<FinancialResult>): Promise<FinancialResult> {
+  private async run<T>(trace: string, operation: (traceId: string) => Promise<T | Extract<FinancialResult, { status: 'denied' | 'unavailable' }>>): Promise<T | Extract<FinancialResult, { status: 'denied' | 'unavailable' }>> {
     const traceId = UUID.test(trace) ? trace : this.deps.newId();
     if (!this.deps.enabled) return { status: 'unavailable', error: 'financial_unavailable', httpStatus: 503, traceId };
     try { return await operation(traceId); }
@@ -103,6 +108,19 @@ export class PolicyFinance {
       if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
       const { policy, premium } = await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor);
       return { status: 'ok', replayed: false, policy: view(policy), ...paid(premium) };
+    });
+  }
+
+  listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult> {
+    return this.run<PolicyListResult>(input.traceId, async () => {
+      if (!validActor(input.actor)) return reject('invalid_request', 400);
+      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1);
+      const policies: PolicySummary[] = [];
+      for (const record of records.slice(0, MAX_LISTED_POLICIES)) {
+        const { policy } = await this.checked(record, input.actor);
+        policies.push(summary(policy));
+      }
+      return { status: 'ok', policies, hasMore: records.length > MAX_LISTED_POLICIES };
     });
   }
 

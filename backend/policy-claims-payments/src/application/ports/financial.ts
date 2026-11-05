@@ -45,6 +45,8 @@ export interface FinancialTransaction {
 }
 export interface FinancialStore {
   readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null>;
+  // Issued policies of one owner, newest validity first; the caller passes one more than it will show to detect truncation.
+  readOwnPolicies(actor: FinancialActor, limit: number): Promise<PolicyRecord[]>;
   readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<AcceptedPolicyLookup>;
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport>;
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;

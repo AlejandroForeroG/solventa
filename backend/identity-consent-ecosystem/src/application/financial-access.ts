@@ -22,9 +22,11 @@ export async function authorizeFinancialAccess(deps: {
   try {
     const access = await deps.authorize(input);
     if (!access.allowed) return access;
-    // Actual native/partner denials come from the audited operation policy above. An impossible
-    // positive actor here is an inconsistent dependency response, never a business authorization.
-    if (input.kind !== 'web' || access.actor.kind !== 'user' || access.actor.channel !== 'web') return { allowed: false, error: 'access_unavailable', status: 503 };
+    // Actual native/partner denials come from the audited operation policy above. The only native
+    // financial permission is reading one's own policies; any other positive actor is an
+    // inconsistent dependency response, never a business authorization.
+    const channel = input.kind === 'web' || (input.kind === 'mobile' && input.operation === 'policies:read') ? input.kind : null;
+    if (!channel || access.actor.kind !== 'user' || access.actor.channel !== channel) return { allowed: false, error: 'access_unavailable', status: 503 };
     if (input.operation !== 'offers:create' && input.operation !== 'offers:accept') return { allowed: true, actor: access.actor };
     // One fresh read covers every scope; no authorization is reused between requests.
     const decisions = await deps.verifyConsents({ subjectToken: access.actor.principal.subjectToken, purposeCode: 'risk_profiling', scopes });

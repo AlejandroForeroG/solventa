@@ -19,7 +19,8 @@ const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'quo
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
 const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:'));
-const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'identity-verifications:read', 'identity-verifications:write'];
+// A native customer reads their own policies but cannot buy, accept or issue: those financial steps stay web-only.
+const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'policies:read', 'identity-verifications:read', 'identity-verifications:write'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
 const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
