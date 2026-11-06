@@ -7,8 +7,9 @@ export type WalletSource = 'online' | 'stored';
 export type WalletSnapshot =
   | { status: 'locked'; failure?: 'denied' | 'no_device_lock' }
   | { status: 'loading' }
-  | { status: 'ready'; source: WalletSource; syncedAt: number; policies: CachedPolicy[]; hasMore: boolean; stored: boolean }
-  | { status: 'failed'; failure: 'unavailable' | 'no_copy' | 'unauthorized' | 'invalid_response' | 'integrity' };
+  // `at` is the moment of this snapshot, so the screen computes validity from it instead of reading the clock while it renders.
+  | { status: 'ready'; source: WalletSource; syncedAt: number; at: number; policies: CachedPolicy[]; hasMore: boolean; stored: boolean }
+  | { status: 'failed'; failure: 'unavailable' | 'no_copy' | 'unauthorized' | 'invalid_response' | 'integrity' | 'discard_pending' };
 
 // `integrity` is the server refusing a policy whose sealed evidence does not verify: it is a rejection, never an outage.
 export type PolicyApiFailureKind = 'unavailable' | 'invalid_response' | 'integrity';

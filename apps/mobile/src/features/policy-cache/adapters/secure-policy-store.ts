@@ -3,10 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 import { installationMarker } from '../../../shared/native/installation-marker';
 import { PolicyCacheFailure } from '../domain/cached-policy';
 import { ProtectedPolicyCache } from '../application/protected-policy-cache';
-import type { ProtectedStore } from '../application/protected-policy-cache';
+import type { DiscardMarker, ProtectedStore } from '../application/protected-policy-cache';
 import { deviceAuthentication, deviceLockAvailable } from './device-authentication';
 
 const key = 'solventa.policies.v1';
+const discardKey = 'solventa.policies.discard.v1';
 
 // Keystore or Keychain encrypts the value with a key that is readable only while the device is unlocked, on this device only.
 // Authentication on each opening is enforced by the cache itself (see ProtectedPolicyCache.unlock), not by the key.
@@ -14,6 +15,16 @@ const options = (): SecureStore.SecureStoreOptions => ({
   keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
   keychainService: key,
 });
+
+const discardOptions = (): SecureStore.SecureStoreOptions => ({ keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY, keychainService: discardKey });
+
+// Not sensitive and not protected by the device prompt: it only records that a removal is owed, so it can be read before the unlock.
+export const discardMarker: DiscardMarker = {
+  raise: async () => { if (await SecureStore.isAvailableAsync()) await SecureStore.setItemAsync(discardKey, '1', discardOptions()); },
+  // Without native custody or a device lock nothing can be read or stored either, so there is nothing to finish.
+  pending: async () => await SecureStore.isAvailableAsync() && await deviceLockAvailable() && await SecureStore.getItemAsync(discardKey, discardOptions()) !== null,
+  settle: async () => { if (await SecureStore.isAvailableAsync()) await SecureStore.deleteItemAsync(discardKey, discardOptions()); },
+};
 
 async function assertNativeProtection() {
   if (!await SecureStore.isAvailableAsync() || !await deviceLockAvailable()) throw new PolicyCacheFailure('unavailable');
@@ -42,6 +53,7 @@ export const securePolicyStore: ProtectedStore = {
 
 export const protectedPolicyCache = new ProtectedPolicyCache({
   store: securePolicyStore,
+  discard: discardMarker,
   installationId: async () => {
     await assertNativeProtection();
     return installationMarker();

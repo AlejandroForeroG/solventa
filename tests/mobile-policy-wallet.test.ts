@@ -21,7 +21,9 @@ function fixture(options: { authentication?: 'pass' | 'deny' | 'no_lock'; storeW
   let value: string | null = null;
   let clock = 1_800_000_000_000;
   const state = { prompts: 0, listCalls: 0, listing: (): Promise<{ policies: CachedPolicy[]; hasMore: boolean }> => Promise.resolve({ policies: [policy], hasMore: false }) };
+  let flag = false;
   const cache = new ProtectedPolicyCache({
+    discard: { raise: async () => { flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
     store: { read: async () => value, write: async next => { if (options.storeWrites === false) throw new Error('disk full'); value = next; }, remove: async () => { value = null; } },
     installationId: async () => installation, now: () => clock,
     authentication: { authenticate: async () => {
@@ -55,7 +57,7 @@ test('online, the wallet shows the server data as current and keeps a protected 
   const f = fixture();
   await f.wallet.unlock();
   assert.deepEqual(f.states.map(item => item.status), ['loading', 'ready']);
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, at: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
   assert.ok(f.stored() && !f.stored()!.includes('vida_hipotecario'), 'the copy rests in the compact protected encoding');
 });
 
@@ -67,7 +69,7 @@ test('without connection the wallet shows the last saved copy, labelled with its
   f.wallet.lock();
   await f.wallet.unlock();
   assert.equal(f.state.prompts, 2, 'each opening asks for the device authentication again');
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, at: 1_800_003_600_000, policies: [policy], hasMore: false, stored: true });
 });
 
 test('without connection and without a copy the wallet says so instead of showing data', async () => {
@@ -110,7 +112,7 @@ test('an owner with no policies gets an empty list and an empty copy', async () 
   const f = fixture();
   f.state.listing = () => Promise.resolve({ policies: [], hasMore: false });
   await f.wallet.unlock();
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, at: 1_800_000_000_000, policies: [], hasMore: false, stored: true });
   f.state.listing = () => Promise.reject(new PolicyApiFailure('unavailable'));
   f.wallet.lock();
   await f.wallet.unlock();

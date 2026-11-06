@@ -95,7 +95,7 @@ function List({ state, locale, onOpen }: { state: Ready; locale: WalletLocale; o
   return <View style={styles.section}>
     {sorted.map(policy => <Pressable key={policy.policyId} accessibilityRole="button" onPress={() => onOpen(policy.policyId)} style={styles.item}>
       <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
-      <Text style={styles.caption}>{policyReference(policy.policyId)} · {copy.validity[validityAt(policy, Date.now())]}</Text>
+      <Text style={styles.caption}>{policyReference(policy.policyId)} · {copy.validity[validityAt(policy, state.at)]}</Text>
       <Text style={styles.body}>{copy.fields.until}: {formatDate(policy.effectiveUntil, locale)} · {formatMoney(policy.premium, locale)}</Text>
       {state.stored && <Text style={styles.caption}>{copy.availableOffline}</Text>}
     </Pressable>)}
@@ -112,7 +112,7 @@ function Detail({ policy, state, locale, onBack }: { policy: CachedPolicy; state
       <Text style={styles.bannerLabel}>{copy.credential}</Text>
       <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
       <Text style={styles.body}>{policyReference(policy.policyId)}</Text>
-      <Text style={styles.caption}>{copy.validity[validityAt(policy, Date.now())]} · {formatDate(policy.effectiveFrom, locale)} - {formatDate(policy.effectiveUntil, locale)}</Text>
+      <Text style={styles.caption}>{copy.validity[validityAt(policy, state.at)]} · {formatDate(policy.effectiveFrom, locale)} - {formatDate(policy.effectiveUntil, locale)}</Text>
       {state.source === 'stored' && <Text style={styles.caption}>{copy.stored.lastSync}: {formatDateTime(state.syncedAt, locale)}</Text>}
     </View>
     <Row label={copy.fields.premium} value={formatMoney(policy.premium, locale)} />

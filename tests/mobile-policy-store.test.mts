@@ -55,8 +55,8 @@ test('the value is stored under its own device-only key and the device authentic
   assert.equal((await adapter.protectedPolicyCache.read(owner))?.policies.length, 1);
   assert.deepEqual(prompts, [{ promptMessage: 'Desbloquea para ver tus pólizas', biometricsSecurityLevel: 'strong', disableDeviceFallback: false }]);
   for (const call of calls) {
-    assert.equal(call.key, 'solventa.policies.v1', 'the cache never touches the credential records');
-    assert.equal(call.options.keychainService, 'solventa.policies.v1');
+    assert.ok(call.key.startsWith('solventa.policies.'), 'the cache never touches the credential records');
+    assert.equal(call.options.keychainService, call.key);
     assert.equal(call.options.keychainAccessible, 'device-only');
     assert.equal(call.options.requireAuthentication, undefined);
   }
@@ -109,5 +109,29 @@ test('clearing without native custody has nothing to remove and does not fail si
   calls.length = 0;
   await adapter.protectedPolicyCache.clear();
   assert.equal(calls.length, 0);
+  available = true;
+});
+
+test('a removal the keychain refused is recorded in a durable note and finished at the next opening', async () => {
+  await adapter.protectedPolicyCache.save(owner, [source]);
+  deleteIgnored = true;
+  calls.length = 0;
+  await assert.rejects(adapter.protectedPolicyCache.clear(), failure('not_removed'));
+  assert.equal(secure.has('solventa.policies.discard.v1'), true, 'the owed removal survives a restart');
+  assert.ok(calls.filter(call => call.key === 'solventa.policies.discard.v1').every(call => call.options.requireAuthentication === undefined), 'the note is readable before any prompt');
+
+  await adapter.protectedPolicyCache.unlock();
+  await assert.rejects(adapter.protectedPolicyCache.readLatest(), failure('not_removed'));
+  assert.equal(secure.has('solventa.policies.v1'), true);
+
+  deleteIgnored = false;
+  assert.equal(await adapter.protectedPolicyCache.readLatest(), null);
+  assert.equal(secure.has('solventa.policies.v1'), false);
+  assert.equal(secure.has('solventa.policies.discard.v1'), false);
+});
+
+test('without native custody the note does not exist and does not block anything', async () => {
+  available = false;
+  assert.equal(await adapter.discardMarker.pending(), false);
   available = true;
 });
