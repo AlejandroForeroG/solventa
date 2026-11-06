@@ -187,6 +187,338 @@
       }
     },
     {
+      "description": "a claims inbox list",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 9,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "currency": "COP",
+              "estimatedAmount": "148000000.0000",
+              "evidence": {
+                "provided": 4,
+                "required": 5,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-01T14:00:00.000Z",
+              "overdue": true,
+              "policyId": "a0000000-0000-4000-8000-0000000000a1",
+              "priority": "high",
+              "state": "in_review"
+            },
+            {
+              "ageDays": 2,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000002",
+              "claimNumber": "SIN-2026-01207",
+              "currency": "COP",
+              "estimatedAmount": "305000000.0000",
+              "evidence": {
+                "provided": 5,
+                "required": 5,
+                "status": "in_review"
+              },
+              "openedAt": "2026-09-08T09:30:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a2",
+              "priority": "high",
+              "state": "escalated"
+            },
+            {
+              "ageDays": 1,
+              "assigneeId": null,
+              "claimId": "a0000000-0000-4000-8000-000000000003",
+              "claimNumber": "SIN-2026-01211",
+              "currency": "COP",
+              "estimatedAmount": "58200000.0000",
+              "evidence": {
+                "provided": 1,
+                "required": 4,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-09T16:45:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a3",
+              "priority": "low",
+              "state": "unassigned"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list of overdue claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims",
+        "query": {
+          "overdue": [
+            "true"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 9,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "currency": "COP",
+              "estimatedAmount": "148000000.0000",
+              "evidence": {
+                "provided": 4,
+                "required": 5,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-01T14:00:00.000Z",
+              "overdue": true,
+              "policyId": "a0000000-0000-4000-8000-0000000000a1",
+              "priority": "high",
+              "state": "in_review"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list of unassigned claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims",
+        "query": {
+          "state": [
+            "unassigned"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 1,
+              "assigneeId": null,
+              "claimId": "a0000000-0000-4000-8000-000000000003",
+              "claimNumber": "SIN-2026-01211",
+              "currency": "COP",
+              "estimatedAmount": "58200000.0000",
+              "evidence": {
+                "provided": 1,
+                "required": 4,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-09T16:45:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a3",
+              "priority": "low",
+              "state": "unassigned"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list with no open claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst with no open claims"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "items": [],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c2"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox request resulting in forbidden",
+      "providerStates": [
+        {
+          "name": "a customer without claims permission"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "error": "forbidden",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
+      "description": "a claims inbox request resulting in unavailable",
+      "providerStates": [
+        {
+          "name": "the claims inbox store is unavailable"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "error": "service_unavailable",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
+      }
+    },
+    {
       "description": "a consent authorization",
       "providerStates": [
         {
