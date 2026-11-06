@@ -76,7 +76,9 @@ export class PolicyWallet {
         : { status: 'failed', failure: 'no_copy' });
     } catch (error) {
       if (generation !== this.generation) return;
-      this.publish(error instanceof PolicyCacheFailure && error.kind === 'locked' ? { status: 'locked' } : { status: 'failed', failure: 'unavailable' });
+      if (error instanceof PolicyCacheFailure && error.kind === 'locked') this.publish({ status: 'locked' });
+      // A removal owed from an ended session is still failing: the copy stays closed rather than shown.
+      else this.publish({ status: 'failed', failure: error instanceof PolicyCacheFailure && error.kind === 'not_removed' ? 'discard_pending' : 'unavailable' });
     }
   }
 

@@ -21,7 +21,9 @@ function fixture(options: { authentication?: 'pass' | 'deny' | 'no_lock'; storeW
   let value: string | null = null;
   let clock = 1_800_000_000_000;
   const state = { prompts: 0, listCalls: 0, listing: (): Promise<{ policies: CachedPolicy[]; hasMore: boolean }> => Promise.resolve({ policies: [policy], hasMore: false }) };
+  let flag = false;
   const cache = new ProtectedPolicyCache({
+    discard: { raise: async () => { flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
     store: { read: async () => value, write: async next => { if (options.storeWrites === false) throw new Error('disk full'); value = next; }, remove: async () => { value = null; } },
     installationId: async () => installation, now: () => clock,
     authentication: { authenticate: async () => {

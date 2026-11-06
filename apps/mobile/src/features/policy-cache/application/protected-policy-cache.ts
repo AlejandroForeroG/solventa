@@ -14,8 +14,17 @@ export interface DeviceAuthentication {
   authenticate(): Promise<void>;
 }
 
+// A durable note that the stored copy must be removed. It survives a restart, so a session that ended is never reopened offline
+// just because one removal failed: while the note is set, nothing is read or stored until the removal succeeds.
+export interface DiscardMarker {
+  raise(): Promise<void>;
+  pending(): Promise<boolean>;
+  settle(): Promise<void>;
+}
+
 type Dependencies = {
   store: ProtectedStore;
+  discard: DiscardMarker;
   installationId: () => Promise<string>;
   authentication: DeviceAuthentication;
   now: () => number;
@@ -113,7 +122,16 @@ export class ProtectedPolicyCache {
     return this.serialized(() => this.write(owner, sources));
   }
 
+  // Finishes a removal that an earlier clear could not complete. If it still fails the failure propagates and the copy stays unreadable.
+  private async finishDiscard(): Promise<void> {
+    if (!await this.deps.discard.pending()) return;
+    await this.deps.store.remove();
+    // A note that cannot be settled stays a failure: otherwise the next read would remove a fresh snapshot.
+    await this.deps.discard.settle();
+  }
+
   private async write(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
+    await this.finishDiscard();
     if (!isOwner(owner)) throw new PolicyCacheFailure('invalid_policy');
     if (sources.length > maxCachedPolicies) throw new PolicyCacheFailure('too_large');
     const snapshot: PolicySnapshot = { syncedAt: this.deps.now(), policies: sources.map(minimizePolicy) };
@@ -140,6 +158,7 @@ export class ProtectedPolicyCache {
 
   private async find(expected?: CacheOwner): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null> {
     if (!this.unlocked) throw new PolicyCacheFailure('locked');
+    await this.finishDiscard();
     const value = await this.deps.store.read();
     if (value === null) return null;
     const found = await this.parse(value, expected);
@@ -147,10 +166,15 @@ export class ProtectedPolicyCache {
     return found;
   }
 
-  // Locking is immediate; the removal waits for any save or read already in flight.
+  // Locking is immediate; the removal waits for any save or read already in flight. The note is raised first so that a removal that
+  // fails, even across a restart, keeps the copy closed. If the note itself cannot be written the removal is still attempted.
   clear(): Promise<void> {
     this.lock();
-    return this.serialized(() => this.deps.store.remove());
+    return this.serialized(async () => {
+      const raised = await this.deps.discard.raise().then(() => true, () => false);
+      await this.deps.store.remove();
+      if (raised) await this.deps.discard.settle();
+    });
   }
 
   private async parse(value: string, expected?: CacheOwner): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null> {

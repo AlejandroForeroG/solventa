@@ -14,6 +14,7 @@ import type { WalletAccess } from '../domain/wallet';
 import type { WalletSnapshot } from '../domain/wallet';
 import { formatDate, formatDateTime, formatMoney } from './format';
 import { walletMessages } from './messages';
+import { useNow } from './use-now';
 import type { WalletLocale } from './messages';
 
 type Ready = Extract<WalletSnapshot, { status: 'ready' }>;
@@ -38,6 +39,7 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
   const state = useSyncExternalStore(wallet.subscribe, wallet.getSnapshot, wallet.getSnapshot);
   const [selected, select] = useState<string>();
   const copy = walletMessages[locale];
+  const now = useNow();
   useEffect(() => {
     void wallet.unlock();
     const lifecycle = AppState.addEventListener('change', next => { if (next !== 'active') { select(undefined); wallet.lock(); } });
@@ -57,8 +59,8 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
         </>}
         {state.status === 'ready' && <>
           <SourceBanner state={state} locale={locale} unverified={access.mode === 'offline'} />
-          {policy ? <Detail policy={policy} state={state} locale={locale} onBack={() => select(undefined)} />
-            : <List state={state} locale={locale} onOpen={select} />}
+          {policy ? <Detail policy={policy} state={state} locale={locale} now={now} onBack={() => select(undefined)} />
+            : <List state={state} locale={locale} now={now} onOpen={select} />}
           {!policy && <Action label={copy.refresh} secondary onPress={() => void wallet.refresh()} />}
         </>}
       </View>
@@ -88,14 +90,14 @@ function SourceBanner({ state, locale, unverified }: { state: Ready; locale: Wal
   </View>;
 }
 
-function List({ state, locale, onOpen }: { state: Ready; locale: WalletLocale; onOpen: (policyId: string) => void }) {
+function List({ state, locale, now, onOpen }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void }) {
   const copy = walletMessages[locale];
   if (state.policies.length === 0) return <Text style={styles.body}>{copy.empty}</Text>;
   const sorted = [...state.policies].sort((a, b) => Date.parse(b.effectiveUntil) - Date.parse(a.effectiveUntil));
   return <View style={styles.section}>
     {sorted.map(policy => <Pressable key={policy.policyId} accessibilityRole="button" onPress={() => onOpen(policy.policyId)} style={styles.item}>
       <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
-      <Text style={styles.caption}>{policyReference(policy.policyId)} · {copy.validity[validityAt(policy, Date.now())]}</Text>
+      <Text style={styles.caption}>{policyReference(policy.policyId)} · {copy.validity[validityAt(policy, now)]}</Text>
       <Text style={styles.body}>{copy.fields.until}: {formatDate(policy.effectiveUntil, locale)} · {formatMoney(policy.premium, locale)}</Text>
       {state.stored && <Text style={styles.caption}>{copy.availableOffline}</Text>}
     </Pressable>)}
@@ -103,7 +105,7 @@ function List({ state, locale, onOpen }: { state: Ready; locale: WalletLocale; o
   </View>;
 }
 
-function Detail({ policy, state, locale, onBack }: { policy: CachedPolicy; state: Ready; locale: WalletLocale; onBack: () => void }) {
+function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; state: Ready; locale: WalletLocale; now: number; onBack: () => void }) {
   const copy = walletMessages[locale];
   const { coverage } = policy;
   return <View style={styles.section}>
@@ -112,7 +114,7 @@ function Detail({ policy, state, locale, onBack }: { policy: CachedPolicy; state
       <Text style={styles.bannerLabel}>{copy.credential}</Text>
       <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
       <Text style={styles.body}>{policyReference(policy.policyId)}</Text>
-      <Text style={styles.caption}>{copy.validity[validityAt(policy, Date.now())]} · {formatDate(policy.effectiveFrom, locale)} - {formatDate(policy.effectiveUntil, locale)}</Text>
+      <Text style={styles.caption}>{copy.validity[validityAt(policy, now)]} · {formatDate(policy.effectiveFrom, locale)} - {formatDate(policy.effectiveUntil, locale)}</Text>
       {state.source === 'stored' && <Text style={styles.caption}>{copy.stored.lastSync}: {formatDateTime(state.syncedAt, locale)}</Text>}
     </View>
     <Row label={copy.fields.premium} value={formatMoney(policy.premium, locale)} />

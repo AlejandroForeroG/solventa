@@ -7,6 +7,7 @@ import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/s
 import type { AuthRecord, Configuration } from '../apps/mobile/src/features/authentication/domain/session';
 import { parseCallback } from '../apps/mobile/src/features/authentication/adapters/callback';
 import { ProtectedPolicyCache } from '../apps/mobile/src/features/policy-cache/application/protected-policy-cache';
+import { PolicyCacheFailure } from '../apps/mobile/src/features/policy-cache/domain/cached-policy';
 import { PolicyWallet } from '../apps/mobile/src/features/policy-wallet/application/policy-wallet';
 import { createPoliciesApi } from '../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { walletAccessFor } from '../apps/mobile/src/features/policy-wallet/domain/wallet';
@@ -30,11 +31,16 @@ const activeSession: AuthRecord = { version: 1, transaction: null, session: { co
 // The device: one protected store and one token store shared by every app start, like the real keychain.
 function device() {
   let copy: string | null = null;
+  let flag = false;
+  const storage = { removalFails: false };
   let saved: AuthRecord = structuredClone(activeSession);
-  const cache = new ProtectedPolicyCache({
-    store: { read: async () => copy, write: async value => { copy = value; }, remove: async () => { copy = null; } },
+  const open = () => new ProtectedPolicyCache({
+    store: { read: async () => copy, write: async value => { copy = value; },
+      remove: async () => { if (storage.removalFails) throw new PolicyCacheFailure('not_removed'); copy = null; } },
+    discard: { raise: async () => { flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
     installationId: async () => installation, now: () => now, authentication: { authenticate: async () => {} },
   });
+  let cache = open();
   const tokens: TokenStore = { read: async () => structuredClone(saved), write: async record => { saved = structuredClone(record); } };
   const identity: IdentityProvider = { authorize: async () => { throw new Error('not used'); }, exchange: async () => { throw new Error('not used'); }, refresh: async () => { throw new Error('not used'); } };
   const browser: AuthBrowser = { assertAvailable: () => {}, open: async () => null };
@@ -43,9 +49,10 @@ function device() {
       configuration: async () => config, register: async () => principal, inspect, access: async () => principal, logout: async () => {},
       registerDevice: async () => {}, inspectDevice: async () => {}, revokeDevice: async () => {},
     };
-    return new Authentication({ baseUrl, store: tokens, identity, api, browser, now: () => now, parseCallback, policyCache: cache });
+    return new Authentication({ baseUrl, store: tokens, identity, api, browser, now: () => now, parseCallback, policyCache: { clear: () => cache.clear() } });
   };
-  return { cache, start };
+  // A new app start reuses the same device storage with fresh in-memory state.
+  return { get cache() { return cache; }, start, storage, restart: () => { cache = open(); return cache; } };
 }
 
 const outage = () => Promise.reject(new AuthFailure('unavailable'));
@@ -101,7 +108,7 @@ test('a real revocation signs the user out and removes the stored copy, so the w
   assert.equal(await d.cache.readLatest(), null, 'the copy was cleared with the revoked session');
 });
 
-test('a revoked session whose cleanup failed keeps the wallet closed: an incomplete discard is not an unreachable server', async () => {
+test('a revoked session whose cleanup failed keeps the copy closed through retries and restarts without connection, until it is removed', async () => {
   const d = device();
   const online = d.start(verified);
   await online.restore();
@@ -109,17 +116,31 @@ test('a revoked session whose cleanup failed keeps the wallet closed: an incompl
   await first.wallet.unlock();
   first.wallet.lock();
 
-  const failingCache = { clear: async () => { throw new Error('keychain refused the removal'); } };
-  const api: SessionApi = { configuration: async () => config, register: async () => principal, inspect: revoked, access: async () => principal,
-    logout: async () => {}, registerDevice: async () => {}, inspectDevice: async () => {}, revokeDevice: async () => {} };
-  const stuck = new Authentication({ baseUrl, store: { read: async () => structuredClone(activeSession), write: async () => {} }, identity: { authorize: async () => { throw new Error('x'); },
-    exchange: async () => { throw new Error('x'); }, refresh: async () => { throw new Error('x'); } }, api, browser: { assertAvailable: () => {}, open: async () => null },
-  now: () => now, parseCallback, policyCache: failingCache });
-  await stuck.restore();
-  assert.deepEqual([stuck.getSnapshot().status, stuck.getSnapshot().failure], ['blocked', 'discard_incomplete']);
-  assert.equal(walletAccessFor(stuck.getSnapshot()), null);
-  await d.cache.unlock();
-  assert.ok(await d.cache.readLatest(), 'the copy is still on the device, which is why the wallet must stay closed');
+  // The server revokes the session while the device cannot remove the copy.
+  d.storage.removalFails = true;
+  const revokedStart = d.start(revoked);
+  await revokedStart.restore();
+  assert.deepEqual([revokedStart.getSnapshot().status, revokedStart.getSnapshot().failure], ['blocked', 'discard_incomplete']);
+  assert.equal(walletAccessFor(revokedStart.getSnapshot()), null);
+
+  // "Retry without internet" and an app restart without connection: the session now looks merely unreachable.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const auth = d.start(outage);
+    await auth.restore();
+    assert.deepEqual([auth.getSnapshot().status, auth.getSnapshot().failure], ['blocked', 'unavailable']);
+    const { wallet, calls } = walletFor(auth, d.restart(), () => { throw new Error('the server must not be called'); });
+    await wallet.unlock();
+    assert.deepEqual(wallet.getSnapshot(), { status: 'failed', failure: 'discard_pending' }, 'the stored policies are not shown');
+    assert.equal(calls.fetch, 0);
+  }
+
+  // Once the device can remove it, the owed removal completes and nothing is left to show.
+  d.storage.removalFails = false;
+  const recovered = d.start(outage);
+  await recovered.restore();
+  const { wallet } = walletFor(recovered, d.restart(), () => { throw new Error('the server must not be called'); });
+  await wallet.unlock();
+  assert.deepEqual(wallet.getSnapshot(), { status: 'failed', failure: 'no_copy' });
 });
 
 test('a block that is not an outage gives no wallet access, and neither does a pending logout', () => {
