@@ -56,6 +56,9 @@ export async function verifySchema(environment, { administrative = false } = {})
       assert.equal(publicTables.rowCount, 0, 'Unexpected public tables');
       for (const owner of owners) {
         assert.equal(Number((await admin.query(`SELECT count(*) AS n FROM ${owner.schema}.schema_migration_failures`)).rows[0].n), 0, 'Incomplete migration requires reconciliation');
+        const grants = validateRuntimeGrants(JSON.parse(await readFile(`backend/${owner.name}/runtime-grants.json`, 'utf8')));
+        const tables = (await admin.query('SELECT table_name FROM information_schema.tables WHERE table_catalog=$1 AND table_schema=$2 ORDER BY table_name', [config.database, owner.schema])).rows.map(row => row.table_name);
+        assert.deepEqual(tables, [...Object.keys(grants), 'schema_migrations', 'schema_migration_failures'].sort(), 'Administrative schema tables differ');
       }
     } finally { await admin.end(); }
   }
