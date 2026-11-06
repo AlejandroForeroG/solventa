@@ -1,0 +1,12 @@
+{
+  "preferences": {
+    "version": 1,
+    "preferences": {
+      "policy": { "push": true, "email": true, "sms": false },
+      "payments": { "push": true, "email": false, "sms": true },
+      "claims": { "push": true, "email": true, "sms": true },
+      "commercial": { "push": false, "email": false, "sms": false }
+    }
+  },
+  "traceId": "123e4567-e89b-42d3-a456-426614174000"
+}

@@ -4,7 +4,7 @@ import { X509Certificate } from 'node:crypto';
 import { remoteEnvironments } from './environments.mjs';
 import { financialSecrets } from './financial-configuration.mjs';
 
-// CI only restores runtime credentials. Administrative SQL never enters the runner.
+// Worker publication restores runtime credentials only. The separate migration job owns DDL credentials.
 const [action, environment] = process.argv.slice(2);
 try {
   assert.ok(remoteEnvironments.includes(environment));

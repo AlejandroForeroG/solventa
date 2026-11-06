@@ -22,6 +22,7 @@ const es = {
   actions: {
     verifyIdentity: 'Verificar identidad',
     wallet: 'Mis pólizas',
+    notificationPreferences: 'Preferencias de avisos',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
     enable: 'Activar huella o rostro', revoke: 'Revocar acceso de este dispositivo', retry: 'Reintentar conexión',
     retryLogout: 'Reintentar cierre', signOut: 'Cerrar sesión', cancel: 'Cancelar',
@@ -65,6 +66,7 @@ const en: typeof es = {
   actions: {
     verifyIdentity: 'Verify identity',
     wallet: 'My policies',
+    notificationPreferences: 'Notification preferences',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
     enable: 'Enable fingerprint or face', revoke: 'Revoke access for this device', retry: 'Retry connection',
     retryLogout: 'Retry sign-out', signOut: 'Sign out', cancel: 'Cancel',

@@ -24,8 +24,37 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       revision: ${{ github.sha }}
-  deploy:
+  migrate:
     needs: [resolve, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Restore migration credentials
+        env:
+          DATABASE_HOST: ${{ vars.DATABASE_HOST }}
+          DATABASE_PORT: ${{ vars.DATABASE_PORT }}
+          DATABASE_CA_PEM: ${{ secrets.DATABASE_CA_PEM }}
+          RUNTIME_STATE_JSON: ${{ secrets.RUNTIME_STATE_JSON }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: node infra/migration-ci.mjs prepare "$TARGET_ENVIRONMENT"
+      - name: Apply pending migrations and verify SQL
+        run: npm run db:migrations -- apply "$TARGET_ENVIRONMENT"
+      - if: always()
+        run: node infra/migration-ci.mjs cleanup "$TARGET_ENVIRONMENT"
+  deploy:
+    needs: [resolve, validate, migrate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

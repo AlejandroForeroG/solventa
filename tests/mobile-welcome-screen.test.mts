@@ -43,7 +43,7 @@ const copy = {
   currentAccount: 'currentAccount', biometricEnabled: 'biometricEnabled', biometricSetup: 'biometricSetup',
   biometricReady: 'biometricReady', biometricDescription: 'biometricDescription', primaryRequired: 'primaryRequired',
   pendingLogout: 'pendingLogout', nativeOnly: 'nativeOnly',
-  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', verifyIdentity: 'verifyIdentity', wallet: 'wallet', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
+  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', verifyIdentity: 'verifyIdentity', wallet: 'wallet', notificationPreferences: 'notificationPreferences', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
 };
 mock.module(new URL('shared/i18n/use-app-messages.ts', mobile).href, { namedExports: { useAppMessages: () => copy } });
 
@@ -157,7 +157,7 @@ test('biometric setup is disabled until primary authentication allows it', () =>
   assert.ok(text().includes('primaryRequired'));
   assert.equal(button('enable').props.disabled, true);
   assert.deepEqual(button('enable').props.accessibilityState, { disabled: true });
-  assert.deepEqual(labels(), ['verifyIdentity', 'wallet', 'enable', 'signOut']);
+  assert.deepEqual(labels(), ['verifyIdentity', 'wallet', 'notificationPreferences', 'enable', 'signOut']);
   render('authenticated');
   assert.ok(text().includes('biometricSetup'));
   press('enable');
@@ -168,7 +168,7 @@ test('an enrolled account can revoke biometric access and a pending logout can b
   render('authenticated', { biometricEnabled: true });
   assert.ok(text().includes('biometricEnabled'));
   assert.ok(text().includes('biometricReady'));
-  assert.deepEqual(labels(), ['verifyIdentity', 'wallet', 'revoke', 'signOut']);
+  assert.deepEqual(labels(), ['verifyIdentity', 'wallet', 'notificationPreferences', 'revoke', 'signOut']);
   press('revoke');
   assert.deepEqual(actions, ['revoke']);
   render('logoutPending');
@@ -200,4 +200,10 @@ test('an authenticated account opens the wallet', () => {
   render('authenticated');
   press('wallet');
   assert.deepEqual(routes, ['/wallet']);
+});
+
+test('an authenticated account can open notification preferences', () => {
+  render('authenticated');
+  press('notificationPreferences');
+  assert.deepEqual(routes, ['/notification-preferences']);
 });
