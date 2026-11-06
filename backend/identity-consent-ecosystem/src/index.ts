@@ -6,6 +6,7 @@ import { authorizeApiAccess } from './adapters/inbound/api-access-http';
 import type { ApiAccessRequest } from './adapters/inbound/api-access-http';
 
 import { SqlUnderwritingAuditGrants } from './adapters/outbound/underwriting-audit-grants';
+import { SqlClaimsAccessGrants } from './adapters/outbound/claims-access-grants';
 import { ApiAccess } from './application/api-access';
 import { Consents } from './application/consents';
 import type { ConsentCheck } from './application/consents';
@@ -44,7 +45,7 @@ type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.shared
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString));
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
       security: securityFor(env),
