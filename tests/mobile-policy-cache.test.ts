@@ -28,7 +28,7 @@ function flight(index = 1, extra: Record<string, unknown> = {}) {
 }
 
 function fixture(passes = true) {
-  const state = { value: null as string | null, removed: 0, installation, prompts: 0, passes, flag: false, removeFails: false, raiseFails: false };
+  const state = { value: null as string | null, removed: 0, installation, prompts: 0, passes, flag: false, removeFails: false, raiseFails: false, settleFails: false };
   const store: ProtectedStore = {
     read: async () => state.value,
     write: async value => { state.value = value; },
@@ -37,7 +37,7 @@ function fixture(passes = true) {
   const discard: DiscardMarker = {
     raise: async () => { if (state.raiseFails) throw new Error('marker not written'); state.flag = true; },
     pending: async () => state.flag,
-    settle: async () => { state.flag = false; },
+    settle: async () => { if (state.settleFails) throw new PolicyCacheFailure('not_removed'); state.flag = false; },
   };
   const open = () => new ProtectedPolicyCache({ store, discard, installationId: async () => state.installation, now: () => now,
     authentication: { authenticate: async () => { state.prompts++; if (!state.passes) throw new PolicyCacheFailure('locked'); } } });
@@ -250,4 +250,20 @@ test('when both the note and the removal fail the clear reports the failure', as
   f.state.raiseFails = true;
   f.state.removeFails = true;
   await assert.rejects(f.cache.clear(), error => error instanceof PolicyCacheFailure && error.kind === 'not_removed');
+});
+
+test('a note that cannot be settled keeps the cache closed, so a fresh snapshot is never removed by a stale note', async () => {
+  const f = fixture();
+  await f.cache.save(owner, [mortgage()]);
+  f.state.settleFails = true;
+  await assert.rejects(f.cache.clear(), error => error instanceof PolicyCacheFailure && error.kind === 'not_removed');
+  assert.equal(f.state.value, null, 'the copy itself was removed');
+  assert.equal(f.state.flag, true, 'the debt is still recorded');
+  await assert.rejects(f.cache.save(owner, [mortgage(2)]), error => error instanceof PolicyCacheFailure && error.kind === 'not_removed');
+  assert.equal(f.state.value, null, 'nothing new is stored while the note is stuck');
+
+  f.state.settleFails = false;
+  await f.cache.save(owner, [mortgage(3)]);
+  await f.cache.unlock();
+  assert.equal((await f.cache.readLatest())?.snapshot.policies.length, 1, 'once settled, the new snapshot survives later reads');
 });

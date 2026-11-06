@@ -126,7 +126,8 @@ export class ProtectedPolicyCache {
   private async finishDiscard(): Promise<void> {
     if (!await this.deps.discard.pending()) return;
     await this.deps.store.remove();
-    await this.deps.discard.settle().catch(() => undefined);
+    // A note that cannot be settled stays a failure: otherwise the next read would remove a fresh snapshot.
+    await this.deps.discard.settle();
   }
 
   private async write(owner: CacheOwner, sources: readonly unknown[]): Promise<PolicySnapshot> {
@@ -172,7 +173,7 @@ export class ProtectedPolicyCache {
     return this.serialized(async () => {
       const raised = await this.deps.discard.raise().then(() => true, () => false);
       await this.deps.store.remove();
-      if (raised) await this.deps.discard.settle().catch(() => undefined);
+      if (raised) await this.deps.discard.settle();
     });
   }
 
