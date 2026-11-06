@@ -104,7 +104,9 @@ Two capabilities cooperate. `policy-wallet` reads the customer's own issued poli
 | Adapters | `policies-api.ts`: bearer `GET /api/v1/policies` with validation | `secure-policy-store.ts` (Expo SecureStore) and `device-authentication.ts` (Expo Local Authentication) |
 | Presentation | `WalletScreen`, formatting and messages | none |
 
-The server stays the source of truth. The wallet shows the online answer as current and, only when the request fails, the stored copy with its own synchronization date. It never falls back to the copy after an authentication failure, and no stored value can authorize an action.
+The server stays the source of truth. The wallet shows the online answer as current and, only when the request fails because the server or network is unavailable, the stored copy with its own synchronization date. It never falls back to the copy after an authentication failure, an integrity rejection (`409`) or a malformed answer, and no stored value can authorize an action.
+
+A session that exists on the device but cannot be verified because the server is unreachable may still open the last stored copy: `walletAccessFor` returns an `offline` access only for `blocked` with `unavailable`, and `ProtectedPolicyCache.readLatest()` reads the copy of the last verified owner behind the same unlock, without calling the server. Real revocation is not bypassed: `Authentication` signs the user out and clears the copy, and any other block or a pending logout gives no access.
 
 Rules that every local data store in the channel follows:
 
