@@ -56,7 +56,7 @@ export class PolicyWallet {
       if (generation !== this.generation) return;
       let stored = true;
       try { await this.deps.cache.save(owner, policies); } catch { stored = false; }
-      if (generation === this.generation) this.publish({ status: 'ready', source: 'online', syncedAt: this.deps.now(), policies, hasMore, stored });
+      if (generation === this.generation) this.publish({ status: 'ready', source: 'online', syncedAt: this.deps.now(), at: this.deps.now(), policies, hasMore, stored });
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof AuthFailure) { this.publish({ status: 'failed', failure: 'unauthorized' }); return; }
@@ -72,11 +72,13 @@ export class PolicyWallet {
       const { owner } = this.deps;
       const copy = owner ? await this.deps.cache.read(owner) : (await this.deps.cache.readLatest())?.snapshot ?? null;
       if (generation !== this.generation) return;
-      this.publish(copy ? { status: 'ready', source: 'stored', syncedAt: copy.syncedAt, policies: copy.policies, hasMore: false, stored: true }
+      this.publish(copy ? { status: 'ready', source: 'stored', syncedAt: copy.syncedAt, at: this.deps.now(), policies: copy.policies, hasMore: false, stored: true }
         : { status: 'failed', failure: 'no_copy' });
     } catch (error) {
       if (generation !== this.generation) return;
-      this.publish(error instanceof PolicyCacheFailure && error.kind === 'locked' ? { status: 'locked' } : { status: 'failed', failure: 'unavailable' });
+      if (error instanceof PolicyCacheFailure && error.kind === 'locked') this.publish({ status: 'locked' });
+      // A removal owed from an ended session is still failing: the copy stays closed rather than shown.
+      else this.publish({ status: 'failed', failure: error instanceof PolicyCacheFailure && error.kind === 'not_removed' ? 'discard_pending' : 'unavailable' });
     }
   }
 
