@@ -129,6 +129,22 @@ describe('protected claims inbox', () => {
     expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(/Ningún siniestro coincide/)).toBeVisible();
   });
 
+  it('keeps the focus where the analyst is during automatic refreshes and moves it only after an explicit action', async () => {
+    const fetch = vi.fn().mockImplementation(async () => response(examples.page));
+    vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
+    await screen.findByRole('table');
+    expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
+    const input = screen.getByLabelText('Buscar por N.º de siniestro o póliza');
+    await user.click(input); await user.type(input, 'SIN-2026');
+    const before = fetch.mock.calls.length;
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(fetch.mock.calls.length).toBe(before + 1));
+    await screen.findByRole('table');
+    expect(input).toHaveFocus(); expect(input).toHaveValue('SIN-2026');
+    await user.click(screen.getByRole('button', { name: 'Vencidos' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus());
+  });
+
   it('renders in English with the same data and has no accessibility violations', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.page)));
     const { container } = show(true);
