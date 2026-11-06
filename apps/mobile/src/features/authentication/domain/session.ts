@@ -41,7 +41,8 @@ export type FailureKind =
   | 'biometric_locked'
   | 'biometric_unavailable'
   | 'biometric_failed'
-  | 'logout_unconfirmed';
+  | 'logout_unconfirmed'
+  | 'discard_incomplete';
 
 export class AuthFailure extends Error {
   constructor(public readonly kind: FailureKind, public readonly traceId?: string) {

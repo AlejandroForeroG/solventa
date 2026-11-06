@@ -532,6 +532,7 @@ test('a failed credential deletion after denial remains blocked, not a successfu
   f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
   await f.auth.restore();
   assert.equal(f.auth.getSnapshot().status, 'blocked');
+  assert.equal(f.auth.getSnapshot().failure, 'discard_incomplete');
   assert.equal(f.auth.getSnapshot().principal, undefined);
   f.store.write = write;
   await f.auth.retry();

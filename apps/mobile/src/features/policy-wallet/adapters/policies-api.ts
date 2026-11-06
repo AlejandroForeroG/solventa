@@ -35,7 +35,10 @@ export function createPoliciesApi(baseUrl: string, session: AuthenticatedSession
         });
         if (response.status === 401) throw new AuthFailure('unauthorized');
         if (response.status === 403) throw new AuthFailure('forbidden');
-        if (!response.ok) throw new PolicyApiFailure('unavailable');
+        if (response.status === 409) throw new PolicyApiFailure('integrity');
+        // Only a server or rate-limit failure is an outage. Any other rejection (400, 404, 405) means the client and the contract disagree.
+        if (response.status >= 500 || response.status === 429) throw new PolicyApiFailure('unavailable');
+        if (!response.ok) throw new PolicyApiFailure('invalid_response');
         if (!response.headers.get('content-type')?.includes('application/json')) throw new PolicyApiFailure('invalid_response');
         const raw = await response.text();
         if (raw.length > maxBody) throw new PolicyApiFailure('invalid_response');

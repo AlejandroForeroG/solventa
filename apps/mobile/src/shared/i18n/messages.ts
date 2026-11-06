@@ -39,6 +39,7 @@ const es = {
     biometric_unavailable: 'No hay biometría segura disponible. Usa el inicio de sesión.',
     biometric_failed: 'No pudimos confirmar tu identidad. Reintenta o usa el inicio de sesión.',
     logout_unconfirmed: 'Sesión cerrada en este dispositivo. No pudimos confirmar el cierre remoto.',
+    discard_incomplete: 'No pudimos terminar de cerrar tu sesión en este dispositivo. Intenta de nuevo.',
   },
 };
 
@@ -83,6 +84,7 @@ const en: typeof es = {
     biometric_unavailable: 'Secure biometrics are unavailable. Use account sign-in.',
     biometric_failed: 'We couldn’t confirm your identity. Try again or use account sign-in.',
     logout_unconfirmed: 'Signed out on this device. We couldn’t confirm remote sign-out.',
+    discard_incomplete: 'We could not finish signing you out on this device. Try again.',
   },
 };
 

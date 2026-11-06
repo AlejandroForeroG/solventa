@@ -9,7 +9,8 @@ import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { createPolicyWallet } from '../adapters/create-policy-wallet';
-import { policyReference, validityAt } from '../domain/wallet';
+import { policyReference, validityAt, walletAccessFor } from '../domain/wallet';
+import type { WalletAccess } from '../domain/wallet';
 import type { WalletSnapshot } from '../domain/wallet';
 import { formatDate, formatDateTime, formatMoney } from './format';
 import { walletMessages } from './messages';
@@ -21,17 +22,19 @@ export function WalletScreen() {
   const auth = useAuthentication();
   const locale: WalletLocale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   const copy = walletMessages[locale];
-  if (auth.status !== 'authenticated' || !auth.principal) return <SafeAreaView style={styles.safe}>
+  const access = walletAccessFor(auth);
+  if (!access) return <SafeAreaView style={styles.safe}>
     <View style={styles.card}><Text style={styles.body}>{copy.signedOut}</Text>
       <Action label={copy.back} onPress={() => router.replace('/')} /></View>
   </SafeAreaView>;
   // A new owner or locale gets a new coordinator, so another account never sees the previous one's data.
-  return <Wallet key={`${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale} owner={auth.principal} />;
+  const key = access.mode === 'online' ? `${access.owner.clientId}:${access.owner.subjectToken}:${locale}` : `offline:${locale}`;
+  return <Wallet key={key} locale={locale} access={access} />;
 }
 
-function Wallet({ locale, owner }: { locale: WalletLocale; owner: { clientId: string; subjectToken: string } }) {
+function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess }) {
   const session = useAuthenticatedSession();
-  const [wallet] = useState(() => createPolicyWallet(session.baseUrl, session, owner));
+  const [wallet] = useState(() => createPolicyWallet(session.baseUrl, session, access.mode === 'online' ? access.owner : undefined));
   const state = useSyncExternalStore(wallet.subscribe, wallet.getSnapshot, wallet.getSnapshot);
   const [selected, select] = useState<string>();
   const copy = walletMessages[locale];
@@ -53,7 +56,7 @@ function Wallet({ locale, owner }: { locale: WalletLocale; owner: { clientId: st
           {state.failure !== 'unauthorized' && <Action label={copy.retry} onPress={() => void wallet.refresh()} />}
         </>}
         {state.status === 'ready' && <>
-          <SourceBanner state={state} locale={locale} />
+          <SourceBanner state={state} locale={locale} unverified={access.mode === 'offline'} />
           {policy ? <Detail policy={policy} state={state} locale={locale} onBack={() => select(undefined)} />
             : <List state={state} locale={locale} onOpen={select} />}
           {!policy && <Action label={copy.refresh} secondary onPress={() => void wallet.refresh()} />}
@@ -73,13 +76,14 @@ function Locked({ state, locale, onUnlock }: { state: Extract<WalletSnapshot, { 
   </View>;
 }
 
-function SourceBanner({ state, locale }: { state: Ready; locale: WalletLocale }) {
+function SourceBanner({ state, locale, unverified }: { state: Ready; locale: WalletLocale; unverified: boolean }) {
   const copy = walletMessages[locale];
   const stored = state.source === 'stored';
   return <View accessibilityLiveRegion="polite" style={[styles.banner, stored && styles.bannerStored]}>
     <Text style={styles.bannerLabel}>{stored ? copy.stored.label : copy.online.label}</Text>
     <Text style={styles.body}>{stored ? copy.stored.detail : copy.online.detail}</Text>
     {stored && <Text style={styles.caption}>{copy.stored.lastSync}: {formatDateTime(state.syncedAt, locale)}</Text>}
+    {unverified && <Text style={styles.caption}>{copy.unverified}</Text>}
     {!stored && !state.stored && <Text style={styles.caption}>{copy.notSaved}</Text>}
   </View>;
 }

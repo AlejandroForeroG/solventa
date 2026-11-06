@@ -110,6 +110,20 @@ test('reading needs the device authentication on each opening and locks again af
   await assert.rejects(f.cache.read(owner), error => error instanceof PolicyCacheFailure && error.kind === 'locked', 'clearing also locks');
 });
 
+test('the copy of the last verified owner can be read without knowing the owner, behind the same unlock', async () => {
+  const f = fixture();
+  await f.cache.save(owner, [mortgage(), flight(2)]);
+  await assert.rejects(f.cache.readLatest(), error => error instanceof PolicyCacheFailure && error.kind === 'locked');
+  await f.cache.unlock();
+  const latest = await f.cache.readLatest();
+  assert.deepEqual(latest?.owner, owner);
+  assert.equal(latest?.snapshot.policies.length, 2);
+  f.state.installation = '10000000-0000-4000-8000-000000000002';
+  assert.equal(await f.cache.readLatest(), null, 'a copy of another installation is discarded');
+  assert.equal(f.state.value, null);
+  assert.equal(await f.cache.readLatest(), null);
+});
+
 test('a failed or cancelled device authentication leaves the cache locked', async () => {
   const f = fixture(false);
   await f.cache.save(owner, [mortgage()]);
