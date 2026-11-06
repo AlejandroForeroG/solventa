@@ -64,6 +64,15 @@
   "underwriting_audit_grants": [
     "SELECT"
   ],
+  "notification_preferences": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "notification_preference_commands": [
+    "SELECT",
+    "INSERT"
+  ],
   "claims_access_grants": [
     "SELECT"
   ]
