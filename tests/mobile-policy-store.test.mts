@@ -10,13 +10,19 @@ let available = true;
 let level = 1;
 let authenticationSucceeds = true;
 let deleteIgnored = false;
+let markerDeleteIgnored = false;
+let markerOverwriteFails = false;
 let markerValue = '';
 
 mock.module('expo-secure-store', { namedExports: {
   WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: 'device-only',
   async getItemAsync(key: string, options: Options) { calls.push({ operation: 'read', key, options }); return secure.get(key) ?? null; },
-  async setItemAsync(key: string, value: string, options: Options) { calls.push({ operation: 'write', key, options }); secure.set(key, value); },
-  async deleteItemAsync(key: string, options: Options) { calls.push({ operation: 'remove', key, options }); if (!deleteIgnored) secure.delete(key); },
+  async setItemAsync(key: string, value: string, options: Options) {
+    calls.push({ operation: 'write', key, options });
+    if (markerOverwriteFails && key === 'solventa.policies.discard.v1' && value === '0') throw new Error('write refused');
+    secure.set(key, value);
+  },
+  async deleteItemAsync(key: string, options: Options) { calls.push({ operation: 'remove', key, options }); if (!(key === 'solventa.policies.discard.v1' ? markerDeleteIgnored : deleteIgnored)) secure.delete(key); },
   async isAvailableAsync() { return available; },
 } });
 mock.module('expo-local-authentication', { namedExports: {
@@ -134,4 +140,23 @@ test('without native custody the note does not exist and does not block anything
   available = false;
   assert.equal(await adapter.discardMarker.pending(), false);
   available = true;
+});
+
+test('a note whose deletion the keychain silently refused is overwritten as settled, and a stuck note fails closed', async () => {
+  await adapter.protectedPolicyCache.save(owner, [source]);
+  markerDeleteIgnored = true;
+  await adapter.protectedPolicyCache.clear();
+  assert.equal(secure.has('solventa.policies.v1'), false, 'the copy was removed');
+  assert.equal(await adapter.discardMarker.pending(), false, 'the refused deletion no longer leaves a debt');
+  await adapter.protectedPolicyCache.save(owner, [source]);
+  await adapter.protectedPolicyCache.unlock();
+  assert.equal((await adapter.protectedPolicyCache.readLatest())?.snapshot.policies.length, 1, 'a fresh snapshot is not removed by a stale note');
+
+  markerOverwriteFails = true;
+  await assert.rejects(adapter.protectedPolicyCache.clear(), failure('not_removed'));
+  assert.equal(await adapter.discardMarker.pending(), true, 'when the note cannot be ended either, it stays pending');
+  markerDeleteIgnored = false;
+  markerOverwriteFails = false;
+  await adapter.protectedPolicyCache.clear();
+  assert.equal(await adapter.discardMarker.pending(), false);
 });

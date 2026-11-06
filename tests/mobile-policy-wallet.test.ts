@@ -57,7 +57,7 @@ test('online, the wallet shows the server data as current and keeps a protected 
   const f = fixture();
   await f.wallet.unlock();
   assert.deepEqual(f.states.map(item => item.status), ['loading', 'ready']);
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, at: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
   assert.ok(f.stored() && !f.stored()!.includes('vida_hipotecario'), 'the copy rests in the compact protected encoding');
 });
 
@@ -69,7 +69,7 @@ test('without connection the wallet shows the last saved copy, labelled with its
   f.wallet.lock();
   await f.wallet.unlock();
   assert.equal(f.state.prompts, 2, 'each opening asks for the device authentication again');
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, at: 1_800_003_600_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
 });
 
 test('without connection and without a copy the wallet says so instead of showing data', async () => {
@@ -112,7 +112,7 @@ test('an owner with no policies gets an empty list and an empty copy', async () 
   const f = fixture();
   f.state.listing = () => Promise.resolve({ policies: [], hasMore: false });
   await f.wallet.unlock();
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, at: 1_800_000_000_000, policies: [], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [], hasMore: false, stored: true });
   f.state.listing = () => Promise.reject(new PolicyApiFailure('unavailable'));
   f.wallet.lock();
   await f.wallet.unlock();
