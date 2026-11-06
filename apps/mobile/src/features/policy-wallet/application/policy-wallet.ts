@@ -5,7 +5,8 @@ import { PolicyApiFailure } from '../domain/wallet';
 import type { WalletSnapshot } from '../domain/wallet';
 import type { PoliciesApi, WalletCache } from './ports';
 
-type Dependencies = { api: PoliciesApi; cache: WalletCache; owner: CacheOwner; now: () => number };
+// Without an owner the session could not be verified: the wallet only shows the last stored copy and never calls the server.
+type Dependencies = { api: PoliciesApi; cache: WalletCache; owner?: CacheOwner; now: () => number };
 
 // The server is the source of truth. The protected copy only keeps the last answer available, and says so.
 export class PolicyWallet {
@@ -36,35 +37,40 @@ export class PolicyWallet {
       if (generation === this.generation) this.publish({ status: 'locked', failure: error instanceof PolicyCacheFailure && error.kind === 'unavailable' ? 'no_device_lock' : 'denied' });
       return;
     }
-    if (generation === this.generation) await this.load(generation);
+    if (generation !== this.generation) return;
+    if (this.deps.owner) await this.load(generation, this.deps.owner);
+    else await this.showStoredCopy(generation);
   };
 
   // Only an unlocked wallet can reload.
   refresh = async () => {
-    if (this.snapshot.status === 'ready' || this.snapshot.status === 'failed') await this.load(this.generation);
+    if (this.snapshot.status !== 'ready' && this.snapshot.status !== 'failed') return;
+    if (this.deps.owner) await this.load(this.generation, this.deps.owner);
+    else await this.showStoredCopy(this.generation);
   };
 
-  private async load(generation: number) {
+  private async load(generation: number, owner: CacheOwner) {
     this.publish({ status: 'loading' });
     try {
       const { policies, hasMore } = await this.deps.api.list();
       if (generation !== this.generation) return;
       let stored = true;
-      try { await this.deps.cache.save(this.deps.owner, policies); } catch { stored = false; }
+      try { await this.deps.cache.save(owner, policies); } catch { stored = false; }
       if (generation === this.generation) this.publish({ status: 'ready', source: 'online', syncedAt: this.deps.now(), policies, hasMore, stored });
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof AuthFailure) { this.publish({ status: 'failed', failure: 'unauthorized' }); return; }
       if (!(error instanceof PolicyApiFailure)) { this.publish({ status: 'failed', failure: 'unavailable' }); return; }
-      // Only an outage falls back to the stored copy. A malformed or incompatible answer stays a failure, so it is never reported as lost connectivity.
-      if (error.kind === 'invalid_response') { this.publish({ status: 'failed', failure: 'invalid_response' }); return; }
+      // Only an outage falls back to the stored copy. A malformed answer or an integrity rejection stays a failure, so it is never reported as lost connectivity.
+      if (error.kind !== 'unavailable') { this.publish({ status: 'failed', failure: error.kind }); return; }
       await this.showStoredCopy(generation);
     }
   }
 
   private async showStoredCopy(generation: number) {
     try {
-      const copy = await this.deps.cache.read(this.deps.owner);
+      const { owner } = this.deps;
+      const copy = owner ? await this.deps.cache.read(owner) : (await this.deps.cache.readLatest())?.snapshot ?? null;
       if (generation !== this.generation) return;
       this.publish(copy ? { status: 'ready', source: 'stored', syncedAt: copy.syncedAt, policies: copy.policies, hasMore: false, stored: true }
         : { status: 'failed', failure: 'no_copy' });

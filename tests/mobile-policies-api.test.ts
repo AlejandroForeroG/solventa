@@ -35,9 +35,16 @@ test('an unauthorized or forbidden session is an authentication failure, not an 
   }
 });
 
-test('server errors and network failures are outages that let the wallet show its stored copy', async () => {
-  for (const respond of [() => json({ error: 'financial_unavailable', traceId }, 503), () => json({}, 500), () => json({ error: 'not_found' }, 404), () => { throw new TypeError('Network request failed'); }]) {
+test('server errors, rate limits and network failures are outages that let the wallet show its stored copy', async () => {
+  for (const respond of [() => json({ error: 'financial_unavailable', traceId }, 503), () => json({}, 500), () => json({}, 502), () => json({}, 429), () => { throw new TypeError('Network request failed'); }]) {
     await assert.rejects(api(respond).list(), error => error instanceof PolicyApiFailure && error.kind === 'unavailable');
+  }
+});
+
+test('an integrity rejection and a contract mismatch are not outages', async () => {
+  await assert.rejects(api(() => json({ error: 'integrity_violation', traceId }, 409)).list(), error => error instanceof PolicyApiFailure && error.kind === 'integrity');
+  for (const status of [400, 404, 405]) {
+    await assert.rejects(api(() => json({ error: 'not_found', traceId }, status)).list(), error => error instanceof PolicyApiFailure && error.kind === 'invalid_response', String(status));
   }
 });
 

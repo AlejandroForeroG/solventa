@@ -129,12 +129,22 @@ export class ProtectedPolicyCache {
   }
 
   private async load(owner: CacheOwner): Promise<PolicySnapshot | null> {
+    return (await this.find(owner))?.snapshot ?? null;
+  }
+
+  // Without a connection the server cannot verify the session, so the only copy the device can show is the one of the last verified owner.
+  // A copy of another installation or an unknown format is still discarded.
+  readLatest(): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null> {
+    return this.serialized(() => this.find());
+  }
+
+  private async find(expected?: CacheOwner): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null> {
     if (!this.unlocked) throw new PolicyCacheFailure('locked');
     const value = await this.deps.store.read();
     if (value === null) return null;
-    const snapshot = await this.parse(value, owner);
-    if (!snapshot) await this.deps.store.remove();
-    return snapshot;
+    const found = await this.parse(value, expected);
+    if (!found) await this.deps.store.remove();
+    return found;
   }
 
   // Locking is immediate; the removal waits for any save or read already in flight.
@@ -143,14 +153,15 @@ export class ProtectedPolicyCache {
     return this.serialized(() => this.deps.store.remove());
   }
 
-  private async parse(value: string, owner: CacheOwner): Promise<PolicySnapshot | null> {
+  private async parse(value: string, expected?: CacheOwner): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null> {
     try {
       const data = record(JSON.parse(value));
       const stored = data.o;
-      if (data.v !== 2 || data.i !== await this.deps.installationId() || !Array.isArray(stored)
-        || stored[0] !== owner.clientId || stored[1] !== owner.subjectToken) return null;
+      if (data.v !== 2 || data.i !== await this.deps.installationId() || !Array.isArray(stored)) return null;
+      const owner = { clientId: stored[0], subjectToken: stored[1] };
+      if (!isOwner(owner) || (expected && (owner.clientId !== expected.clientId || owner.subjectToken !== expected.subjectToken))) return null;
       if (typeof data.t !== 'number' || !Number.isSafeInteger(data.t) || !Array.isArray(data.p) || data.p.length > maxCachedPolicies) return null;
-      return { syncedAt: data.t, policies: data.p.map(decodePolicy) };
+      return { owner, snapshot: { syncedAt: data.t, policies: data.p.map(decodePolicy) } };
     } catch {
       return null;
     }

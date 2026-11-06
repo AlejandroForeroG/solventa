@@ -73,6 +73,7 @@ export function WelcomeScreen() {
               {auth.biometricEnabled && <Action variant="secondary" label={copy.actions.revoke} onPress={() => void auth.revokeDevice()} />}
             </>}
             {auth.status === 'blocked' && <Action label={copy.actions.retry} onPress={() => void auth.retry()} />}
+            {auth.status === 'blocked' && auth.failure === 'unavailable' && <Action variant="secondary" label={copy.actions.wallet} onPress={() => router.push('/wallet' as Href)} />}
             {auth.status === 'logoutPending' && <>
               <Text style={styles.description}>{copy.pendingLogout}</Text>
               <Action label={copy.actions.retryLogout} onPress={() => void auth.retry()} />
