@@ -32,6 +32,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   const [result, setResult] = useState<{ view: string; state: State } | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const moveFocus = useRef(true);
   const view = [filter, search, before ?? ''].join('|');
   useEffect(() => {
     if (document.hidden) return;
@@ -41,7 +42,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
       if (outcome.kind === 'unauthenticated') onSessionLost();
       if (outcome.kind === 'ok') setUpdatedAt(new Date());
       setResult({ view, state: outcome.kind === 'ok' ? { kind: 'ready', page: outcome.value } : outcome });
-      heading.current?.focus();
+      if (moveFocus.current) { moveFocus.current = false; heading.current?.focus(); }
     }).catch(() => { if (!abort.signal.aborted) setResult({ view, state: { kind: 'unavailable' } }); });
     return () => abort.abort();
   }, [view, filter, search, before, refresh, onSessionLost]);
@@ -53,8 +54,8 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', reload); window.removeEventListener('focus', reload); };
   }, []);
   const state: State = result?.view === view ? result.state : { kind: document.hidden ? 'hidden' : 'loading' };
-  const choose = (next: Filter) => { setFilter(next); setBefore(undefined); };
-  const clear = () => { setFilter('all'); setDraft(''); setSearch(''); setSearchInvalid(false); setBefore(undefined); };
+  const choose = (next: Filter) => { moveFocus.current = true; setFilter(next); setBefore(undefined); };
+  const clear = () => { moveFocus.current = true; setFilter('all'); setDraft(''); setSearch(''); setSearchInvalid(false); setBefore(undefined); };
   const page = state.kind === 'ready' ? state.page : null;
   const filtered = filter !== 'all' || search !== '';
   return <main className="audit-shell">
@@ -72,7 +73,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
           event.preventDefault();
           const value = draft.trim();
           if (value && !SEARCH.test(value)) { setSearchInvalid(true); return; }
-          setSearchInvalid(false); setSearch(value.toLowerCase().startsWith('sin-') ? value.toUpperCase() : value.toLowerCase()); setBefore(undefined);
+          moveFocus.current = true; setSearchInvalid(false); setSearch(value.toLowerCase().startsWith('sin-') ? value.toUpperCase() : value.toLowerCase()); setBefore(undefined);
         }}>
           <label htmlFor="claims-search" className="visually-hidden">{t('search')}</label>
           <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} placeholder={t('search')} maxLength={64} autoComplete="off"
@@ -82,7 +83,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
       </div>
       {searchInvalid && <p id="claims-search-error" className="claims-error" role="alert">{t('searchInvalid')}</p>}
       {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
-        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => { setResult(null); setRefresh(value => value + 1); }}>{t('retry')}</button>}
+        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => { moveFocus.current = true; setResult(null); setRefresh(value => value + 1); }}>{t('retry')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
       {page && (page.items.length ? <>
@@ -99,7 +100,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
           </tr>)}</tbody></table></div>
         <div className="claims-footer"><p role="status" className="note">{t('showing', { count: page.items.length })}</p>
           {updatedAt && <p className="mono note">{t('updated', { time: intl.formatTime(updatedAt, { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) })}</p>}</div>
-        {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => setBefore(page.next ?? undefined)}>{t('next')}</button></div>}
+        {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}
       </> : <div className="audit-state" role="status">
         <p>{filtered ? t('emptyFiltered', { filter: search ? search : t(`filter.${filter}`) }) : t('empty')}</p>
         {filtered && <><p className="note">{t('emptyHint')}</p><button type="button" className="btn btn-secondary" onClick={clear}>{t('clearFilter')}</button></>}
