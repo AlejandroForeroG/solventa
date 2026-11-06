@@ -55,8 +55,8 @@ test('storage failure and an unbounded lease fail closed', async () => {
 });
 
 // CockroachDB returns a UUID column in canonical lowercase whatever case it was inserted with.
-function ledger() {
-  let stored: Record<string, unknown> | null = null;
+function ledger(initial: Record<string, unknown> | null = null) {
+  let stored: Record<string, unknown> | null = initial;
   return {
     async query(sql: string, params: unknown[] = []) {
       if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [], rowCount: 0 };
@@ -98,4 +98,11 @@ test('grant inputs are canonicalized and anything else is rejected', () => {
   assert.equal(clean.grantId, '90000000-0000-4000-8000-0000000000a1');
   for (const bad of [{ operation: 'claims:other' }, { clientId: 'not-a-uuid' }, { expiresAt: '2026-01-01' }]) assert.throws(() => validateClaimsGrantInput('local', 'grant', grantInput(bad)));
   assert.throws(() => validateClaimsGrantInput('local', 'grant', { ...grantInput(), extra: 'field' }));
+});
+
+test('a grant recorded before canonicalization with an uppercase operator reference is still recognized on retry', async () => {
+  const input = grantInput();
+  const db = ledger({ client_id: input.clientId.toLowerCase(), operation: input.operation, expires_at: new Date(input.expiresAt), granted_by: input.operatorReference, revoked_at: null });
+  assert.equal((await changeClaimsGrant(db, 'local', 'grant', input)).changed, false);
+  await assert.rejects(changeClaimsGrant(db, 'local', 'grant', { ...input, operatorReference: '90000000-0000-4000-8000-0000000000C2' }), /grant_id_conflict/);
 });
