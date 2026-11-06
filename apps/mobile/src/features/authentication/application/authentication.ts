@@ -141,7 +141,8 @@ export class Authentication {
         this.primaryAuthenticated = false;
       } catch {
         this.record = undefined;
-        this.publish({ status: this.logoutRequested || session?.phase === 'logout' ? 'logoutPending' : 'blocked', failure: 'unavailable' });
+        // The server already revoked this session. A failed local cleanup is not an unreachable server: stored data may remain and must not be opened.
+        this.publish({ status: this.logoutRequested || session?.phase === 'logout' ? 'logoutPending' : 'blocked', failure: 'discard_incomplete' });
         return;
       }
       this.publish({ status: 'signedOut', failure: session?.phase === 'logout' ? 'logout_unconfirmed' : 'unauthorized', traceId: failure.traceId });
