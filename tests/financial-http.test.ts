@@ -5,7 +5,7 @@ import { DependencyTimings } from '../backend/acquisition-risk/src/application/d
 import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition-risk/src/adapters/inbound/offers-http';
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
-import type { PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
+import type { PolicySummary, PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
 import gateway from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -32,6 +32,11 @@ const actor = { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: 
 const consent = { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-01T00:00:00.000Z' };
 const terms: OfferTerms = { ...actor, offerId: id, offerVersion: 1, quoteId: 'COT-2026-00001', product: 'vida_hipotecario', premium: '77760.0000', currency: 'COP', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' }, effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', synthetic: true, status: 'definitive' };
 const policy: PolicyView = { policyId: id, offerId: id, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
+const summary: PolicySummary = { policyId: id, product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
+  effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+const nativeUser = { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: actor, operations: ['policies:read'] } };
+const listRequest = (headers: Record<string, string> = { authorization: 'Bearer synthetic-token', 'x-trace-id': traceId }, method = 'GET') =>
+  new Request('https://web.example/api/v1/policies', { method, headers });
 const acceptance = { acceptanceId: id, offerId: id, eventId: id, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance' as const, synthetic: true as const };
 const unexpected = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
 const request = (path: string, body: string | undefined = '{}', headers: Record<string, string> = {}, method = 'POST', version = 'v1') => new Request(`https://web.example/api/${version}` + path, { method, ...(body !== undefined && method !== 'GET' ? { body } : {}), headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic-sealed', origin: 'https://web.example', 'idempotency-key': 'synthetic-operation-1', 'x-trace-id': traceId, ...headers } });
@@ -54,6 +59,7 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const app = new Hono<{ Bindings: AcquisitionEnv }>();
   mountOffers(app, { offers, authorizeFinancialAccess, denyResourceAccess });
   const finance: PolicyHttpDependencies['finance'] = {
+    listOwn: async input => { calls.push({ operation: 'policyList', input }); return { status: 'ok', policies: [summary], hasMore: false }; },
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
     beginSignatureChallenge: async input => { calls.push({ operation: 'challenge', input }); return { status: 'ok', replayed: false, policy,
@@ -422,4 +428,60 @@ test('profiling waits for a failed security denial audit and records the final u
   const profiles = lines.map(line => JSON.parse(line)).filter(line => line.event === 'mortgage_offer_profiled');
   assert.equal(profiles.length, 1);
   assert.equal(profiles[0].result, 'unavailable');
+});
+
+test('the native policy list authorizes the bearer token once, derives the owner on the server and returns the contract shape', async () => {
+  const { calls, run } = setup(nativeUser);
+  const response = await run(listRequest(), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  const body = await contractual(response, 'policies', 'PolicyList');
+  assert.deepEqual(body.policies, [summary]);
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
+  assert.deepEqual(calls[0].input, { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
+  assert.deepEqual(calls[1].input, { actor, traceId });
+});
+
+test('the native policy list needs a bearer token: no credential, a cookie or a malformed header never reach authorization', async () => {
+  for (const headers of [{}, { cookie: '__Host-solventa-session=synthetic-sealed' }, { authorization: 'Basic abc' }, { authorization: 'Bearer ' }]) {
+    const { calls, run } = setup(nativeUser);
+    const response = await run(listRequest(headers), true);
+    assert.equal(response.status, 401);
+    assert.deepEqual(calls, []);
+  }
+  const { calls, run } = setup(nativeUser);
+  const response = await run(listRequest({ authorization: 'Bearer synthetic-token' }, 'POST'), true);
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('allow'), 'GET');
+  assert.deepEqual(calls, []);
+});
+
+test('the native policy list stops on denial, technical failure or an actor that is not a native user with this permission', async () => {
+  for (const [decision, status, error] of [
+    [{ allowed: false, status: 401, error: 'unauthorized' }, 401, 'unauthorized'],
+    [{ allowed: false, status: 403, error: 'forbidden' }, 403, 'forbidden'],
+    [{ allowed: false, status: 503, error: 'access_unavailable' }, 503, 'access_unavailable'],
+    [{ allowed: false, status: 403, error: 'consent_required' }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, channel: 'web' } }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, operations: ['quotes:create'] } }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, principal: { clientId: 'foreign', subjectToken: 'foreign' } } }, 503, 'access_unavailable'],
+    ['not an object', 503, 'access_unavailable'],
+  ] as const) {
+    const { calls, run } = setup(decision);
+    const response = await run(listRequest(), true);
+    assert.equal(response.status, status);
+    assert.equal(((await response.json()) as { error: string }).error, error);
+    assert.deepEqual(calls.map(call => call.operation), ['authorize']);
+  }
+});
+
+test('the native policy list reports a failed integrity check or a technical failure with its canonical code only', async () => {
+  for (const result of [{ status: 'denied', error: 'integrity_violation', httpStatus: 409, traceId }, { status: 'unavailable', error: 'financial_unavailable', httpStatus: 503, traceId }] as const) {
+    const { finance } = setup(nativeUser);
+    const app = createPolicyHttp({ authorizeFinancialAccess: async () => nativeUser, denyResourceAccess: async () => ({ recorded: true }), finance: { ...finance, listOwn: async () => result } });
+    const response = await app.fetch(listRequest(), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, result.httpStatus);
+    assert.deepEqual(await response.json(), { error: result.error, traceId });
+  }
 });

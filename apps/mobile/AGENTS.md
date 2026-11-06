@@ -43,3 +43,24 @@ Docs: https://docs.expo.dev/eas/index.md
 ## Product documentation
 
 Follow the mandatory documentation rules in the root [AGENTS.md](../../AGENTS.md#required-documentation). Update the existing [mobile guide](../../docs/channels/mobile/README.md) in the same branch and PR for every feature or change to documented behavior. Link to the owning backend module for shared rules and contracts.
+
+## Data stored on the device
+
+Read the [protected local data guide](../../docs/channels/mobile/README.md#protected-local-data) and its [architecture rules](../../docs/channels/mobile/architecture.md#policy-wallet-and-protected-local-data) before storing anything on the phone.
+
+- Business data may rest on the device only through `src/features/policy-cache` (or a feature built the same way). Never use `AsyncStorage`, plain files, logs, URLs or persisted React state for it.
+- Store the minimum: project the source object field by field, validate each value and drop everything else. Documents, hashes, payment data, trace ids, provider flags, holder name and document number stay on the server. A new stored field needs its validation, a test, a size check and a documented reason.
+- Use SecureStore with `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` and a key of its own. If native custody or a device screen lock is missing, store nothing; there is no unprotected fallback. Every opening of the data goes through `ProtectedPolicyCache.unlock()`, the system prompt that accepts biometrics or the device code, and `lock()` runs when the screen closes or the app is backgrounded. Do not claim the prompt is cryptographic: it is enforced by the app.
+- Bind each record to the installation UUID and to the pseudonymous owner, and discard it when either differs. Reuse `src/shared/native` (`installationMarker`, `strongBiometricsAvailable`) instead of copying that logic.
+- Clear local data when logout starts, when credentials are discarded, when the environment changes and when a different account is confirmed. `Authentication` receives the store through its `policyCache` dependency; a new store joins that clearing path, not a parallel one. Clear local data before removing the credential record that triggers the clearing, so a failed deletion is retried. Cancelling a new login must not clear data of the current owner.
+- Do not trust a SecureStore delete or write to report failure: verify a removal by reading the key back and treat a failed removal as a failed sign-out step so it is retried.
+- SecureStore values are small (about 2048 bytes on some iOS releases). Do not raise the policy limits; for larger data keep a key in SecureStore and encrypt a private file, as described in the guide, with the same rules.
+- Cached data is stored data: show its sync date, keep it visibly apart from online data and never let it enable contracting, payment or any action the server must authorize.
+- Tests with mocked Expo modules do not prove native protection. Say so, and list the device checks from the guide that were not run.
+
+## Policy wallet
+
+- The wallet (`src/features/policy-wallet`, route `/wallet`) shows only what Solventa has: the products `vida_hipotecario` and `flight_delay`, their sealed premium, validity and coverage. Mockups are illustrative; do not invent products, deductibles, holder names, contacts or documents the backend does not return. When a design needs a field that does not exist, show nothing, document the gap and ask for the data owner.
+- The server is the source of truth. Online data is shown as current; the stored copy is shown only when the request fails for a network or server reason, with its own sync date and a visible banner. After an authentication failure or a malformed or incompatible answer never show the copy, and reject any policy the list route should not return (status other than `issued`).
+- Read policies only through `GET /api/v1/policies` with the user access token (`createPoliciesApi`). A native client may read, never buy, accept or issue: those stay web-only. A new native call to Policy needs its operation allowed in Identity (`mobileUserOperations`), its OpenAPI contract, a Pact interaction and an ownership test.
+- Keep screens thin: state and rules live in `PolicyWallet` and the domain, not in the component. Every state needs copy in both catalogs (`walletMessages` must keep identical keys) and accessible labels; check them on a device.

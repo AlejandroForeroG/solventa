@@ -7,8 +7,8 @@ import { createHttp as createAcquisitionHttp } from '../../../backend/acquisitio
 import { CreateQuote } from '../../../backend/acquisition-risk/src/application/create-quote';
 import { EstimateQuote } from '../../../backend/acquisition-risk/src/application/estimate-quote';
 import type { OfferTerms } from '../../../backend/acquisition-risk/src/domain/offer';
-import { createHttp as createPolicyHttp } from '../../../backend/policy-claims-payments/src/adapters/inbound/http';
-import type { PolicyView } from '../../../backend/policy-claims-payments/src/domain/financial';
+import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../../../backend/policy-claims-payments/src/adapters/inbound/http';
+import type { PolicySummary, PolicyView } from '../../../backend/policy-claims-payments/src/domain/financial';
 import type { AuthenticationCollaborators } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
 import { createHttp as createIdentityHttp } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/http';
@@ -155,7 +155,27 @@ const financialTerms: OfferTerms = { ...financialActor, offerId: financialIds.of
   expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', synthetic: true, status: 'definitive' };
 const financialPolicy: PolicyView = { policyId: financialIds.policyId, offerId: financialIds.offerId, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP',
   effectiveFrom: financialTerms.effectiveFrom, effectiveUntil: financialTerms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
+const nativePolicy: PolicySummary = { policyId: financialIds.policyId, product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
+  effectiveFrom: financialTerms.effectiveFrom, effectiveUntil: financialTerms.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
 type FinancialState = { consent: boolean; acceptance: 'created' | 'expired'; imported: boolean };
+
+const binding = (app: { request: (request: Request, init: undefined, env: unknown) => Response | Promise<Response> }, env: unknown): Binding =>
+  ({ fetch: request => { const { pathname, search } = new URL(request.url); return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, env)); } });
+
+function financeFixtures(imported: boolean): PolicyHttpDependencies['finance'] {
+  return {
+    listOwn: async () => ({ status: 'ok', policies: [nativePolicy], hasMore: false }),
+    get: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
+    getByAcceptance: async input => imported ? { status: 'ok', replayed: false, policy: financialPolicy } : { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: input.traceId },
+    beginSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy,
+      challenge: { challengeId: '80000000-0000-4000-8000-000000000008', expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }),
+    cancelSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
+    charge: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'charged' },
+      payment: { status: 'confirmed', reference: 'MOCK-60000000-0000-4000-8000-000000000006' } }),
+    issue: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }),
+    issueLegacy: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }),
+  };
+}
 
 function financialWorld(state: FinancialState): Partial<World> {
   const authorizeFinancialAccess = async (input: unknown) => {
@@ -174,19 +194,19 @@ function financialWorld(state: FinancialState): Partial<World> {
       get: async () => ({ status: 'found', offer: financialTerms }),
       accept: async () => state.acceptance === 'expired' ? { status: 'expired' } : { status: 'created', acceptance: { acceptanceId: financialIds.acceptanceId, offerId: financialIds.offerId,
         eventId: financialIds.eventId, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance', synthetic: true } } } } });
-  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance: {
-    get: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
-    getByAcceptance: async input => state.imported ? { status: 'ok', replayed: false, policy: financialPolicy } : { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: input.traceId },
-    beginSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy,
-      challenge: { challengeId: '80000000-0000-4000-8000-000000000008', expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }),
-    cancelSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
-    charge: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'charged' },
-      payment: { status: 'confirmed', reference: 'MOCK-60000000-0000-4000-8000-000000000006' } }),
-    issue: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }),
-    issueLegacy: async () => ({ status: 'ok', replayed: false, policy: { ...financialPolicy, status: 'issued' } }) } });
-  const binding = (app: { request: (request: Request, init: undefined, env: unknown) => Response | Promise<Response> }, env: unknown): Binding =>
-    ({ fetch: request => { const { pathname, search } = new URL(request.url); return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, env)); } });
+  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess, finance: financeFixtures(state.imported) });
   return { acquisition: binding(offers, { APP_ENV: 'dev' }), policy: binding(policy, { APP_ENV: 'dev' }), sessionCookie: financialCookie };
+}
+
+// Identity's decision for a native user is simulated by the bearer token; the real policy route and its response shape are exercised.
+function nativePolicyWorld(): Partial<World> {
+  const authorizeFinancialAccess = async (input: unknown) => {
+    const request = input as { kind: string; token: string; operation: string };
+    if (request.kind !== 'mobile' || request.token !== 'synthetic.jwt.token') return { allowed: false, status: 401, error: 'unauthorized' };
+    return { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [request.operation] } };
+  };
+  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess: async () => ({ recorded: true }), finance: financeFixtures(true) });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
 type StateParameters = { idempotencyKey?: string } | undefined;
@@ -207,6 +227,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
     },
   ])),
   'a native session with its installation binding': nativeWorld,
+  'a native session with an issued policy': nativePolicyWorld,
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
