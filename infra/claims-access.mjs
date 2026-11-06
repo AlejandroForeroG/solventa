@@ -31,7 +31,7 @@ export async function changeClaimsGrant(db, environment, action, input) {
       const previous = (await db.query('SELECT client_id,operation,expires_at,granted_by,revoked_at FROM identity.claims_access_grants WHERE id=$1', [grant.grantId])).rows[0];
       if (previous) {
         if (previous.client_id !== grant.clientId || previous.operation !== grant.operation || previous.expires_at.toISOString() !== grant.expiresAt
-          || previous.granted_by !== grant.operatorReference || previous.revoked_at !== null) throw fail('grant_id_conflict');
+          || previous.granted_by.toLowerCase() !== grant.operatorReference || previous.revoked_at !== null) throw fail('grant_id_conflict');
       } else {
         const result = await db.query(`INSERT INTO identity.claims_access_grants (id,client_id,operation,expires_at,granted_by)
           SELECT $1,$2,$3,$4,$5 WHERE $4::TIMESTAMPTZ > clock_timestamp() AND $4::TIMESTAMPTZ <= clock_timestamp()+INTERVAL '90 days' RETURNING id`,
