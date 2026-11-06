@@ -77,6 +77,7 @@ const aliases = {
   'sql-consents': `export class SqlConsents { async forSubject() { return []; } async forSubjectScopes() { return new Map(); } }`,
   'sql-identity-verifications': `export class SqlIdentityVerifications { async execute() { throw Error('unexpected_verification_access'); } }`,
   'underwriting-audit-grants': `export class SqlUnderwritingAuditGrants { async find() { throw Error('unexpected_audit_permission_lookup'); } }`,
+  'claims-access-grants': `export class SqlClaimsAccessGrants { async find() { throw Error('unexpected_claims_permission_lookup'); } }`,
   'identity-sessions': `export class SqlIdentitySessions { async find() { return null; } }`,
   'partner-access': `export class SqlPartnerAccess { async find() { return null; } }`,
   'registered-devices': `export class SqlRegisteredDevices { async execute() { throw Error('unexpected_device_access'); } }`,
@@ -109,7 +110,7 @@ test('workerd executes real Identity security composition with explicit local SQ
     entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false,
     format: 'esm', platform: 'neutral', external: ['cloudflare:*', 'node:*'],
     plugins: [{ name: 'explicit-local-owner-and-provider-collaborators', setup(builder) {
-      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|underwriting-audit-grants|identity-sessions|partner-access|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
+      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|underwriting-audit-grants|claims-access-grants|identity-sessions|partner-access|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
         { path: args.path.split('/').at(-1), namespace: 'composition-collaborator' }
       ));
       builder.onLoad({ filter: /.*/, namespace: 'composition-collaborator' }, args => ({ contents: aliases[args.path], loader: 'js' }));
