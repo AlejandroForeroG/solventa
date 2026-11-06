@@ -119,13 +119,21 @@ for (const [state, message, availableActions] of [
   });
 }
 
+test('a session that cannot be verified offline still opens the stored wallet, and other blocks do not', () => {
+  render('blocked', { failure: 'unavailable', traceId: 'trace-1' });
+  press('wallet');
+  assert.deepEqual(routes, ['/wallet']);
+  render('blocked', { failure: 'forbidden', traceId: 'trace-1' });
+  assert.equal(nodes.some(node => node.type === 'Pressable' && (node.props.children as { props: { children: unknown } }).props.children === 'wallet'), false);
+});
+
 test('a blocked session displays its error and trace and permits retry or logout', () => {
   render('blocked', { failure: 'unavailable', traceId: 'trace-1' });
   assert.ok(text().includes('blocked'));
   assert.ok(text().includes('unavailable'));
   assert.ok(text().includes('reference: trace-1'));
   assert.equal(nodes.some(node => node.type === 'ActivityIndicator'), false);
-  assert.deepEqual(labels(), ['retry', 'signOut']);
+  assert.deepEqual(labels(), ['retry', 'wallet', 'signOut']);
   press('retry');
   press('signOut');
   assert.deepEqual(actions, ['retry', 'signOut']);

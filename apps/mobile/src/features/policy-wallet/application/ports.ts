@@ -14,4 +14,5 @@ export interface WalletCache {
   lock(): void;
   save(owner: CacheOwner, policies: readonly unknown[]): Promise<PolicySnapshot>;
   read(owner: CacheOwner): Promise<PolicySnapshot | null>;
+  readLatest(): Promise<{ owner: CacheOwner; snapshot: PolicySnapshot } | null>;
 }
