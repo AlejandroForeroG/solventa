@@ -101,9 +101,31 @@ test('a real revocation signs the user out and removes the stored copy, so the w
   assert.equal(await d.cache.readLatest(), null, 'the copy was cleared with the revoked session');
 });
 
+test('a revoked session whose cleanup failed keeps the wallet closed: an incomplete discard is not an unreachable server', async () => {
+  const d = device();
+  const online = d.start(verified);
+  await online.restore();
+  const first = walletFor(online, d.cache, ok);
+  await first.wallet.unlock();
+  first.wallet.lock();
+
+  const failingCache = { clear: async () => { throw new Error('keychain refused the removal'); } };
+  const api: SessionApi = { configuration: async () => config, register: async () => principal, inspect: revoked, access: async () => principal,
+    logout: async () => {}, registerDevice: async () => {}, inspectDevice: async () => {}, revokeDevice: async () => {} };
+  const stuck = new Authentication({ baseUrl, store: { read: async () => structuredClone(activeSession), write: async () => {} }, identity: { authorize: async () => { throw new Error('x'); },
+    exchange: async () => { throw new Error('x'); }, refresh: async () => { throw new Error('x'); } }, api, browser: { assertAvailable: () => {}, open: async () => null },
+  now: () => now, parseCallback, policyCache: failingCache });
+  await stuck.restore();
+  assert.deepEqual([stuck.getSnapshot().status, stuck.getSnapshot().failure], ['blocked', 'discard_incomplete']);
+  assert.equal(walletAccessFor(stuck.getSnapshot()), null);
+  await d.cache.unlock();
+  assert.ok(await d.cache.readLatest(), 'the copy is still on the device, which is why the wallet must stay closed');
+});
+
 test('a block that is not an outage gives no wallet access, and neither does a pending logout', () => {
   assert.equal(walletAccessFor({ status: 'blocked', failure: 'forbidden' }), null);
   assert.equal(walletAccessFor({ status: 'blocked', failure: 'invalid_response' }), null);
+  assert.equal(walletAccessFor({ status: 'blocked', failure: 'discard_incomplete' }), null);
   assert.equal(walletAccessFor({ status: 'logoutPending', failure: 'unavailable' }), null);
   assert.equal(walletAccessFor({ status: 'locked' }), null);
   assert.equal(walletAccessFor({ status: 'authenticated' }), null);
