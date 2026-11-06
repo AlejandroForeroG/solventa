@@ -66,6 +66,11 @@ try {
   assert.equal(await permissions.find(principal, identity, 'claims:read'), null);
   assert.equal((await changeClaimsGrant(db, 'local', 'revoke', { grantId: grant.grantId, operatorReference: grant.operatorReference })).changed, false);
 
+  const uppercase = { grantId: randomUUID().toUpperCase(), clientId: principal.clientId.toUpperCase(), operation: 'claims:decide', expiresAt: new Date(Date.now() + 3600000).toISOString(), operatorReference: randomUUID() };
+  assert.equal((await changeClaimsGrant(db, 'local', 'grant', uppercase)).changed, true);
+  assert.equal((await changeClaimsGrant(db, 'local', 'grant', uppercase)).changed, false, 'an identical retry with uppercase UUIDs stays a no-op');
+  assert.equal((await changeClaimsGrant(db, 'local', 'revoke', { grantId: uppercase.grantId, operatorReference: uppercase.operatorReference })).changed, true);
+
   const rolledBack = { ...grant, grantId: randomUUID() };
   const brokenAudit = { query: (sql: string, ...args: unknown[]) => sql.includes('INSERT INTO identity.audit_events') ? Promise.reject(new Error('synthetic_audit_failure')) : db!.query(sql, ...args) };
   await assert.rejects(changeClaimsGrant(brokenAudit, 'local', 'grant', rolledBack), /synthetic_audit_failure/);
