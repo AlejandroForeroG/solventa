@@ -15,3 +15,5 @@ Covered generic access/consent denials use `security_decision` resources instead
 See [permissions, events and SQL operations](../../infrastructure/data-model.md).
 
 `underwriting_audit_grants` is Identity-owned, with client FK, grant/expiry timestamps, optional revocation timestamp and opaque granting-operator reference. Expiry is mandatory and limited to 90 days from grant. Runtime has SELECT only, including no ability to self-grant or revoke. The [audit permission procedure](api-access.md#underwriting-audit-permission) defines administrative writes, atomic audit and revocation behavior. No other owner reads this table directly.
+
+`claims_access_grants` is Identity-owned like `underwriting_audit_grants` and adds a mandatory `operation` limited to `claims:read` and `claims:decide`. The same 90-day maximum, revocation, operator-reference and runtime SELECT-only rules apply; see [claims permissions](api-access.md#claims-permissions).
