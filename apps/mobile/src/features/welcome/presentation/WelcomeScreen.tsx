@@ -58,6 +58,7 @@ export function WelcomeScreen() {
             </>}
             {authenticated && <>
               <Action label={copy.actions.verifyIdentity} onPress={() => router.push('/identity-verification' as Href)} />
+              <Action label={copy.actions.wallet} variant="secondary" onPress={() => router.push('/wallet' as Href)} />
               <Action variant="secondary" label={copy.actions.notificationPreferences} onPress={() => router.push('/notification-preferences' as Href)} />
               {auth.email && <View style={styles.account}><Text style={styles.accountLabel}>{copy.currentAccount}</Text>
                 <Text selectable style={styles.email}>{auth.email}</Text></View>}
@@ -72,6 +73,7 @@ export function WelcomeScreen() {
               {auth.biometricEnabled && <Action variant="secondary" label={copy.actions.revoke} onPress={() => void auth.revokeDevice()} />}
             </>}
             {auth.status === 'blocked' && <Action label={copy.actions.retry} onPress={() => void auth.retry()} />}
+            {auth.status === 'blocked' && auth.failure === 'unavailable' && <Action variant="secondary" label={copy.actions.wallet} onPress={() => router.push('/wallet' as Href)} />}
             {auth.status === 'logoutPending' && <>
               <Text style={styles.description}>{copy.pendingLogout}</Text>
               <Action label={copy.actions.retryLogout} onPress={() => void auth.retry()} />

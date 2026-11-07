@@ -230,3 +230,82 @@ Failures while fetching configuration, generating PKCE or saving the OAuth trans
 Regression tests also cover same-account alternative entry with replacement tokens, browser cancellation/restart, pre-browser configuration/PKCE/storage recovery, rejected exchanges, foreign-account isolation, logout/revocation preference cleanup, legacy-marker upgrade and failed regular-record cleanup during suspension. Native acceptance must separately check WorkOS alternative entry, the new confirmation, background/cold restart and biometric re-entry; an earlier native result does not validate this changed path.
 
 The [Bruno collection](../../../tools/bruno/solventa/README.md#native-connection) independently checks the backend connection after obtaining a user token securely. Deploy/HTTP verification and native validation are separate evidence.
+
+## Policy wallet
+
+The wallet is the section where a signed-in customer reads their own issued policies, also without connection. Code: `src/features/policy-wallet`; route `/wallet`, opened from **Mis pólizas** on the home screen.
+
+### Journey
+
+1. The route asks for the device authentication (strong biometrics or the device code, through the system prompt) every time it opens, and again after the app goes to the background. Until it passes, the wallet shows only the locked state, with or without connection. A device with no screen lock cannot use it.
+2. With the device unlocked, the wallet reads `GET /api/v1/policies` with the user access token (see the [native policy list](../../modules/policy-claims-payments/README.md#native-policy-list)). It shows the answer as **online** and saves a minimal protected copy.
+3. If the request fails for a network or server reason (no connection, timeout, a 5xx or a rate limit), it shows the saved copy as **stored**: an amber banner says it is data saved on the device, not verified today, with the last synchronization date. Only an outage falls back. A revoked session never does, a `409 integrity_violation` from the server is shown as an integrity error, and a malformed or incompatible answer (any other 4xx, a wrong body, or a policy that is not `issued`) is shown as a failure, never as lost connectivity.
+3b. **Offline start.** When the app cannot verify the session because the server is unreachable (`blocked` with `unavailable`, after a cold start, returning from the background or an expired token that cannot be renewed offline), **Mis pólizas** is still offered. The wallet then opens only the last stored copy, behind the same device authentication, without calling the server, and says the session could not be verified. On a known revocation or explicit logout, `Authentication` first stores a `logout` intent in credential custody, then clears the copy before removing credentials or contacting the server. Failed cleanup leaves `logoutPending` and gives no wallet access, including after an offline restart when the cache's own discard note could not be stored. Every pending-logout retry attempts local cleanup before the remote request. The cache also records the owed removal in `solventa.policies.discard.v1`: while that note is set it refuses reads and writes, and a direct wallet read shows `discard_pending`. Neither a different block (`forbidden`, an invalid answer) nor a pending logout gives access. These barriers depend on native persistence; see the [storage limits](architecture.md#policy-wallet-and-protected-local-data).
+4. The list shows each policy's product, reference, validity state and end date, and marks it as available offline. Opening one shows the insured credential card, premium and coverage; **Volver a mis pólizas** returns to the list.
+5. If online data could not be saved, the banner says so. If there is no connection and no copy, the wallet says so and offers a retry. An owner with no issued policy sees an empty state, and that empty answer is saved too.
+
+### What it shows, and what it does not
+
+The wallet represents the products and data Solventa has: `vida_hipotecario` (sum insured) and `flight_delay` (flight, minimum delay and payout), with the sealed premium and validity. The mockup's cars, homes, names, amounts and two sample policies are illustrative and did not create products.
+
+| Mockup element | Wallet behavior |
+|---|---|
+| Policy number `AUT-••••-4471` | `POL-` plus the first eight characters of the policy identifier, because policies have no human-readable number |
+| Monthly premium | The single sealed premium, in whole pesos |
+| Deductible and limits | Not shown: the two products have none |
+| Holder name and masked document number | Not shown and never stored: the policy model has only a pseudonymous subject |
+| Emergency contacts | Not shown: no source defines them. They need a product decision and a data owner |
+| Certificate PDF | Not stored on the device; the wallet says the policy document is read online. No signed PDF exists |
+| Valid / expired filters | Not implemented: the list is sorted by end date and each item carries its state |
+| Pending actions queue and conflicts | Synchronization of actions and conflict resolution belong to other stories |
+
+Validity (`Por iniciar`, `Vigente`, `Vencida`) is computed from the policy dates and the device clock, also on the stored copy. The device is never the contractual source: no action in the wallet changes a policy, and a stored copy cannot enable contracting, payment or claims.
+
+### Tests and limits
+
+`tests/mobile-policy-wallet.test.ts` covers the coordinator (locked gate, online, stored copy, no copy, failed save, revoked session, late responses after locking), `tests/mobile-policies-api.test.ts` the HTTP adapter and formatting, and the native Pact interaction `mobile own policy list` the contract with the gateway. They run with injected collaborators and mocked Expo modules. No screen rendering test exists for `WalletScreen`; render it on a device or emulator and check every state, the language switch and screen-reader labels.
+
+## Protected local data
+
+Design and rules are in the [architecture guide](architecture.md#protected-local-data). This section is the operating guide for anyone adding a screen that reads or writes data on the device.
+
+### What exists
+
+- `protectedPolicyCache` (`src/features/policy-cache/adapters/secure-policy-store.ts`) offers `unlock()`, `lock()`, `save(owner, policies)`, `read(owner)` and `clear()`. `save` accepts the policy summaries the API returns and keeps only the allowed fields; `read` returns `{ syncedAt, policies }` or `null` and fails with `locked` until `unlock()` succeeds.
+- `unlock()` runs the system authentication prompt (`expo-local-authentication`, strong biometrics or the device code). The wallet unlocks when it opens and locks when it closes or the app is backgrounded.
+- `Authentication` clears the cache on logout, denied credentials, environment change and account change. A new screen does not need to do that.
+
+### What you can and cannot do
+
+| Allowed | Not allowed |
+|---|---|
+| Keep the allowed policy fields and `syncedAt` in `protectedPolicyCache` | Store the policy document, its hash, payment data, trace ids, holder name, document number or any field outside `CachedPolicy` |
+| Show cached data only after `unlock()` and label it with its sync date, apart from online data | Show cached data before the device authentication, or present it as current |
+| Let a stored copy inform the customer | Let a stored copy enable contracting, payment, claims or any action the server must authorize |
+| Store a small non-sensitive UI preference outside the cache | Put business data in `AsyncStorage`, plain files, logs, query strings or persisted React state |
+| Add a field to `CachedPolicy` with its validation, a test, a size check and a documented reason | Raise `maxCachedPolicies` (6) or `maxSnapshotBytes` (1800) without changing the storage design |
+| Keep working offline when the prompt is cancelled (stay locked) | Fall back to unprotected storage when there is no device lock |
+
+### How it is protected, and the trade-off
+
+The value is encrypted by Keystore or Keychain with a key that is readable only while the device is unlocked and only on this device (`WHEN_PASSCODE_SET_THIS_DEVICE_ONLY`), under its own key `solventa.policies.v1`. It is also bound to the installation and the pseudonymous owner. Opening it requires the system prompt, which accepts biometrics or the device code, as the design shows.
+
+That prompt is enforced by the application, not by the cryptographic key. The credential records still use a key that requires strong biometrics on each use; the wallet does not, because a customer without an enrolled fingerprint or face must still be able to use the device code. A process that could bypass the application code on a compromised device could therefore read the value without the prompt. State this limit when describing the feature.
+
+### Larger or new data
+
+The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. For more data, keep a random key in SecureStore and encrypt a file in private storage with it, binding the file to the installation UUID and owner. That needs an encryption library chosen against the Expo SDK 57 documentation, a new development build and its own tests, and it keeps the same rules: minimum data, device authentication before reading, owner and installation binding, clearing with the session.
+
+### Verification
+
+`tests/mobile-policy-cache.test.ts`, `tests/mobile-policy-store.test.mts` and the new cases in `tests/mobile-channel-authentication.test.ts` and `tests/mobile-biometric-authentication.test.ts` run in `npm run check`. They use in-memory and mocked Expo modules, so they do not establish the native behavior. On a real Android and a real iOS device, check separately:
+
+1. After the wallet saves data, opening it again asks for the system prompt, with and without connection, and a cancelled prompt shows nothing.
+2. The device code is accepted when no biometrics are enrolled, and a device without any screen lock stores nothing and the wallet explains why.
+3. Sending the app to the background hides the policies and asks again on return.
+4. Logout, including offline logout, empties the stored copy before the remote revocation finishes, and signing in as another account never shows the previous account's policies.
+5. A reinstall (iOS Keychain survival) and a backup restore do not bring the stored copy back.
+6. With the network off, the wallet shows the stored copy with its own date and banner, and with the network on it shows online data without it.
+7. Force the Android commit to fail (full storage) and confirm the copy is missing or older after a restart, with its own sync date, and that a refused iOS removal during logout keeps sign-out pending instead of completing it.
+
+A build, export or unit test result is not evidence for these checks.
