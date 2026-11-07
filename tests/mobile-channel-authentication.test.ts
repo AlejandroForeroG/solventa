@@ -531,7 +531,7 @@ test('a failed credential deletion after denial remains blocked, not a successfu
   f.store.write = async () => { throw new Error('Storage unavailable'); };
   f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
   await f.auth.restore();
-  assert.equal(f.auth.getSnapshot().status, 'blocked');
+  assert.equal(f.auth.getSnapshot().status, 'logoutPending');
   assert.equal(f.auth.getSnapshot().failure, 'discard_incomplete');
   assert.equal(f.auth.getSnapshot().principal, undefined);
   f.store.write = write;
@@ -630,8 +630,8 @@ test('a failed offline data cleanup after denied credentials is retried instead 
   const f = fixture(sessionRecord(), { clear: async () => { if (failing) throw new Error('synthetic_storage_failure'); clears++; } });
   f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
   await f.auth.restore();
-  assert.equal(f.auth.getSnapshot().status, 'blocked');
-  assert.equal(f.saved().session?.phase, 'active', 'the record that allows a retry is kept');
+  assert.equal(f.auth.getSnapshot().status, 'logoutPending');
+  assert.equal(f.saved().session?.phase, 'logout', 'the retained record allows cleanup retries, never session restoration');
   failing = false;
   await f.auth.restore();
   assert.equal(f.auth.getSnapshot().status, 'signedOut');

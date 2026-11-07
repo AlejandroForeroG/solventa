@@ -97,7 +97,7 @@ export class Authentication {
     const binding = await this.deps.biometrics?.info();
     if (binding) {
       if (binding.baseUrl !== this.deps.baseUrl) {
-        await this.deps.policyCache?.clear();
+        await this.clearPolicyCache();
         await this.deps.biometrics?.clear();
         await this.deps.store.write(emptyRecord());
       }
@@ -105,7 +105,7 @@ export class Authentication {
     const record = await this.deps.store.read();
     const context = record.session ?? record.transaction;
     if (context && context.baseUrl !== this.deps.baseUrl) {
-      await this.deps.policyCache?.clear();
+      await this.clearPolicyCache();
       await this.save(emptyRecord());
     } else {
       this.record = record;
@@ -115,10 +115,32 @@ export class Authentication {
   private async save(record: AuthRecord) {
     if (record.session?.phase !== 'active') this.warmSession = false;
     if (record.session?.phase === 'logout') record = { ...record, session: { ...record.session, email: undefined } };
-    // Offline data must not outlive the session: clear it when logout starts, not after remote confirmation.
-    if (record.session?.phase === 'logout') await this.deps.policyCache?.clear();
+    if (record.session?.phase === 'logout') {
+      // Keep the session unusable before cleanup: the cache's own discard note may fail to persist too.
+      this.record = record;
+      try { await this.deps.store.write(record); }
+      catch (error) {
+        // Credential storage failing must not prevent the independent cache cleanup attempt.
+        await this.deps.policyCache?.clear();
+        throw error;
+      }
+      return;
+    }
     await this.deps.store.write(record);
     this.record = record;
+  }
+
+  private async clearPolicyCache() {
+    try { await this.deps.policyCache?.clear(); }
+    catch {
+      // A failed account/environment cleanup is never an outage eligible for the previous owner's copy.
+      this.logoutRequested = true;
+      const session = this.record?.session;
+      if (session && session.phase !== 'logout') {
+        await this.save({ version: 1, transaction: null, session: { ...session, phase: 'logout' } });
+      }
+      throw new AuthFailure('discard_incomplete');
+    }
   }
 
   private async handleFailure(error: unknown) {
@@ -132,13 +154,17 @@ export class Authentication {
       return;
     }
     if (failure.kind === 'unauthorized') {
+      // Retain intent in memory even if every persistence attempt fails, so a retry cannot reopen this session.
+      this.logoutRequested = true;
       try {
-        // Clear offline data first: if this fails the session record remains, so a retry cleans again.
-        await this.deps.policyCache?.clear();
+        if (session) await this.save({ version: 1, transaction: null, session: { ...session, phase: 'logout' } });
+        // The pending intent survives failed deletion; remove credentials only after offline data is gone.
+        await this.clearPolicyCache();
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
         this.device = undefined;
         this.primaryAuthenticated = false;
+        this.logoutRequested = false;
       } catch {
         this.record = undefined;
         // The server already revoked this session. A failed local cleanup is not an unreachable server: stored data may remain and must not be opened.
@@ -210,7 +236,7 @@ export class Authentication {
       if (binding || this.snapshot.status === 'locked') {
         if (binding?.baseUrl === this.deps.baseUrl) await this.deps.biometrics?.suspend();
         else {
-          await this.deps.policyCache?.clear();
+          await this.clearPolicyCache();
           await this.deps.biometrics?.clear();
           await this.deps.store.write(emptyRecord());
         }
@@ -363,7 +389,7 @@ export class Authentication {
     this.publish({ status: 'logoutPending' });
     return this.run(async () => {
       if (!this.record?.session) {
-        await this.deps.policyCache?.clear();
+        await this.clearPolicyCache();
         await this.save(emptyRecord());
         await this.deps.biometrics?.clear();
         this.device = undefined;
@@ -407,6 +433,8 @@ export class Authentication {
     const session = this.record?.session;
     if (!session) throw new AuthFailure('unauthorized');
     if (session.phase === 'logout') {
+      // Retry local cleanup after restart even without connectivity, before attempting remote revocation.
+      await this.clearPolicyCache();
       const installationId = session.revocationInstallationId;
       if (installationId) await this.request(token => this.deps.api.revokeDevice(token, installationId));
       else await this.request(token => this.deps.api.logout(token));
@@ -439,7 +467,7 @@ export class Authentication {
       await vault.commit(device, this.deps.baseUrl, principal);
     } else if (binding?.suspended && vault) {
       if (binding.owner?.clientId !== principal.clientId || binding.owner.subjectToken !== principal.subjectToken) {
-        await this.deps.policyCache?.clear();
+        await this.clearPolicyCache();
         await vault.clear();
       } else if (this.primaryAuthenticated && this.foreground && !this.logoutRequested) {
         await this.activateBiometrics(principal, vault);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { Authentication } from '../apps/mobile/src/features/authentication/application/authentication';
-import type { AuthBrowser, IdentityProvider, SessionApi, TokenStore } from '../apps/mobile/src/features/authentication/application/ports';
+import type { AuthBrowser, BiometricVault, IdentityProvider, SessionApi, TokenStore } from '../apps/mobile/src/features/authentication/application/ports';
 import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
 import type { AuthRecord, Configuration } from '../apps/mobile/src/features/authentication/domain/session';
 import { parseCallback } from '../apps/mobile/src/features/authentication/adapters/callback';
@@ -32,27 +32,30 @@ const activeSession: AuthRecord = { version: 1, transaction: null, session: { co
 function device() {
   let copy: string | null = null;
   let flag = false;
-  const storage = { removalFails: false };
+  const storage = { removalFails: false, markerWriteIgnored: false, intentWriteFails: false };
   let saved: AuthRecord = structuredClone(activeSession);
   const open = () => new ProtectedPolicyCache({
     store: { read: async () => copy, write: async value => { copy = value; },
       remove: async () => { if (storage.removalFails) throw new PolicyCacheFailure('not_removed'); copy = null; } },
-    discard: { raise: async () => { flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
+    discard: { raise: async () => { if (!storage.markerWriteIgnored) flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
     installationId: async () => installation, now: () => now, authentication: { authenticate: async () => {} },
   });
   let cache = open();
-  const tokens: TokenStore = { read: async () => structuredClone(saved), write: async record => { saved = structuredClone(record); } };
+  const tokens: TokenStore = { read: async () => structuredClone(saved), write: async record => {
+    if (storage.intentWriteFails) throw new Error('credential storage unavailable');
+    saved = structuredClone(record);
+  } };
   const identity: IdentityProvider = { authorize: async () => { throw new Error('not used'); }, exchange: async () => { throw new Error('not used'); }, refresh: async () => { throw new Error('not used'); } };
   const browser: AuthBrowser = { assertAvailable: () => {}, open: async () => null };
-  const start = (inspect: () => Promise<typeof principal>) => {
+  const start = (inspect: () => Promise<typeof principal>, biometrics?: BiometricVault) => {
     const api: SessionApi = {
-      configuration: async () => config, register: async () => principal, inspect, access: async () => principal, logout: async () => {},
+      configuration: async () => config, register: async () => principal, inspect, access: async () => principal, logout: async () => { await inspect(); },
       registerDevice: async () => {}, inspectDevice: async () => {}, revokeDevice: async () => {},
     };
-    return new Authentication({ baseUrl, store: tokens, identity, api, browser, now: () => now, parseCallback, policyCache: { clear: () => cache.clear() } });
+    return new Authentication({ baseUrl, store: tokens, identity, api, browser, biometrics, now: () => now, parseCallback, policyCache: { clear: () => cache.clear() } });
   };
   // A new app start reuses the same device storage with fresh in-memory state.
-  return { get cache() { return cache; }, start, storage, restart: () => { cache = open(); return cache; } };
+  return { get cache() { return cache; }, start, storage, saved: () => structuredClone(saved), restart: () => { cache = open(); return cache; } };
 }
 
 const outage = () => Promise.reject(new AuthFailure('unavailable'));
@@ -120,25 +123,26 @@ test('a revoked session whose cleanup failed keeps the copy closed through retri
   d.storage.removalFails = true;
   const revokedStart = d.start(revoked);
   await revokedStart.restore();
-  assert.deepEqual([revokedStart.getSnapshot().status, revokedStart.getSnapshot().failure], ['blocked', 'discard_incomplete']);
+  assert.deepEqual([revokedStart.getSnapshot().status, revokedStart.getSnapshot().failure], ['logoutPending', 'discard_incomplete']);
   assert.equal(walletAccessFor(revokedStart.getSnapshot()), null);
 
-  // "Retry without internet" and an app restart without connection: the session now looks merely unreachable.
+  // Retry and a cold start keep the durable logout state, independently of the cache's own guard.
   for (let attempt = 0; attempt < 2; attempt++) {
     const auth = d.start(outage);
     await auth.restore();
-    assert.deepEqual([auth.getSnapshot().status, auth.getSnapshot().failure], ['blocked', 'unavailable']);
-    const { wallet, calls } = walletFor(auth, d.restart(), () => { throw new Error('the server must not be called'); });
+    assert.deepEqual([auth.getSnapshot().status, auth.getSnapshot().failure], ['logoutPending', 'discard_incomplete']);
+    assert.equal(walletAccessFor(auth.getSnapshot()), null);
+    const wallet = new PolicyWallet({ cache: d.restart(), now: () => now, api: { list: async () => { throw new Error('the server must not be called'); } } });
     await wallet.unlock();
     assert.deepEqual(wallet.getSnapshot(), { status: 'failed', failure: 'discard_pending' }, 'the stored policies are not shown');
-    assert.equal(calls.fetch, 0);
   }
 
   // Once the device can remove it, the owed removal completes and nothing is left to show.
   d.storage.removalFails = false;
   const recovered = d.start(outage);
   await recovered.restore();
-  const { wallet } = walletFor(recovered, d.restart(), () => { throw new Error('the server must not be called'); });
+  assert.equal(walletAccessFor(recovered.getSnapshot()), null);
+  const wallet = new PolicyWallet({ cache: d.restart(), now: () => now, api: { list: async () => { throw new Error('the server must not be called'); } } });
   await wallet.unlock();
   assert.deepEqual(wallet.getSnapshot(), { status: 'failed', failure: 'no_copy' });
 });
@@ -151,6 +155,102 @@ test('a block that is not an outage gives no wallet access, and neither does a p
   assert.equal(walletAccessFor({ status: 'locked' }), null);
   assert.equal(walletAccessFor({ status: 'authenticated' }), null);
   assert.deepEqual(walletAccessFor({ status: 'authenticated', principal }), { mode: 'online', owner: principal });
+});
+
+for (const action of ['revocation', 'logout'] as const) {
+  test(`${action} persists an unusable session before a failed cache removal even when its discard note is not stored`, async () => {
+    const d = device();
+    const online = d.start(verified);
+    await online.restore();
+    const first = walletFor(online, d.cache, ok);
+    await first.wallet.unlock();
+    first.wallet.lock();
+    d.storage.removalFails = true;
+    d.storage.markerWriteIgnored = true;
+    const ending = action === 'logout' ? online : d.start(revoked);
+    if (action === 'logout') await ending.signOut(); else await ending.restore();
+    assert.equal(d.saved().session?.phase, 'logout', 'the credential record must not remain active while the copy cannot be removed');
+    assert.equal(walletAccessFor(ending.getSnapshot()), null);
+    await ending.retry();
+    assert.equal(walletAccessFor(ending.getSnapshot()), null, 'retry cannot restore the revoked or ended session');
+    d.restart();
+    const offline = d.start(outage);
+    await offline.restore();
+    assert.equal(offline.getSnapshot().status, 'logoutPending');
+    assert.equal(walletAccessFor(offline.getSnapshot()), null, 'a cold start without network cannot open the stale copy');
+    d.storage.removalFails = false;
+    await offline.retry();
+    assert.equal(offline.getSnapshot().status, 'logoutPending', 'local cleanup does not claim successful remote logout');
+    await d.cache.unlock();
+    assert.equal(await d.cache.readLatest(), null, 'cleanup is retried before calling the unreachable server');
+    const connected = d.start(verified);
+    await connected.restore();
+    assert.equal(connected.getSnapshot().status, 'signedOut', 'recovery completes logout rather than silently authenticating');
+    assert.equal(d.saved().session, null);
+  });
+}
+
+test('a failed logout-intent write still attempts cache removal and never restores access in the same process', async () => {
+  const d = device();
+  const online = d.start(verified);
+  await online.restore();
+  await walletFor(online, d.cache, ok).wallet.unlock();
+  d.storage.intentWriteFails = true;
+  const denied = d.start(revoked);
+  await denied.restore();
+  assert.equal(walletAccessFor(denied.getSnapshot()), null);
+  await d.cache.unlock();
+  assert.equal(await d.cache.readLatest(), null, 'cache deletion still runs when credential persistence fails');
+  d.storage.removalFails = true;
+  await denied.retry();
+  assert.equal(walletAccessFor(denied.getSnapshot()), null);
+  d.storage.intentWriteFails = false;
+  d.storage.removalFails = false;
+  const offline = d.start(outage);
+  await offline.restore();
+  const { wallet } = walletFor(offline, d.cache, () => { throw new Error('offline path'); });
+  await wallet.unlock();
+  assert.deepEqual(wallet.getSnapshot(), { status: 'failed', failure: 'no_copy' });
+});
+
+test('failed cleanup during account replacement cannot offer the previous owner copy as an offline wallet', async () => {
+  const d = device();
+  const previousOwner = { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: '30000000-0000-4000-8000-000000000002' };
+  await d.cache.save(previousOwner, [policy]);
+  const vault: BiometricVault = {
+    info: async () => ({ installationId: installation, baseUrl, owner: previousOwner, suspended: true }),
+    suspend: async () => {}, resume: async () => false, prepare: async () => installation,
+    commit: async () => {}, unlock: async () => structuredClone(activeSession), clear: async () => {},
+  };
+  d.storage.markerWriteIgnored = true;
+  d.storage.removalFails = true;
+  const replacing = d.start(verified, vault);
+  await replacing.restore();
+  assert.equal(walletAccessFor(replacing.getSnapshot()), null, 'a failed account cleanup is not an outage');
+  assert.equal(d.saved().session?.phase, 'logout');
+  d.restart();
+  const offline = d.start(outage, vault);
+  await offline.restore();
+  assert.equal(walletAccessFor(offline.getSnapshot()), null, 'the previous owner copy stays inaccessible after restart');
+});
+
+test('when both persistence paths and removal fail, the running session still cannot retry into offline access', async () => {
+  const d = device();
+  await d.cache.save(principal, [policy]);
+  d.storage.intentWriteFails = true;
+  d.storage.markerWriteIgnored = true;
+  d.storage.removalFails = true;
+  let online = true;
+  const auth = d.start(() => online ? revoked() : outage());
+  await auth.restore();
+  assert.equal(walletAccessFor(auth.getSnapshot()), null);
+  online = false;
+  await auth.retry();
+  assert.equal(walletAccessFor(auth.getSnapshot()), null);
+  assert.equal(auth.getSnapshot().status, 'logoutPending');
+  assert.equal(d.saved().session?.phase, 'active', 'this case deliberately has no working durable intent');
+  await d.cache.unlock();
+  assert.ok(await d.cache.readLatest(), 'the copy still exists, but authentication never offers it');
 });
 
 test('a server integrity rejection after a good sync shows the error, not the previous copy', async () => {
