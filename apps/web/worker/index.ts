@@ -9,6 +9,7 @@ const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 const offersPath = /^\/api\/v1\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
+const claimsPath = /^\/api\/v1\/claims(\/|$)/;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
@@ -24,9 +25,9 @@ async function forwardToAcquisition(request: Request, env: WebEnv, headers: Reco
   catch { return unavailable(request, headers, 'service_unavailable'); }
 }
 
-async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>, error = 'financial_unavailable'): Promise<Response> {
   try { return await fetchService(request, env.POLICY); }
-  catch { return unavailable(request, headers, 'financial_unavailable'); }
+  catch { return unavailable(request, headers, error); }
 }
 
 async function route(request: Request, env: WebEnv): Promise<Response> {
@@ -44,6 +45,7 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
       }
       const response = isQuotesPath(path) || offersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
+        : claimsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }

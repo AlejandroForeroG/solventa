@@ -193,17 +193,17 @@ test('web explains the native-only flow and disables sign-in', () => {
 test('an authenticated account retains the existing identity-verification entry', () => {
   render('authenticated');
   press('verifyIdentity');
-  assert.deepEqual(routes, ['/identity-verification']);
-});
-
-test('an authenticated account opens the wallet', () => {
-  render('authenticated');
-  press('wallet');
-  assert.deepEqual(routes, ['/wallet']);
+  assert.deepEqual(routes, ['./identity-verification']);
 });
 
 test('an authenticated account can open notification preferences', () => {
   render('authenticated');
   press('notificationPreferences');
   assert.deepEqual(routes, ['/notification-preferences']);
+});
+
+test('an authenticated account opens the wallet', () => {
+  render('authenticated');
+  press('wallet');
+  assert.deepEqual(routes, ['/wallet']);
 });

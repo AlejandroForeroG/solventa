@@ -1,4 +1,5 @@
 import { auditWorld } from './audit';
+import { claimsWorld } from './claims';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -215,6 +216,10 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),
   'a customer without underwriting audit permission': () => auditWorld(origin, 'denied'),
   'the underwriting audit store is unavailable': () => auditWorld(origin, 'unavailable'),
+  'an explicitly granted claims analyst': () => claimsWorld(origin, 'granted'),
+  'an explicitly granted claims analyst with no open claims': () => claimsWorld(origin, 'empty'),
+  'a customer without claims permission': () => claimsWorld(origin, 'denied'),
+  'the claims inbox store is unavailable': () => claimsWorld(origin, 'unavailable'),
   ...Object.fromEntries((['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as VerificationStage[]).map(stage => [
     `a native identity verification in ${stage} state`, async () => {
       const world = await verificationPactWorld(stage);
