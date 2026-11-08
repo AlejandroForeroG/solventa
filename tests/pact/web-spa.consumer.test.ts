@@ -1,4 +1,6 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
+import { listClaims } from '../../apps/web/src/claims/api';
+import claimsExamples from '../../packages/contracts/examples/claims.json';
 import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -512,5 +514,46 @@ describe('SPA historical underwriting audit', () => {
       .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions', headers: { accept: 'application/json' } })
       .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
     await pact.executeTest(server => withServer(server.url, async () => assert.equal((await listAuditDecisions(new URLSearchParams(), new AbortController().signal)).kind, expected)));
+  });
+});
+
+describe('SPA claims inbox', () => {
+  const list = (query = new URLSearchParams()) => listClaims(query, new AbortController().signal);
+  test('lists open claims for an explicitly granted analyst', async () => {
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like({ ...claimsExamples.page, next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await list();
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.items[0].claimNumber, claimsExamples.page.items[0].claimNumber);
+    }));
+  });
+  test('applies the overdue and state filters on the server', async () => {
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list of overdue claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', query: { overdue: 'true' }, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ ...claimsExamples.page, items: [claimsExamples.page.items[0]], next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list(new URLSearchParams('overdue=true'))).kind, 'ok')));
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list of unassigned claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', query: { state: 'unassigned' }, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ ...claimsExamples.page, items: [claimsExamples.page.items[2]], next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list(new URLSearchParams('state=unassigned'))).kind, 'ok')));
+  });
+  test('shows an empty queue', async () => {
+    pact.given('an explicitly granted claims analyst with no open claims').uponReceiving('a claims inbox list with no open claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(claimsExamples.emptyPage) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await list();
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.deepEqual(result.value.items, []);
+    }));
+  });
+  for (const [state, status, error, expected] of [
+    ['a customer without claims permission', 403, 'forbidden', 'forbidden'],
+    ['the claims inbox store is unavailable', 503, 'service_unavailable', 'unavailable']
+  ] as const) test('does not expose claims: ' + expected, async () => {
+    pact.given(state).uponReceiving('a claims inbox request resulting in ' + expected)
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list()).kind, expected)));
   });
 });

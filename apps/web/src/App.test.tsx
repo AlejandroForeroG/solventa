@@ -5,6 +5,7 @@ import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
+import claimsExamples from '../../../packages/contracts/examples/claims.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -41,6 +42,36 @@ describe('audit route in the application', () => {
     expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
     await act(async () => failLogout());
     expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+  });
+});
+
+describe('claims inbox route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the claims route', async () => {
+    window.history.replaceState(null, '', '/siniestros'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Siniestros' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('shows the inbox to a signed-in user, links both consoles and unmounts it while logout is pending', async () => {
+    window.history.replaceState(null, '', '/siniestros');
+    let failLogout: () => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/logout') return new Promise((_resolve, reject) => { failLogout = () => reject(new Error('synthetic outage')); });
+      return json(claimsExamples.page);
+    });
+    render(<App />); const user = userEvent.setup();
+    expect(await screen.findByRole('table', { name: 'Bandeja de siniestros' })).toBeVisible();
+    expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
+    expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('table')).toBeNull();
+    await act(async () => failLogout());
+    expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
   });
 });

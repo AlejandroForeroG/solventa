@@ -3,6 +3,8 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createHttp } from './adapters/inbound/http';
 import { databaseProbe } from './adapters/outbound/database-probe';
 import { createPolicyFinance } from './adapters/composition';
+import { ClaimInbox } from './application/claim-inbox';
+import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -16,7 +18,9 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const started = performance.now();
     const response = await createHttp({ finance: createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }),
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
-      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input)
+      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
+      claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {
       const placement = request.headers.get('cf-placement') ?? '';

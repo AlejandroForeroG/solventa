@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { FinancialActor, FinancialResult, PolicyListResult } from '../../domain/financial';
+import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 
 export type PolicyHttpDependencies = {
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
+  claims?: ClaimsHttpDependencies;
   finance: {
     listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
@@ -171,6 +173,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
       }
     };
   }
+  if (deps?.claims) mountClaims(app, deps.claims);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
 }

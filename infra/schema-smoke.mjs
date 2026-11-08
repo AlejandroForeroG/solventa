@@ -23,20 +23,22 @@ try {
   fresh = clientFor(url, config.ssl);
   await fresh.connect();
   const catalog = await migrationCatalog();
+  const awaiting = { identity: ['0011_notification_preferences.sql', '0012_claims_access_grants.sql'], policy: ['0009_claims_inbox.sql'] };
   for (const owner of owners) {
     console.log(JSON.stringify({ freshSchema: owner.schema, status: 'migrating' }));
     await fresh.query(`CREATE SCHEMA ${owner.schema}`);
     await fresh.query(`CREATE TABLE ${owner.schema}.schema_migrations (version STRING PRIMARY KEY, checksum STRING NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-    // Model an existing environment awaiting the notification-preferences upgrade.
+    // Model an existing environment awaiting the notification-preferences and claims inbox upgrades.
     const baseline = catalog.find(entry => entry.owner.schema === owner.schema).migrations
-      .filter(migration => owner.schema !== 'identity' || migration.version !== '0011_notification_preferences.sql');
+      .filter(migration => !(awaiting[owner.schema] ?? []).includes(migration.version));
     await applyMigrations(fresh, owner, baseline);
     const before = (await fresh.query(`SELECT * FROM ${owner.schema}.schema_migrations ORDER BY version`)).rows;
     await applyMigrations(fresh, owner, baseline);
     assert.deepEqual((await fresh.query(`SELECT * FROM ${owner.schema}.schema_migrations ORDER BY version`)).rows, before);
   }
   const plan = await readMigrationPlan(fresh, catalog);
-  assert.deepEqual(plan.flatMap(owner => owner.pending.map(version => `${owner.owner}/${version}`)), ['identity/0011_notification_preferences.sql']);
+  assert.deepEqual(plan.flatMap(owner => owner.pending.map(version => `${owner.owner}/${version}`)),
+    ['identity/0011_notification_preferences.sql', 'identity/0012_claims_access_grants.sql', 'policy/0009_claims_inbox.sql']);
   await applyPendingMigrations(fresh, 'local', catalog);
   const ledgers = async () => {
     const snapshots = [];

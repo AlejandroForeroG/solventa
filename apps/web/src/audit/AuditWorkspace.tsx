@@ -65,7 +65,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const detail = state.kind === 'ready' && state.data.kind === 'detail' ? state.data.detail : null;
   const page = state.kind === 'ready' && state.data.kind === 'page' ? state.data.page : null;
   return <main className="audit-shell">
-    <aside className="audit-nav" aria-label={t('console')}><p>{t('console')}</p><a href="/auditoria" aria-current="page">{t('open')}</a></aside>
+    <aside className="audit-nav" aria-label={t('console')}><p>{t('console')}</p><a href="/siniestros">{intl.formatMessage({ id: 'claims.nav' })}</a><a href="/auditoria" aria-current="page">{t('open')}</a></aside>
     <div className="audit-main">
       {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}>{'← ' + t('back')}</button>}
       <div className="audit-heading"><div><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <p className="mono audit-id">{detail.decisionId}</p>}<p className="note audit-mode">{t('simulated')}</p></div>
