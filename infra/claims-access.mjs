@@ -13,41 +13,43 @@ export function validateClaimsGrantInput(environment, action, input, now = Date.
   if (action === 'grant' && (!uuid(input.clientId) || !operations.includes(input.operation) || typeof input.expiresAt !== 'string'
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input.expiresAt) || !Number.isFinite(Date.parse(input.expiresAt))
     || new Date(input.expiresAt).toISOString() !== input.expiresAt || Date.parse(input.expiresAt) <= now || Date.parse(input.expiresAt) > now + 90 * 86400000)) throw fail('invalid_expiry');
-  return input;
+  const canonical = { ...input, grantId: input.grantId.toLowerCase(), operatorReference: input.operatorReference.toLowerCase() };
+  if (action === 'grant') canonical.clientId = input.clientId.toLowerCase();
+  return canonical;
 }
 
 // Administrative operation only: the deployed Identity runtime has SELECT on grants.
 // The operator reference is traceability, not authentication; SQL privileges enforce administration.
 export async function changeClaimsGrant(db, environment, action, input) {
-  validateClaimsGrantInput(environment, action, input);
+  const grant = validateClaimsGrantInput(environment, action, input);
   await db.query('BEGIN');
   try {
     let changed = false;
     if (action === 'grant') {
-      const client = (await db.query('SELECT id FROM identity.clients WHERE id=$1 AND status=$2', [input.clientId, 'active'])).rows[0];
+      const client = (await db.query('SELECT id FROM identity.clients WHERE id=$1 AND status=$2', [grant.clientId, 'active'])).rows[0];
       if (!client) throw fail('client_inactive_or_missing');
-      const previous = (await db.query('SELECT client_id,operation,expires_at,granted_by,revoked_at FROM identity.claims_access_grants WHERE id=$1', [input.grantId])).rows[0];
+      const previous = (await db.query('SELECT client_id,operation,expires_at,granted_by,revoked_at FROM identity.claims_access_grants WHERE id=$1', [grant.grantId])).rows[0];
       if (previous) {
-        if (previous.client_id !== input.clientId || previous.operation !== input.operation || previous.expires_at.toISOString() !== input.expiresAt
-          || previous.granted_by !== input.operatorReference || previous.revoked_at !== null) throw fail('grant_id_conflict');
+        if (previous.client_id !== grant.clientId || previous.operation !== grant.operation || previous.expires_at.toISOString() !== grant.expiresAt
+          || previous.granted_by.toLowerCase() !== grant.operatorReference || previous.revoked_at !== null) throw fail('grant_id_conflict');
       } else {
         const result = await db.query(`INSERT INTO identity.claims_access_grants (id,client_id,operation,expires_at,granted_by)
           SELECT $1,$2,$3,$4,$5 WHERE $4::TIMESTAMPTZ > clock_timestamp() AND $4::TIMESTAMPTZ <= clock_timestamp()+INTERVAL '90 days' RETURNING id`,
-        [input.grantId, input.clientId, input.operation, input.expiresAt, input.operatorReference]);
+        [grant.grantId, grant.clientId, grant.operation, grant.expiresAt, grant.operatorReference]);
         if (result.rowCount !== 1) throw fail('invalid_expiry');
         changed = true;
       }
     } else {
-      const previous = (await db.query('SELECT revoked_at FROM identity.claims_access_grants WHERE id=$1 FOR UPDATE', [input.grantId])).rows[0];
+      const previous = (await db.query('SELECT revoked_at FROM identity.claims_access_grants WHERE id=$1 FOR UPDATE', [grant.grantId])).rows[0];
       if (!previous) throw fail('grant_not_found');
       if (previous.revoked_at === null) {
-        await db.query('UPDATE identity.claims_access_grants SET revoked_at=now() WHERE id=$1', [input.grantId]); changed = true;
+        await db.query('UPDATE identity.claims_access_grants SET revoked_at=now() WHERE id=$1', [grant.grantId]); changed = true;
       }
     }
     if (changed) await db.query(`INSERT INTO identity.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-      VALUES ($1,$2,'claims_access_grant',$3,'success',$4,now()+INTERVAL '90 days')`, [input.operatorReference, `claims_access_grant.${action}`, input.grantId, randomUUID()]);
+      VALUES ($1,$2,'claims_access_grant',$3,'success',$4,now()+INTERVAL '90 days')`, [grant.operatorReference, `claims_access_grant.${action}`, grant.grantId, randomUUID()]);
     await db.query('COMMIT');
-    return { status: 'passed', environment, action, grantId: input.grantId, changed };
+    return { status: 'passed', environment, action, grantId: grant.grantId, changed };
   } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
 }
 async function main() {
