@@ -72,5 +72,8 @@
   "notification_preference_commands": [
     "SELECT",
     "INSERT"
+  ],
+  "claims_access_grants": [
+    "SELECT"
   ]
 }

@@ -1,0 +1,63 @@
+{
+  "page": {
+    "items": [
+      {
+        "claimId": "a0000000-0000-4000-8000-000000000001",
+        "claimNumber": "SIN-2026-01187",
+        "policyId": "a0000000-0000-4000-8000-0000000000a1",
+        "state": "in_review",
+        "priority": "high",
+        "openedAt": "2026-09-01T14:00:00.000Z",
+        "ageDays": 9,
+        "overdue": true,
+        "estimatedAmount": "148000000.0000",
+        "currency": "COP",
+        "evidence": { "provided": 4, "required": 5, "status": "incomplete" },
+        "assigneeId": "a0000000-0000-4000-8000-0000000000b1"
+      },
+      {
+        "claimId": "a0000000-0000-4000-8000-000000000002",
+        "claimNumber": "SIN-2026-01207",
+        "policyId": "a0000000-0000-4000-8000-0000000000a2",
+        "state": "escalated",
+        "priority": "high",
+        "openedAt": "2026-09-08T09:30:00.000Z",
+        "ageDays": 2,
+        "overdue": false,
+        "estimatedAmount": "305000000.0000",
+        "currency": "COP",
+        "evidence": { "provided": 5, "required": 5, "status": "in_review" },
+        "assigneeId": "a0000000-0000-4000-8000-0000000000b1"
+      },
+      {
+        "claimId": "a0000000-0000-4000-8000-000000000003",
+        "claimNumber": "SIN-2026-01211",
+        "policyId": "a0000000-0000-4000-8000-0000000000a3",
+        "state": "unassigned",
+        "priority": "low",
+        "openedAt": "2026-09-09T16:45:00.000Z",
+        "ageDays": 1,
+        "overdue": false,
+        "estimatedAmount": "58200000.0000",
+        "currency": "COP",
+        "evidence": { "provided": 1, "required": 4, "status": "incomplete" },
+        "assigneeId": null
+      }
+    ],
+    "next": "a0000000-0000-4000-8000-000000000003",
+    "traceId": "a0000000-0000-4000-8000-0000000000c1"
+  },
+  "emptyPage": {
+    "items": [],
+    "next": null,
+    "traceId": "a0000000-0000-4000-8000-0000000000c2"
+  },
+  "invalidRequest": {
+    "error": "invalid_request",
+    "traceId": "a0000000-0000-4000-8000-0000000000c3"
+  },
+  "forbidden": {
+    "error": "forbidden",
+    "traceId": "a0000000-0000-4000-8000-0000000000c4"
+  }
+}

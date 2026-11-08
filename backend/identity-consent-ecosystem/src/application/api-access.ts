@@ -1,6 +1,7 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
-export type ApiOperation = 'underwriting-decisions:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write';
+export type ClaimsOperation = 'claims:read' | 'claims:decide';
+export type ApiOperation = 'underwriting-decisions:read' | ClaimsOperation | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -15,7 +16,7 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write'];
+const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'claims:read', 'claims:decide', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
 const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:') && !operation.startsWith('notification-preferences:'));
@@ -28,14 +29,21 @@ const invalid = { allowed: false, error: 'invalid_request', status: 400 } as con
 export function isApiOperation(value: unknown): value is ApiOperation {
   return operations.some(operation => operation === value);
 }
+function isClaimsOperation(value: ApiOperation): value is ClaimsOperation {
+  return value === 'claims:read' || value === 'claims:decide';
+}
 
 // Identities reach this application only after cryptographic verification by an adapter.
 export interface AuditPermissions {
   find(principal: Principal, identity: VerifiedIdentity): Promise<{ expiresAt: string } | null>;
 }
+export interface ClaimsPermissions {
+  find(principal: Principal, identity: VerifiedIdentity, operation: ClaimsOperation): Promise<{ expiresAt: string } | null>;
+}
 
 export class ApiAccess {
-  constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions, private readonly auditPermissions?: AuditPermissions) {}
+  constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions, private readonly auditPermissions?: AuditPermissions,
+    private readonly claimsPermissions?: ClaimsPermissions) {}
 
   async partner(identity: PartnerIdentity, operation: string): Promise<AccessDecision<PartnerActor>> {
     if (!isApiOperation(operation)) return invalid;
@@ -56,9 +64,10 @@ export class ApiAccess {
     try {
       const principal = await this.sessions.find(identity);
       if (!principal) return unauthorized;
-      if (operation === 'underwriting-decisions:read') {
-        if (!this.auditPermissions) return forbidden;
-        const grant = await this.auditPermissions.find(principal, identity);
+      if (operation === 'underwriting-decisions:read' || isClaimsOperation(operation)) {
+        const grant = await (operation === 'underwriting-decisions:read'
+          ? this.auditPermissions?.find(principal, identity)
+          : this.claimsPermissions?.find(principal, identity, operation));
         if (!grant) return forbidden;
         if (!(Date.parse(grant.expiresAt) > Date.now()) || Date.parse(grant.expiresAt) > Date.now() + 5500) return unavailable;
         return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation], authorizationExpiresAt: grant.expiresAt } };
