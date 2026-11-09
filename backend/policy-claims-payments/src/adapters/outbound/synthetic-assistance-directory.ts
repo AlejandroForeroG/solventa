@@ -1,5 +1,5 @@
 import { findAssistanceProviders, validCoordinates } from '../../domain/assistance-search';
-import type { AssistanceMatch, AssistanceProvider, AssistanceSearch } from '../../domain/assistance-search';
+import type { AssistanceDirectoryResult, AssistanceProvider, AssistanceSearch } from '../../domain/assistance-search';
 
 export const syntheticAssistanceFormat = 'synthetic-assistance-directory.v1';
 
@@ -41,10 +41,6 @@ function parseProvider(value: unknown): AssistanceProvider | null {
   if (!validCoordinates(point)) return null;
   return { id, kind, name, city, address, phone, hours, coordinates: point };
 }
-
-export type AssistanceDirectoryResult =
-  | { status: 'ok'; simulated: true; providers: AssistanceMatch[] }
-  | { status: 'invalid_input' | 'unavailable' };
 
 export function searchSyntheticAssistance(
   search: AssistanceSearch,

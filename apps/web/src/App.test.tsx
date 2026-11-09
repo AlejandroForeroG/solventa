@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
+import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
 
@@ -19,6 +20,30 @@ function serve(session: number) {
 
 beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
 afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
+
+describe('assistance directory route in the application', () => {
+  it('shows contact details and hours without a provider selection control', async () => {
+    window.history.replaceState(null, '', '/prestadores');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: true });
+      if (input !== '/api/v1/assistance/providers/search') return json({ error: 'not_found' }, 404);
+      return json({ ...assistanceExamples.empty, providers: [{
+        id: 'demo-workshop', kind: 'workshop', name: 'Taller de prueba Bogotá', address: 'Calle de prueba 10',
+        city: 'Bogotá', phone: '+570000000001', hours: 'Lun–vie 08:00–17:00',
+      }] });
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole('textbox', { name: 'Ciudad o dirección' }), 'Bogotá');
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    const result = within(await screen.findByRole('article'));
+    expect(result.getByRole('heading', { name: 'Taller de prueba Bogotá' })).toBeVisible();
+    expect(result.getByText(/Contacto de prueba.*\+570000000001/)).toBeVisible();
+    expect(result.getByText(/Horario.*08:00–17:00/)).toBeVisible();
+    expect(result.queryByRole('checkbox')).toBeNull();
+    expect(result.queryByRole('button')).toBeNull();
+  });
+});
 
 describe('audit route in the application', () => {
   it('requires sign-in and does not render the public calculator on the audit route', async () => {

@@ -15,6 +15,7 @@ export function HomeScreen() {
   if (auth.status !== 'authenticated') return <WelcomeScreen />;
 
   return <Page title={copy.homeTitle}>
+    <Tile title={copy.assistance} detail={copy.assistanceDetail} href="/assistance-providers" />
     <Tile title={copy.wallet} detail={copy.walletDetail} href="/wallet" />
     <Tile title={copy.claims} detail={copy.claimsDetail} href="/claims" />
     <Tile title={copy.alerts} detail={copy.alertsDetail} href="/alerts" />
@@ -37,10 +38,9 @@ export function ClaimsScreen() {
   const copy = useNavigationMessages();
 
   return <Page title={copy.claims}>
-    {auth.status === 'authenticated' ? <View style={styles.card}>
-      <Text accessibilityRole="header" style={styles.cardTitle}>{copy.assistance}</Text>
-      <Text style={styles.detail}>{copy.assistanceUnavailable}</Text>
-    </View> : <Tile title={copy.signIn} detail={copy.back} href="/" />}
+    {auth.status === 'authenticated'
+      ? <Tile title={copy.assistance} detail={copy.assistanceDetail} href="/assistance-providers" />
+      : <Tile title={copy.signIn} detail={copy.back} href="/" />}
   </Page>;
 }
 

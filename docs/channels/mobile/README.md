@@ -17,7 +17,7 @@ Keep routes thin. Each capability's UI and logic live in its `src/features` dire
 
 ## Navigation
 
-The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts displays the availability of the notification inbox. Profile contains identity verification, notification preferences, device access settings and sign-out. Claims shows the availability of [assistance provider search](../../modules/policy-claims-payments/assistance-provider-search.md) while its API is pending.
+The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts displays the availability of the notification inbox. Profile contains identity verification, notification preferences, device access settings and sign-out. Home and Claims both link to `/assistance-providers`.
 
 Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
 
@@ -41,6 +41,10 @@ npm run build --workspace @solventa/mobile
 ```
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
+
+## Assistance provider search
+
+Open Nearby providers from Home or Claims. The customer can search manually by city or address at any time. Use my location requests the operating system's foreground permission for a single search. Permission denial, a location timeout and an unavailable directory preserve the manual field. The signed-in native client uses the [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md). A matching backend revision and a development build that includes `expo-location` are required for an Android or iOS test. Exercise permission grant, denial, manual fallback and an empty result using a synthetic catalog location. A web export does not validate the native prompt.
 
 ## Notification preferences
 

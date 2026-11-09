@@ -17,6 +17,10 @@ export type AssistanceSearch =
 
 export type AssistanceMatch = Omit<AssistanceProvider, 'coordinates'> & { distanceKm?: number };
 
+export type AssistanceDirectoryResult =
+  | { status: 'ok'; simulated: true; providers: AssistanceMatch[] }
+  | { status: 'invalid_input' | 'unavailable' };
+
 export function validCoordinates(value: Coordinates): boolean {
   return Number.isFinite(value.latitude) && Math.abs(value.latitude) <= 90
     && Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180;
