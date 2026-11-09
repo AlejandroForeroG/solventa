@@ -7,6 +7,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { canonicalReport, claimNumber, DESCRIPTION_LENGTH, MAX_EVIDENCE_BYTES, MAX_EVIDENCE_FILES, parseReport, type ReportInput } from '../backend/policy-claims-payments/src/domain/claim-report';
 import { ClaimReport } from '../backend/policy-claims-payments/src/application/claim-report';
+import { R2ClaimEvidence } from '../backend/policy-claims-payments/src/adapters/outbound/r2-claim-evidence';
 import type { ClaimEvidenceStore, ClaimReportStore, DraftView, ReportOwner, StoredEvidence } from '../backend/policy-claims-payments/src/application/ports/claim-report';
 import { createHttp } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import worker from '../apps/web/worker/index';
@@ -292,4 +293,17 @@ test('the gateway carries the report: JSON declarations intact, evidence streame
   const down = await worker.fetch(new Request(`http://localhost:8787/api/v1/claims/${draft.claimId}/evidence/${ids.file2}`, { method: 'PUT', body: video, headers: { ...bearer, 'content-type': 'video/mp4', 'content-length': String(video.length) } }),
     { APP_ENV: 'local', POLICY: { fetch: async () => { throw new Error('down'); } } } as unknown as WebEnv);
   assert.equal(down.status, 503); assert.equal((await down.json()).error, 'service_unavailable');
+});
+
+test('the R2 adapter maps a checksum refusal, keeps other failures visible and confirms the stored size', async () => {
+  const meta = { contentType: 'image/jpeg', byteSize: 10, sha256: 'a'.repeat(64) };
+  const body = () => new Response(new Uint8Array(10)).body as ReadableStream<Uint8Array>;
+  const bucket = (put: () => Promise<unknown>, size: number | null) => ({ put, head: async () => (size === null ? null : { size }) }) as unknown as R2Bucket;
+  assert.equal(await new R2ClaimEvidence(bucket(async () => ({}), 10)).put('claims/a', body(), meta), 'stored');
+  assert.equal(await new R2ClaimEvidence(bucket(async () => ({}), 9)).put('claims/a', body(), meta), 'size_mismatch');
+  assert.equal(await new R2ClaimEvidence(bucket(async () => ({}), null)).put('claims/a', body(), meta), 'size_mismatch');
+  for (const message of ['put: The SHA-256 checksum you specified did not match what we received. (10037)', 'put: The SHA-256 checksum you specified did not match what we received.']) {
+    assert.equal(await new R2ClaimEvidence(bucket(async () => { throw new Error(message); }, 10)).put('claims/a', body(), meta), 'checksum_mismatch');
+  }
+  await assert.rejects(new R2ClaimEvidence(bucket(async () => { throw new Error('put: internal error (10001)'); }, 10)).put('claims/a', body(), meta), /internal error/);
 });
