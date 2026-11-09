@@ -4,6 +4,8 @@ Code: `backend/policy-claims-payments`. This module owns issuance, policies, pre
 
 Explicitly granted web analysts can list open claims through the [claims inbox](claims-inbox.md). Identity owns the `claims:read` permission; this module owns the list, its ordering and the read audit. Claim files, decisions and a flow that creates open claims are not implemented.
 
+The [assistance provider search](assistance-provider-search.md) guide describes the shared lookup rules and the versioned synthetic directory.
+
 ## Implemented state
 
 The Worker owns its `policy` schema, runtime role and Hyperdrive. Its academic financial flow consumes signed accepted-offer events, persists policies and charges, signs and issues them using explicit mock provider adapters. The internal event consumer evaluates verified flight-delay events against the immutable coverage and creates a single indemnity/payment effect. Business rules, SQL transactions, authorization, integrity verification and idempotency execute in Solventa; only external data, payment and signature providers are mocked. This does not establish legal issuance, real money movement, PCI compliance, external provider integration or production readiness. Evidence upload, assisted claims and lifecycle changes remain separate capabilities.

@@ -15,6 +15,12 @@ See [Mobile architecture](architecture.md) for the implemented folder structure,
 
 Keep routes thin. Each capability's UI and logic live in its `src/features` directory; reusable code between capabilities may go in `src/shared` when a concrete need exists.
 
+## Navigation
+
+The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts displays the availability of the notification inbox. Profile contains identity verification, notification preferences, device access settings and sign-out. Home and Claims both link to `/assistance-providers`.
+
+Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
+
 ## Development
 
 Run from the monorepo root:
@@ -36,17 +42,21 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Assistance provider search
+
+Open Nearby providers from Home or Claims. The customer can search manually by city or address at any time. Use my location requests the operating system's foreground permission for a single search. If Android pauses the app for the permission dialog, the screen waits for session revalidation before reading coordinates and querying the directory. The pending search is discarded when the account changes, session revalidation fails or the screen closes. Permission denial, a location timeout and an unavailable directory preserve the manual field. The signed-in native client uses the [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md). A matching backend revision and a development build that includes `expo-location` are required for an Android or iOS test. Exercise permission grant, denial, manual fallback and an empty result using a synthetic catalog location. A web export does not validate the native prompt.
+
 ## Notification preferences
 
-After sign-in, the welcome screen opens `/notification-preferences`. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
+After sign-in, the notification preferences action in Profile opens `/notification-preferences` on the root stack. The native header back action returns to Profile. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
 
-The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission; if denied, the saved choice remains visible but the UI says push is not operational and offers a Settings shortcut. This uses `expo-notifications` in an Expo development build and `expo-crypto` for the command's idempotency key. The public web gateway forwards the complete PUT body with the same 4 KiB limit enforced by Identity; `tests/notification-preferences-runtime.test.mjs` checks that path through a Service Binding. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
+The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission. If denied, the saved choice remains visible and the screen offers a Settings shortcut in the permission warning. This warning clears when the device grants permission. This uses `expo-notifications` in an Expo development build and `expo-crypto` for the command's idempotency key. The public web gateway forwards the complete PUT body with the same 4 KiB limit enforced by Identity; `tests/notification-preferences-runtime.test.mjs` checks that path through a Service Binding. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
 
 Run `npm run test:notification-preferences`, mobile lint and types, and `npm run check`. On Android and iOS, test initial permission, denial, return from Settings, save/retry/conflict, sign-out and account switching with a development build. Keep mobile and Identity on matching revisions; the route fails closed against an older backend.
 
 ## Identity onboarding
 
-The signed-in welcome action opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
+The identity action in Profile opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
 
 Revocation or expiry requires new explicit consent and an empty attempt. Pending operations retry the same key/body; a persisted evaluation resumes after restart. Refresh reads authoritative progress. Backgrounding, sign-out and account changes hide progress until authentication is revalidated. The adapter uses the existing serialized session execution port; tokens never enter UI state. No result grants contracting access or a legal certificate.
 
