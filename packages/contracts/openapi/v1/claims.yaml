@@ -25,7 +25,7 @@ paths:
         - LocalWebSession: []
       operationId: listClaims
       summary: List at most twenty open claims
-      description: Ordered by priority (high first), openedAt ascending, estimatedAmount descending and claimId.
+      description: Ordered by priority (high first), openedAt ascending, estimatedAmount descending (a claim without an estimate last) and claimId.
         Pass next as before, preserving filters. No total count. A missing cursor produces an empty page.
         Approved and paid claims are not open and are not listed. The collection read is durably audited without
         persisting search values.
@@ -246,6 +246,8 @@ components:
         estimatedAmount:
           type: string
           pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+          nullable: true
+          description: Null until an analyst estimates the claim, as for a claim reported by the customer.
         currency:
           type: string
           pattern: ^[A-Z]{3}$

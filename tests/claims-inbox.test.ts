@@ -37,7 +37,11 @@ test('evidence is incomplete until the required count, then in review until ever
 test('a stored record that breaks the contract is rejected instead of being listed', () => {
   assert.equal(summarize(record(), now).priority, 'high');
   for (const change of [{ state: 'paid' as const }, { claimNumber: 'bad' }, { estimatedAmount: '148000000' }, { currency: 'cop' }, { provided: -1 }, { unverified: 5 },
-    { claimNumber: null as unknown as string }, { estimatedAmount: null as unknown as string }]) assert.throws(() => summarize(record(change), now), InvalidClaimRecord);
+    { claimNumber: null as unknown as string }, { estimatedAmount: '-1.0000' }]) assert.throws(() => summarize(record(change), now), InvalidClaimRecord);
+});
+
+test('a claim reported by the customer is listed with no estimate until an analyst sets one', () => {
+  assert.equal(summarize(record({ estimatedAmount: null }), now).estimatedAmount, null);
 });
 
 test('an expired authorization cannot start or release a read', async () => {

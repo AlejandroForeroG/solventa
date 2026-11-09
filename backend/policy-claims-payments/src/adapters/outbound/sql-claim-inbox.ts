@@ -20,10 +20,12 @@ export class SqlClaimInbox implements ClaimInboxStore {
       if (query.state) conditions.push(`status = ${parameter(query.state)}`);
       if (query.overdue) conditions.push(`age >= ${parameter(thresholds.overdueDays)}`);
       if (query.query) conditions.push(query.query.startsWith('SIN-') ? `claim_number = ${parameter(query.query)}` : `policy_id = ${parameter(query.query)}::UUID`);
-      if (query.before) conditions.push(`(rank, created_at, -estimated_amount, id) > (SELECT rank, created_at, -estimated_amount, id FROM ranked WHERE id = ${parameter(query.before)}::UUID)`);
-      const order = 'rank, created_at, estimated_amount DESC, id';
+      if (query.before) conditions.push(`(rank, created_at, amount_key, id) > (SELECT rank, created_at, amount_key, id FROM ranked WHERE id = ${parameter(query.before)}::UUID)`);
+      // A claim without an estimate sorts after every estimated one, so one ascending key serves the order and the keyset cursor.
+      const order = 'rank, created_at, amount_key, id';
       const result = await client.query<Row>(`WITH open AS (
           SELECT id, claim_number, policy_id, status, created_at, estimated_amount, currency, assignee_id, evidence_required,
+            COALESCE(-estimated_amount, 10000000000000000::DECIMAL) AS amount_key,
             (((now() AT TIME ZONE 'America/Bogota')::DATE) - ((created_at AT TIME ZONE 'America/Bogota')::DATE))::INT4 AS age
           FROM policy.claims WHERE status = ANY($1::STRING[])
         ), ranked AS (
@@ -34,14 +36,14 @@ export class SqlClaimInbox implements ClaimInboxStore {
           p.evidence_required::INT4 AS required,
           (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state IN ('uploaded', 'verified'))::INT4 AS provided,
           (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state = 'uploaded')::INT4 AS unverified
-        FROM page p ORDER BY ${order.replaceAll(/\b(rank|created_at|estimated_amount|id)\b/g, 'p.$1')}`, values);
+        FROM page p ORDER BY ${order.replaceAll(/\b(rank|created_at|amount_key|id)\b/g, 'p.$1')}`, values);
       const audit = await client.query(`INSERT INTO policy.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
         SELECT $1, 'claims.inbox.read', 'claim_collection', $2::UUID, 'success', $3, now() + INTERVAL '90 days' WHERE clock_timestamp() < $4::TIMESTAMPTZ RETURNING id`,
       [reader.clientId, reader.clientId, reader.traceId, reader.expiresAt]);
       if (audit.rowCount !== 1) throw new Error('claims_authorization_expired');
       await client.query('COMMIT');
       const records: OpenClaimRecord[] = result.rows.slice(0, PAGE_SIZE).map(row => ({ id: row.id, claimNumber: row.claim_number as string, policyId: row.policy_id,
-        state: row.status, openedAt: row.created_at, estimatedAmount: row.estimated_amount as string, currency: row.currency, assigneeId: row.assignee_id,
+        state: row.status, openedAt: row.created_at, estimatedAmount: row.estimated_amount, currency: row.currency, assigneeId: row.assignee_id,
         provided: row.provided, required: row.required, unverified: row.unverified }));
       return { records, next: result.rows.length > PAGE_SIZE ? result.rows[PAGE_SIZE - 1].id : null };
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }

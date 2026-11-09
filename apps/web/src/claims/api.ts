@@ -5,7 +5,7 @@ export type ClaimState = typeof CLAIM_STATES[number];
 export type ClaimPriority = 'high' | 'medium' | 'low';
 export type ClaimEvidence = { provided: number; required: number; status: 'complete' | 'incomplete' | 'in_review' };
 export type ClaimSummary = { claimId: string; claimNumber: string; policyId: string; state: ClaimState; priority: ClaimPriority; openedAt: string; ageDays: number;
-  overdue: boolean; estimatedAmount: string; currency: string; evidence: ClaimEvidence; assigneeId: string | null };
+  overdue: boolean; estimatedAmount: string | null; currency: string; evidence: ClaimEvidence; assigneeId: string | null };
 export type ClaimsPage = { items: ClaimSummary[]; next: string | null };
 export type ClaimsOutcome<T> = { kind: 'ok'; value: T } | { kind: 'unauthenticated' | 'forbidden' | 'invalid' | 'unavailable'; traceId?: string };
 
@@ -19,7 +19,7 @@ function summary(v: unknown): v is ClaimSummary {
   return record(v) && uuid(v.claimId) && typeof v.claimNumber === 'string' && /^SIN-\d{4}-\d{5}$/.test(v.claimNumber) && uuid(v.policyId)
     && CLAIM_STATES.some(state => state === v.state) && ['high', 'medium', 'low'].includes(String(v.priority))
     && typeof v.openedAt === 'string' && Number.isFinite(Date.parse(v.openedAt)) && count(v.ageDays) && typeof v.overdue === 'boolean'
-    && typeof v.estimatedAmount === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(v.estimatedAmount)
+    && (v.estimatedAmount === null || (typeof v.estimatedAmount === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(v.estimatedAmount)))
     && typeof v.currency === 'string' && /^[A-Z]{3}$/.test(v.currency) && evidence(v.evidence) && (v.assigneeId === null || uuid(v.assigneeId));
 }
 
