@@ -2,11 +2,13 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { FinancialActor, FinancialResult, PolicyListResult } from '../../domain/financial';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
+import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 
 export type PolicyHttpDependencies = {
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
+  claimReport?: ClaimReportHttpDependencies;
   finance: {
     listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
@@ -173,6 +175,8 @@ export function createHttp(deps?: PolicyHttpDependencies) {
       }
     };
   }
+  // The report routes share the list's path, so they register first and the list keeps the remaining methods.
+  if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
   if (deps?.claims) mountClaims(app, deps.claims);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;

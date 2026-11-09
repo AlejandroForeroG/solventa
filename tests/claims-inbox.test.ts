@@ -97,7 +97,7 @@ test('HTTP sends a fixed read operation, forwards the cookie and releases only t
 
 test('HTTP rejects methods, bearer credentials and invalid queries without a read', async () => {
   const service = http();
-  const method = await call(service, '', { method: 'POST' }); assert.equal(method.status, 405); assert.equal(method.headers.get('allow'), 'GET');
+  const method = await call(service, '', { method: 'POST' }); assert.equal(method.status, 405); assert.equal(method.headers.get('allow'), 'GET, POST');
   assert.equal((await call(service, '', { headers: { authorization: 'Bearer synthetic' } })).status, 400);
   assert.equal((await call(service, '?state=archived')).status, 400); assert.equal(service.reads(), 0);
 });
