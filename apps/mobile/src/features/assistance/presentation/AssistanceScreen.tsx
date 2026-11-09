@@ -1,14 +1,14 @@
 import type { AssistanceProviderMatch, AssistanceSearchRequest } from '@solventa/contracts';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
-import { messages } from '@/shared/i18n/messages';
-import { useAppMessages } from '@/shared/i18n/use-app-messages';
-import { theme } from '@/theme';
+import { messages } from '../../../shared/i18n/messages';
+import { useAppMessages } from '../../../shared/i18n/use-app-messages';
+import { theme } from '../../../theme';
+import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
 import { createAssistanceApi } from '../adapters/assistance-api';
-import { readDeviceLocation } from '../adapters/device-location';
+import { readDeviceLocation, requestDeviceLocationPermission } from '../adapters/device-location';
 
 const es = {
   title: 'Prestadores cercanos', location: 'Usar mi ubicación', purpose: 'Usaremos tu ubicación para esta búsqueda.',
@@ -33,63 +33,100 @@ const en: typeof es = {
   kinds: { workshop: 'Workshop', expert: 'Expert', roadside: 'Roadside assistance' },
 };
 
-type Result = { state: 'idle' | 'loading' | 'denied' | 'locationError' | 'unavailable' }
+type Result = { state: 'idle' | 'denied' | 'locationError' | 'unavailable' }
   | { state: 'ready'; providers: AssistanceProviderMatch[] };
+type Search = Extract<AssistanceSearchRequest, { kind: 'manual' }>
+  | { kind: 'nearby'; permission: Promise<boolean | null> };
 
 export function AssistanceScreen() {
   const auth = useAuthentication();
-  const english = useAppMessages() === messages.en;
+  const appCopy = useAppMessages();
+  const english = appCopy === messages.en;
   const copy = english ? en : es;
+  const authenticated = auth.status === 'authenticated' && Boolean(auth.principal);
+  const verifying = auth.status === 'loading';
+  const [previousOwner, setPreviousOwner] = useState<string | null>(null);
+  const owner = authenticated && auth.principal
+    ? JSON.stringify([auth.principal.clientId, auth.principal.subjectToken]) : verifying ? previousOwner : null;
+  if (owner !== previousOwner) setPreviousOwner(owner);
+
   return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-    {auth.status === 'authenticated' && auth.principal
-      ? <Directory key={auth.principal.clientId} copy={copy} locale={english ? 'en-US' : 'es-CO'} />
-      : <Text style={styles.signedOut}>{copy.signIn}</Text>}
+    {owner && <Directory key={owner} authenticated={authenticated} copy={copy} locale={english ? 'en-US' : 'es-CO'} />}
+    {!authenticated && <Text style={styles.signedOut} accessibilityLiveRegion="polite">
+      {verifying ? appCopy.verifying : auth.status === 'blocked' ? appCopy.failures[auth.failure ?? 'unavailable'] : copy.signIn}
+    </Text>}
   </SafeAreaView>;
 }
 
-function Directory({ copy, locale }: { copy: typeof es; locale: string }) {
-  const session = useAuthenticatedSession();
+function Directory({ authenticated, copy, locale }: { authenticated: boolean; copy: typeof es; locale: string }) {
+  const { baseUrl, execute } = useAuthenticatedSession();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<Result>({ state: 'idle' });
-  const active = useRef<AbortController | null>(null);
-  useEffect(() => () => active.current?.abort(), []);
-
-  async function search(byLocation: boolean) {
-    active.current?.abort();
-    const controller = new AbortController();
-    active.current = controller;
-    setResult({ state: 'loading' });
-    try {
-      let input: AssistanceSearchRequest;
-      if (byLocation) {
-        const coordinates = await readDeviceLocation(controller.signal).catch(() => undefined);
-        if (controller.signal.aborted) return;
-        if (!coordinates) { setResult({ state: coordinates === null ? 'denied' : 'locationError' }); return; }
-        input = { kind: 'nearby', locationAuthorized: true, coordinates };
-      } else {
-        input = { kind: 'manual', query: query.trim() };
-      }
-      const providers = await createAssistanceApi(session.baseUrl, session).search(input, controller.signal);
-      if (!controller.signal.aborted) setResult({ state: 'ready', providers });
-    } catch {
-      if (!controller.signal.aborted) setResult({ state: 'unavailable' });
-    }
+  const [search, setSearch] = useState<Search | null>(null);
+  if (!authenticated) {
+    if (query) setQuery('');
+    if (result.state !== 'idle') setResult({ state: 'idle' });
+    if (search?.kind === 'manual') setSearch(null);
   }
 
-  const busy = result.state === 'loading';
+  useEffect(() => {
+    if (!authenticated || !search) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const finish = (next: Result) => {
+      if (signal.aborted) return;
+      setResult(next);
+      setSearch(null);
+    };
+    async function lookup(request: Search) {
+      let input: AssistanceSearchRequest;
+      if (request.kind === 'nearby') {
+        // Android's permission activity can pause the app. Reuse its answer after session revalidation.
+        const permission = await request.permission;
+        if (signal.aborted) return;
+        if (!permission) return finish({ state: permission === null ? 'locationError' : 'denied' });
+        const coordinates = await readDeviceLocation(signal).catch(() => null);
+        if (signal.aborted) return;
+        if (!coordinates) return finish({ state: 'locationError' });
+        input = { kind: 'nearby', locationAuthorized: true, coordinates };
+      } else {
+        input = request;
+      }
+      const providers = await createAssistanceApi(baseUrl, { execute }).search(input, signal);
+      finish({ state: 'ready', providers });
+    }
+    void lookup(search).catch(() => finish({ state: 'unavailable' }));
+    return () => controller.abort();
+  }, [authenticated, baseUrl, execute, search]);
+
+  function searchByLocation() {
+    const permission = requestDeviceLocationPermission().catch(() => null);
+    setResult({ state: 'idle' });
+    setSearch({ kind: 'nearby', permission });
+  }
+
+  function searchManually() {
+    const place = query.trim();
+    if (place.length < 2) return;
+    setResult({ state: 'idle' });
+    setSearch({ kind: 'manual', query: place });
+  }
+
+  if (!authenticated) return null;
+  const busy = search !== null;
   return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
     <Text style={styles.demo}>{copy.demo}</Text>
     <View style={styles.card}>
       <Text style={styles.detail}>{copy.purpose}</Text>
-      <Action label={copy.location} onPress={() => void search(true)} disabled={busy} />
+      <Action label={copy.location} onPress={searchByLocation} disabled={busy} />
       <Text style={styles.title}>{copy.manual}</Text>
       <TextInput accessibilityLabel={copy.manual} style={styles.input} placeholder={copy.placeholder}
         placeholderTextColor={theme.colors.muted} value={query} maxLength={160} returnKeyType="search"
-        onChangeText={setQuery} onSubmitEditing={() => { if (query.trim().length >= 2) void search(false); }} />
-      <Action label={copy.search} onPress={() => void search(false)} disabled={query.trim().length < 2} />
+        onChangeText={setQuery} onSubmitEditing={searchManually} />
+      <Action label={copy.search} onPress={searchManually} disabled={query.trim().length < 2} />
     </View>
     {busy && <ActivityIndicator color={theme.colors.primary} accessibilityLabel={copy.loading} />}
-    {result.state !== 'idle' && result.state !== 'ready' && !busy
+    {result.state !== 'idle' && result.state !== 'ready'
       && <Text style={styles.detail} accessibilityLiveRegion="polite">{copy[result.state]}</Text>}
     {result.state === 'ready' && result.providers.length === 0 && <Text style={styles.detail}>{copy.empty}</Text>}
     {result.state === 'ready' && result.providers.map(provider => <View key={provider.id} style={styles.card}>
