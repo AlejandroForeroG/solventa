@@ -18,7 +18,7 @@ const copy = {
     retry: 'Reintentar', reload: 'Actualizar', loading: 'Cargando preferencias…',
     signedOut: 'Inicia sesión para consultar tus preferencias.',
     blocked: 'Push no está autorizado por el dispositivo. Actívalo en Ajustes para recibir avisos por este canal.',
-    openSettings: 'Abrir Ajustes', allowed: 'Push autorizado por el dispositivo.',
+    openSettings: 'Abrir Ajustes',
     pending: 'Push está elegido, pero no operará hasta que autorices las notificaciones en el dispositivo.',
     conflict: 'Las preferencias cambiaron en otra sesión. Actualiza antes de guardar.',
     failure: 'No pudimos guardar las preferencias. Reintenta con la misma solicitud o actualiza.',
@@ -33,7 +33,7 @@ const copy = {
     retry: 'Retry', reload: 'Refresh', loading: 'Loading preferences…',
     signedOut: 'Sign in to view your preferences.',
     blocked: 'Push is blocked by your device. Enable notifications in Settings to receive this channel.',
-    openSettings: 'Open Settings', allowed: 'Push is allowed by your device.',
+    openSettings: 'Open Settings',
     pending: 'Push is selected but cannot operate until you allow notifications on this device.',
     conflict: 'Preferences changed in another session. Refresh before saving.',
     failure: 'We could not save your preferences. Retry the same request or refresh.',
@@ -113,9 +113,9 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
     {error && <View accessibilityLiveRegion="polite" style={styles.warning}><Text style={styles.warningText}>
       {error === 'conflict' ? text.conflict : error === 'read' ? text.readFailure : text.failure}</Text></View>}
     {notice && <Text accessibilityLiveRegion="polite" style={styles.success}>{text.saved}</Text>}
-    {permission !== null && <View style={[styles.permission, !permission && styles.warning]}>
-      <Text style={permission ? styles.description : styles.warningText}>{permission ? text.allowed : text.blocked}</Text>
-      {!permission && <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />}
+    {permission === false && <View style={[styles.warning, styles.permission]}>
+      <Text style={styles.warningText}>{text.blocked}</Text>
+      <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />
     </View>}
     {draft && <View style={styles.panel}>
       <View style={styles.channelHeader}><View style={styles.categoryLabel} />{channels.map(channel =>
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, gap: 18, paddingBottom: 40 },
   description: { color: theme.colors.muted, fontSize: 14, lineHeight: 21 },
   panel: { backgroundColor: theme.colors.surface, borderRadius: 22, padding: 16, gap: 10 },
-  permission: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 12 },
+  permission: { gap: 12 },
   warning: { backgroundColor: theme.colors.warningSurface, padding: 16, borderRadius: 16 },
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },
