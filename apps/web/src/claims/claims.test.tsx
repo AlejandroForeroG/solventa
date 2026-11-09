@@ -34,6 +34,18 @@ describe('protected claims inbox', () => {
     expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
   });
 
+  it('shows a claim without an estimate as pending, in both languages, instead of a zero amount', async () => {
+    const reported = { ...examples.page, items: [{ ...first, estimatedAmount: null }] };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(reported)));
+    const spanish = show();
+    const row = within(await screen.findByRole('table')).getAllByRole('row')[1];
+    expect(within(row).getByText('Por estimar')).toBeVisible();
+    expect(within(row).queryByText(/COP/)).toBeNull();
+    spanish.unmount();
+    show(true);
+    expect(within((await screen.findAllByRole('row'))[1]).getByText('To be estimated')).toBeVisible();
+  });
+
   it('applies each quick filter on the server and returns to every claim', async () => {
     const fetch = vi.fn().mockImplementation(async () => response(examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
