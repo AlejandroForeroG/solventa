@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import type { FinancialActor, FinancialResult } from '../../domain/financial';
+import type { FinancialActor, FinancialResult, PolicyListResult } from '../../domain/financial';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 
 export type PolicyHttpDependencies = {
@@ -8,6 +8,7 @@ export type PolicyHttpDependencies = {
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
   finance: {
+    listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
     getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult>;
     issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string;
@@ -42,6 +43,7 @@ async function smallBody(request: Request): Promise<unknown> {
 export function createHttp(deps?: PolicyHttpDependencies) {
   const app = new Hono<{ Bindings: PolicyEnv }>();
   app.get('/health', (c) => c.json({ service: 'policy-claims-payments', status: 'alive' }));
+  app.all('/api/v1/policies', listOwnHandler);
   app.all('/api/v1/policies/:policyId', handler('policies:read'));
   app.all('/api/v1/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
   app.all('/api/v2/policies/:policyId', handler('policies:read'));
@@ -51,6 +53,38 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   app.all('/api/v2/policies/:policyId/charge', handler('policies:issue', false, 'charge'));
   app.all('/api/v2/policies/:policyId/signature-challenges', handler('policies:issue', false, 'challenge'));
   app.all('/api/v2/policies/:policyId/signature-challenges/:challengeId/cancel', handler('policies:issue', false, 'cancel'));
+  // The native wallet lists the caller's own issued policies with a bearer token; the web routes below keep using the sealed cookie.
+  async function listOwnHandler(c: import('hono').Context<{ Bindings: PolicyEnv }>) {
+    const supplied = c.req.header('x-trace-id') ?? '';
+    const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
+    const reply = (body: Record<string, unknown>, status: 200 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
+      { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      if (c.req.method !== 'GET') { c.header('Allow', 'GET'); return reply({ error: 'method_not_allowed' }, 405); }
+      if (!deps) return reply({ error: 'financial_unavailable' }, 503);
+      const token = c.req.header('authorization')?.match(/^Bearer ([A-Za-z0-9_.-]+)$/i)?.[1] ?? '';
+      if (!token) return reply({ error: 'unauthorized' }, 401);
+      const decision = await Promise.race([deps.authorizeFinancialAccess({ kind: 'mobile', operation: 'policies:read', token, traceId }),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('access_deadline')), 2000); })]);
+      if (!record(decision)) return reply({ error: 'access_unavailable' }, 503);
+      if (decision.allowed !== true) {
+        const { status, error } = decision;
+        if ((status === 400 || status === 401 || status === 403 || status === 503) && typeof error === 'string'
+          && ['invalid_request', 'unauthorized', 'forbidden', 'access_unavailable'].includes(error)) return reply({ error }, status);
+        return reply({ error: 'access_unavailable' }, 503);
+      }
+      const actor = decision.actor;
+      if (!record(actor) || actor.kind !== 'user' || actor.channel !== 'mobile' || !record(actor.principal)
+        || !Array.isArray(actor.operations) || !actor.operations.includes('policies:read')
+        || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)
+        || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
+      const result = await deps.finance.listOwn({ actor: { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, traceId });
+      if (result.status === 'ok') return reply({ policies: result.policies, hasMore: result.hasMore }, 200);
+      return reply({ error: result.error }, result.httpStatus);
+    } catch { return reply({ error: 'financial_unavailable' }, 503); }
+    finally { clearTimeout(timer); }
+  }
   function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' = 'issue') {
     return async (c: import('hono').Context<{ Bindings: PolicyEnv }>) => {
       const supplied = c.req.header('x-trace-id') ?? '';

@@ -61,7 +61,7 @@ test('unsupported native browser fails before launching another activity', async
   await assert.rejects(browser.open('https://synthetic.example/authorize', config.redirectUri), error => error instanceof AuthFailure && error.kind === 'native_required');
 });
 
-function fixture(initial: AuthRecord = emptyRecord()) {
+function fixture(initial: AuthRecord = emptyRecord(), policyCache?: { clear(): Promise<void> }) {
   let saved = structuredClone(initial);
   let clock = now;
   const calls: string[] = [];
@@ -82,7 +82,7 @@ function fixture(initial: AuthRecord = emptyRecord()) {
     revokeDevice: async () => { calls.push('revokeDevice'); },
   };
   const browser: AuthBrowser = { assertAvailable: () => {}, open: async () => null };
-  const auth = new Authentication({ baseUrl, store, identity, api, browser, now: () => clock, parseCallback });
+  const auth = new Authentication({ baseUrl, store, identity, api, browser, now: () => clock, parseCallback, policyCache });
   return { auth, api, identity, browser, store, calls, saved: () => saved, advance: (ms: number) => { clock += ms; } };
 }
 
@@ -531,7 +531,8 @@ test('a failed credential deletion after denial remains blocked, not a successfu
   f.store.write = async () => { throw new Error('Storage unavailable'); };
   f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
   await f.auth.restore();
-  assert.equal(f.auth.getSnapshot().status, 'blocked');
+  assert.equal(f.auth.getSnapshot().status, 'logoutPending');
+  assert.equal(f.auth.getSnapshot().failure, 'discard_incomplete');
   assert.equal(f.auth.getSnapshot().principal, undefined);
   f.store.write = write;
   await f.auth.retry();
@@ -580,4 +581,60 @@ test('legacy secure records need no email and malformed display metadata never b
     assert.equal(storedRecord({ ...record, session: { ...record.session, email } }).session?.email, undefined);
   }
   assert.equal(storedRecord({ ...record, session: { ...record.session, email: 'synthetic@example.test' } }).session?.email, 'synthetic@example.test');
+});
+
+test('offline policy data is cleared when logout starts, even while remote revocation is unavailable', async () => {
+  let clears = 0;
+  const f = fixture(sessionRecord(), { clear: async () => { clears++; } });
+  f.api.logout = async () => { throw new AuthFailure('unavailable'); };
+  const operation = f.auth.signOut();
+  await operation;
+  assert.equal(f.saved().session?.phase, 'logout');
+  assert.equal(clears, 1);
+});
+
+test('offline policy data is cleared when credentials are discarded and when the environment changes', async () => {
+  let clears = 0;
+  const policyCache = { clear: async () => { clears++; } };
+  const denied = fixture(sessionRecord(), policyCache);
+  denied.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
+  await denied.auth.restore();
+  assert.equal(denied.auth.getSnapshot().status, 'signedOut');
+  assert.equal(clears, 1);
+
+  const foreign = fixture({ ...sessionRecord(), session: { ...sessionRecord().session!, baseUrl: 'https://other.example' } }, policyCache);
+  await foreign.auth.restore();
+  assert.ok(clears >= 2);
+});
+
+test('signing out without a loaded session, as from the locked screen, still clears offline policy data', async () => {
+  let clears = 0;
+  const f = fixture(emptyRecord(), { clear: async () => { clears++; } });
+  await f.auth.signOut();
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.equal(clears, 1);
+});
+
+test('cancelling a new login attempt keeps the offline policy data of the existing installation', async () => {
+  let clears = 0;
+  const f = fixture(emptyRecord(), { clear: async () => { clears++; } });
+  await f.auth.restore();
+  await f.auth.signIn();
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.equal(clears, 0);
+});
+
+test('a failed offline data cleanup after denied credentials is retried instead of leaving the data behind', async () => {
+  let clears = 0;
+  let failing = true;
+  const f = fixture(sessionRecord(), { clear: async () => { if (failing) throw new Error('synthetic_storage_failure'); clears++; } });
+  f.api.inspect = async () => { throw new AuthFailure('unauthorized'); };
+  await f.auth.restore();
+  assert.equal(f.auth.getSnapshot().status, 'logoutPending');
+  assert.equal(f.saved().session?.phase, 'logout', 'the retained record allows cleanup retries, never session restoration');
+  failing = false;
+  await f.auth.restore();
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.equal(clears, 1);
+  assert.deepEqual(f.saved(), emptyRecord());
 });

@@ -28,13 +28,13 @@
       [
         "expo-secure-store",
         {
-          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales de acceso."
+          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas."
         }
       ],
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales de acceso."
+          "faceIDPermission": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas."
         }
       ],
       "expo-web-browser",
@@ -42,8 +42,8 @@
       ["expo-localization", { "supportedLocales": ["es", "en"] }]
     ],
     "locales": {
-      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales de acceso." } },
-      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials." } }
+      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas." } },
+      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials and saved policies." } }
     },
     "experiments": {
       "typedRoutes": true,
