@@ -17,7 +17,18 @@ export function HomeScreen() {
   return <Page title={copy.homeTitle}>
     <Tile title={copy.wallet} detail={copy.walletDetail} href="/wallet" />
     <Tile title={copy.claims} detail={copy.claimsDetail} href="/claims" />
-    <Tile title={copy.alerts} detail={copy.alertsDetail} href="/notification-preferences" />
+    <Tile title={copy.alerts} detail={copy.alertsDetail} href="/alerts" />
+  </Page>;
+}
+
+export function AlertsScreen() {
+  const auth = useAuthentication();
+  const copy = useNavigationMessages();
+
+  return <Page title={copy.alerts}>
+    {auth.status === 'authenticated' ? <View style={styles.card}>
+      <Text style={styles.detail}>{copy.alertsUnavailable}</Text>
+    </View> : <Tile title={copy.signIn} detail={copy.back} href="/" />}
   </Page>;
 }
 

@@ -23,7 +23,7 @@ export default function MainLayout() {
     <Tabs.Screen name="index" options={{ title: copy.home, tabBarIcon: icons.home }} />
     <Tabs.Screen name="wallet" options={{ title: copy.wallet, tabBarIcon: icons.wallet }} />
     <Tabs.Screen name="claims" options={{ title: copy.claims, tabBarIcon: icons.claims }} />
-    <Tabs.Screen name="notification-preferences" options={{ title: copy.alerts, tabBarIcon: icons.alerts }} />
+    <Tabs.Screen name="alerts" options={{ title: copy.alerts, tabBarIcon: icons.alerts }} />
     <Tabs.Screen name="profile" options={{ title: copy.profile, tabBarIcon: icons.profile }} />
   </Tabs>;
 }
