@@ -22,7 +22,7 @@ Derived values, never supplied by a caller:
 
 ## Data
 
-Migration `0009_claims_inbox.sql` adds nullable `claim_number` (unique, `SIN-YYYY-NNNNN`), `estimated_amount DECIMAL(19,4)` and `assignee_id`, plus `currency` (default `COP`), `evidence_required` (default 0) and a partial index of open claims by `created_at`. Existing rows and the parametric insert are unchanged. The runtime grants did not change. Apply it before integrating code that needs it, following the [migration guide](../../infrastructure/migrations.md), and verify with the environment's schema verification.
+Migration `0009_claims_inbox.sql` adds nullable `claim_number` (unique, `SIN-YYYY-NNNNN`), `estimated_amount DECIMAL(19,4)` and `assignee_id`, plus `currency` (default `COP`), `evidence_required` (default 0) and a partial index of open claims by `created_at`. Existing rows and the parametric insert are unchanged. The runtime grants did not change. Normal Deploy applies it, together with Identity's `0012_claims_access_grants.sql`, in the environment's migration job before publishing the code that reads it; see the [migration guide](../../infrastructure/migrations.md) for status, manual application and recovery. The code and migration ship together, so a deployment that does not receive both fails schema verification.
 
 `assignee_id` holds an Identity client UUID without a foreign key, because owners do not read each other's tables. The claim number has no counter yet: whichever flow creates claims (assisted or mobile reports) must allocate it, as quotes and consents do.
 
