@@ -2,6 +2,7 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
+import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
 import type { VerificationCommand } from '../../apps/mobile/src/features/identity-verification/application/ports';
@@ -127,5 +128,21 @@ test('mobile lists its own issued policies through the public gateway', async ()
     const api = createPoliciesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') }, (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
     const { status: _status, ...kept } = policy;
     assert.deepEqual(await api.list(), { policies: [kept], hasMore: false });
+  });
+});
+
+test('mobile finds a simulated provider through the shared search contract', async () => {
+  const provider = { id: 'demo-med-roadside', kind: 'roadside', name: 'Asistencia de prueba Medellín', city: 'Medellín',
+    address: 'Calle de prueba 30', phone: '+570000000003', hours: 'Todos los días 00:00–24:00' };
+  const input = { kind: 'manual', query: 'Medellín' } as const;
+  pact.given('a native session with access to the synthetic assistance directory').uponReceiving('mobile assistance provider search')
+    .withRequest({ method: 'POST', path: '/api/v1/assistance/providers/search',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token' }, body: input })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, providers: [provider], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    const api = createAssistanceApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+      (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
+    assert.deepEqual(await api.search(input), [provider]);
   });
 });

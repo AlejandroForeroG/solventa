@@ -1,5 +1,7 @@
+import { useIsFocused } from 'expo-router';
+
 import { NotificationPreferencesScreen } from '@/features/notification-preferences/presentation/NotificationPreferencesScreen';
 
 export default function NotificationPreferencesRoute() {
-  return <NotificationPreferencesScreen />;
+  return useIsFocused() ? <NotificationPreferencesScreen /> : null;
 }

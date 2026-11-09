@@ -3,7 +3,10 @@ import { getCookie } from 'hono/cookie';
 import type { FinancialActor, FinancialResult, PolicyListResult } from '../../domain/financial';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 
+import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
+
 export type PolicyHttpDependencies = {
+  assistance?: AssistanceHttpDependencies;
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
@@ -174,6 +177,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
     };
   }
   if (deps?.claims) mountClaims(app, deps.claims);
+  if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
 }
