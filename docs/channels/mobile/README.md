@@ -15,6 +15,12 @@ See [Mobile architecture](architecture.md) for the implemented folder structure,
 
 Keep routes thin. Each capability's UI and logic live in its `src/features` directory; reusable code between capabilities may go in `src/shared` when a concrete need exists.
 
+## Navigation
+
+The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts opens the notification preferences. Profile contains identity verification, device access settings and sign-out. Claims shows the availability of [assistance provider search](../../modules/policy-claims-payments/assistance-provider-search.md) while its API is pending. The sign-in and verification flows use the existing stack outside the tab bar where applicable.
+
+Wallet and Alerts unmount their content when their tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
+
 ## Development
 
 Run from the monorepo root:
@@ -38,7 +44,7 @@ The current build exports for web. For native capability changes, validate the f
 
 ## Notification preferences
 
-After sign-in, the welcome screen opens `/notification-preferences`. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
+After sign-in, the Alerts tab opens `/notification-preferences`. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
 
 The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission; if denied, the saved choice remains visible but the UI says push is not operational and offers a Settings shortcut. This uses `expo-notifications` in an Expo development build and `expo-crypto` for the command's idempotency key. The public web gateway forwards the complete PUT body with the same 4 KiB limit enforced by Identity; `tests/notification-preferences-runtime.test.mjs` checks that path through a Service Binding. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
 
@@ -46,7 +52,7 @@ Run `npm run test:notification-preferences`, mobile lint and types, and `npm run
 
 ## Identity onboarding
 
-The signed-in welcome action opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
+The identity action in Profile opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
 
 Revocation or expiry requires new explicit consent and an empty attempt. Pending operations retry the same key/body; a persisted evaluation resumes after restart. Refresh reads authoritative progress. Backgrounding, sign-out and account changes hide progress until authentication is revalidated. The adapter uses the existing serialized session execution port; tokens never enter UI state. No result grants contracting access or a legal certificate.
 

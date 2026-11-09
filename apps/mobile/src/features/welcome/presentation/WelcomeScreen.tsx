@@ -7,12 +7,12 @@ import { theme } from '../../../theme';
 import { useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
 import { useAppMessages } from '../../../shared/i18n/use-app-messages';
 
-export function WelcomeScreen() {
+export function WelcomeScreen({ profile = false }: { profile?: boolean } = {}) {
   const auth = useAuthentication();
   const copy = useAppMessages();
   const busy = auth.status === 'loading' || auth.status === 'authorizing' || auth.status === 'biometricPrompt';
   const authenticated = auth.status === 'authenticated';
-  const heading = authenticated ? copy.headings.authenticated : auth.status === 'locked' ? copy.headings.locked
+  const heading = authenticated ? (profile ? copy.headings.profile : copy.headings.authenticated) : auth.status === 'locked' ? copy.headings.locked
     : auth.status === 'blocked' ? copy.headings.blocked : auth.status === 'logoutPending' ? copy.headings.logoutPending
       : auth.status === 'signedOut' ? copy.headings.signedOut : copy.headings.signIn;
   const status = auth.status === 'authorizing' ? copy.authorizing
@@ -58,8 +58,10 @@ export function WelcomeScreen() {
             </>}
             {authenticated && <>
               <Action label={copy.actions.verifyIdentity} onPress={() => router.push('/identity-verification' as Href)} />
-              <Action label={copy.actions.wallet} variant="secondary" onPress={() => router.push('/wallet' as Href)} />
-              <Action variant="secondary" label={copy.actions.notificationPreferences} onPress={() => router.push('/notification-preferences' as Href)} />
+              {!profile && <>
+                <Action label={copy.actions.wallet} variant="secondary" onPress={() => router.push('/wallet' as Href)} />
+                <Action variant="secondary" label={copy.actions.notificationPreferences} onPress={() => router.push('/notification-preferences' as Href)} />
+              </>}
               {auth.email && <View style={styles.account}><Text style={styles.accountLabel}>{copy.currentAccount}</Text>
                 <Text selectable style={styles.email}>{auth.email}</Text></View>}
               <View style={styles.biometricStatus}>
