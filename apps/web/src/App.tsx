@@ -1,5 +1,6 @@
 import { AuditWorkspace } from './audit/AuditWorkspace';
 import { ClaimsInbox } from './claims/ClaimsInbox';
+import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { brandAssets } from '@solventa/assets/web';
 import { useCallback, useEffect, useState } from 'react';
@@ -51,8 +52,9 @@ function Shell() {
   const isAudit = window.location.pathname === '/auditoria';
   const isClaims = window.location.pathname === '/siniestros';
   const isProviders = window.location.pathname === '/prestadores';
-  const isConsole = isAudit || isClaims || isProviders;
-  const sectionTitle = isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
+  const isPolicies = window.location.pathname === '/polizas';
+  const isConsole = isAudit || isClaims || isProviders || isPolicies;
+  const sectionTitle = isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -85,6 +87,7 @@ function Shell() {
         {session === 'anonymous' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
           if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
         }}>{t('session.title')}</a>}
+        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/polizas">{t('policies.open')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/siniestros">{t('claims.open')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/prestadores">{t('assistance.title')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/auditoria">{t('audit.open')}</a>}
@@ -92,7 +95,7 @@ function Shell() {
       </div>
     </header>
     {isConsole ? (session === 'authenticated' && !busy
-      ? isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isPolicies ? <PolicyPortal onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(sectionTitle)}</h1>
         {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>
