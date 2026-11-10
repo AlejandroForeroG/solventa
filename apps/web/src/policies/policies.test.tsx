@@ -72,7 +72,7 @@ describe('my policies', () => {
   });
 
   it('lists the documents with their issue date and downloads one as a PDF', async () => {
-    const pdf = new Response(new Blob(['%PDF-1.4']), { status: 200, headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="signed-policy-10000000.pdf"' } });
+    const pdf = new Response('%PDF-1.4', { status: 200, headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="signed-policy-10000000.pdf"' } });
     const fetch = serve({ '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }), [`/api/v1/policies/${policyId}/detail`]: () => json(detail),
       [`/api/v1/policies/${policyId}/documents/signed_policy`]: () => pdf });
     const createObjectURL = vi.fn(() => 'blob:synthetic'), revokeObjectURL = vi.fn();
