@@ -16,7 +16,7 @@ info:
     carries the price, its validity and the applicable explanation, never the customer's identifiers or
     raw signal values. Offers are synthetic: no real provider, settlement or signature is involved.
     The same Idempotency-Key with the same request returns the original offer; a key is scoped to the
-    partner. Provider budget and latency objectives are those of the web offer.
+    partner and the authorization. Provider budget and latency objectives are those of the web offer.
 servers:
   - url: /api/v1
 tags:
@@ -119,7 +119,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Unique key per order, 1 to 128 characters. Scoped to the partner.
+      description: Unique key per order, 1 to 128 characters. Scoped to the partner and the authorization; the same key under another authorization is another order.
       schema: { type: string, minLength: 1, maxLength: 128 }
   headers:
     TraceId:

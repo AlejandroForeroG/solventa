@@ -77,8 +77,9 @@ test('the offer window ends with the earlier of the customer consent and the aut
 
 test('a partner key never replays another partner result and a body customer id never selects the customer', async () => {
   const protector = new HmacProtector('synthetic-partner-key-'.padEnd(40, 'x'));
-  const [a, again, b, c] = await Promise.all([protector.partnerKey(partnerId, 'order-1'), protector.partnerKey(partnerId, 'order-1'), protector.partnerKey(randomUUID(), 'order-1'), protector.partnerKey(partnerId, 'order-2')]);
-  assert.equal(a, again); assert.notEqual(a, b); assert.notEqual(a, c);
+  const [a, again, b, c, d] = await Promise.all([protector.partnerKey(partnerId, authorizationId, 'order-1'), protector.partnerKey(partnerId, authorizationId, 'order-1'),
+    protector.partnerKey(randomUUID(), authorizationId, 'order-1'), protector.partnerKey(partnerId, authorizationId, 'order-2'), protector.partnerKey(partnerId, randomUUID(), 'order-1')]);
+  assert.equal(a, again); assert.notEqual(a, b); assert.notEqual(a, c); assert.notEqual(a, d);
   assert.match(a, /^[0-9a-f]{64}$/);
   const f = fixture();
   await f.service.create(request({ body: { authorizationId, clientId: randomUUID(), subjectToken: randomUUID(), ...quoteBody } }));

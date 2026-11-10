@@ -51,5 +51,5 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 export const protector = {
   fingerprint: async (id: string, request: unknown) => digest(`${id}:${JSON.stringify(request)}`),
   documentToken: async (doc: string) => digest(`document:${doc}`),
-  partnerKey: async (partnerId: string, key: string) => digest(`partner-key:${partnerId}:${key}`)
+  partnerKey: async (partnerId: string, authorizationId: string, key: string) => digest(`partner-key:${partnerId}:${authorizationId}:${key}`)
 };
