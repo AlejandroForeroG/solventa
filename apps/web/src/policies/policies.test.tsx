@@ -161,6 +161,12 @@ describe('my policies', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo consultar tus pólizas.');
   });
 
+  it('rejects a flight coverage whose delay threshold is below the contractual minimum', async () => {
+    serve({ '/api/v1/policies/issued': () => json({ policies: [{ ...flight, coverage: { ...flight.coverage, thresholdMinutes: 0 } }], hasMore: false }) });
+    show();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo consultar tus pólizas.');
+  });
+
   it('marks an expired policy and works in English', async () => {
     serve({ '/api/v1/policies/issued': () => json({ policies: [{ ...summary, effectiveUntil: '2026-11-01T00:00:00.000Z' }], hasMore: false }), [`/api/v1/policies/${policyId}/detail`]: () => json(detail) });
     show(true); const user = userEvent.setup();

@@ -1,7 +1,7 @@
 import { InvalidFinancialRecord } from './financial';
 import type { AcceptedOffer, Coverage, FinancialResult } from './financial';
-import { CONDITIONS_VERSION, conditionsFor } from './policy-conditions';
-import type { Exclusion } from './policy-conditions';
+import { CONDITIONS_VERSIONS, conditionsFor } from './policy-conditions';
+import type { ConditionsVersion, Exclusion } from './policy-conditions';
 
 export const DOCUMENT_KINDS = ['signed_policy', 'general_conditions', 'premium_receipt'] as const;
 export type PolicyDocumentKind = typeof DOCUMENT_KINDS[number];
@@ -47,19 +47,20 @@ function coverageLines(coverage: Coverage): string[] {
   return ['Umbral de retraso: ' + coverage.thresholdMinutes + ' minutos', 'Pago por retraso: ' + pesos(coverage.payoutAmount), 'Vuelo asegurado: ' + coverage.flightReference];
 }
 
-export function policyDetail(facts: IssuedPolicyFacts): PolicyDetail {
+export function policyDetail(facts: IssuedPolicyFacts, versions: readonly ConditionsVersion[] = CONDITIONS_VERSIONS): PolicyDetail {
+  const conditions = conditionsFor(facts.offer.product, facts.signedAt, versions);
   const status = paymentStatus(facts.payment.status);
   const documents: PolicyDocumentEntry[] = [{ documentId: 'signed_policy', issuedAt: facts.signedAt }, { documentId: 'general_conditions', issuedAt: facts.signedAt }];
   if (status === 'paid') documents.push({ documentId: 'premium_receipt', issuedAt: facts.payment.at });
   return { policyId: facts.policyId, product: facts.offer.product, status: 'issued', premium: facts.premium, currency: facts.currency,
     effectiveFrom: facts.effectiveFrom, effectiveUntil: facts.effectiveUntil, coverage: facts.offer.coverage,
-    exclusions: conditionsFor(facts.offer.product).exclusions, conditionsVersion: CONDITIONS_VERSION, documents,
+    exclusions: conditions.exclusions, conditionsVersion: conditions.version, documents,
     payments: [{ date: facts.payment.at, amount: facts.payment.amount, currency: 'COP', status,
       reference: status === 'paid' ? facts.payment.reference : null }] };
 }
 
-export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts): DocumentFile | null {
-  const conditions = conditionsFor(facts.offer.product);
+export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts, versions: readonly ConditionsVersion[] = CONDITIONS_VERSIONS): DocumentFile | null {
+  const conditions = conditionsFor(facts.offer.product, facts.signedAt, versions);
   const fileName = `${kind.replace(/_/g, '-')}-${facts.policyId.slice(0, 8)}.pdf`;
   if (kind === 'signed_policy') return { fileName, title: 'Póliza ' + conditions.productName, lines: [
     'Número de póliza: ' + facts.policyId, 'Emitida: ' + colombiaTime(facts.signedAt),
@@ -68,7 +69,7 @@ export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts)
     'Exclusiones: las señaladas en la cláusula 7 de las condiciones generales.',
     'Huella del documento firmado: ' + facts.documentHash, '', NOTICE] };
   if (kind === 'general_conditions') return { fileName, title: 'Condiciones generales · ' + conditions.productName, lines: [
-    'Versión de las condiciones: ' + CONDITIONS_VERSION, '',
+    'Versión de las condiciones: ' + conditions.version, '',
     ...conditions.clauses.flatMap(clause => [clause.title, ...clause.lines, '']),
     'Cláusula 7 · Exclusiones', ...conditions.exclusions.map(item => item.code + ' ' + item.text), '', NOTICE] };
   if (facts.payment.status !== 'confirmed') return null;

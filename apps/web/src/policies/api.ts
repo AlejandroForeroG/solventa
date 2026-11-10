@@ -22,7 +22,7 @@ const list = <T>(v: unknown, check: (item: unknown) => item is T): v is T[] => A
 function coverage(v: unknown): v is PolicyCoverage {
   if (!record(v)) return false;
   if (v.kind === 'mortgage_life') return money(v.sumInsured);
-  return v.kind === 'flight_delay' && uuid(v.flightReference) && Number.isSafeInteger(v.thresholdMinutes) && money(v.payoutAmount);
+  return v.kind === 'flight_delay' && uuid(v.flightReference) && typeof v.thresholdMinutes === 'number' && Number.isSafeInteger(v.thresholdMinutes) && v.thresholdMinutes >= 1 && money(v.payoutAmount);
 }
 function summary(v: unknown): v is PolicySummary {
   return record(v) && uuid(v.policyId) && (v.product === 'vida_hipotecario' || v.product === 'flight_delay') && v.status === 'issued' && money(v.premium)
