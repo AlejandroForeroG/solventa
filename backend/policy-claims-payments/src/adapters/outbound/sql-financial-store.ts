@@ -16,10 +16,10 @@ const policyFrom = (row: PolicyRow): StoredPolicy => {
 };
 type PaymentRow = { payment_id: string | null; payment_policy_id: string | null; payment_operation: Payment['operation'] | null; payment_amount: string | null;
   payment_currency: 'COP' | null; payment_key: string | null; payment_hash: string | null; payment_status: Payment['status'] | null; payment_reference: string | null;
-  intent_id: string | null; intent_operation: string | null; intent_key: string | null; intent_hash: string | null; orphan: boolean };
+  payment_updated_at: Date | null; intent_id: string | null; intent_operation: string | null; intent_key: string | null; intent_hash: string | null; orphan: boolean };
 const paymentColumns = (intent: string, payment: string, policyId: string) => `${payment}.id AS payment_id,${payment}.policy_id AS payment_policy_id,
   ${payment}.operation AS payment_operation,${payment}.amount::STRING AS payment_amount,${payment}.currency AS payment_currency,
-  ${payment}.idempotency_key AS payment_key,${payment}.request_hash AS payment_hash,${payment}.status AS payment_status,${payment}.provider_reference AS payment_reference,
+  ${payment}.idempotency_key AS payment_key,${payment}.request_hash AS payment_hash,${payment}.status AS payment_status,${payment}.provider_reference AS payment_reference,${payment}.updated_at AS payment_updated_at,
   ${intent}.payment_id AS intent_id,${intent}.operation AS intent_operation,${intent}.payment_key AS intent_key,${intent}.request_hash AS intent_hash,
   (${intent}.payment_id IS NULL AND EXISTS(SELECT 1 FROM policy.payments other
     LEFT JOIN policy.financial_payment_intents unbound ON unbound.payment_id=other.id
@@ -32,7 +32,8 @@ const paymentFrom = (row: PaymentRow, policyId: string, operation: Payment['oper
     || typeof row.payment_key !== 'string' || typeof row.payment_hash !== 'string' || row.payment_key !== row.intent_key || row.payment_hash !== row.intent_hash
     || !row.payment_status || !['pending', 'confirmed', 'refunded', 'declined'].includes(row.payment_status)) throw new InvalidFinancialRecord();
   return { id: row.payment_id, policyId: row.payment_policy_id, operation: row.payment_operation, amount: row.payment_amount, currency: row.payment_currency,
-    key: row.payment_key, hash: row.payment_hash, status: row.payment_status, providerReference: row.payment_reference };
+    key: row.payment_key, hash: row.payment_hash, status: row.payment_status, providerReference: row.payment_reference,
+    ...(row.payment_updated_at ? { updatedAt: row.payment_updated_at.toISOString() } : {}) };
 };
 type RecordRow = PolicyRow & PaymentRow & { signature_policy_id: string | null; signature_document_hash: string | null;
   signature_receipt: string | null; signature_signed_at: Date | null; signature_time_seal: string | null };

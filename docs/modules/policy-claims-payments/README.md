@@ -39,6 +39,24 @@ Issuance derives money and ownership from the stored, integrity-checked acceptan
 
 The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) documents `listOwnPolicies`; `tests/financial.test.ts`, `tests/financial-http.test.ts`, `tests/financial-access.test.ts` and the native Pact interaction cover it, and `infra/financial-smoke.mts` covers the SQL ownership and status filter.
 
+### Web policy portal
+
+The signed-in customer reads issued policies from the web through three owner-scoped, read-only routes. They use the sealed web session and one `authorizeFinancialAccessV1` call with `policies:read`; an `Authorization` header, a non-GET method or a malformed identifier is rejected before any business read. Each answer is `no-store` and carries `X-Trace-Id`.
+
+- `GET /api/v1/policies/issued` lists at most six issued policies with the same summaries as the native list. The native route keeps its own bearer contract.
+- `GET /api/v1/policies/{policyId}/detail` returns, from one integrity-checked read, the `coverage` of the sealed offer, the `exclusions` and `conditionsVersion` of the product, the available `documents` with their `issuedAt`, and the `payments` of the policy.
+- `GET /api/v1/policies/{policyId}/documents/{documentId}` returns the PDF of `signed_policy`, `general_conditions` or `premium_receipt` as an attachment.
+
+Rules that keep the portal honest:
+
+- **Exclusions and general conditions live in the code**, in `src/domain/policy-conditions.ts`, per product and identified by `conditionsVersion` (`academic-conditions-1`). They are joined to a policy when it is read, so they are not part of the signed document or its hash and they also apply to policies issued earlier. The wording is academic demonstration text in es-CO, taken from the approved prototype for mortgage life. Changing it changes what every policy shows, so a future need to prove the exact exclusions each customer signed requires sealing them into the document instead.
+- **Only an issued policy is a portal policy.** A policy still in the purchase flow, a missing one and one owned by another user all return the same 404. A pending one is not recorded as a security denial, like a missing import in the acceptance read; a foreign one is recorded as for any other policy read.
+- **Documents.** The issue date of the signed policy and of the general conditions is the signature time. The receipt is dated by the payment and exists only for a confirmed premium. PDFs are generated on request from the checked record by `src/adapters/inbound/pdf.ts`, a text-only PDF 1.4 writer without dependencies and without dates, so the same document gives the same bytes. Nothing is stored. Characters outside Latin-1 are replaced by `?`.
+- **Payments.** The model has one premium charge per policy, so the history has one row: `date` is the last state change of the stored payment, `status` is `paid`, `pending` or `failed` (a refunded premium never belongs to an issued policy and fails the integrity check), and the synthetic receipt `reference` appears only when paid. Indemnity payments are not part of this history.
+- The portal reads need no migration: the payment query also selects the existing `updated_at` column.
+
+The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) documents `listIssuedPolicies`, `getOwnPolicyDetail` and `downloadOwnPolicyDocument`. `tests/policy-portal.test.ts` covers the detail, documents, payment states, integrity failures and the PDF structure, and `tests/financial-http.test.ts` covers the routes, authorization, identifiers and denial recording. The latency objective of the detail read (p95 ≤ 150 ms, p99 ≤ 300 ms) has a scenario, `infra/load/policies.k6.js`; see [load tests](../../../infra/load/README.md) for what has been measured.
+
 ### Decision: charge before issuance
 
 The premium is charged before the policy is signed and issued; a policy never becomes `issued` without a confirmed premium. Alternative considered: issue first and charge afterwards, which would leave an issued, unpaid policy after a declined charge. With the chosen order, the recovery obligation is the opposite case, a confirmed charge whose issuance did not complete, which must end issued or refunded.
