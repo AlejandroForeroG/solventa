@@ -91,6 +91,16 @@ try {
   assert.equal((await service.create(command)).status, 'replayed');
   assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
   assert.equal((await service.get({ actor: other, offerId: created.offer.offerId, traceId: trace() })).status, 'not_found');
+  // The retained decision explains an offer to its owner only, and records the partner channel when one requested it.
+  assert.deepEqual(await store.explanation(actor, created.offer.offerId), storedCapture);
+  assert.equal(await store.explanation(other, created.offer.offerId), null, 'a foreign customer cannot read the retained decision');
+  assert.equal(await store.explanation(actor, randomUUID()), null);
+  const channel = { kind: 'partner' as const, partnerId: randomUUID(), authorizationId: randomUUID() };
+  const partnerOffer = await service.create({ ...command, idempotencyKey: randomUUID(), traceId: trace(), channel });
+  assert.equal(partnerOffer.status, 'created'); if (partnerOffer.status !== 'created') throw Error('partner offer failed');
+  const partnerCapture = await store.explanation(actor, partnerOffer.offer.offerId);
+  assert.deepEqual(partnerCapture?.channel, channel);
+  assert.equal(storedCapture.channel, undefined, 'an offer the customer requested has no partner channel');
   // One snapshot statement returns the ledger outcome, the keyed context and only the caller's own quote.
   const snapshot = await store.creationSnapshot(actor, command.idempotencyKey, quote.quote.quoteId);
   if (snapshot.request?.outcome !== 'accepted') throw Error('ledger outcome missing from snapshot');
