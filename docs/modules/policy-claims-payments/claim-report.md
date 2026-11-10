@@ -15,6 +15,7 @@ A report is three owner-side steps, so a partial failure can never claim that th
 The draft declares the policy, the event type (`collision`, `theft`, `damage`, `other`), the time of the event, an optional place of at most 120 characters, a description of 40 to 600 characters and the evidence manifest: for each file a client-chosen UUID, its content type, its size and its SHA-256. The server rejects unknown fields and reports only the names of invalid fields, never their values, because a description or place may be personal data.
 
 - **Limits.** At most 10 files and 50 MiB in total; `image/jpeg`, `image/png`, `image/heic`, `video/mp4` and `video/quicktime`. These are provisional product values taken from the approved mobile prototype, and the app checks the same limits before sending.
+- **Policy.** It must be issued and belong to the caller; a policy still pending has no coverage, so a report against it answers `404 not_found` like a policy of someone else.
 - **Event time.** It must not be in the future (five minutes of clock tolerance) and must fall inside the policy's effective dates, otherwise the answer is `422 outside_coverage`.
 - **Required evidence.** One verified file completes a report. The submitted claim records `evidence_required = 1`; analysts may require more later.
 - **Estimate.** The customer cannot value a claim, so the submitted claim has no `estimated_amount` and the inbox lists it as pending until an analyst sets one.

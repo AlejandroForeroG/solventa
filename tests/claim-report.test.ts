@@ -30,14 +30,15 @@ const report = (change: Record<string, unknown> = {}) => ({ policyId: ids.policy
 // A faithful in-memory copy of the store's contract: the claim is always resolved through the owner's policy.
 function memoryStore() {
   type Row = { id: string; owner: string; policyId: string; key: string; hash: string; state: string; number: string | null; submittedAt: string | null; files: Map<string, StoredEvidence> };
-  const policies = new Map([[ids.policy, { subject: ids.subjectA, from: Date.parse('2026-01-01T00:00:00.000Z'), until: Date.parse('2027-01-01T00:00:00.000Z') }]]);
+  const window = { from: Date.parse('2026-01-01T00:00:00.000Z'), until: Date.parse('2027-01-01T00:00:00.000Z') };
+  const policies = new Map([[ids.policy, { subject: ids.subjectA, issued: true, ...window }], [ids.otherPolicy, { subject: ids.subjectA, issued: false, ...window }]]);
   const claims = new Map<string, Row>(); let sequence = 0;
   const owned = (owner: ReportOwner, id: string) => { const row = claims.get(id); return row && policies.get(row.policyId)?.subject === owner.subjectToken ? row : undefined; };
   const view = (row: Row): DraftView => ({ claimId: row.id, state: row.state, evidence: [...row.files].map(([fileId, file]) => ({ fileId, state: file.state === 'verified' ? 'verified' as const : 'pending' as const })) });
   const store: ClaimReportStore = {
     async createDraft({ owner, report: input, idempotencyKey, requestHash }) {
       const policy = policies.get(input.policyId);
-      if (!policy || policy.subject !== owner.subjectToken) return { status: 'policy_not_found' };
+      if (!policy || policy.subject !== owner.subjectToken || !policy.issued) return { status: 'policy_not_found' };
       const existing = [...claims.values()].find(row => row.policyId === input.policyId && row.key === idempotencyKey);
       if (existing) return existing.hash === requestHash ? { status: 'replayed', claim: view(existing) } : { status: 'idempotency_conflict' };
       const occurred = Date.parse(input.occurredAt);
@@ -156,6 +157,7 @@ test('uploads are refused for another customer, a wrong type or size, a corrupte
   assert.deepEqual(await send(ownerB, ids.file1, photo, 'image/jpeg', photo.length), { status: 'not_found' });
   assert.deepEqual(await application.submit(ownerB, draft.claimId, ids.trace), { status: 'not_found' });
   assert.equal((await application.create(ownerB, report(), 'retry-key-0003', ids.trace)).status, 'policy_not_found');
+  assert.equal((await application.create(ownerA, report({ policyId: ids.otherPolicy }), 'retry-key-0006', ids.trace)).status, 'policy_not_found', 'a policy that is not issued yet has no coverage');
   assert.deepEqual(await send(ownerA, ids.file1, photo, 'image/png', photo.length), { status: 'content_type_mismatch' });
   assert.deepEqual(await send(ownerA, ids.file1, photo, null, photo.length), { status: 'content_type_mismatch' });
   assert.deepEqual(await send(ownerA, ids.file1, photo.slice(0, 10), 'image/jpeg', 10), { status: 'size_mismatch' });
