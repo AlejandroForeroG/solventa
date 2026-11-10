@@ -83,6 +83,19 @@ describe('my policies', () => {
     expect(within(coverage).getByText('Pago por retraso').nextSibling).toHaveTextContent(/100\.000/);
   });
 
+  it('shows the weather coverage with its rainfall threshold, station and payout', async () => {
+    const stationId = '20000000-0000-4000-8000-000000000002';
+    const rain = { ...summary, policyId: flightId, product: 'weather_event', premium: '10000.0000',
+      coverage: { kind: 'weather_event', stationId, parameter: 'precipitation_24h', unit: 'mm', threshold: 50, payoutAmount: '100000.0000' } };
+    serve({ '/api/v1/policies/issued': () => json({ policies: [rain], hasMore: false }), [`/api/v1/policies/${flightId}/detail`]: () => json({ ...detail, ...rain }) });
+    show(); const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /^Ver detalle de/ }));
+    const coverage = await screen.findByRole('region', { name: 'Cobertura' });
+    expect(within(coverage).getByText('50 mm en 24 horas')).toBeVisible();
+    expect(within(coverage).getByText(stationId)).toBeVisible();
+    expect(within(coverage).getByText('Pago por lluvia intensa').nextSibling).toHaveTextContent(/100\.000/);
+  });
+
   it('lists the documents with their issue date and downloads one as a PDF', async () => {
     const pdf = new Response('%PDF-1.4', { status: 200, headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="signed-policy-10000000.pdf"' } });
     const fetch = serve({ '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }), [`/api/v1/policies/${policyId}/detail`]: () => json(detail),
