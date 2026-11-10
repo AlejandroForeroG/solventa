@@ -1,6 +1,6 @@
 # Claim report
 
-Policy, Claims & Payments owns the customer's report of a claim from the native app. [OpenAPI](../../../packages/contracts/openapi/v1/claims.yaml) and [synthetic examples](../../../packages/contracts/examples/claims.json) define three routes; the report ends as an open claim in the [claims inbox](claims-inbox.md). Reporting from the web channel and resuming an interrupted upload are separate work and are not part of this guide.
+Policy, Claims & Payments owns the customer's report of a claim from the native app. [OpenAPI](../../../packages/contracts/openapi/v1/claims.yaml) and [synthetic examples](../../../packages/contracts/examples/claims.json) define three routes; the report ends as an open claim in the [claims inbox](claims-inbox.md). The native caller is described in the [mobile claim report guide](../../channels/mobile/README.md#claim-report). Reporting from the web channel and resuming an interrupted upload are separate work and are not part of this guide.
 
 ## Flow
 

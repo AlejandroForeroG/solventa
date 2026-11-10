@@ -121,6 +121,10 @@ Rules that every local data store in the channel follows:
 - **Operations are serialized.** Save, read and clear run one at a time in call order, so a clear that starts while a save is still writing always runs after it. Locking is immediate, and a read queued behind a clear finds the cache locked.
 - **Cache is not authorization.** Showing cached data never grants business access. The server still decides, and cached data is shown as stored data with its sync time, never as online information.
 
+## Claim report
+
+`src/features/claim-report` follows the same layers. The domain holds the limits and the declaration rules and has no platform type. The application holds `ClaimReportFlow`, an in-memory coordinator that retains one idempotency key, the declaration and the files already received across retries, and the ports it needs (`ClaimReportApi`, `FileDigest`, `EvidenceSource`). The adapters translate the HTTP contract, the camera and gallery (`expo-image-picker`), the file hash (`expo-crypto`) and the native upload (`expo-file-system`); `create-claim-report.ts` is the only place where they meet the flow. The screen keeps the report mounted while the app revalidates its session after a trip to the camera or the gallery.
+
 ## Localization and appearance
 
 `shared/i18n/messages.ts` holds matching Spanish/English catalogs and a pure language resolver. `device-language.ts` reads Expo Localization; `use-app-messages.ts` reacts to device/browser language changes and foreground return. The first supported preferred language wins, with Spanish as fallback. There is no in-app selector or stored language override.
