@@ -196,12 +196,6 @@ test('an authenticated account retains the existing identity-verification entry'
   assert.deepEqual(routes, ['/identity-verification']);
 });
 
-test('an authenticated account opens the wallet', () => {
-  render('authenticated');
-  press('wallet');
-  assert.deepEqual(routes, ['/wallet']);
-});
-
 test('notification preferences are opened from the authenticated profile', () => {
   render('authenticated');
   assert.ok(!text().includes('notificationPreferences'));
@@ -209,4 +203,10 @@ test('notification preferences are opened from the authenticated profile', () =>
   assert.ok(text().includes('profile'));
   press('notificationPreferences');
   assert.deepEqual(routes, ['/notification-preferences']);
+});
+
+test('an authenticated account opens the wallet', () => {
+  render('authenticated');
+  press('wallet');
+  assert.deepEqual(routes, ['/wallet']);
 });
