@@ -32,7 +32,7 @@ type Dependencies = {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const premium = /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/;
-const products: readonly PolicyProduct[] = ['vida_hipotecario', 'flight_delay'];
+const products: readonly PolicyProduct[] = ['vida_hipotecario', 'flight_delay', 'weather_event'];
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PolicyCacheFailure('invalid_policy');
@@ -54,11 +54,17 @@ function coverageOf(product: PolicyProduct, value: unknown): PolicyCoverage {
   const data = record(value);
   if (product === 'vida_hipotecario' && data.kind === 'mortgage_life') return { kind: 'mortgage_life', sumInsured: text(data.sumInsured, premium) };
   if (product === 'flight_delay' && data.kind === 'flight_delay') {
-    const { thresholdMinutes } = data;
-    if (typeof thresholdMinutes !== 'number' || !Number.isSafeInteger(thresholdMinutes) || thresholdMinutes < 1) throw new PolicyCacheFailure('invalid_policy');
-    return { kind: 'flight_delay', flightReference: text(data.flightReference, uuid), thresholdMinutes, payoutAmount: text(data.payoutAmount, premium) };
+    return { kind: 'flight_delay', flightReference: text(data.flightReference, uuid), thresholdMinutes: positiveInteger(data.thresholdMinutes), payoutAmount: text(data.payoutAmount, premium) };
+  }
+  if (product === 'weather_event' && data.kind === 'weather_event' && data.parameter === 'precipitation_24h' && data.unit === 'mm') {
+    return { kind: 'weather_event', stationId: text(data.stationId, uuid), parameter: 'precipitation_24h', unit: 'mm', threshold: positiveInteger(data.threshold), payoutAmount: text(data.payoutAmount, premium) };
   }
   throw new PolicyCacheFailure('invalid_policy');
+}
+
+function positiveInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new PolicyCacheFailure('invalid_policy');
+  return value;
 }
 
 // Copies only the allowed fields: anything else on the source object never reaches storage.
@@ -74,9 +80,12 @@ export function minimizePolicy(source: unknown): CachedPolicy {
 
 // Arrays instead of objects keep six policies far below the keychain size limit.
 function encodePolicy(policy: CachedPolicy): unknown[] {
-  const common = [policy.policyId, policy.coverage.kind === 'mortgage_life' ? 0 : 1, policy.premium, Date.parse(policy.effectiveFrom), Date.parse(policy.effectiveUntil)];
-  return policy.coverage.kind === 'mortgage_life' ? [...common, policy.coverage.sumInsured]
-    : [...common, policy.coverage.flightReference, policy.coverage.thresholdMinutes, policy.coverage.payoutAmount];
+  const { coverage } = policy;
+  const code = coverage.kind === 'mortgage_life' ? 0 : coverage.kind === 'flight_delay' ? 1 : 2;
+  const common = [policy.policyId, code, policy.premium, Date.parse(policy.effectiveFrom), Date.parse(policy.effectiveUntil)];
+  if (coverage.kind === 'mortgage_life') return [...common, coverage.sumInsured];
+  return coverage.kind === 'flight_delay' ? [...common, coverage.flightReference, coverage.thresholdMinutes, coverage.payoutAmount]
+    : [...common, coverage.stationId, coverage.threshold, coverage.payoutAmount];
 }
 
 function decodePolicy(value: unknown): CachedPolicy {
@@ -87,6 +96,8 @@ function decodePolicy(value: unknown): CachedPolicy {
   if (code === 0 && rest.length === 1) return minimizePolicy({ policyId, product: 'vida_hipotecario', premium: amount, currency: 'COP', ...effective, coverage: { kind: 'mortgage_life', sumInsured: rest[0] } });
   if (code === 1 && rest.length === 3) return minimizePolicy({ policyId, product: 'flight_delay', premium: amount, currency: 'COP', ...effective,
     coverage: { kind: 'flight_delay', flightReference: rest[0], thresholdMinutes: rest[1], payoutAmount: rest[2] } });
+  if (code === 2 && rest.length === 3) return minimizePolicy({ policyId, product: 'weather_event', premium: amount, currency: 'COP', ...effective,
+    coverage: { kind: 'weather_event', stationId: rest[0], parameter: 'precipitation_24h', unit: 'mm', threshold: rest[1], payoutAmount: rest[2] } });
   throw new PolicyCacheFailure('invalid_policy');
 }
 

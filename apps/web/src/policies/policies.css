@@ -1,0 +1,47 @@
+/* My policies: customer-facing, so the warm Design System temperature. Tokens as in index.css; grey text never lighter than #6b7583. */
+.policies h1 { margin-bottom: 8px; }
+.policies h1:focus, .policies h1:focus-visible { outline: none; }
+.policy-list { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.policy-card { display: grid; gap: 10px; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.policy-card:hover { border-color: #0b6b5f; }
+.policy-card:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.policy-card .h-card { font: 600 20px/1.2 'Space Grotesk', sans-serif; letter-spacing: -.02em; }
+.policy-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.policy-card-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; font-size: 13px; color: #3a424e; }
+.policy-id { font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.policy-empty { display: grid; justify-items: start; gap: 16px; }
+.policy-empty p { margin: 0; }
+.policy-back { margin-bottom: 20px; }
+.policy-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 20px; }
+.policy-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #e3e1dc; }
+.policy-tabs [role='tab'] { width: auto; margin-bottom: -1px; padding: 10px 16px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #3a424e; font: 600 14px 'IBM Plex Sans', sans-serif; cursor: pointer; }
+.policy-tabs [role='tab'][aria-selected='true'] { border-bottom-color: #0b6b5f; color: #08544a; }
+.policy-tabs [role='tab']:focus-visible { outline: 3px solid #0b6b5f; outline-offset: -3px; }
+.policy-section { margin-bottom: 16px; }
+.policy-section .h-card { margin: 0 0 16px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
+.policy-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }
+.policy-facts dt { margin-bottom: 4px; font: 600 10.5px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6b7583; }
+.policy-facts dd { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.policy-exclusions { display: grid; gap: 10px; margin: 0 0 16px; padding: 0; list-style: none; }
+.policy-exclusions li { display: grid; grid-template-columns: 36px 1fr; gap: 8px; font-size: 14px; }
+.policy-documents { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.policy-documents li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid #e3e1dc; }
+.policy-documents li:last-child { border-bottom: 0; }
+.policy-documents li > span { display: grid; gap: 2px; }
+.policy-table-wrap { overflow-x: auto; }
+.policy-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.policy-table th { padding: 8px 12px 8px 0; text-align: left; font: 600 10.5px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6b7583; border-bottom: 1px solid #e3e1dc; }
+.policy-table td { padding: 12px 12px 12px 0; border-bottom: 1px solid #e3e1dc; vertical-align: middle; overflow-wrap: anywhere; }
+.policy-payment-paid { background: #e6f3ec; color: #175c3a; }
+.policy-payment-pending { background: #fbf0dc; color: #7a4e05; }
+.policy-payment-failed { background: #fbe9e7; color: #8a241c; }
+@media (max-width: 600px) {
+  .policy-facts { grid-template-columns: 1fr; }
+  /* Each payment becomes a labelled block so no column is squeezed; the header stays available to screen readers. */
+  .policy-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .policy-table tr, .policy-table td { display: block; }
+  .policy-table tr { padding: 8px 0; border-bottom: 1px solid #e3e1dc; }
+  .policy-table td { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 0; text-align: right; }
+  .policy-table td::before { content: attr(data-label); flex: none; font: 600 10.5px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6b7583; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { .policy-card { transition: none; } }

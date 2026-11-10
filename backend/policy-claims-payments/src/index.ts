@@ -38,6 +38,10 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const traceId = object(input) && typeof input.correlationId === 'string' && UUID.test(input.correlationId) ? input.correlationId : crypto.randomUUID();
     return createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }).acceptOffer(input, traceId);
   }
+  // Private Service Binding RPC for the parametric provider; there is deliberately no public route for provider events.
+  async receiveParametricEventV1(input: unknown) {
+    return createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }).receiveParametricEvent(input, crypto.randomUUID());
+  }
   async queue(batch: MessageBatch<unknown>): Promise<void> {
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     for (const message of batch.messages) {
@@ -57,9 +61,13 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
   }
   async scheduled(): Promise<void> {
     // The grace period lets an in-flight customer request finish before recovery competes for the same policy.
-    const outcomes = await createPolicyFinance(this.env).reconcileIssuances(new Date(Date.now() - RECONCILIATION_GRACE_MS), RECONCILIATION_BATCH);
-    for (const { traceId, outcome, error } of outcomes) {
+    const finance = createPolicyFinance(this.env);
+    const staleBefore = new Date(Date.now() - RECONCILIATION_GRACE_MS);
+    for (const { traceId, outcome, error } of await finance.reconcileIssuances(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'financial_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
+    }
+    for (const { traceId, outcome, error } of await finance.reconcileIndemnities(staleBefore, RECONCILIATION_BATCH)) {
+      console.log(JSON.stringify({ event: 'indemnity_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
     }
   }
   liveness() { return { service: 'policy-claims-payments', environment: this.env.APP_ENV }; }

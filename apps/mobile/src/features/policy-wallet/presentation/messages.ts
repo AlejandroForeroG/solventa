@@ -22,12 +22,12 @@ const es = {
     invalid_response: 'El servicio respondió algo inesperado. Intenta más tarde.',
     integrity: 'Una de tus pólizas no pasó la verificación de integridad. No mostramos datos guardados. Intenta más tarde.',
     discard_pending: 'Tu sesión ya fue cerrada y falta borrar los datos guardados en este dispositivo. No los mostramos. Intenta de nuevo.' },
-  products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo' },
+  products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
   validity: { upcoming: 'Por iniciar', active: 'Vigente', expired: 'Vencida' },
   fields: { reference: 'Póliza', validity: 'Vigencia', premium: 'Prima', until: 'Vence', status: 'Estado', product: 'Producto' },
   credential: 'Credencial de asegurado', coverage: 'Coberturas',
   coverages: { mortgage_life: 'Vida deudor hipotecario', sumInsured: 'Suma asegurada', flight_delay: 'Retraso de vuelo',
-    threshold: 'Retraso mínimo', minutes: 'min', payout: 'Pago', flight: 'Vuelo' },
+    threshold: 'Retraso mínimo', minutes: 'min', payout: 'Pago', flight: 'Vuelo', rainThreshold: 'Lluvia mínima en 24 h', station: 'Estación' },
   document: 'El documento de la póliza no se guarda en el teléfono: se consulta en línea.',
 };
 
@@ -53,12 +53,12 @@ const en: typeof es = {
     invalid_response: 'The service answered something unexpected. Try again later.',
     integrity: 'One of your policies did not pass the integrity check. We are not showing saved data. Try again later.',
     discard_pending: 'Your session has ended and the data saved on this device still has to be removed. We are not showing it. Try again.' },
-  products: { vida_hipotecario: 'Mortgage life', flight_delay: 'Flight delay' },
+  products: { vida_hipotecario: 'Mortgage life', flight_delay: 'Flight delay', weather_event: 'Heavy rain' },
   validity: { upcoming: 'Starts soon', active: 'Active', expired: 'Expired' },
   fields: { reference: 'Policy', validity: 'Validity', premium: 'Premium', until: 'Expires', status: 'Status', product: 'Product' },
   credential: 'Insured credential', coverage: 'Coverage',
   coverages: { mortgage_life: 'Mortgage debtor life', sumInsured: 'Sum insured', flight_delay: 'Flight delay',
-    threshold: 'Minimum delay', minutes: 'min', payout: 'Payout', flight: 'Flight' },
+    threshold: 'Minimum delay', minutes: 'min', payout: 'Payout', flight: 'Flight', rainThreshold: 'Minimum rainfall in 24 h', station: 'Station' },
   document: 'The policy document is not saved on the phone: it is read online.',
 };
 
