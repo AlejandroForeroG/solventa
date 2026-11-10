@@ -6,6 +6,7 @@ import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
 import type { PolicySummary, PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
+import type { PolicyDetail } from '../backend/policy-claims-payments/src/domain/policy-portal';
 import gateway from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -34,6 +35,9 @@ const terms: OfferTerms = { ...actor, offerId: id, offerVersion: 1, quoteId: 'CO
 const policy: PolicyView = { policyId: id, offerId: id, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
 const summary: PolicySummary = { policyId: id, product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
   effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+const detail: PolicyDetail = { ...summary, exclusions: [{ code: '7.1', text: 'Actos intencionales del asegurado.' }], conditionsVersion: 'academic-conditions-1',
+  documents: [{ documentId: 'signed_policy', issuedAt: '2026-10-15T00:02:00.000Z' }, { documentId: 'premium_receipt', issuedAt: '2026-10-15T00:01:30.000Z' }],
+  payments: [{ date: '2026-10-15T00:01:30.000Z', amount: '77760.0000', currency: 'COP', status: 'paid', reference: 'MOCK-' + id }] };
 const nativeUser = { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: actor, operations: ['policies:read'] } };
 const listRequest = (headers: Record<string, string> = { authorization: 'Bearer synthetic-token', 'x-trace-id': traceId }, method = 'GET') =>
   new Request('https://web.example/api/v1/policies', { method, headers });
@@ -61,6 +65,9 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const finance: PolicyHttpDependencies['finance'] = {
     listOwn: async input => { calls.push({ operation: 'policyList', input }); return { status: 'ok', policies: [summary], hasMore: false }; },
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
+    detail: async input => { calls.push({ operation: 'policyDetail', input }); return { status: 'ok', detail }; },
+    document: async input => { calls.push({ operation: 'policyDocument', input });
+      return { status: 'ok', file: { fileName: 'signed-policy-10000000.pdf', title: 'Póliza', lines: ['Número de póliza: ' + id] } }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
     beginSignatureChallenge: async input => { calls.push({ operation: 'challenge', input }); return { status: 'ok', replayed: false, policy,
       challenge: { challengeId: id, expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }; },
@@ -484,4 +491,85 @@ test('the native policy list reports a failed integrity check or a technical fai
     assert.equal(response.status, result.httpStatus);
     assert.deepEqual(await response.json(), { error: result.error, traceId });
   }
+});
+
+const portalRequest = (path: string, headers: Record<string, string> = {}, method = 'GET') => request(path, undefined, headers, method);
+
+test('the web portal list authorizes the session once and derives the owner on the server', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest('/policies/issued'), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const body = await contractual(response, 'policies', 'PolicyList');
+  assert.deepEqual(body.policies, [summary]);
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
+  assert.deepEqual(calls[0].input, { kind: 'web', operation: 'policies:read', traceId, method: 'GET', requestOrigin: 'https://web.example', cookie: 'synthetic-sealed', origin: 'https://web.example' });
+  assert.deepEqual(calls[1].input, { actor, traceId });
+});
+
+test('the policy detail returns the contract shape from one owner-scoped read', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest(`/policies/${id}/detail`), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await contractual(response, 'policies', 'PolicyDetail'), { ...detail, traceId });
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyDetail']);
+  assert.deepEqual(calls[1].input, { actor, policyId: id, traceId });
+});
+
+test('a policy document is delivered as a no-store PDF attachment for the owner only', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest(`/policies/${id}/documents/signed_policy`), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="signed-policy-10000000.pdf"');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  assert.ok(Buffer.from(await response.arrayBuffer()).toString('latin1').startsWith('%PDF-1.4'));
+  assert.deepEqual(calls[1].input, { actor, policyId: id, documentId: 'signed_policy', traceId });
+});
+
+test('portal reads reject bad identifiers, partner credentials and other methods before any business read', async () => {
+  for (const [path, headers, method, status] of [
+    [`/policies/${id}/documents/passport`, {}, 'GET', 400], ['/policies/not-a-uuid/detail', {}, 'GET', 400],
+    [`/policies/${id}/detail`, { authorization: 'Bearer synthetic-token' }, 'GET', 400], [`/policies/${id}/detail`, {}, 'POST', 405],
+  ] as const) {
+    const { calls, run } = setup();
+    const response = await run(portalRequest(path, headers, method), true);
+    assert.equal(response.status, status, path);
+    assert.ok(!calls.some(call => ['policyDetail', 'policyDocument', 'policyList'].includes(call.operation)), path);
+  }
+});
+
+test('a policy that is still being purchased is an opaque 404 without a security denial, a foreign one is audited', async () => {
+  for (const [error, denials] of [['policy_pending', 0], ['not_found', 1]] as const) {
+    const { calls, run, finance } = setup();
+    finance.detail = async () => ({ status: 'denied', error, httpStatus: 404, traceId });
+    finance.document = async () => ({ status: 'denied', error, httpStatus: 404, traceId });
+    for (const path of [`/policies/${id}/detail`, `/policies/${id}/documents/signed_policy`]) {
+      const response = await run(portalRequest(path), true);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'not_found', traceId });
+    }
+    assert.equal(calls.filter(call => call.operation === 'securityDenial').length, denials * 2);
+  }
+  const { run, finance } = setup(undefined, new Error('audit_down'));
+  finance.detail = async () => ({ status: 'denied', error: 'not_found', httpStatus: 404, traceId });
+  assert.equal((await run(portalRequest(`/policies/${id}/detail`), true)).status, 503);
+});
+
+test('the gateway delivers a policy PDF to the browser unchanged, with the version and security headers and no caching', async () => {
+  const { calls, run } = setup();
+  const env = { APP_ENV: 'local', POLICY: { fetch: (req: Request) => run(req, true) } } as never;
+  const response = await gateway.fetch(portalRequest(`/policies/${id}/documents/signed_policy`), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="signed-policy-10000000.pdf"');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assert.ok(bytes.toString('latin1').startsWith('%PDF-1.4') && bytes.toString('latin1').endsWith('%%EOF\n'));
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyDocument']);
 });

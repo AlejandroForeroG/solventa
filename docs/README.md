@@ -45,3 +45,4 @@ Historical underwriting lookup: [Acquisition audit API and workspace](modules/ac
 Partner requests for a customer's offer: [Partner authorizations](modules/identity-consent-ecosystem/partner-authorizations.md) and [Acquisition partner offers](modules/acquisition-risk/README.md#partner-offers).
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
+Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).

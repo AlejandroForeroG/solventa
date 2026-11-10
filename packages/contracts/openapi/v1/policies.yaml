@@ -242,6 +242,174 @@ paths:
         subject produces the required financial and minimal security denial
         audits without exposing its record. The public not_found response
         remains indistinguishable; unavailable required auditing returns 503.
+  /policies/issued:
+    get:
+      operationId: listIssuedPolicies
+      summary: List the signed-in customer's issued policies for the web portal
+      description: Web read-only route. The owner comes from the verified session,
+        never from a parameter. It returns at most six issued policies, newest
+        validity first, with the same fields as the native list. Pending,
+        charged, refunding and refunded policies belong to the purchase flow and
+        are not listed.
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        "200":
+          description: The owner's issued policies, possibly none.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyList"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /policies/{policyId}/detail:
+    get:
+      operationId: getOwnPolicyDetail
+      summary: Read the coverage, documents and premium payments of an issued policy
+      description: One integrity-checked read of an issued policy. Coverage comes
+        from the immutable accepted terms; exclusions come from the product
+        conditions identified by conditionsVersion and are not part of the signed
+        document. Documents list what can be downloaded with its issue date. The
+        payment list holds the policy's single premium charge. A policy that is
+        still in the purchase flow, missing or owned by another user returns the
+        same opaque 404.
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detail of the issued policy.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyDetail"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /policies/{policyId}/documents/{documentId}:
+    get:
+      operationId: downloadOwnPolicyDocument
+      summary: Download one document of an issued policy as PDF
+      description: The PDF is generated on demand from the integrity-checked policy,
+        so repeated downloads of the same document are identical. The signed
+        policy and the premium receipt are synthetic demonstration documents, and
+        the general conditions carry the version in PolicyDetail.conditionsVersion.
+        The text is written in es-CO.
+      tags:
+        - Policies
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - signed_policy
+              - general_conditions
+              - premium_receipt
+      responses:
+        "200":
+          description: The PDF document.
+          headers:
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     WebSession:
@@ -456,6 +624,130 @@ components:
           type: string
           nullable: true
           pattern: ^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+    PolicyExclusion:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - text
+      properties:
+        code:
+          type: string
+          pattern: ^[0-9]+\.[0-9]+$
+        text:
+          type: string
+          minLength: 1
+    PolicyDocumentEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - documentId
+        - issuedAt
+      properties:
+        documentId:
+          type: string
+          enum:
+            - signed_policy
+            - general_conditions
+            - premium_receipt
+        issuedAt:
+          type: string
+          format: date-time
+    PolicyPaymentEntry:
+      type: object
+      additionalProperties: false
+      description: The premium charge. date is the last state change of the stored
+        payment. The reference is the synthetic receipt and is present only for a
+        paid charge.
+      required:
+        - date
+        - amount
+        - currency
+        - status
+        - reference
+      properties:
+        date:
+          type: string
+          format: date-time
+        amount:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        currency:
+          type: string
+          enum:
+            - COP
+        status:
+          type: string
+          enum:
+            - paid
+            - pending
+            - failed
+        reference:
+          type: string
+          nullable: true
+          pattern: ^MOCK-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+    PolicyDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - policyId
+        - product
+        - status
+        - premium
+        - currency
+        - effectiveFrom
+        - effectiveUntil
+        - coverage
+        - exclusions
+        - conditionsVersion
+        - documents
+        - payments
+        - traceId
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        product:
+          type: string
+          enum:
+            - vida_hipotecario
+            - flight_delay
+        status:
+          type: string
+          enum:
+            - issued
+        premium:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        currency:
+          type: string
+          enum:
+            - COP
+        effectiveFrom:
+          type: string
+          format: date-time
+        effectiveUntil:
+          type: string
+          format: date-time
+        coverage:
+          $ref: "#/components/schemas/PolicyCoverage"
+        exclusions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyExclusion"
+        conditionsVersion:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyDocumentEntry"
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyPaymentEntry"
+        traceId:
+          type: string
+          format: uuid
     IssueRequest:
       type: object
       additionalProperties: false
