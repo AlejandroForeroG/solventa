@@ -1,5 +1,5 @@
 import type { AcceptedOffer, FinancialActor, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { FinancialAction, FinancialDecisionCapture } from '../financial-decision';
+import type { FinancialAction, FinancialDecisionCapture, FinancialEvidence, FinancialSource } from '../financial-decision';
 import type { ParametricEventProvider } from './parametric';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
@@ -24,7 +24,9 @@ export type AcceptanceImport = { status: 'created' } | { status: 'existing'; sna
 // An unfinished customer issuance command whose policy may hold a provider charge without its final state.
 export type IssuanceCandidate = { policyId: string; actor: FinancialActor; commandKey: string };
 // An indemnity whose event was accepted and whose payment is still unconfirmed, with what the audit trail needs to name its event.
-export type IndemnityCandidate = { policyId: string; eventId: string; eventType: string; occurredAt: string };
+// `event` and `sources` are the evidence stored when the occurrence was accepted, so a recovered decision explains the payout like the first attempt.
+export type IndemnityCandidate = { policyId: string; eventId: string; eventType: string; occurredAt: string;
+  event: NonNullable<FinancialEvidence['event']>; sources: FinancialSource[] };
 // The customer notice SOL-40 consumes; it exists only once the provider confirmed the indemnity payment.
 export type IndemnityNotice = { paymentId: string; policyId: string; clientId: string; coverageKind: 'flight_delay' | 'weather_event'; confirmedAt: string };
 export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
