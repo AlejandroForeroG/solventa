@@ -316,6 +316,29 @@ test('retrying an order replays the same offer without a second quote, a changed
   assert.equal(w.offerStore.offers.size, 2);
 });
 
+test('an order key belongs to one partner and one authorization: another authorization or customer never replays it', async () => {
+  const w = await world();
+  await w.consent('ana-session');
+  await w.consent('luis-session');
+  const first = await w.authorize('ana-session', 'acme');
+  const second = await w.authorize('ana-session', 'acme');
+  const luis = await w.authorize('luis-session', 'acme');
+  const acme = w.consumer('acme');
+  const original = await acme.requestOffer({ authorizationId: first, idempotencyKey: 'order-1', quote });
+  assert.equal(original.status, 201);
+  const again = await acme.requestOffer({ authorizationId: first, idempotencyKey: 'order-1', quote });
+  assert.deepEqual([again.status, again.body.offerId], [200, original.body.offerId]);
+  const otherAuthorization = await acme.requestOffer({ authorizationId: second, idempotencyKey: 'order-1', quote });
+  assert.equal(otherAuthorization.status, 201, 'a key under another authorization is another order, never a replay of the first');
+  assert.notEqual(otherAuthorization.body.offerId, original.body.offerId);
+  const otherCustomer = await acme.requestOffer({ authorizationId: luis, idempotencyKey: 'order-1', quote });
+  assert.equal(otherCustomer.status, 201);
+  assert.notEqual(otherCustomer.body.offerId, original.body.offerId);
+  const luisAgain = await acme.requestOffer({ authorizationId: luis, idempotencyKey: 'order-1', quote });
+  assert.deepEqual([luisAgain.status, luisAgain.body.offerId], [200, otherCustomer.body.offerId], "each customer's order replays its own offer");
+  assert.equal(w.offerStore.offers.size, 3);
+});
+
 test('the request is validated before it prices: bad body, missing key and unknown fields never create anything', async () => {
   const w = await world();
   await w.consent('ana-session');

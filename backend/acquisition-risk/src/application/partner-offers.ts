@@ -37,7 +37,7 @@ export class PartnerOffers {
     if (key.length > 128) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'invalid_format' }] };
 
     const actor = access.customer;
-    const scopedKey = await this.deps.protector.partnerKey(access.partnerId, key);
+    const scopedKey = await this.deps.protector.partnerKey(access.partnerId, id, key);
     const quote = await this.deps.quotes.createFor({ kind: 'user', ...actor }, { idempotencyKey: scopedKey, body: quoteBody, traceId: input.traceId });
     if (quote.status === 'invalid') return { status: 'invalid', errors: quote.errors };
     if (quote.status === 'idempotency_conflict') return { status: 'idempotency_conflict' };
