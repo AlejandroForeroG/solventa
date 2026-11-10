@@ -1,8 +1,9 @@
 import { fetchWithSession } from '../session-fetch';
 
-export type PolicyProduct = 'vida_hipotecario' | 'flight_delay';
+export type PolicyProduct = 'vida_hipotecario' | 'flight_delay' | 'weather_event';
 export type PolicyCoverage = { kind: 'mortgage_life'; sumInsured: string }
-  | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string };
+  | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string }
+  | { kind: 'weather_event'; stationId: string; parameter: 'precipitation_24h'; unit: 'mm'; threshold: number; payoutAmount: string };
 export type PolicySummary = { policyId: string; product: PolicyProduct; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: PolicyCoverage };
 export const DOCUMENT_IDS = ['signed_policy', 'general_conditions', 'premium_receipt'] as const;
@@ -18,14 +19,16 @@ const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}
 const money = (v: unknown): v is string => typeof v === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(v);
 const instant = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
 const list = <T>(v: unknown, check: (item: unknown) => item is T): v is T[] => Array.isArray(v) && v.every(check);
+const positiveInteger = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 1;
 
 function coverage(v: unknown): v is PolicyCoverage {
   if (!record(v)) return false;
   if (v.kind === 'mortgage_life') return money(v.sumInsured);
-  return v.kind === 'flight_delay' && uuid(v.flightReference) && typeof v.thresholdMinutes === 'number' && Number.isSafeInteger(v.thresholdMinutes) && v.thresholdMinutes >= 1 && money(v.payoutAmount);
+  if (v.kind === 'flight_delay') return uuid(v.flightReference) && positiveInteger(v.thresholdMinutes) && money(v.payoutAmount);
+  return v.kind === 'weather_event' && uuid(v.stationId) && v.parameter === 'precipitation_24h' && v.unit === 'mm' && positiveInteger(v.threshold) && money(v.payoutAmount);
 }
 function summary(v: unknown): v is PolicySummary {
-  return record(v) && uuid(v.policyId) && (v.product === 'vida_hipotecario' || v.product === 'flight_delay') && v.status === 'issued' && money(v.premium)
+  return record(v) && uuid(v.policyId) && (v.product === 'vida_hipotecario' || v.product === 'flight_delay' || v.product === 'weather_event') && v.status === 'issued' && money(v.premium)
     && v.currency === 'COP' && instant(v.effectiveFrom) && instant(v.effectiveUntil) && coverage(v.coverage);
 }
 const exclusion = (v: unknown): v is PolicyDetail['exclusions'][number] => record(v) && typeof v.code === 'string' && typeof v.text === 'string';
