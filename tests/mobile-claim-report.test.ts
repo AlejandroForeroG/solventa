@@ -1,0 +1,270 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
+import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
+import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
+import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
+import { admit, contentTypeOf, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
+
+const baseUrl = 'https://dev.solventa.site';
+const policyId = '20000000-0000-4000-8000-000000000001';
+const now = new Date('2026-11-10T18:00:00.000Z');
+const window = { from: new Date('2026-11-10T05:00:00.000Z'), until: new Date('2027-11-10T05:00:00.000Z') };
+const description = 'Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.';
+const photo = (id: string, size = 2_000_000): EvidenceItem => ({ id, uri: `file:///cache/${id}.jpg`, contentType: 'image/jpeg', byteSize: size, kind: 'photo' });
+const draft = (change: Partial<Draft> = {}): Draft => ({ policyId, eventType: 'collision', occurredAt: new Date('2026-11-10T15:00:00.000Z'), place: '', description, evidence: [photo('a')], ...change });
+
+test('picked files are normalized, and every limit is enforced before anything is sent', () => {
+  assert.equal(contentTypeOf({ uri: 'file:///a.jpg', mimeType: 'image/jpg', byteSize: 1 }), 'image/jpeg');
+  assert.equal(contentTypeOf({ uri: 'file:///a.HEIC', mimeType: null, byteSize: 1 }), 'image/heic');
+  assert.equal(contentTypeOf({ uri: 'file:///a.mov', mimeType: 'video/quicktime', byteSize: 1 }), 'video/quicktime');
+  assert.equal(contentTypeOf({ uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 1 }), null);
+  assert.equal(contentTypeOf({ uri: 'file:///a', mimeType: null, byteSize: 1 }), null);
+  const none: EvidenceItem[] = [];
+  assert.deepEqual(admit(none, { uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 5 }, 'x'), { rejected: 'file_type' });
+  assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: 0 }, 'x'), { rejected: 'empty' });
+  assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: null }, 'x'), { rejected: 'unreadable' });
+  assert.deepEqual(admit([photo('a', LIMITS.bytes - 10)], { uri: 'file:///b.jpg', mimeType: 'image/jpeg', byteSize: 11 }, 'x'), { rejected: 'total_size' });
+  assert.equal('item' in admit([photo('a', LIMITS.bytes - 10)], { uri: 'file:///b.jpg', mimeType: 'image/jpeg', byteSize: 10 }, 'x'), true);
+  const full = Array.from({ length: LIMITS.files }, (_, index) => photo(String(index), 1));
+  assert.deepEqual(admit(full, { uri: 'file:///b.jpg', mimeType: 'image/jpeg', byteSize: 1 }, 'x'), { rejected: 'too_many' });
+});
+
+test('the declaration needs a type, an exact time inside the policy dates, a real description and at least one file', () => {
+  assert.deepEqual(validate(draft(), window, now), []);
+  const issues = (change: Partial<Draft>) => validate(draft(change), window, now).map(issue => `${issue.field}:${issue.code}`);
+  assert.deepEqual(issues({ eventType: null }), ['eventType:required']);
+  assert.deepEqual(issues({ occurredAt: new Date('2026-11-10T19:00:00.000Z') }), ['occurredAt:future']);
+  assert.deepEqual(issues({ occurredAt: new Date('2026-11-10T04:59:00.000Z') }), ['occurredAt:before_coverage']);
+  assert.deepEqual(issues({ description: 'demasiado corta' }), ['description:too_short']);
+  assert.deepEqual(issues({ description: '   ' + 'x'.repeat(39) + '   ' }), ['description:too_short'], 'surrounding spaces do not count');
+  assert.deepEqual(issues({ description: 'x'.repeat(LIMITS.description.max + 1) }), ['description:too_long']);
+  assert.deepEqual(issues({ place: 'x'.repeat(LIMITS.place + 1) }), ['place:too_long']);
+  assert.deepEqual(issues({ evidence: [] }), ['evidence:none']);
+  assert.deepEqual(issues({ evidence: [photo('a', LIMITS.bytes), photo('b', 1)] }), ['evidence:total_size']);
+  assert.deepEqual(validate(draft({ occurredAt: new Date('2027-11-11T00:00:00.000Z') }), { ...window, until: new Date('2027-11-10T05:00:00.000Z') }, new Date('2027-12-01T00:00:00.000Z')).map(issue => issue.code), ['after_coverage']);
+  assert.deepEqual(issues({ eventType: null, description: '', evidence: [] }).sort(), ['description:too_short', 'eventType:required', 'evidence:none']);
+});
+
+test('the declaration sent to the server is exact, trimmed and carries no device path', () => {
+  const manifest = manifestOf({ ...draft({ place: '  Calle 116  ', description: `  ${description}  ` }), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
+  assert.deepEqual(manifest, { policyId, eventType: 'collision', occurredAt: '2026-11-10T15:00:00.000Z', place: 'Calle 116', description,
+    evidence: [{ fileId: 'a', contentType: 'image/jpeg', byteSize: 2_000_000, sha256: 'f'.repeat(64) }] });
+  assert.equal(JSON.stringify(manifest).includes('file:///'), false);
+  assert.equal('place' in manifestOf({ ...draft(), eventType: 'collision' }, new Map()), false);
+});
+
+// A server that keeps its own record of drafts, files and numbers, so a retry can be told apart from a new report.
+function fakeServer() {
+  const server = { drafts: new Map<string, { key: string; body: string; claimId: string; verified: Set<string> }>(), uploads: [] as string[], submits: 0, failNext: [] as ClaimReportFailure[], keys: [] as string[] };
+  const api: ClaimReportApi = {
+    async createDraft(manifest, key) {
+      server.keys.push(key);
+      const failure = server.failNext.shift(); if (failure) throw failure;
+      const existing = server.drafts.get(key);
+      const body = JSON.stringify(manifest);
+      if (existing) { if (existing.body !== body) throw new ClaimReportFailure('conflict'); return receipt(existing); }
+      const created = { key, body, claimId: `30000000-0000-4000-8000-${String(server.drafts.size + 1).padStart(12, '0')}`, verified: new Set<string>() };
+      server.drafts.set(key, created);
+      return receipt(created);
+    },
+    async upload(claimId, file) {
+      const failure = server.failNext.shift(); if (failure) throw failure;
+      server.uploads.push(file.id);
+      [...server.drafts.values()].find(draft => draft.claimId === claimId)?.verified.add(file.id);
+    },
+    async submit(claimId) {
+      const failure = server.failNext.shift(); if (failure) throw failure;
+      const stored = [...server.drafts.values()].find(draft => draft.claimId === claimId)!;
+      const declared = (JSON.parse(stored.body) as { evidence: { fileId: string }[] }).evidence.map(file => file.fileId);
+      const missing = declared.filter(id => !stored.verified.has(id));
+      if (missing.length) throw new ClaimReportFailure('incomplete', { missing });
+      server.submits++;
+      return { claimId, claimNumber: 'SIN-2026-00001', submittedAt: now.toISOString() } satisfies SubmitReceipt;
+    },
+  };
+  const receipt = (stored: { claimId: string; body: string; verified: Set<string> }): DraftReceipt => ({ claimId: stored.claimId,
+    evidence: (JSON.parse(stored.body) as { evidence: { fileId: string }[] }).evidence.map(file => ({ fileId: file.fileId, state: stored.verified.has(file.fileId) ? 'verified' : 'pending' })) });
+  return { server, api };
+}
+const flowWith = (api: ClaimReportApi, digested: string[] = []) => {
+  let counter = 0;
+  const flow = new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `40000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`,
+    digest: { sha256: async uri => { digested.push(uri); return 'a'.repeat(64); } } });
+  flow.setEventType('collision'); flow.setOccurredAt(new Date('2026-11-10T15:00:00.000Z')); flow.setDescription(description);
+  flow.add([{ uri: 'file:///cache/one.jpg', mimeType: 'image/jpeg', byteSize: 1000 }, { uri: 'file:///cache/two.mp4', mimeType: 'video/mp4', byteSize: 5000 }]);
+  return flow;
+};
+
+test('a report is checked before sending, and a complete one ends with a single case number', async () => {
+  const { server, api } = fakeServer();
+  const flow = flowWith(api);
+  flow.setDescription('muy corta');
+  assert.equal(flow.review(), false);
+  assert.deepEqual(flow.getSnapshot().issues.map(issue => issue.code), ['too_short']);
+  await flow.send();
+  assert.equal(server.drafts.size, 0, 'an invalid report never reaches the server');
+  flow.setDescription(description);
+  assert.equal(flow.review(), true);
+  await flow.send();
+  const phase = flow.getSnapshot().phase;
+  assert.deepEqual(phase, { kind: 'submitted', claimNumber: 'SIN-2026-00001', submittedAt: now.toISOString(), files: 2, bytes: 6000 });
+  assert.deepEqual(server.uploads.length, 2); assert.equal(server.submits, 1);
+  await flow.send();
+  assert.equal(server.submits, 1, 'sending again after success does nothing');
+});
+
+test('after an interruption the retry reuses the key and the declaration, so the server never holds a second draft', async () => {
+  const { server, api } = fakeServer();
+  const digested: string[] = [];
+  const flow = flowWith(api, digested);
+  server.failNext.push(new ClaimReportFailure('unavailable'), new ClaimReportFailure('unavailable'));
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'unavailable', missing: 0 });
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'failed');
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.equal(server.keys.length, 3, 'three attempts reached the server');
+  assert.equal(new Set(server.keys).size, 1, 'and all carried the same key');
+  assert.equal(server.drafts.size, 1);
+  assert.equal(digested.length, 2, 'each file is hashed once');
+  assert.equal(new Set(server.uploads).size, server.uploads.length, 'a file that arrived is never sent again');
+  assert.equal(server.submits, 1);
+});
+
+test('a lost upload is named by the server and only that file travels again', async () => {
+  const { server, api } = fakeServer();
+  const flow = flowWith(api);
+  const original = api.upload.bind(api);
+  let calls = 0;
+  api.upload = async (claimId, file) => { calls++; if (calls === 2) throw new ClaimReportFailure('unavailable'); return original(claimId, file); };
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'unavailable', missing: 0 });
+  assert.equal(server.submits, 0, 'a report with a missing file is never submitted');
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.equal(server.uploads.length, 2, 'the first file was not sent twice');
+});
+
+test('a server that reports missing files makes only those files travel again', async () => {
+  const { server, api } = fakeServer();
+  const flow = flowWith(api);
+  const submit = api.submit.bind(api);
+  let first = true;
+  api.submit = async claimId => {
+    if (first) { first = false; const stored = [...server.drafts.values()][0]; const lost = [...stored.verified][0]; stored.verified.delete(lost); throw new ClaimReportFailure('incomplete', { missing: [lost] }); }
+    return submit(claimId);
+  };
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'incomplete', missing: 1 });
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.equal(server.uploads.length, 3, 'two files, plus the one the server reported lost');
+});
+
+test('editing after a failure starts a new declaration instead of reusing a stale key, and refused files are reported', async () => {
+  const { server, api } = fakeServer();
+  const flow = flowWith(api);
+  server.failNext.push(new ClaimReportFailure('outside_coverage'));
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'outside_coverage', missing: 0 });
+  flow.setDescription(description + ' Hubo un testigo.');
+  assert.equal(flow.getSnapshot().phase.kind, 'editing');
+  await flow.send();
+  assert.equal(new Set(server.keys).size, 2, 'a changed declaration gets its own key');
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  flow.add([{ uri: 'file:///x.pdf', mimeType: 'application/pdf', byteSize: 1 }]);
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted', 'a submitted report is no longer editable');
+});
+
+test('rejected files are surfaced and a mismatched checksum discards the stale declaration', async () => {
+  const { server, api } = fakeServer();
+  const flow = flowWith(api);
+  flow.add([{ uri: 'file:///x.pdf', mimeType: 'application/pdf', byteSize: 1 }, { uri: 'file:///y.jpg', mimeType: 'image/jpeg', byteSize: LIMITS.bytes }]);
+  assert.deepEqual(flow.getSnapshot().rejected, ['file_type', 'total_size']);
+  flow.dismissRejected();
+  assert.deepEqual(flow.getSnapshot().rejected, []);
+  server.failNext.push(new ClaimReportFailure('unavailable'), new ClaimReportFailure('integrity'));
+  await flow.send();
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'integrity', missing: 0 });
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.equal(new Set(server.keys).size, 2, 'the declaration was rebuilt after the checksum failed');
+});
+
+test('authentication failures are not retried as outages', async () => {
+  const api: ClaimReportApi = { createDraft: async () => { throw new AuthFailure('forbidden'); }, upload: async () => {}, submit: async () => { throw new Error('unreachable'); } };
+  const flow = flowWith(api);
+  await flow.send();
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'failed', failure: 'forbidden', missing: 0 });
+  const expired = flowWith({ ...api, createDraft: async () => { throw new AuthFailure('unauthorized'); } });
+  await expired.send();
+  assert.deepEqual(expired.getSnapshot().phase, { kind: 'failed', failure: 'unauthorized', missing: 0 });
+});
+
+const session = { execute: <T>(operation: (token: string) => Promise<T>) => operation('synthetic.jwt.token') };
+const json = (body: unknown, status = 200, type = 'application/json') => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'content-type': type } });
+const traceId = '50000000-0000-4000-8000-0000000000f0';
+const claimId = '30000000-0000-4000-8000-000000000001';
+const fileId = '40000000-0000-4000-8000-000000000001';
+const uploaded: EvidenceUploader = async () => ({ status: 200, body: JSON.stringify({ fileId, state: 'verified', traceId }) });
+const http = (respond: (url: string, init: RequestInit) => Response | Promise<Response>, uploader: EvidenceUploader = uploaded) =>
+  createClaimReportApi(baseUrl, session, uploader, (async (url: string, init: RequestInit) => respond(url, init)) as typeof fetch);
+const manifest = manifestOf({ ...draft(), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
+
+test('the draft is posted with the token, the retained key and no cookies, and only a valid answer is accepted', async () => {
+  let seen: { url: string; init: RequestInit } | undefined;
+  const receipt = await http((url, init) => { seen = { url, init }; return json({ claimId, state: 'draft', evidence: [{ fileId, state: 'pending' }], traceId }, 201); }).createDraft(manifest, 'retry-key-0001');
+  assert.equal(seen?.url, `${baseUrl}/api/v1/claims`);
+  assert.equal(seen?.init.method, 'POST'); assert.equal(seen?.init.credentials, 'omit');
+  assert.deepEqual(seen?.init.headers, { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token', 'Content-Type': 'application/json', 'Idempotency-Key': 'retry-key-0001' });
+  assert.deepEqual(JSON.parse(String(seen?.init.body)), manifest);
+  assert.deepEqual(receipt, { claimId, evidence: [{ fileId, state: 'pending' }] });
+  for (const body of [{ claimId: 'nope', evidence: [] }, { claimId, evidence: 'x' }, { claimId, evidence: [{ fileId, state: 'stored' }] }, '{', '[]']) {
+    await assert.rejects(http(() => json(body, 200)).createDraft(manifest, 'retry-key-0001'), (error: ClaimReportFailure) => error.code === 'invalid_response');
+  }
+  await assert.rejects(http(() => json({ claimId, evidence: [] }, 200, 'text/html')).createDraft(manifest, 'retry-key-0001'), (error: ClaimReportFailure) => error.code === 'invalid_response');
+});
+
+test('every refusal of the contract becomes a distinct failure and an outage is never read as a contract error', async () => {
+  const failure = (status: number, body: unknown) => http(() => json(body, status)).createDraft(manifest, 'retry-key-0001').then(() => 'ok', (error: ClaimReportFailure | AuthFailure) => error instanceof AuthFailure ? `auth:${error.kind}` : error.code);
+  assert.equal(await failure(401, { error: 'unauthorized', traceId }), 'auth:unauthorized');
+  assert.equal(await failure(403, { error: 'forbidden', traceId }), 'auth:forbidden');
+  assert.equal(await failure(404, { error: 'not_found', traceId }), 'not_found');
+  assert.equal(await failure(400, { error: 'invalid_request', fields: ['description'], traceId }), 'invalid');
+  assert.equal(await failure(409, { error: 'idempotency_conflict', traceId }), 'conflict');
+  assert.equal(await failure(415, { error: 'unsupported_media_type', traceId }), 'media');
+  assert.equal(await failure(422, { error: 'outside_coverage', traceId }), 'outside_coverage');
+  assert.equal(await failure(422, { error: 'checksum_mismatch', traceId }), 'integrity');
+  assert.equal(await failure(503, { error: 'evidence_unavailable', traceId }), 'unavailable');
+  assert.equal(await failure(429, 'slow down'), 'unavailable');
+  assert.equal(await failure(418, 'teapot'), 'invalid_response');
+  await assert.rejects(http(() => { throw new Error('offline'); }).createDraft(manifest, 'retry-key-0001'), (error: ClaimReportFailure) => error.code === 'unavailable');
+  const submitted = await http(() => json({ error: 'evidence_incomplete', missing: [fileId], traceId }, 409)).submit(claimId).then(() => null, (error: ClaimReportFailure) => error);
+  assert.deepEqual([submitted?.code, submitted?.detail], ['incomplete', { missing: [fileId] }]);
+});
+
+test('an evidence file is sent to its own address with its type, and a bad receipt is not trusted', async () => {
+  let sent: Parameters<EvidenceUploader>[0] | undefined;
+  const item = { id: fileId, uri: 'file:///cache/a.jpg', contentType: 'image/jpeg' as const, byteSize: 10, kind: 'photo' as const };
+  await http(() => json({}), async input => { sent = input; return { status: 200, body: JSON.stringify({ fileId, state: 'verified', traceId }) }; }).upload(claimId, item);
+  assert.deepEqual(sent, { url: `${baseUrl}/api/v1/claims/${claimId}/evidence/${fileId}`, uri: item.uri, contentType: 'image/jpeg', token: 'synthetic.jwt.token' });
+  const result = (status: number, body: unknown) => http(() => json({}), async () => ({ status, body: JSON.stringify(body) })).upload(claimId, item).then(() => 'ok', (error: ClaimReportFailure | AuthFailure) => error instanceof AuthFailure ? `auth:${error.kind}` : error.code);
+  assert.equal(await result(200, { fileId: 'other', state: 'verified' }), 'invalid_response');
+  assert.equal(await result(200, { fileId, state: 'pending' }), 'invalid_response');
+  assert.equal(await result(422, { error: 'checksum_mismatch' }), 'integrity');
+  assert.equal(await result(401, {}), 'auth:unauthorized');
+  assert.equal(await result(409, { error: 'claim_not_draft' }), 'conflict');
+  assert.equal(await http(() => json({}), async () => { throw new Error('network'); }).upload(claimId, item).then(() => 'ok', (error: ClaimReportFailure) => error.code), 'unavailable');
+});
+
+test('the submission accepts only the case number of the claim it asked for', async () => {
+  const ok = await http(() => json({ claimId, claimNumber: 'SIN-2026-09127', state: 'unassigned', submittedAt: now.toISOString(), traceId })).submit(claimId);
+  assert.deepEqual(ok, { claimId, claimNumber: 'SIN-2026-09127', submittedAt: now.toISOString() });
+  for (const body of [{ claimId: 'other', claimNumber: 'SIN-2026-09127', submittedAt: now.toISOString() }, { claimId, claimNumber: 'SIN-26-1', submittedAt: now.toISOString() }, { claimId, claimNumber: 'SIN-2026-09127', submittedAt: 'soon' }]) {
+    await assert.rejects(http(() => json(body)).submit(claimId), (error: ClaimReportFailure) => error.code === 'invalid_response');
+  }
+});

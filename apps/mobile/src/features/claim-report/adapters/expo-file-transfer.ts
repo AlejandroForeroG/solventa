@@ -1,0 +1,22 @@
+import { CryptoDigestAlgorithm, digest } from 'expo-crypto';
+import { File } from 'expo-file-system';
+import { FileSystemUploadType, uploadAsync } from 'expo-file-system/legacy';
+import type { FileDigest } from '../application/ports';
+import type { EvidenceUploader } from './claim-report-api';
+
+// The report holds at most 50 MiB, so one file is read into memory only to hash it. The file is never sent from that copy.
+export const expoFileDigest: FileDigest = {
+  async sha256(uri) {
+    const hash = await digest(CryptoDigestAlgorithm.SHA256, await new File(uri).arrayBuffer());
+    return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  },
+};
+
+// The native layer streams the file body from its path with a known length, which the gateway requires.
+export const expoEvidenceUploader: EvidenceUploader = async ({ url, uri, contentType, token }) => {
+  const result = await uploadAsync(url, uri, {
+    httpMethod: 'PUT', uploadType: FileSystemUploadType.BINARY_CONTENT,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, Accept: 'application/json' },
+  });
+  return { status: result.status, body: result.body };
+};
