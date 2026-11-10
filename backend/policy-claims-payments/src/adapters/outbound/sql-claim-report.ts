@@ -31,7 +31,7 @@ export class SqlClaimReport implements ClaimReportStore {
   async createDraft({ owner, report, idempotencyKey, requestHash, traceId }: Parameters<ClaimReportStore['createDraft']>[0]): Promise<DraftOutcome> {
     return this.run<DraftOutcome>(async db => {
       const policy = (await db.query<{ effective_from: Date; effective_until: Date }>(
-        'SELECT effective_from, effective_until FROM policy.policies WHERE id = $1 AND subject_token = $2', [report.policyId, owner.subjectToken])).rows[0];
+        "SELECT effective_from, effective_until FROM policy.policies WHERE id = $1 AND subject_token = $2 AND status = 'issued'", [report.policyId, owner.subjectToken])).rows[0];
       if (!policy) return { status: 'policy_not_found' };
       const existing = (await db.query<{ id: string; request_hash: string }>(
         'SELECT id, request_hash FROM policy.claims WHERE policy_id = $1 AND idempotency_key = $2', [report.policyId, idempotencyKey])).rows[0];

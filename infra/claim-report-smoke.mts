@@ -40,8 +40,11 @@ try {
   const ownerA = { clientId: randomUUID(), subjectToken: randomUUID() };
   const ownerB = { clientId: randomUUID(), subjectToken: randomUUID() };
   const policyId = randomUUID();
+  await db.query(`INSERT INTO policy.policies (id,subject_token,offer_id,offer_version,idempotency_key,request_hash,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id,status)
+    VALUES ($1,$2,$3,1,'synthetic-policy',$4,100000,'COP','{}',now()-interval '1 day',now()+interval '1 year',$5,'issued')`, [policyId, ownerA.subjectToken, randomUUID(), 'a'.repeat(64), randomUUID()]);
+  const pendingPolicyId = randomUUID();
   await db.query(`INSERT INTO policy.policies (id,subject_token,offer_id,offer_version,idempotency_key,request_hash,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
-    VALUES ($1,$2,$3,1,'synthetic-policy',$4,100000,'COP','{}',now()-interval '1 day',now()+interval '1 year',$5)`, [policyId, ownerA.subjectToken, randomUUID(), 'a'.repeat(64), randomUUID()]);
+    VALUES ($1,$2,$3,1,'synthetic-pending-policy',$4,100000,'COP','{}',now()-interval '1 day',now()+interval '1 year',$5)`, [pendingPolicyId, ownerA.subjectToken, randomUUID(), 'b'.repeat(64), randomUUID()]);
   const store = new SqlClaimReport(runtime.toString());
   const inbox = new ClaimInbox(new SqlClaimInbox(runtime.toString()), { now: () => new Date() });
   const reader = () => ({ clientId: randomUUID(), traceId: randomUUID(), expiresAt: new Date(Date.now() + 5000).toISOString() });
@@ -68,6 +71,7 @@ try {
   assert.equal(replay.status, 'replayed'); assert.equal((replay as { claim: { claimId: string } }).claim.claimId, claimId);
   assert.equal((await store.createDraft({ owner: ownerA, report: first, idempotencyKey: key, requestHash: hash('two'), traceId: randomUUID() })).status, 'idempotency_conflict');
   assert.equal((await store.createDraft({ owner: ownerB, report: first, idempotencyKey: 'other-' + randomUUID(), requestHash: hash('x'), traceId: randomUUID() })).status, 'policy_not_found');
+  assert.equal((await store.createDraft({ owner: ownerA, report: input({ policyId: pendingPolicyId }), idempotencyKey: 'pending-' + randomUUID(), requestHash: hash('p'), traceId: randomUUID() })).status, 'policy_not_found', 'a policy that is not issued yet has no coverage to report against');
   assert.equal((await store.createDraft({ owner: ownerA, report: input({ occurredAt: new Date(Date.now() - 3 * 86_400_000).toISOString() }), idempotencyKey: 'early-' + randomUUID(), requestHash: hash('y'), traceId: randomUUID() })).status, 'outside_coverage');
   assert.equal(Number((await db.query(`SELECT count(*) AS n FROM policy.claims WHERE status='draft'`)).rows[0].n), 1, 'retries, strangers and out-of-coverage dates create nothing');
 
@@ -140,7 +144,7 @@ try {
   const legacy = randomUUID();
   await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id) VALUES($1,$2,'parametric-once',$3,'approved',now(),$4)`, [legacy, policyId, 'f'.repeat(64), randomUUID()]);
   assert.ok(!(await inbox.list({}, reader())).items.some(item => item.claimId === legacy), 'the parametric flow keeps its claims and is not listed');
-  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'coverage-window', 'draft-not-listed', 'evidence-verification',
+  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'draft-not-listed', 'evidence-verification',
     'incomplete-submit', 'single-number', 'inbox-shows-unestimated', 'concurrent-identical-requests', 'concurrent-numbering', 'audit-rollback', 'runtime-privileges', 'constraints', 'legacy-insert'] }));
 } finally {
   if (db) await db.end();
