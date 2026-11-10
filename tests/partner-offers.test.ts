@@ -227,6 +227,19 @@ test('HTTP: every attempt logs one mortgage_offer_profiled line for the partner 
   assert.equal(JSON.stringify(event).includes(customer.clientId), false);
 });
 
+test('HTTP: the profiling line tells an access outage from a real denial', async () => {
+  const lines: string[] = []; const log = console.log;
+  console.log = (line: string) => { lines.push(line); };
+  try {
+    for (const result of [{ status: 'denied', error: 'access_unavailable', httpStatus: 503 }, { status: 'denied', error: 'forbidden', httpStatus: 403 },
+      { status: 'denied', error: 'unauthorized', httpStatus: 401 }, { status: 'unavailable' }] as Awaited<ReturnType<PartnerOffers['create']>>[]) {
+      await httpFixture({ create: async () => result })({ body: '{}' });
+    }
+  } finally { console.log = log; }
+  const results = lines.filter(line => line.includes('mortgage_offer_profiled')).map(line => JSON.parse(line).result);
+  assert.deepEqual(results, ['unavailable', 'denied', 'denied', 'unavailable']);
+});
+
 test('the Identity adapter validates the untrusted reply, drops oversized tokens and bounds the call by its deadline', async () => {
   const sent: unknown[] = [];
   const identity = (reply: unknown, delay = 0) => new IdentityPartnerOfferAccess({ authorizePartnerOfferAccessV1: async request => { sent.push(request); await new Promise(resolve => setTimeout(resolve, delay)); return reply; } }, 30);
