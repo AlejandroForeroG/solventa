@@ -39,6 +39,7 @@
       ],
       "expo-web-browser",
       "expo-notifications",
+      "expo-location",
       ["expo-localization", { "supportedLocales": ["es", "en"] }],
       "@react-native-community/datetimepicker",
       ["expo-image-picker", {
@@ -48,18 +49,8 @@
       }]
     ],
     "locales": {
-      "es": { "ios": {
-        "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas.",
-        "NSCameraUsageDescription": "Solventa usa la cámara para que adjuntes fotos y videos a tu reporte de siniestro.",
-        "NSPhotoLibraryUsageDescription": "Solventa accede a tus fotos y videos solo para los que elijas adjuntar a tu reporte de siniestro.",
-        "NSMicrophoneUsageDescription": "Solventa usa el micrófono para grabar el audio de los videos que adjuntes a tu reporte de siniestro."
-      } },
-      "en": { "ios": {
-        "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials and saved policies.",
-        "NSCameraUsageDescription": "Solventa uses the camera so you can attach photos and videos to your claim report.",
-        "NSPhotoLibraryUsageDescription": "Solventa accesses your photos and videos only for the ones you choose to attach to your claim report.",
-        "NSMicrophoneUsageDescription": "Solventa uses the microphone to record the audio of the videos you attach to your claim report."
-      } }
+      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas.", "NSCameraUsageDescription": "Solventa usa la cámara para que adjuntes fotos y videos a tu reporte de siniestro.", "NSPhotoLibraryUsageDescription": "Solventa accede a tus fotos y videos solo para los que elijas adjuntar a tu reporte de siniestro.", "NSMicrophoneUsageDescription": "Solventa usa el micrófono para grabar el audio de los videos que adjuntes a tu reporte de siniestro.", "NSLocationWhenInUseUsageDescription": "Solventa usa tu ubicación para buscar prestadores cercanos cuando lo solicitas." } },
+      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials and saved policies.", "NSCameraUsageDescription": "Solventa uses the camera so you can attach photos and videos to your claim report.", "NSPhotoLibraryUsageDescription": "Solventa accesses your photos and videos only for the ones you choose to attach to your claim report.", "NSMicrophoneUsageDescription": "Solventa uses the microphone to record the audio of the videos you attach to your claim report.", "NSLocationWhenInUseUsageDescription": "Solventa uses your location to find nearby providers when you ask." } }
     },
     "experiments": {
       "typedRoutes": true,

@@ -4,7 +4,10 @@ import type { FinancialActor, FinancialResult, PolicyListResult } from '../../do
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 
+import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
+
 export type PolicyHttpDependencies = {
+  assistance?: AssistanceHttpDependencies;
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
@@ -178,6 +181,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   // The report routes share the list's path, so they register first and the list keeps the remaining methods.
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
   if (deps?.claims) mountClaims(app, deps.claims);
+  if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
 }
