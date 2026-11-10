@@ -6,134 +6,514 @@
       "name": "flight delay at the threshold",
       "sign": true,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000001", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "flight_delay", "flightReference": "30000000-0000-4000-8000-000000000001", "delayMinutes": 180 } },
-      "expected": { "status": "verified", "occurrence": { "eventId": "40000000-0000-4000-8000-000000000001", "occurredAt": "2026-10-16T02:30:00.000Z", "eventType": "flight.delay_verified", "payload": { "policyId": "10000000-0000-4000-8000-000000000001", "flightReference": "30000000-0000-4000-8000-000000000001", "delayMinutes": 180 } } }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000001",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "flight_delay",
+          "flightReference": "30000000-0000-4000-8000-000000000001",
+          "delayMinutes": 180
+        }
+      },
+      "expected": {
+        "status": "verified",
+        "occurrence": {
+          "eventId": "40000000-0000-4000-8000-000000000001",
+          "occurredAt": "2026-10-16T02:30:00.000Z",
+          "eventType": "flight.delay_verified",
+          "payload": {
+            "policyId": "10000000-0000-4000-8000-000000000001",
+            "flightReference": "30000000-0000-4000-8000-000000000001",
+            "delayMinutes": 180
+          }
+        }
+      }
     },
     {
       "name": "flight with no delay",
       "sign": true,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000002", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "flight_delay", "flightReference": "30000000-0000-4000-8000-000000000001", "delayMinutes": 0 } },
-      "expected": { "status": "verified", "occurrence": { "eventId": "40000000-0000-4000-8000-000000000002", "occurredAt": "2026-10-16T02:30:00.000Z", "eventType": "flight.delay_verified", "payload": { "policyId": "10000000-0000-4000-8000-000000000001", "flightReference": "30000000-0000-4000-8000-000000000001", "delayMinutes": 0 } } }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000002",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "flight_delay",
+          "flightReference": "30000000-0000-4000-8000-000000000001",
+          "delayMinutes": 0
+        }
+      },
+      "expected": {
+        "status": "verified",
+        "occurrence": {
+          "eventId": "40000000-0000-4000-8000-000000000002",
+          "occurredAt": "2026-10-16T02:30:00.000Z",
+          "eventType": "flight.delay_verified",
+          "payload": {
+            "policyId": "10000000-0000-4000-8000-000000000001",
+            "flightReference": "30000000-0000-4000-8000-000000000001",
+            "delayMinutes": 0
+          }
+        }
+      }
     },
     {
       "name": "rainfall at the threshold",
       "sign": true,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000003", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "verified", "occurrence": { "eventId": "40000000-0000-4000-8000-000000000003", "occurredAt": "2026-10-16T02:30:00.000Z", "eventType": "weather.precipitation_verified", "payload": { "policyId": "10000000-0000-4000-8000-000000000001", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } } }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000003",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "verified",
+        "occurrence": {
+          "eventId": "40000000-0000-4000-8000-000000000003",
+          "occurredAt": "2026-10-16T02:30:00.000Z",
+          "eventType": "weather.precipitation_verified",
+          "payload": {
+            "policyId": "10000000-0000-4000-8000-000000000001",
+            "stationId": "20000000-0000-4000-8000-000000000001",
+            "precipitationMm": 50
+          }
+        }
+      }
     },
     {
       "name": "rainfall at the documented maximum",
       "sign": true,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000004", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 2000 } },
-      "expected": { "status": "verified", "occurrence": { "eventId": "40000000-0000-4000-8000-000000000004", "occurredAt": "2026-10-16T02:30:00Z", "eventType": "weather.precipitation_verified", "payload": { "policyId": "10000000-0000-4000-8000-000000000001", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 2000 } } }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000004",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 2000
+        }
+      },
+      "expected": {
+        "status": "verified",
+        "occurrence": {
+          "eventId": "40000000-0000-4000-8000-000000000004",
+          "occurredAt": "2026-10-16T02:30:00Z",
+          "eventType": "weather.precipitation_verified",
+          "payload": {
+            "policyId": "10000000-0000-4000-8000-000000000001",
+            "stationId": "20000000-0000-4000-8000-000000000001",
+            "precipitationMm": 2000
+          }
+        }
+      }
+    },
+    {
+      "name": "observation time in whole seconds",
+      "sign": true,
+      "schemaValid": true,
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000014",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "verified",
+        "occurrence": {
+          "eventId": "40000000-0000-4000-8000-000000000014",
+          "occurredAt": "2026-10-16T02:30:00Z",
+          "eventType": "weather.precipitation_verified",
+          "payload": {
+            "policyId": "10000000-0000-4000-8000-000000000001",
+            "stationId": "20000000-0000-4000-8000-000000000001",
+            "precipitationMm": 50
+          }
+        }
+      }
     },
     {
       "name": "valid fields with a signature that does not match",
       "sign": false,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000005", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 }, "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000005",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "signed message for another environment",
       "sign": true,
       "schemaValid": true,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000006", "environment": "prod", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000006",
+        "environment": "prod",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "missing signature",
       "sign": false,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000007", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000007",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "unknown format version",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 2, "providerEventId": "40000000-0000-4000-8000-000000000008", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 2,
+        "providerEventId": "40000000-0000-4000-8000-000000000008",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "message not marked synthetic",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000009", "environment": "local", "synthetic": false, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000009",
+        "environment": "local",
+        "synthetic": false,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "unexpected top level field",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000a", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "payoutAmount": "1.0000", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000a",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "payoutAmount": "1.0000",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "unknown reading kind",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000b", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "earthquake", "magnitude": 7 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000b",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "earthquake",
+          "magnitude": 7
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "weather reading carrying a flight field",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000c", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50, "delayMinutes": 180 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000c",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50,
+          "delayMinutes": 180
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "flight reading without its delay",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000d", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "flight_delay", "flightReference": "30000000-0000-4000-8000-000000000001" } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000d",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "flight_delay",
+          "flightReference": "30000000-0000-4000-8000-000000000001"
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "station that is not an identifier",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000e", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "station-7", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000e",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "station-7",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "fractional rainfall",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-00000000000f", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 49.5 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-00000000000f",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 49.5
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "negative rainfall",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000010", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": -1 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000010",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": -1
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "rainfall above the documented maximum",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000011", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 2001 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000011",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 2001
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "delay above the documented maximum",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000012", "environment": "local", "synthetic": true, "observedAt": "2026-10-16T02:30:00.000Z", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "flight_delay", "flightReference": "30000000-0000-4000-8000-000000000001", "delayMinutes": 10081 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000012",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "flight_delay",
+          "flightReference": "30000000-0000-4000-8000-000000000001",
+          "delayMinutes": 10081
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     },
     {
       "name": "observation time that is not an instant",
       "sign": true,
       "schemaValid": false,
-      "message": { "version": 1, "providerEventId": "40000000-0000-4000-8000-000000000013", "environment": "local", "synthetic": true, "observedAt": "yesterday", "policyId": "10000000-0000-4000-8000-000000000001", "reading": { "kind": "weather_precipitation", "stationId": "20000000-0000-4000-8000-000000000001", "precipitationMm": 50 } },
-      "expected": { "status": "invalid" }
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000013",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "yesterday",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
+    },
+    {
+      "name": "observation time with a UTC offset instead of Z",
+      "sign": true,
+      "schemaValid": false,
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000015",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00+00:00",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
+    },
+    {
+      "name": "observation time with more than three fractional digits",
+      "sign": true,
+      "schemaValid": false,
+      "message": {
+        "version": 1,
+        "providerEventId": "40000000-0000-4000-8000-000000000016",
+        "environment": "local",
+        "synthetic": true,
+        "observedAt": "2026-10-16T02:30:00.0000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "reading": {
+          "kind": "weather_precipitation",
+          "stationId": "20000000-0000-4000-8000-000000000001",
+          "precipitationMm": 50
+        }
+      },
+      "expected": {
+        "status": "invalid"
+      }
     }
   ]
 }
