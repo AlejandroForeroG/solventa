@@ -74,6 +74,8 @@ The access check does not refresh the cookie and never registers a session: if t
 
 ## Responses
 
+Reporting a claim uses the mobile-only `claims:report` operation, authorized through the same `ApiAccess.mobileUser` policy for the customer's own session. The web channel is denied it, and it confers no analyst permission: `claims:read` and `claims:decide` remain explicit grants. The [claim report](../policy-claims-payments/claim-report.md) checks ownership of the policy itself.
+
 Native onboarding uses separate mobile-only `identity-verifications:read` and `identity-verifications:write` operations. The [verification routes](identity-verification.md) call the same `ApiAccess.mobileUser` policy after WorkOS verification and check the current owned session again inside each business transaction. Web and partner policies exclude these operations. The original `/access/mobile` probe remains compatible and advertises only `quotes:create`; a KYC outcome changes neither that session nor business permissions.
 
 The web gateway gives each access probe's Identity Service Binding call a five-second deadline, cancels it on expiry and returns `503 access_unavailable`. This deadline does not rely on client-disconnection signals. Upstream failures preserve a valid caller-supplied UUID in `X-Trace-Id` and the response body; missing or invalid values receive a generated UUID. API version headers and `Cache-Control: no-store` also apply to these failures.

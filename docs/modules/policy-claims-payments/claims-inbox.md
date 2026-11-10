@@ -12,7 +12,7 @@ The list is an operational permission: an authorized analyst reads open claims o
 
 Only open claims: `unassigned`, `in_review`, `pending_information` and `escalated`. Claims written by the parametric payment flow (`approved`, then `paid`) are not open and keep their existing values and insert statement. `claims.status` is still unconstrained SQL text, so an unknown state or an open claim missing its number or estimated amount fails the page with 503 rather than being hidden or guessed.
 
-Order: priority (high first), `created_at` ascending, `estimated_amount` descending, then claim id. Pass the last item's id as `before` to continue; filters must be repeated. There is no total, and a cursor that no longer exists returns an empty page. Filters are `state`, `overdue=true` and `query` (exact claim number or policy UUID). Unknown, duplicate or empty parameters return 400 after authorization.
+Order: priority (high first), `created_at` ascending, `estimated_amount` descending, then claim id. A claim without an estimate, such as one reported by the customer before an analyst values it, sorts after every estimated claim of the same priority and age and returns `estimatedAmount: null`; the list never replaces a missing estimate with zero. A missing claim number, currency or a malformed value still fails the whole read closed. Pass the last item's id as `before` to continue; filters must be repeated. There is no total, and a cursor that no longer exists returns an empty page. Filters are `state`, `overdue=true` and `query` (exact claim number or policy UUID). Unknown, duplicate or empty parameters return 400 after authorization.
 
 Derived values, never supplied by a caller:
 
