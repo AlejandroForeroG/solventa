@@ -256,7 +256,7 @@ The wallet is the section where a signed-in customer reads their own issued poli
 
 ### What it shows, and what it does not
 
-The wallet represents the products and data Solventa has: `vida_hipotecario` (sum insured) and `flight_delay` (flight, minimum delay and payout), with the sealed premium and validity. The mockup's cars, homes, names, amounts and two sample policies are illustrative and did not create products.
+The wallet represents the products and data Solventa has: `vida_hipotecario` (sum insured), `flight_delay` (flight, minimum delay and payout) and `weather_event` (station, minimum rainfall in 24 hours and payout), with the sealed premium and validity. The compact protected encoding gives each coverage kind its own code, and six policies of any mix stay within the 1800-byte bound. The mockup's cars, homes, names, amounts and two sample policies are illustrative and did not create products.
 
 | Mockup element | Wallet behavior |
 |---|---|
