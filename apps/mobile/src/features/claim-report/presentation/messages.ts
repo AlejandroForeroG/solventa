@@ -1,3 +1,4 @@
+import type { PolicyProduct } from '../../policy-cache/domain/cached-policy';
 import type { ClaimFailureCode } from '../application/ports';
 import type { EventType, Issue, RejectedCandidate } from '../domain/report';
 
@@ -19,7 +20,8 @@ type Copy = {
   sending: { preparing: string; creating: string; uploading: (done: number, total: number) => string; submitting: string };
   failures: Record<Exclude<ClaimFailureCode, 'incomplete'>, string> & { incomplete: (missing: number) => string };
   done: { heading: string; caseNumber: string; filedAt: string; evidence: string; once: string; home: string };
-  continue: string; products: { vida_hipotecario: string; flight_delay: string };
+  // Every product needs a name, even one that cannot be reported, so a new product fails the build here instead of showing a blank.
+  continue: string; products: Record<PolicyProduct, string>;
 };
 
 const es: Copy = {
