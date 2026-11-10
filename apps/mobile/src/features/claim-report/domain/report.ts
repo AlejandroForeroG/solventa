@@ -39,7 +39,7 @@ export type RejectedCandidate = 'file_type' | 'empty' | 'too_many' | 'total_size
 const EXTENSIONS: Record<string, EvidenceContentType> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', heif: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime' };
 const length = (text: string) => [...text].length;
 
-// Flight delay is parametric and pays without a report, so only mortgage life policies are reportable.
+// Flight delay and heavy rain are parametric and pay without a report, so only mortgage life policies are reportable.
 export const isReportableProduct = (product: string): boolean => product === 'vida_hipotecario';
 
 export const kindOf = (contentType: EvidenceContentType): EvidenceKind => contentType.startsWith('video/') ? 'video' : 'photo';

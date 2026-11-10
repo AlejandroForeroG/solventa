@@ -52,7 +52,7 @@ const es: Copy = {
     unavailable: 'No pudimos completar el envío. Tu reporte todavía no está radicado. Inténtalo de nuevo.', invalid_response: 'El servicio respondió algo inesperado. Inténtalo más tarde.' },
   done: { heading: 'Reporte recibido', caseNumber: 'Número de caso', filedAt: 'Radicado', evidence: 'Evidencia', once: 'Un solo caso: volver a enviar no crea otro.', home: 'Volver al inicio' },
   resuming: 'Verificando tu sesión…',
-  continue: 'Continuar', products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo' },
+  continue: 'Continuar', products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
 };
 
 const en: Copy = {
@@ -83,7 +83,7 @@ const en: Copy = {
     unavailable: 'We could not finish sending. Your report is not filed yet. Try again.', invalid_response: 'The service answered something unexpected. Try again later.' },
   done: { heading: 'Report received', caseNumber: 'Case number', filedAt: 'Filed', evidence: 'Evidence', once: 'One case only: sending again does not create another.', home: 'Back to home' },
   resuming: 'Checking your session…',
-  continue: 'Continue', products: { vida_hipotecario: 'Mortgage life', flight_delay: 'Flight delay' },
+  continue: 'Continue', products: { vida_hipotecario: 'Mortgage life', flight_delay: 'Flight delay', weather_event: 'Heavy rain' },
 };
 
 export const claimReportMessages: Record<ClaimReportLocale, Copy> = { 'es-CO': es, 'en-US': en };
