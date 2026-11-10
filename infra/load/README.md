@@ -107,3 +107,25 @@ Consequence: if a transaction fails after the number is allocated, the numbering
 
 - Each request opens a new database connection. Hyperdrive pools connections in the remote environments and should help, but it has to be measured there.
 - If more than about 100 requests per second per environment are needed, the yearly counter is still one shared row: split it (for example per partner) or change the code format. That is a team decision.
+
+## Policy detail (local evidence)
+
+`policies.k6.js` measures `GET /api/v1/policies/{policyId}/detail` against the policy-consultation objective: **p95 ≤ 150 ms and p99 ≤ 300 ms**. It needs an issued policy owned by the logged-in session, which the web purchase flow creates, plus the same session cookie as the other scenarios:
+
+```sh
+COOKIE=<cookie value> POLICY_ID=<issued policy id> sh infra/load/run-policies.sh 10 60s
+```
+
+`run-policies.sh` writes `results/policies-<rate>rps-<duration>.json` and prints the key numbers. Checks require the detail contract and the trace header.
+
+The 2026-11-09 local run was **not** driven by k6: the session cookie is HttpOnly, so a page script with the signed-in session was the runner, with a clock-based scheduler. It read one issued mortgage-life policy with real SQL, the local Workers and the local Docker CockroachDB, on the uncommitted revision of the portal branch (base `c14f706`):
+
+| Run | Requests | Failures | p50 | p95 | p99 | Max |
+|---|---|---|---|---|---|---|
+| Detail, 10 req/s for 40 s, browser time | 400 | 0 | 125.1 ms | 165.7 ms | 272.5 ms | 323.6 ms |
+| Same requests, Worker time (`wrangler` log) | 400 | 0 | 122 ms | 157 ms | 269 ms | 319 ms |
+| Existing `GET /policies/{id}`, 10 req/s for 20 s, browser time | 200 | 0 | 125.7 ms | 144.3 ms | 160.9 ms | 196.3 ms |
+
+Reading: the p99 objective (300 ms) held, **the p95 objective (150 ms) was not met locally** (165.7 ms in the browser, 157 ms in the Worker). The existing policy read, which shares the web Worker, the Identity authorization call and a new SQL connection per request, has the same median (about 125 ms), so that floor belongs to the shared path and not to the detail query. This is development evidence from a laptop that also ran Docker and the browser, not dev, staging or production performance.
+
+Discarded runs: repeats of the detail route gave p95 of 305 and 480 ms while another test run pushed the machine load average to 43, and the Workers then lost their database connection, so they are not reported as results. A request without a renewed session also answers 401 after a few minutes because the access cookie is short-lived; the script must call `/auth/session` first, as the SPA does. A k6 run, or a staging run with its own synthetic user, is still pending.

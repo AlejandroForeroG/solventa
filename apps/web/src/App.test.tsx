@@ -101,6 +101,25 @@ describe('claims inbox route in the application', () => {
   });
 });
 
+describe('my policies route in the application', () => {
+  const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
+    effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+  it('requires sign-in and does not render the public calculator on the policies route', async () => {
+    window.history.replaceState(null, '', '/polizas'); serve(401); render(<App />);
+    await screen.findByRole('heading', { name: 'Mis pólizas' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('lists the policies of a signed-in user and links the section from the header', async () => {
+    window.history.replaceState(null, '', '/polizas');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true })
+      : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' }));
+    render(<App />);
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Vida hipotecario/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('href', '/polizas');
+  });
+});
+
 describe('privacy dashboard in the application', () => {
   it.each([
     { lostResponse: false, reconciliation: 'immediate' },
