@@ -1,6 +1,6 @@
 const es = {
   headings: {
-    authenticated: 'Sesión iniciada', locked: 'Vuelve a tu cuenta', blocked: 'Revisa la conexión',
+    authenticated: 'Sesión iniciada', profile: 'Perfil', locked: 'Vuelve a tu cuenta', blocked: 'Revisa la conexión',
     logoutPending: 'Cierre pendiente', signedOut: 'Bienvenido a Solventa', signIn: 'Inicia sesión',
   },
   introduction: 'Aquí puedes gestionar tus productos y cuidar tu bienestar en un solo lugar.',
@@ -45,7 +45,7 @@ const es = {
 
 const en: typeof es = {
   headings: {
-    authenticated: 'Signed in', locked: 'Welcome back', blocked: 'Check your connection',
+    authenticated: 'Signed in', profile: 'Profile', locked: 'Welcome back', blocked: 'Check your connection',
     logoutPending: 'Sign-out pending', signedOut: 'Welcome to Solventa', signIn: 'Sign in',
   },
   introduction: 'Manage your products and take care of your wellbeing, all in one place.',

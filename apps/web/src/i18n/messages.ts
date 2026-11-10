@@ -1,5 +1,6 @@
 import { auditEs, auditEn } from '../audit/messages';
 import { claimsEs, claimsEn } from '../claims/messages';
+import { assistanceEs, assistanceEn } from '../assistance/messages';
 // Catalogues for the commercial front end. Texts come from the approved prototype
 // dictionary; parameters use ICU placeholders. Currency is always COP in both locales.
 export const locales = ['es-CO', 'en-US'] as const;
@@ -673,4 +674,7 @@ const enUS: typeof esCO = {
   'session.retry': 'Retry'
 };
 
-export const messages: Record<Locale, Record<string, string>> = { 'es-CO': { ...esCO, ...auditEs, ...claimsEs }, 'en-US': { ...enUS, ...auditEn, ...claimsEn } };
+export const messages: Record<Locale, Record<string, string>> = {
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...assistanceEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...assistanceEn },
+};

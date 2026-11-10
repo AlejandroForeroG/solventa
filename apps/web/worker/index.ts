@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { apiVersions } from '@solventa/contracts';
+import { apiVersions, assistanceSearchPath } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
 import { withSecurityHeaders } from './security-headers';
@@ -64,7 +64,7 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
       const response = isQuotesPath(path) || offersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
         : claimEvidencePath.test(path) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
-        : claimsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
+        : claimsPath.test(path) || path === assistanceSearchPath ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }

@@ -9,13 +9,10 @@ import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { createPolicyWallet } from '../adapters/create-policy-wallet';
-import { policyReference, validityAt, walletAccessFor } from '../domain/wallet';
-import type { WalletAccess } from '../domain/wallet';
-import type { WalletSnapshot } from '../domain/wallet';
+import { policyReference, validityAt, walletAccessFor, type WalletAccess, type WalletSnapshot } from '../domain/wallet';
 import { formatDate, formatDateTime, formatMoney } from './format';
-import { walletMessages } from './messages';
+import { walletMessages, type WalletLocale } from './messages';
 import { useNow } from './use-now';
-import type { WalletLocale } from './messages';
 
 type Ready = Extract<WalletSnapshot, { status: 'ready' }>;
 
@@ -48,8 +45,8 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
   const policy = state.status === 'ready' ? state.policies.find(item => item.policyId === selected) : undefined;
   return <SafeAreaView style={styles.safe}>
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        <Action label={copy.back} secondary onPress={() => router.replace('/')} />
+      <View style={styles.page}>
+        {access.mode === 'offline' && <Action label={copy.back} secondary onPress={() => router.replace('/')} />}
         <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
         {state.status === 'locked' && <Locked state={state} locale={locale} onUnlock={() => void wallet.unlock()} />}
         {state.status === 'loading' && <ActivityIndicator accessibilityLabel={copy.loading} color={theme.colors.primary} />}
@@ -92,16 +89,43 @@ function SourceBanner({ state, locale, unverified }: { state: Ready; locale: Wal
 
 function List({ state, locale, now, onOpen }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void }) {
   const copy = walletMessages[locale];
+  const [filter, setFilter] = useState<keyof typeof copy.filters>('all');
   if (state.policies.length === 0) return <Text style={styles.body}>{copy.empty}</Text>;
-  const sorted = [...state.policies].sort((a, b) => Date.parse(b.effectiveUntil) - Date.parse(a.effectiveUntil));
+  const sorted = state.policies.filter(policy => filter === 'all' || validityAt(policy, now) === filter)
+    .sort((a, b) => Date.parse(b.effectiveUntil) - Date.parse(a.effectiveUntil));
   return <View style={styles.section}>
-    {sorted.map(policy => <Pressable key={policy.policyId} accessibilityRole="button" onPress={() => onOpen(policy.policyId)} style={styles.item}>
-      <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
-      <Text style={styles.caption}>{policyReference(policy.policyId)} · {copy.validity[validityAt(policy, now)]}</Text>
-      <Text style={styles.body}>{copy.fields.until}: {formatDate(policy.effectiveUntil, locale)} · {formatMoney(policy.premium, locale)}</Text>
-      {state.stored && <Text style={styles.caption}>{copy.availableOffline}</Text>}
-    </Pressable>)}
+    <View style={styles.filters}>
+      {(['active', 'expired', 'all'] as const).map(value => <Pressable key={value} accessibilityRole="button"
+        accessibilityState={{ selected: value === filter }} onPress={() => setFilter(value)}
+        style={[styles.filter, value === filter && styles.filterSelected]}>
+        <Text style={[styles.filterText, value === filter && styles.filterTextSelected]}>{copy.filters[value]}</Text>
+      </Pressable>)}
+    </View>
+    {sorted.length === 0 && <Text style={styles.body}>{copy.emptyFilter}</Text>}
+    {sorted.map(policy => {
+      const validity = validityAt(policy, now);
+      return <Pressable key={policy.policyId} accessibilityRole="button" onPress={() => onOpen(policy.policyId)}
+        style={({ pressed }) => [styles.item, pressed && styles.dimmed]}>
+        <View style={styles.itemHeading}>
+          <Text style={styles.itemTitle}>{copy.products[policy.product]}</Text>
+          <Text style={[styles.badge, validity !== 'active' && styles.badgeNeutral]}>{copy.validity[validity]}</Text>
+        </View>
+        <View style={styles.facts}>
+          <Fact label={copy.fields.reference} value={policyReference(policy.policyId)} />
+          <Fact label={copy.fields.premium} value={formatMoney(policy.premium, locale)} />
+          <Fact label={copy.fields.until} value={formatDate(policy.effectiveUntil, locale)} />
+        </View>
+        {state.stored && <Text style={styles.caption}>{copy.availableOffline}</Text>}
+      </Pressable>;
+    })}
     {state.hasMore && <Text style={styles.caption}>{copy.hasMore}</Text>}
+  </View>;
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return <View style={styles.fact}>
+    <Text style={styles.caption}>{label}</Text>
+    <Text style={styles.factValue}>{value}</Text>
   </View>;
 }
 
@@ -143,7 +167,8 @@ function Action({ label, secondary = false, onPress }: { label: string; secondar
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background }, content: { padding: 24, paddingVertical: 32 },
   card: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: 24, borderRadius: 28, backgroundColor: theme.colors.surface, gap: 18 },
-  title: { fontSize: 23, lineHeight: 30, color: theme.colors.foreground, fontWeight: '600' },
+  page: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
+  title: { fontSize: 32, lineHeight: 38, color: theme.colors.foreground, fontWeight: '700', letterSpacing: -0.8 },
   subtitle: { fontSize: 18, lineHeight: 26, color: theme.colors.foreground, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 23, color: theme.colors.foreground, flexShrink: 1 }, caption: { fontSize: 12, lineHeight: 18, color: theme.colors.muted },
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.warningSurface, color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
@@ -151,7 +176,19 @@ const styles = StyleSheet.create({
   banner: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, gap: 4 },
   bannerStored: { backgroundColor: theme.colors.warningSurface },
   bannerLabel: { fontSize: 12, lineHeight: 18, fontWeight: '700', letterSpacing: 0.6, color: theme.colors.onMint },
-  item: { padding: 16, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 16, gap: 4, minHeight: 48 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filter: { paddingHorizontal: 16, minHeight: 44, borderRadius: 22, backgroundColor: theme.colors.border, justifyContent: 'center' },
+  filterSelected: { backgroundColor: theme.colors.primaryDark },
+  filterText: { fontSize: 14, color: theme.colors.foreground, fontWeight: '600' },
+  filterTextSelected: { color: theme.colors.onPrimary },
+  item: { padding: 18, backgroundColor: theme.colors.surface, borderRadius: 24, gap: 12, minHeight: 48 },
+  itemHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  badge: { color: theme.colors.onMint, backgroundColor: theme.colors.mint, borderRadius: 12, paddingHorizontal: 9,
+    paddingVertical: 4, fontSize: 12, fontWeight: '700' },
+  badgeNeutral: { color: theme.colors.muted, backgroundColor: theme.colors.background },
+  facts: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  fact: { flexGrow: 1, gap: 2 },
+  factValue: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   itemTitle: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: theme.colors.foreground },
   credential: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 4 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderColor: theme.colors.border },

@@ -39,11 +39,12 @@
       ],
       "expo-web-browser",
       "expo-notifications",
+      "expo-location",
       ["expo-localization", { "supportedLocales": ["es", "en"] }]
     ],
     "locales": {
-      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas." } },
-      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials and saved policies." } }
+      "es": { "ios": { "NSFaceIDUsageDescription": "Solventa usa Face ID para proteger tus credenciales y tus pólizas guardadas.", "NSLocationWhenInUseUsageDescription": "Solventa usa tu ubicación para buscar prestadores cercanos cuando lo solicitas." } },
+      "en": { "ios": { "NSFaceIDUsageDescription": "Solventa uses Face ID to protect your sign-in credentials and saved policies.", "NSLocationWhenInUseUsageDescription": "Solventa uses your location to find nearby providers when you ask." } }
     },
     "experiments": {
       "typedRoutes": true,

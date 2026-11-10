@@ -102,6 +102,10 @@ All protected responses are validated before rendering. Requests are aborted and
 
 `src/audit/audit.test.tsx` checks navigation, filtering, gap/provenance display, English copy, empty/denied states, session loss, stale responses, export denial, visibility purge, response validation/backward compatibility and accessibility. The SPA Pact adds successful/legacy/denied/unavailable audit interactions against the real gateway and HTTP handler with explicit test collaborators; SQL smoke separately exercises real persistence and permissions. Browser validation with real WorkOS remains a separate executed check, not a claim implied by these tests.
 
+## Assistance provider search
+
+The authenticated header opens `/prestadores`. Enter a city or directory fixture address to see matches, sample contacts and hours. This web screen does not request device location. The [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md) supplies the same directory to both channels and distinguishes an empty result from a failure.
+
 ## Claims inbox
 
 `/siniestros` loads `src/claims/ClaimsInbox.tsx` after the existing session check, with the same console shell and navigation as the audit workspace; the authenticated header links to it, and the link is not an authorization signal. An anonymous visitor gets sign-in and an ordinary client gets the forbidden state. The [claims inbox guide](../../modules/policy-claims-payments/claims-inbox.md) defines the API, ordering and limits.

@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { randomUUID } from 'expo-crypto';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -15,11 +14,11 @@ import type { Category, Channel, Matrix, Preferences } from '../domain/preferenc
 
 const copy = {
   es: {
-    title: 'Preferencias de avisos', back: 'Volver', save: 'Guardar preferencias', saved: 'Preferencias guardadas.',
+    save: 'Guardar preferencias', saved: 'Preferencias guardadas.',
     retry: 'Reintentar', reload: 'Actualizar', loading: 'Cargando preferencias…',
     signedOut: 'Inicia sesión para consultar tus preferencias.',
     blocked: 'Push no está autorizado por el dispositivo. Actívalo en Ajustes para recibir avisos por este canal.',
-    openSettings: 'Abrir Ajustes', allowed: 'Push autorizado por el dispositivo.',
+    openSettings: 'Abrir Ajustes',
     pending: 'Push está elegido, pero no operará hasta que autorices las notificaciones en el dispositivo.',
     conflict: 'Las preferencias cambiaron en otra sesión. Actualiza antes de guardar.',
     failure: 'No pudimos guardar las preferencias. Reintenta con la misma solicitud o actualiza.',
@@ -30,11 +29,11 @@ const copy = {
       commercial: ['Novedades comerciales', 'Productos y beneficios'] },
   },
   en: {
-    title: 'Notification preferences', back: 'Back', save: 'Save preferences', saved: 'Preferences saved.',
+    save: 'Save preferences', saved: 'Preferences saved.',
     retry: 'Retry', reload: 'Refresh', loading: 'Loading preferences…',
     signedOut: 'Sign in to view your preferences.',
     blocked: 'Push is blocked by your device. Enable notifications in Settings to receive this channel.',
-    openSettings: 'Open Settings', allowed: 'Push is allowed by your device.',
+    openSettings: 'Open Settings',
     pending: 'Push is selected but cannot operate until you allow notifications on this device.',
     conflict: 'Preferences changed in another session. Refresh before saving.',
     failure: 'We could not save your preferences. Retry the same request or refresh.',
@@ -50,9 +49,10 @@ export function NotificationPreferencesScreen() {
   const auth = useAuthentication();
   const language = useAppMessages() === messages.en ? 'en' : 'es';
   const text = copy[language];
-  if (auth.status !== 'authenticated' || !auth.principal) return <SafeAreaView style={styles.safe}>
-    <View style={styles.panel}><Text style={styles.title}>{text.title}</Text><Text style={styles.description}>{text.signedOut}</Text>
-      <Action label={text.back} onPress={() => router.replace('/')} /></View>
+  if (auth.status !== 'authenticated' || !auth.principal) return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+    <View style={styles.content}><View style={styles.panel}>
+      <Text style={styles.description}>{text.signedOut}</Text>
+    </View></View>
   </SafeAreaView>;
   return <PreferencesFlow key={`${auth.principal.clientId}:${auth.principal.subjectToken}`} language={language} />;
 }
@@ -108,16 +108,14 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   }
   const pushSelected = !!draft && categories.some(category => draft[category].push);
   const changed = !!saved && !!draft && JSON.stringify(saved.preferences) !== JSON.stringify(draft);
-  return <SafeAreaView style={styles.safe}><ScrollView contentContainerStyle={styles.content}>
-    <View style={styles.top}><Action label={text.back} secondary onPress={() => router.replace('/')} />
-      <Text accessibilityRole="header" style={styles.title}>{text.title}</Text></View>
+  return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}><ScrollView contentContainerStyle={styles.content}>
     {busy && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
     {error && <View accessibilityLiveRegion="polite" style={styles.warning}><Text style={styles.warningText}>
       {error === 'conflict' ? text.conflict : error === 'read' ? text.readFailure : text.failure}</Text></View>}
     {notice && <Text accessibilityLiveRegion="polite" style={styles.success}>{text.saved}</Text>}
-    {permission !== null && <View style={[styles.permission, !permission && styles.warning]}>
-      <Text style={permission ? styles.description : styles.warningText}>{permission ? text.allowed : text.blocked}</Text>
-      {!permission && <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />}
+    {permission === false && <View style={[styles.warning, styles.permission]}>
+      <Text style={styles.warningText}>{text.blocked}</Text>
+      <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />
     </View>}
     {draft && <View style={styles.panel}>
       <View style={styles.channelHeader}><View style={styles.categoryLabel} />{channels.map(channel =>
@@ -148,11 +146,9 @@ function Action({ label, onPress, disabled = false, secondary = false }: {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 20, gap: 18, paddingBottom: 40 },
-  top: { gap: 20 },
-  title: { color: theme.colors.foreground, fontSize: 26, fontWeight: '700' },
   description: { color: theme.colors.muted, fontSize: 14, lineHeight: 21 },
   panel: { backgroundColor: theme.colors.surface, borderRadius: 22, padding: 16, gap: 10 },
-  permission: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 12 },
+  permission: { gap: 12 },
   warning: { backgroundColor: theme.colors.warningSurface, padding: 16, borderRadius: 16 },
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },

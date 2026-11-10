@@ -199,3 +199,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .trace + .note { margin-top: 12px; }
 .charge-key { color: #0b6b5f; overflow-wrap: anywhere; }
 .btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #6b7583; border-color: #edebe6; cursor: wait; }
+
+.assistance-search .btn { margin-top: 12px; }
+.assistance-result { margin-top: 16px; }
+.assistance-result p { margin: 6px 0; }

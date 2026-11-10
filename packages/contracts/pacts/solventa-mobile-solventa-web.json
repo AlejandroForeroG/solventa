@@ -53,6 +53,61 @@
       }
     },
     {
+      "description": "mobile assistance provider search",
+      "providerStates": [
+        {
+          "name": "a native session with access to the synthetic assistance directory"
+        }
+      ],
+      "request": {
+        "body": {
+          "kind": "manual",
+          "query": "Medellín"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v1/assistance/providers/search"
+      },
+      "response": {
+        "body": {
+          "providers": [
+            {
+              "address": "Calle de prueba 30",
+              "city": "Medellín",
+              "hours": "Todos los días 00:00–24:00",
+              "id": "demo-med-roadside",
+              "kind": "roadside",
+              "name": "Asistencia de prueba Medellín",
+              "phone": "+570000000003"
+            }
+          ],
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile configuration",
       "providerStates": [
         {

@@ -1,5 +1,6 @@
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
+import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -209,6 +210,21 @@ function nativePolicyWorld(): Partial<World> {
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+function nativeAssistanceWorld(): Partial<World> {
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    assistance: {
+      authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token' && input.operation === 'assistance-providers:read'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+      search: searchSyntheticAssistance,
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
@@ -228,6 +244,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   ])),
   'a native session with its installation binding': nativeWorld,
   'a native session with an issued policy': nativePolicyWorld,
+  'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
@@ -278,7 +295,7 @@ export async function verifyPact(pactFile: string): Promise<void> {
       }])),
       // The browser sends Origin on POST and the session cookie on same-origin requests; the contract does not carry them.
       requestFilter: (request, _response, next) => {
-        if (request.method === 'POST') request.headers.origin = origin;
+        if (request.method === 'POST' && !request.headers.authorization) request.headers.origin = origin;
         if (world.sessionCookie && /^\/(api|auth)\//.test(request.url)) request.headers.cookie = `${sessionCookieName}=${world.sessionCookie}`;
         next();
       },

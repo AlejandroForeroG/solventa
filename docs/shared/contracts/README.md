@@ -52,6 +52,7 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `openapi/v1/identity-access.yaml` | Access probes `GET /access/partner` and `GET /access/web`: responses 200, 400, 401, 403, 405 and 503; `tests/identity-access-contract.test.ts` checks each real response, its headers and its status against this spec |
 | `examples/quotes.json` | Valid and invalid cases with synthetic data, checked against the spec by `tests/quotes-contract.test.ts` |
 | `openapi/v1/claims.yaml`, `examples/claims.json` | Claims inbox for explicitly granted web analysts (`GET /claims`): responses 200, 400, 401, 403, 405 and 503 with only the canonical code and the trace id; its claim components are the vocabulary the claim file and decisions reuse. Checked against real handler output by `tests/claims-inbox.test.ts` |
+| `openapi/v1/assistance-providers.yaml`, `examples/assistance-providers.json` | Shared authenticated web and native search of the simulated provider directory (`POST /assistance/providers/search`). Tested against the Policy handler and the native Pact consumer. |
 | `openapi/v1/consents.yaml` | Consent of the authenticated web user: terms, grant, decline, list and revoke; responses 200, 201, 204, 400, 401, 403, 404, 409 and 503, with only the canonical code and the trace id in errors |
 | `examples/consents.json` | Terms and consents in each status with synthetic data, checked against the spec by `tests/consents-contract.test.ts` |
 | `src/versions.ts` | Version registry (`apiVersions`) with optional `deprecatedAt` and `sunset` |
