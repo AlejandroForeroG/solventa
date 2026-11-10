@@ -27,6 +27,12 @@ function flight(index = 1, extra: Record<string, unknown> = {}) {
     coverage: { kind: 'flight_delay', flightReference: '50000000-0000-4000-8000-000000000001', thresholdMinutes: 180, payoutAmount: '999999999999999.0000' }, ...extra };
 }
 
+function weather(index = 1, extra: Record<string, unknown> = {}) {
+  return { ...mortgage(index), product: 'weather_event', premium: '999999999999999.0000',
+    effectiveFrom: '2026-10-16T02:00:00.123Z', effectiveUntil: '2026-10-17T02:00:00.999Z',
+    coverage: { kind: 'weather_event', stationId: '60000000-0000-4000-8000-000000000001', parameter: 'precipitation_24h', unit: 'mm', threshold: 50, payoutAmount: '999999999999999.0000' }, ...extra };
+}
+
 function fixture(passes = true) {
   const state = { value: null as string | null, removed: 0, installation, prompts: 0, passes, flag: false, removeFails: false, raiseFails: false, settleFails: false };
   const store: ProtectedStore = {
@@ -60,13 +66,15 @@ test('only the minimum policy fields reach storage; the document, hash, offer, p
   }] });
 });
 
-test('both products survive the compact encoding exactly, including millisecond instants', async () => {
+test('every product survives the compact encoding exactly, including millisecond instants', async () => {
   const f = fixture();
-  const saved = await f.cache.save(owner, [mortgage(1), flight(2)]);
+  const saved = await f.cache.save(owner, [mortgage(1), flight(2), weather(3)]);
   await f.cache.unlock();
   assert.deepEqual(await f.cache.read(owner), saved);
   assert.equal(saved.policies[1].effectiveUntil, '2026-10-17T02:00:00.999Z');
   assert.deepEqual(saved.policies[1].coverage, flight().coverage);
+  assert.deepEqual(saved.policies[2].coverage, weather().coverage);
+  assert.equal(saved.policies[2].product, 'weather_event');
 });
 
 test('malformed policies are rejected before anything is written', async () => {
@@ -78,6 +86,10 @@ test('malformed policies are rejected before anything is written', async () => {
     flight(1, { coverage: { kind: 'flight_delay', flightReference: 'x', thresholdMinutes: 180, payoutAmount: '1.0000' } }),
     flight(1, { coverage: { kind: 'flight_delay', flightReference: uuid(9), thresholdMinutes: 0, payoutAmount: '1.0000' } }),
     flight(1, { coverage: { kind: 'flight_delay', flightReference: uuid(9), thresholdMinutes: 1.5, payoutAmount: '1.0000' } }),
+    weather(1, { coverage: { ...weather().coverage, stationId: 'station-7' } }), weather(1, { coverage: { ...weather().coverage, threshold: 0 } }),
+    weather(1, { coverage: { ...weather().coverage, threshold: 49.5 } }), weather(1, { coverage: { ...weather().coverage, unit: 'cm' } }),
+    weather(1, { coverage: { ...weather().coverage, parameter: 'wind' } }), weather(1, { coverage: { ...weather().coverage, payoutAmount: '1' } }),
+    weather(1, { coverage: flight().coverage }), flight(1, { coverage: weather().coverage }),
     null, 'policy',
   ];
   for (const source of invalid) {
@@ -92,7 +104,7 @@ test('malformed policies are rejected before anything is written', async () => {
 
 test('the largest allowed snapshot fits the keychain bound and one more policy is rejected', async () => {
   const f = fixture();
-  const largest = Array.from({ length: maxCachedPolicies }, (_, index) => flight(index + 1));
+  const largest = Array.from({ length: maxCachedPolicies }, (_, index) => index % 2 ? weather(index + 1) : flight(index + 1));
   const saved = await f.cache.save(owner, largest);
   assert.equal(saved.policies.length, maxCachedPolicies);
   assert.ok(new TextEncoder().encode(f.state.value ?? '').length <= maxSnapshotBytes, `${f.state.value?.length} bytes`);

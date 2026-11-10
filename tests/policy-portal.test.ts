@@ -13,7 +13,7 @@ import { acceptedOffer, financialIntegrity, financialNow } from './financial-fix
 const paidAt = '2026-10-16T02:00:05.000Z';
 const issued = financialNow().toISOString();
 
-async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay'): Promise<PolicyRecord> {
+async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay' | 'weather_event'): Promise<PolicyRecord> {
   const offer = (await acceptedOffer(product)).payload, id = randomUUID(), document = policyDocument(id, offer);
   const policy: StoredPolicy = { id, clientId: offer.clientId, subjectToken: offer.subjectToken, status: 'issued', offer,
     termsHash: await financialIntegrity.digest(offerContent(offer)), document, documentHash: await financialIntegrity.digest(document),
@@ -62,6 +62,19 @@ test('each product shows its own exclusions and coverage', async () => {
   assert.deepEqual(result.detail.exclusions, conditionsFor('flight_delay', issued).exclusions);
   assert.notDeepEqual(result.detail.exclusions, conditionsFor('vida_hipotecario', issued).exclusions);
   assert.ok(mortgage.policy.id !== flight.policy.id);
+});
+
+test('a weather policy shows its own station coverage, exclusions and a document that names that coverage', async () => {
+  const weather = await issuedRecord('weather_event');
+  const finance = financeFor([weather]);
+  const input = { actor: actorOf(weather), policyId: weather.policy.id, traceId: randomUUID() };
+  const result = await finance.detail(input);
+  assert.ok(result.status === 'ok', JSON.stringify(result));
+  assert.equal(result.detail.coverage.kind, 'weather_event');
+  assert.deepEqual(result.detail.exclusions, conditionsFor('weather_event', issued).exclusions);
+  assert.notDeepEqual(result.detail.exclusions, conditionsFor('flight_delay', issued).exclusions);
+  const document = await finance.document({ ...input, documentId: 'general_conditions' });
+  assert.ok(document.status === 'ok', JSON.stringify(document));
 });
 
 test('a policy still in the purchase flow is waiting: no detail, no document and no financial rejection', async () => {
