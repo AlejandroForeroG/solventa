@@ -35,7 +35,8 @@ export function mountPartnerOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps
     let profileResult = 'unavailable';
     let offerStatus: string | null = null;
     const reply = (body: Record<string, unknown>, status: Status, extra: Record<string, string> = {}) => {
-      if (status === 401 || status === 403) profileResult = 'denied';
+      if (status === 503) profileResult = 'unavailable';
+      else if (status === 401 || status === 403) profileResult = 'denied';
       else if (status === 400 || status === 405) profileResult = 'invalid';
       return c.json({ ...body, traceId }, status, { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra });
     };
