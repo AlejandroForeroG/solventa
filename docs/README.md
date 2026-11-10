@@ -43,3 +43,5 @@ Each topic has one authoritative explanation. README files beside code link to t
 Historical underwriting lookup: [Acquisition audit API and workspace](modules/acquisition-risk/underwriting-audit.md).
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
+
+Automatic indemnities for flight delay and heavy rainfall: [Parametric payouts](modules/policy-claims-payments/parametric-payouts.md).

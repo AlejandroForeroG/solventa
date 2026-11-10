@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://solventa.site/schemas/parametric-provider-event.v1.json",
+  "title": "Simulated parametric provider event v1",
+  "description": "Format of the simulated flight and weather provider, received only through the private Policy RPC. Schema validity is never authentication: the adapter verifies the signature, the environment and the numeric limits before translating the message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "providerEventId",
+    "environment",
+    "synthetic",
+    "observedAt",
+    "policyId",
+    "reading",
+    "signature"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "providerEventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "environment": {
+      "enum": [
+        "local",
+        "dev",
+        "staging",
+        "prod"
+      ]
+    },
+    "synthetic": {
+      "const": true
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "policyId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reading": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "flightReference",
+            "delayMinutes"
+          ],
+          "properties": {
+            "kind": {
+              "const": "flight_delay"
+            },
+            "flightReference": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "delayMinutes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10080
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "stationId",
+            "precipitationMm"
+          ],
+          "properties": {
+            "kind": {
+              "const": "weather_precipitation"
+            },
+            "stationId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "precipitationMm": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2000
+            }
+          }
+        }
+      ]
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { FINANCIAL_RULE } from '../domain/financial';
 import type { FinancialErrorCode, SignedOfferAcceptanceV1, SignedParametricEventV1 } from '../domain/financial';
+import type { ParametricOccurrence } from '../domain/parametric';
 import type { Payment, StoredPolicy } from './ports/financial';
 
 export type FinancialAction = 'offer.accepted' | 'premium.requested' | 'premium.declined' | 'premium.confirmed'
@@ -12,7 +13,7 @@ export type FinancialDecisionCapture = { schemaVersion: 1; contractVersion: 'v1'
   rule: { id: FinancialAction; version: string }; outcome: string };
 export type FinancialEvidence = { payment?: Payment; sources?: FinancialSource[];
   challenge?: { id: string; expiresAt: string; attempts: number; accepted: boolean };
-  event?: { eventId: string; eventType: string; environment: string; occurredAt: string; delayMinutes?: number };
+  event?: { eventId: string; eventType: string; environment: string; occurredAt: string; delayMinutes?: number; precipitationMm?: number };
   issuance?: { signedAt: string; documentHash: string };
   trigger?: 'reconciliation';
   refundReason?: 'signature_refused' | 'expired_before_sign' | 'expired_after_sign' | 'expired_during_final_transaction' | 'signature_invalid' | 'existing_refund_intent' };
@@ -45,6 +46,11 @@ export function financialRejection(id: string, traceId: string, cause: Financial
 export function financialEventSource(event: SignedOfferAcceptanceV1 | SignedParametricEventV1, capturedAt: string): FinancialSource {
   return { source: event.eventType === 'offer.accepted' ? 'acquisition.offer-accepted.v1' : 'synthetic-oracle-v1', capturedAt,
     quality: 'synthetic_verified', degraded: false, operation: 'consume', result: 'authenticated', eventId: event.eventId, occurredAt: event.occurredAt };
+}
+
+export function providerEventSource(occurrence: ParametricOccurrence, capturedAt: string): FinancialSource {
+  return { source: 'synthetic-parametric-provider-v1', capturedAt, quality: 'synthetic_verified', degraded: false, operation: 'receive',
+    result: 'authenticated', eventId: occurrence.eventId, occurredAt: occurrence.occurredAt };
 }
 
 export function gatewaySource(operation: 'lookup' | 'settle' | 'refund', result: { status: string; reference: string | null },

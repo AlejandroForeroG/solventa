@@ -60,7 +60,8 @@ For the local stack setup, use [development](../../development.md) and [infrastr
 | `openapi/v1/offers.yaml` | Owned profiled synthetic offers, preliminary status on degraded signals, explicit current risk consent, and asynchronous acceptance of definitive offers |
 | `openapi/v1/policies.yaml` | Owned policy lookup and the original one-field combined mock issuance for already loaded web clients |
 | `openapi/v2/policies.yaml` | Separate premium charge, document-bound signature challenge and issuance; v1 remains available without a sunset date |
-| `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; authentication still requires HMAC verification |
+| `schemas/financial-event.v1.json` | Exact synthetic signed Queue envelopes for accepted offers and verified flight-delay events; its accepted-offer coverage also covers the `weather_event` product; authentication still requires HMAC verification |
+| `schemas/parametric-provider-event.v1.json`, `examples/parametric-provider-events.json` | Format of the simulated flight and rainfall provider received by the private Policy RPC, with its agreed valid and negative corpus, checked by `tests/parametric-provider.test.ts`; see [parametric payouts](../../modules/policy-claims-payments/parametric-payouts.md) |
 | `examples/financial.json` | Synthetic public responses and an intentionally invalid example signature, checked by financial contract tests |
 | `schemas/acord-life-quote-request.v1.json`, `schemas/acord-life-quote-response.v1.json` | ACORD Life inspired quote messages for the unmounted translator, not an enabled partner route; see [integration schemas](#integration-schemas-and-corpus) |
 | `examples/acord-life-quote.json` | Agreed corpus of valid and negative ACORD messages, checked by `tests/acord-life-quote.test.ts` |

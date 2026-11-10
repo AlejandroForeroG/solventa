@@ -1,7 +1,9 @@
 import { MAX_LISTED_POLICIES, canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
 import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyListResult, PolicySummary, PolicyView } from '../domain/financial';
-import type { FinancialDependencies, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
-import { financialDecision, financialEventSource, financialRejection, gatewaySource } from './financial-decision';
+import { indemnityAmount, occurrenceCovered, occurrenceEvidence } from '../domain/parametric';
+import type { ParametricOccurrence, ParametricResult } from '../domain/parametric';
+import type { FinancialDependencies, IndemnityCandidate, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
+import { financialDecision, financialEventSource, financialRejection, gatewaySource, providerEventSource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
 
 class Rejection extends Error {
@@ -21,6 +23,7 @@ const paid = (premium: Payment | null): { payment?: PaymentView } => premium ? {
   reference: premium.status === 'confirmed' || premium.status === 'refunded' ? premium.providerReference : null } } : {};
 const validActor = (actor: FinancialActor) => UUID.test(actor.clientId) && UUID.test(actor.subjectToken);
 type IssuanceContext = { actor: FinancialActor; policyId: string; documentHash: string; commandKey: string; traceId: string; trigger?: 'reconciliation' };
+export type IndemnityOutcome = { traceId: string; outcome: 'confirmed' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refunded' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 
 export class PolicyFinance {
@@ -502,8 +505,7 @@ export class PolicyFinance {
   }
 
   private async checkPayment(payment: Payment, policy: StoredPolicy): Promise<void> {
-    const amount = payment.operation === 'premium' ? policy.premium
-      : policy.offer.coverage.kind === 'flight_delay' ? policy.offer.coverage.payoutAmount : null;
+    const amount = payment.operation === 'premium' ? policy.premium : indemnityAmount(policy.offer.coverage);
     if (!amount || !UUID.test(payment.id) || payment.policyId !== policy.id || payment.amount !== amount || payment.currency !== 'COP'
       || payment.key !== (payment.operation === 'premium' ? 'initial-premium' : 'parametric-once')
       || (payment.status === 'pending' && payment.providerReference !== null)
@@ -527,56 +529,114 @@ export class PolicyFinance {
     return { ...settled, sources: [lookupSource, gatewaySource('settle', settled, payment, this.deps.now().toISOString())] };
   }
 
+  // Internal Queue boundary: a sealed flight-delay envelope from the synthetic oracle.
   consumeParametricEvent(input: unknown, trace: string): Promise<FinancialResult> {
     return this.run(trace, async traceId => {
       if (!isParametricEnvelope(input, this.deps.environment) || Date.parse(input.occurredAt) > this.deps.now().getTime() + 60000
         || !(await this.deps.integrity.verify(eventContent(input), input.signature))) return reject('invalid_event', 400);
-      const hash = await this.deps.integrity.digest(eventContent(input));
-      const source = financialEventSource(input, this.deps.now().toISOString());
-      const plan = await this.deps.store.transaction(async tx => {
-        const { policy, signature } = await this.checked(await tx.policy(input.payload.policyId));
-        const previous = await tx.inbox(input.eventId, 'policy.parametric.v1');
-        if (previous && (previous.hash !== hash || previous.policyId !== policy.id)) return reject('event_conflict');
-        if (policy.status !== 'issued') return reject('policy_not_active');
-        const coverage = policy.offer.coverage;
-        if (coverage.kind !== 'flight_delay' || coverage.flightReference !== input.payload.flightReference
-          || input.payload.delayMinutes < coverage.thresholdMinutes || !signature
-          || !eventWithinIssuedCoverage(input.occurredAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)) return reject('event_not_covered');
-        let payment = await tx.payment(policy.id, 'indemnity');
-        if (!previous && payment) return reject('event_conflict');
-        if (!payment) {
-          payment = { id: this.deps.newId(), policyId: policy.id, operation: 'indemnity', amount: coverage.payoutAmount,
-            currency: 'COP', key: 'parametric-once', hash: '', status: 'pending', providerReference: null };
-          payment.hash = await this.deps.integrity.digest(paymentContent(payment));
-          await tx.createPayment(payment, traceId, { id: this.deps.newId(), indemnityId: this.deps.newId(), occurredAt: input.occurredAt });
-          await tx.recordInbox(input.eventId, 'policy.parametric.v1', hash, policy.id, input.eventType, traceId);
-          await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', 'synthetic-oracle-v1',
-            this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
-              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
-        }
-        await this.checkPayment(payment, policy);
-        return { policy, payment, replayed: !!previous };
-      });
-      const settled = await this.settle(plan.payment);
-      if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
-      if (settled.status === 'declined') return reject('payment_declined');
-      await this.deps.store.transaction(async tx => {
-        const { policy, signature } = await this.checked(await tx.policy(plan.policy.id));
-        const payment = await tx.payment(policy.id, 'indemnity');
-        if (!payment) throw new Error('financial_intent_missing');
-        await this.checkPayment(payment, policy);
-        if (payment.status !== 'confirmed') {
-          await tx.setPaymentStatus(payment.id, 'confirmed', settled.reference);
-          if (!signature) throw new Error('financial_issuance_evidence_missing');
-          await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', 'synthetic-oracle-v1',
-            this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...payment, status: 'confirmed', providerReference: settled.reference }, sources: [source, ...settled.sources],
-              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
-        }
-      });
-      return { status: 'ok', replayed: plan.replayed, policy: view(plan.policy) };
+      const occurrence: ParametricOccurrence = { eventId: input.eventId, eventType: input.eventType, occurredAt: input.occurredAt, payload: input.payload };
+      const { policy, replayed } = await this.applyOccurrence(traceId, occurrence, await this.deps.integrity.digest(eventContent(input)),
+        financialEventSource(input, this.deps.now().toISOString()));
+      return { status: 'ok', replayed, policy: view(policy) };
     });
+  }
+
+  // Private RPC boundary: the provider adapter authenticates and translates its own versioned format before the shared core runs.
+  receiveParametricEvent(input: unknown, trace: string): Promise<ParametricResult> {
+    return this.run<Extract<ParametricResult, { status: 'ok' }>>(trace, async traceId => {
+      const received = await this.deps.parametric.receive(input);
+      if (received.status !== 'verified' || Date.parse(received.occurrence.occurredAt) > this.deps.now().getTime() + 60000) return reject('invalid_event', 400);
+      const { policy, replayed, reference } = await this.applyOccurrence(traceId, received.occurrence, await this.deps.integrity.digest(received.content),
+        providerEventSource(received.occurrence, this.deps.now().toISOString()));
+      return { status: 'ok', replayed, policyId: policy.id, indemnity: { status: 'confirmed', reference } };
+    });
+  }
+
+  // One effect per policy: the first covered occurrence creates the claim, indemnity and payment; any other identity or content is a conflict.
+  private async applyOccurrence(traceId: string, occurrence: ParametricOccurrence, hash: string, source: FinancialSource) {
+    const event = occurrenceEvidence(occurrence, this.deps.environment);
+    const plan = await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(occurrence.payload.policyId));
+      const previous = await tx.inbox(occurrence.eventId, 'policy.parametric.v1');
+      if (previous && (previous.hash !== hash || previous.policyId !== policy.id)) return reject('event_conflict');
+      if (policy.status !== 'issued') return reject('policy_not_active');
+      const coverage = policy.offer.coverage;
+      const amount = indemnityAmount(coverage);
+      if (!amount || !occurrenceCovered(coverage, occurrence) || !signature
+        || !eventWithinIssuedCoverage(occurrence.occurredAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)) return reject('event_not_covered');
+      let payment = await tx.payment(policy.id, 'indemnity');
+      if (!previous && payment) return reject('event_conflict');
+      if (!payment) {
+        payment = { id: this.deps.newId(), policyId: policy.id, operation: 'indemnity', amount,
+          currency: 'COP', key: 'parametric-once', hash: '', status: 'pending', providerReference: null };
+        payment.hash = await this.deps.integrity.digest(paymentContent(payment));
+        await tx.createPayment(payment, traceId, { id: this.deps.newId(), indemnityId: this.deps.newId(), occurredAt: occurrence.occurredAt });
+        await tx.recordInbox(occurrence.eventId, 'policy.parametric.v1', hash, policy.id, occurrence.eventType, traceId);
+        await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', source.source,
+          this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
+            issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event }));
+      }
+      await this.checkPayment(payment, policy);
+      return { policy, payment, replayed: !!previous };
+    });
+    const reference = await this.settleIndemnity(plan.payment, traceId, source.source, [source], event);
+    return { policy: plan.policy, replayed: plan.replayed, reference };
+  }
+
+  // Provider settlement, then the confirmation with its audit and customer notice in one owner transaction.
+  // An uncertain provider result throws before anything is announced, so only a confirmed payment reaches the customer.
+  private async settleIndemnity(payment: Payment, traceId: string, actor: string, sources: FinancialSource[], event: FinancialEvidence['event'], trigger?: 'reconciliation'): Promise<string> {
+    const settled = await this.settle(payment);
+    if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
+    if (settled.status === 'declined') return reject('payment_declined');
+    if (!settled.reference) throw new Error('financial_provider_reference_missing');
+    const { reference } = settled;
+    await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(payment.policyId));
+      const current = await tx.payment(policy.id, 'indemnity');
+      if (!current) throw new Error('financial_intent_missing');
+      await this.checkPayment(current, policy);
+      if (current.status === 'confirmed') return;
+      const { kind } = policy.offer.coverage;
+      if (!signature || kind === 'mortgage_life') throw new Error('financial_issuance_evidence_missing');
+      await tx.setPaymentStatus(current.id, 'confirmed', reference);
+      await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', actor,
+        this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...current, status: 'confirmed', providerReference: reference },
+          sources: [...sources, ...settled.sources], issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event, ...(trigger ? { trigger } : {}) }));
+      await tx.announceIndemnity({ paymentId: current.id, policyId: policy.id, clientId: policy.clientId, coverageKind: kind,
+        confirmedAt: this.deps.now().toISOString() }, traceId);
+    });
+    return reference;
+  }
+
+  // Finishes indemnities whose event was accepted but whose payment stayed pending (a crash between the two transactions, or an
+  // uncertain provider answer). Settlement is idempotent per payment, so recovery never pays twice and never starts a second effect.
+  async reconcileIndemnities(staleBefore: Date, limit: number): Promise<IndemnityOutcome[]> {
+    if (!this.deps.enabled) return [];
+    const outcomes: IndemnityOutcome[] = [];
+    for (const candidate of await this.deps.store.pendingIndemnities(staleBefore, limit)) outcomes.push(await this.recoverIndemnity(candidate));
+    return outcomes;
+  }
+
+  private async recoverIndemnity(candidate: IndemnityCandidate): Promise<IndemnityOutcome> {
+    const traceId = this.deps.newId();
+    let unchanged = false;
+    const result = await this.run<{ status: 'ok' }>(traceId, async () => {
+      const payment = await this.deps.store.transaction(async tx => {
+        const { policy } = await this.checked(await tx.policy(candidate.policyId));
+        const pending = await tx.payment(policy.id, 'indemnity');
+        if (!pending) return reject('integrity_violation');
+        await this.checkPayment(pending, policy);
+        return pending;
+      });
+      if (payment.status === 'confirmed') { unchanged = true; return { status: 'ok' }; }
+      const { eventId, eventType, occurredAt } = candidate;
+      await this.settleIndemnity(payment, traceId, 'financial-reconciliation-v1', [], { eventId, eventType, environment: this.deps.environment, occurredAt }, 'reconciliation');
+      return { status: 'ok' };
+    });
+    if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };
+    if (result.status === 'denied') return { traceId, outcome: 'rejected', error: result.error };
+    return { traceId, outcome: unchanged ? 'unchanged' : 'confirmed' };
   }
 }
 
