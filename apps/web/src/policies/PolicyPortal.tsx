@@ -65,7 +65,7 @@ function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void;
     <p className="lede">{t('subtitle')}</p>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
-    {state.kind === 'ready' && (state.value.length ? <ul className="policy-list">{state.value.map(policy => {
+    {state.kind === 'ready' && (state.value.policies.length ? <ul className="policy-list">{state.value.policies.map(policy => {
       const status = policyState(policy, now), product = t(`product.${policy.product}`);
       return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={t('open.detail', { product }) + ' · ' + policy.policyId.slice(0, 8)} onClick={() => onOpen(policy.policyId)}>
         <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
@@ -73,6 +73,7 @@ function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void;
         <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
       </button></li>;
     })}</ul> : <div className="card policy-empty"><p>{t('empty')}</p><a className="btn btn-primary" href="/cotizar">{t('quote')}</a></div>)}
+    {state.kind === 'ready' && state.value.hasMore && <p className="note" role="status">{t('truncated')}</p>}
   </main>;
 }
 
