@@ -682,9 +682,28 @@ try {
   assert.ok(recovery.some(outcome => outcome.outcome === 'confirmed'), JSON.stringify(recovery));
   assert.equal(await indemnityStatus(lateRainPolicy.policyId), 'confirmed');
   assert.equal((await notices(lateRainPolicy.policyId)).length, 1);
-  assert.equal((await captures(lateRainPolicy.policyId, 'indemnity.confirmed'))[0].inputs.trigger, 'reconciliation');
+  const recovered = (await captures(lateRainPolicy.policyId, 'indemnity.confirmed'))[0];
+  assert.equal(recovered.inputs.trigger, 'reconciliation');
+  assert.equal((recovered.inputs.event as { precipitationMm?: number }).precipitationMm, 120, 'the recovered decision keeps the measurement that justified the payout');
+  assert.ok(recovered.sources.some(source => source.source === 'synthetic-parametric-provider-v1'), 'and the authenticated provider that reported it');
   assert.deepEqual(await new PolicyFinance(base).reconcileIndemnities(new Date(Date.now() + 60_000), 25), [], 'a second run finds nothing to recover');
   assert.equal((await notices(lateRainPolicy.policyId)).length, 1);
+
+  // A declined indemnity is terminal: stored as declined with its decision, never announced, and neither a replay nor the recovery tries it again.
+  const declinedRain = await acceptedOffer('weather_event'); const declinedRainPolicy = await importOffer(declinedRain);
+  assert.equal(ok(await issue(finance, declinedRain, declinedRainPolicy)).policy.status, 'issued');
+  if (declinedRain.payload.coverage.kind !== 'weather_event') throw new Error('unexpected_fixture');
+  const refusing: PaymentGateway = { lookup: input => gateway.lookup(input), refund: input => gateway.refund(input), settle: async () => ({ status: 'declined', reference: null }) };
+  const declinedEvent = await providerEvent(declinedRainPolicy.policyId, { kind: 'weather_precipitation', stationId: declinedRain.payload.coverage.stationId, precipitationMm: 80 }, observed);
+  const declinedAnswer = await received(new PolicyFinance({ ...base, payments: refusing }), declinedEvent);
+  assert.ok(declinedAnswer.status === 'denied' && declinedAnswer.error === 'payment_declined', JSON.stringify(declinedAnswer));
+  assert.equal(await indemnityStatus(declinedRainPolicy.policyId), 'declined');
+  assert.deepEqual(await notices(declinedRainPolicy.policyId), [], 'a declined payment is never announced');
+  assert.equal((await captures(declinedRainPolicy.policyId, 'indemnity.declined')).length, 1);
+  assert.equal((await received(new PolicyFinance(base), declinedEvent)).status, 'denied', 'a replay of a declined event never reaches the gateway again');
+  assert.equal(await indemnityStatus(declinedRainPolicy.policyId), 'declined');
+  assert.deepEqual(await new PolicyFinance(base).reconcileIndemnities(new Date(Date.now() + 60_000), 25), [], 'the recovery no longer selects a declined payment');
+  assert.equal((await captures(declinedRainPolicy.policyId, 'indemnity.declined')).length, 1);
 
   const laterFlight = await acceptedOffer('flight_delay'); const laterPolicy = await importOffer(laterFlight);
   const issuedAt = '2026-10-16T02:01:00.000Z';
@@ -755,10 +774,10 @@ try {
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
   const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type<>'policy.indemnity.notice'")).rows; // the customer notice is not a decision capture
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
-    'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'signature.challenge_created',
+    'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'indemnity.declined', 'signature.challenge_created',
     'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'financial.denied'];
   const expectedPaymentStatus: Record<string, string> = { 'premium.requested': 'pending', 'premium.declined': 'declined', 'premium.confirmed': 'confirmed',
-    'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed' };
+    'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed', 'indemnity.declined': 'declined' };
   for (const action of requiredActions) assert.ok(persisted.some(row => row.event_type === 'policy.' + action), 'missing persisted decision ' + action);
   for (const row of persisted) {
     assert.equal(validateCapture(row.payload), true, JSON.stringify(validateCapture.errors));
@@ -785,7 +804,7 @@ try {
         && challenge.attempts >= 0 && challenge.attempts <= 3, 'challenge history must retain a bounded numeric count');
       assert.equal(JSON.stringify(capture).includes('demoCode'), false);
     } else {
-      const operation = ['parametric.accepted', 'indemnity.confirmed'].includes(action) ? 'indemnity' : 'premium';
+      const operation = ['parametric.accepted', 'indemnity.confirmed', 'indemnity.declined'].includes(action) ? 'indemnity' : 'premium';
       const payment: { id: string; amount: string; currency: string; payment_key: string; request_hash: string } =
         (await db.query('SELECT p.id,p.amount::STRING,p.currency,i.payment_key,i.request_hash FROM policy.financial_payment_intents i JOIN policy.payments p ON p.id=i.payment_id WHERE i.policy_id=$1 AND i.operation=$2', [capture.inputs.resourceId, operation])).rows[0];
       assert.ok(payment);

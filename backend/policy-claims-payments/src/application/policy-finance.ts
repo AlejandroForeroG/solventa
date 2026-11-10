@@ -616,9 +616,13 @@ export class PolicyFinance {
   // Provider settlement, then the confirmation with its audit and customer notice in one owner transaction.
   // An uncertain provider result throws before anything is announced, so only a confirmed payment reaches the customer.
   private async settleIndemnity(payment: Payment, traceId: string, actor: string, sources: FinancialSource[], event: FinancialEvidence['event'], trigger?: 'reconciliation'): Promise<string> {
+    if (payment.status === 'declined') return reject('payment_declined');
     const settled = await this.settle(payment);
     if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
-    if (settled.status === 'declined') return reject('payment_declined');
+    if (settled.status === 'declined') {
+      await this.recordDeclinedIndemnity(payment, traceId, actor, [...sources, ...settled.sources], settled.reference, event, trigger);
+      return reject('payment_declined');
+    }
     if (!settled.reference) throw new Error('financial_provider_reference_missing');
     const { reference } = settled;
     await this.deps.store.transaction(async tx => {
@@ -637,6 +641,23 @@ export class PolicyFinance {
         confirmedAt: this.deps.now().toISOString() }, traceId);
     });
     return reference;
+  }
+
+  // A declined payment is terminal: it is recorded with its decision so the recovery stops selecting it and a replay never reaches the gateway again.
+  private async recordDeclinedIndemnity(payment: Payment, traceId: string, actor: string, sources: FinancialSource[], reference: string | null,
+    event: FinancialEvidence['event'], trigger?: 'reconciliation'): Promise<void> {
+    await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(payment.policyId));
+      const current = await tx.payment(policy.id, 'indemnity');
+      if (!current) throw new Error('financial_intent_missing');
+      await this.checkPayment(current, policy);
+      if (current.status !== 'pending') return;
+      if (!signature) throw new Error('financial_issuance_evidence_missing');
+      await tx.setPaymentStatus(current.id, 'declined', reference);
+      await tx.audit('indemnity.declined', policy.id, traceId, 'declined', actor,
+        this.decision('indemnity.declined', traceId, policy, 'declined', { payment: { ...current, status: 'declined', providerReference: reference },
+          sources, issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event, ...(trigger ? { trigger } : {}) }));
+    });
   }
 
   // Finishes indemnities whose event was accepted but whose payment stayed pending (a crash between the two transactions, or an
@@ -660,8 +681,7 @@ export class PolicyFinance {
         return pending;
       });
       if (payment.status === 'confirmed') { unchanged = true; return { status: 'ok' }; }
-      const { eventId, eventType, occurredAt } = candidate;
-      await this.settleIndemnity(payment, traceId, 'financial-reconciliation-v1', [], { eventId, eventType, environment: this.deps.environment, occurredAt }, 'reconciliation');
+      await this.settleIndemnity(payment, traceId, 'financial-reconciliation-v1', candidate.sources, candidate.event, 'reconciliation');
       return { status: 'ok' };
     });
     if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };

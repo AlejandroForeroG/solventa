@@ -42,9 +42,12 @@ async function fixture(product: Product = 'weather_event', options: { now?: stri
   } as unknown as FinancialTransaction;
   const store = { async transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>) { return work(tx); },
     async rejection(_id: string, _trace: string, cause: string) { rejections.push(cause); },
+    // Like the SQL store, the stored evidence comes from the capture written when the event was accepted.
     async pendingIndemnities() {
       const [eventId, event] = [...inbox.entries()][0] ?? [];
-      return indemnity?.status === 'pending' && event && eventId ? [{ policyId: id, eventId, eventType: event.eventType, occurredAt: '2026-10-16T02:30:00.000Z' }] : [];
+      const accepted = audits.find(entry => entry.action === 'parametric.accepted')?.capture as { inputs: { event: unknown }; sources: unknown[] } | undefined;
+      return indemnity?.status === 'pending' && event && eventId && accepted
+        ? [{ policyId: id, eventId, eventType: event.eventType, occurredAt: '2026-10-16T02:30:00.000Z', event: accepted.inputs.event, sources: accepted.sources }] : [];
     } } as unknown as FinancialStore;
   const gateway: PaymentGateway = {
     async settle(payment) {
@@ -208,7 +211,10 @@ test('the scheduled recovery confirms a pending indemnity once, with its notice,
   assert.equal(state.notices.length, 1);
   const confirmed = state.audits.filter(entry => entry.action === 'indemnity.confirmed');
   assert.equal(confirmed.length, 1);
-  assert.equal((confirmed[0].capture as { inputs: { trigger?: string } }).inputs.trigger, 'reconciliation');
+  const capture = confirmed[0].capture as { inputs: { trigger?: string; event: { precipitationMm?: number } }; sources: Array<{ source: string }> };
+  assert.equal(capture.inputs.trigger, 'reconciliation');
+  assert.equal(capture.inputs.event.precipitationMm, 50, 'the recovered decision keeps the measurement that justified the payout');
+  assert.ok(capture.sources.some(source => source.source === 'synthetic-parametric-provider-v1'), 'and the authenticated provider that reported it');
   assert.deepEqual(await finance.reconcileIndemnities(new Date(), 10), []);
   assert.equal(state.claims(), 1);
 });
@@ -226,11 +232,20 @@ test('recovery continues a charge the provider already holds without settling it
   assert.equal(state.notices.length, 1);
 });
 
-test('a declined indemnity payment is rejected and never announced', async () => {
-  const { receive, policy, reading, state } = await fixture('weather_event', { settle: () => 'declined' });
-  denied(await receive(await providerEvent(policy.id, reading)), 'payment_declined');
-  assert.equal(state.indemnity()?.status, 'pending');
+test('a declined indemnity payment is recorded as declined, never announced, and neither a replay nor the recovery tries it again', async () => {
+  const { receive, policy, reading, finance, state } = await fixture('weather_event', { settle: () => 'declined' });
+  const event = await providerEvent(policy.id, reading);
+  denied(await receive(event), 'payment_declined');
+  assert.equal(state.indemnity()?.status, 'declined');
   assert.deepEqual(state.notices, []);
+  const declined = state.audits.filter(entry => entry.action === 'indemnity.declined');
+  assert.equal(declined.length, 1);
+  assert.equal((declined[0].capture as { outcome: string }).outcome, 'declined');
+  assert.equal(state.settles(), 1);
+  denied(await receive(event), 'payment_declined');
+  assert.deepEqual(await finance.reconcileIndemnities(new Date(), 10), []);
+  assert.equal(state.settles(), 1, 'a terminal decline is not sent to the gateway again');
+  assert.equal(state.audits.filter(entry => entry.action === 'indemnity.declined').length, 1);
 });
 
 test('a disabled service neither pays nor recovers', async () => {

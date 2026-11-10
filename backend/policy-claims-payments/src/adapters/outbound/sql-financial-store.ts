@@ -342,18 +342,22 @@ export class SqlFinancialStore implements FinancialStore {
   pendingIndemnities(staleBefore: Date, limit: number): Promise<IndemnityCandidate[]> {
     return this.connection(async db => {
       // Refreshing the payment's activity rotates bounded batches while a provider stays unknown; it changes no financial state.
-      const rows = (await db.query<{ policy_id: string; event_id: string; event_type: string; occurred_at: Date }>(`WITH candidates AS (
-        SELECT pay.id AS payment_id,pay.policy_id,ie.event_id,ie.event_type,c.occurred_at,pay.updated_at AS last_changed
+      // The evidence is the capture written when the event was accepted; a pending payment always has one, written in the same transaction.
+      const rows = (await db.query<{ policy_id: string; event_id: string; event_type: string; occurred_at: Date; event: IndemnityCandidate['event']; sources: IndemnityCandidate['sources'] }>(`WITH candidates AS (
+        SELECT pay.id AS payment_id,pay.policy_id,ie.event_id,ie.event_type,c.occurred_at,pay.updated_at AS last_changed,
+          oe.payload->'inputs'->'event' AS event,oe.payload->'sources' AS sources
         FROM policy.payments pay
         JOIN policy.indemnities i ON i.id=pay.indemnity_id JOIN policy.claims c ON c.id=i.claim_id
         JOIN policy.inbox_events ie ON ie.policy_id=pay.policy_id AND ie.consumer='policy.parametric.v1'
+        JOIN policy.outbox_events oe ON oe.aggregate_id=pay.policy_id AND oe.event_type='policy.parametric.accepted'
         WHERE pay.operation='indemnity' AND pay.status='pending' AND pay.updated_at<$1
         ORDER BY pay.updated_at,pay.id LIMIT $2
       ), refreshed AS (
         UPDATE policy.payments p SET updated_at=now() FROM candidates c WHERE p.id=c.payment_id RETURNING p.id
-      ) SELECT c.policy_id,c.event_id,c.event_type,c.occurred_at FROM candidates c JOIN refreshed r ON r.id=c.payment_id
+      ) SELECT c.policy_id,c.event_id,c.event_type,c.occurred_at,c.event,c.sources FROM candidates c JOIN refreshed r ON r.id=c.payment_id
         ORDER BY c.last_changed,c.payment_id`, [staleBefore.toISOString(), limit])).rows;
-      return rows.map(row => ({ policyId: row.policy_id, eventId: row.event_id, eventType: row.event_type, occurredAt: row.occurred_at.toISOString() }));
+      return rows.map(row => ({ policyId: row.policy_id, eventId: row.event_id, eventType: row.event_type, occurredAt: row.occurred_at.toISOString(),
+        event: row.event, sources: row.sources }));
     });
   }
   async rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void> {
