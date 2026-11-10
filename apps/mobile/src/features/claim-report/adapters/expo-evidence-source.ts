@@ -7,10 +7,11 @@ const VIDEO_SECONDS = 30;
 // Photos are compressed on capture so ten of them stay well inside the report's size limit.
 const PHOTO_QUALITY = 0.8;
 
-// Some pickers omit the size, so it is read from the file itself; a file that cannot be read is reported as unreadable by the domain.
+// The picker may report the size of the original while handing over a recompressed copy, and the server checks the size of the file it receives, so the
+// copy itself is measured. The declared size is only a fallback; a file that cannot be read is reported as unreadable by the domain.
 function sizeOf(uri: string, declared: number | undefined): number | null {
-  if (typeof declared === 'number' && declared > 0) return declared;
-  try { return new File(uri).size; } catch { return null; }
+  try { const size = new File(uri).size; if (typeof size === 'number' && size > 0) return size; } catch { /* fall back to the declared size */ }
+  return typeof declared === 'number' && declared > 0 ? declared : null;
 }
 
 function outcomeOf(result: ImagePicker.ImagePickerResult): CaptureOutcome {
