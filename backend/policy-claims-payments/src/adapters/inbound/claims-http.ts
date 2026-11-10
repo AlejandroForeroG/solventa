@@ -34,7 +34,7 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
       { 'cache-control': 'no-store', 'x-trace-id': traceId, 'x-content-type-options': 'nosniff' });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (c.req.method !== 'GET') { c.header('Allow', 'GET'); return reply({ error: 'method_not_allowed' }, 405); }
+      if (c.req.method !== 'GET') { c.header('Allow', 'GET, POST'); return reply({ error: 'method_not_allowed' }, 405); }
       if (c.req.header('authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
       const access = await Promise.race([deps.authorize({ kind: 'web', operation: 'claims:read', traceId, method: 'GET', requestOrigin: new URL(c.req.url).origin,
         origin: c.req.header('origin') ?? '', cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? '' }),

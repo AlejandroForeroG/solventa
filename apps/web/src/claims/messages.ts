@@ -12,6 +12,7 @@ export const claimsEs = {
   'claims.state.approved': 'Aprobado', 'claims.state.rejected': 'Rechazado', 'claims.state.paid': 'Pagado',
   'claims.priority.high': 'Alta', 'claims.priority.medium': 'Media', 'claims.priority.low': 'Baja',
   'claims.age': '{days, plural, one {# día} other {# días}}',
+  'claims.amountPending': 'Por estimar',
   'claims.evidence': '{provided} de {required} · {status}',
   'claims.evidenceStatus.complete': 'completa', 'claims.evidenceStatus.incomplete': 'incompleta', 'claims.evidenceStatus.in_review': 'en revisión',
 
@@ -38,6 +39,7 @@ export const claimsEn: Record<keyof typeof claimsEs, string> = {
   'claims.state.approved': 'Approved', 'claims.state.rejected': 'Rejected', 'claims.state.paid': 'Paid',
   'claims.priority.high': 'High', 'claims.priority.medium': 'Medium', 'claims.priority.low': 'Low',
   'claims.age': '{days, plural, one {# day} other {# days}}',
+  'claims.amountPending': 'To be estimated',
   'claims.evidence': '{provided} of {required} · {status}',
   'claims.evidenceStatus.complete': 'complete', 'claims.evidenceStatus.incomplete': 'incomplete', 'claims.evidenceStatus.in_review': 'under review',
 
