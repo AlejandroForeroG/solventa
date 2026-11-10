@@ -63,5 +63,10 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "claim_number_counters": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }

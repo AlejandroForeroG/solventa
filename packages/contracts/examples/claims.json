@@ -59,5 +59,70 @@
   "forbidden": {
     "error": "forbidden",
     "traceId": "a0000000-0000-4000-8000-0000000000c4"
+  },
+  "report": {
+    "request": {
+      "policyId": "a0000000-0000-4000-8000-0000000000a1",
+      "eventType": "collision",
+      "occurredAt": "2026-09-09T18:55:00.000Z",
+      "place": "Autopista Norte con Calle 116, Bogotá D.C.",
+      "description": "Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.",
+      "evidence": [
+        {
+          "fileId": "a0000000-0000-4000-8000-0000000000e1",
+          "contentType": "image/jpeg",
+          "byteSize": 2202009,
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "fileId": "a0000000-0000-4000-8000-0000000000e2",
+          "contentType": "video/mp4",
+          "byteSize": 13841203,
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    },
+    "draft": {
+      "claimId": "a0000000-0000-4000-8000-0000000000d1",
+      "state": "draft",
+      "evidence": [
+        {
+          "fileId": "a0000000-0000-4000-8000-0000000000e1",
+          "state": "pending"
+        },
+        {
+          "fileId": "a0000000-0000-4000-8000-0000000000e2",
+          "state": "pending"
+        }
+      ],
+      "traceId": "a0000000-0000-4000-8000-0000000000f0"
+    },
+    "receipt": {
+      "fileId": "a0000000-0000-4000-8000-0000000000e1",
+      "state": "verified",
+      "traceId": "a0000000-0000-4000-8000-0000000000f0"
+    },
+    "submitted": {
+      "claimId": "a0000000-0000-4000-8000-0000000000d1",
+      "claimNumber": "SIN-2026-09127",
+      "state": "unassigned",
+      "submittedAt": "2026-09-09T19:07:00.000Z",
+      "traceId": "a0000000-0000-4000-8000-0000000000f0"
+    },
+    "incomplete": {
+      "error": "evidence_incomplete",
+      "missing": [
+        "a0000000-0000-4000-8000-0000000000e2"
+      ],
+      "traceId": "a0000000-0000-4000-8000-0000000000f0"
+    },
+    "invalid": {
+      "error": "invalid_request",
+      "fields": [
+        "description",
+        "evidence"
+      ],
+      "traceId": "a0000000-0000-4000-8000-0000000000f0"
+    }
   }
 }

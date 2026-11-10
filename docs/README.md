@@ -46,3 +46,4 @@ Partner requests for a customer's offer: [Partner authorizations](modules/identi
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
 Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).
+Customer claim report with evidence: [Claim report](modules/policy-claims-payments/claim-report.md).
