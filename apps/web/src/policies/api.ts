@@ -17,8 +17,15 @@ export type PolicyOutcome<T> = { kind: 'ok'; value: T } | { kind: 'unauthenticat
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 const money = (v: unknown): v is string => typeof v === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(v);
-const RFC_3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-const instant = (v: unknown): v is string => typeof v === 'string' && RFC_3339.test(v) && Number.isFinite(Date.parse(v));
+const RFC_3339 = /^(\d{4})-(0[1-9]|1[0-2])-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/;
+// Date.parse normalizes impossible calendar days such as February 30, so the day is checked against its month.
+function existingDay(year: number, month: number, day: number): boolean {
+  return day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+function instant(v: unknown): v is string {
+  const parts = typeof v === 'string' ? RFC_3339.exec(v) : null;
+  return parts !== null && existingDay(Number(parts[1]), Number(parts[2]), Number(parts[3])) && Number.isFinite(Date.parse(v as string));
+}
 const list = <T>(v: unknown, check: (item: unknown) => item is T): v is T[] => Array.isArray(v) && v.every(check);
 
 function coverage(v: unknown): v is PolicyCoverage {

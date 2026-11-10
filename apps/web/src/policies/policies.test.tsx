@@ -55,7 +55,7 @@ describe('my policies', () => {
     expect(await screen.findByText(/Hay más que este portal aún no lista/)).toBeVisible();
   });
 
-  it.each(['2026', '01/02/2026', '2026-10-15', '2026-10-15T00:00:00'])('rejects the policy list when a date is not RFC 3339: %s', async badDate => {
+  it.each(['2026', '01/02/2026', '2026-10-15', '2026-10-15T00:00:00', '2026-02-30T00:00:00Z', '2026-01-01T24:00:00Z', '2026-13-01T00:00:00Z'])('rejects the policy list when a date is not RFC 3339: %s', async badDate => {
     serve({ '/api/v1/policies/issued': () => json({ policies: [{ ...summary, effectiveFrom: badDate }], hasMore: false }) });
     show();
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo consultar tus pólizas.');
