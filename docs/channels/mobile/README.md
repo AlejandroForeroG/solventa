@@ -275,6 +275,35 @@ Validity (`Por iniciar`, `Vigente`, `Vencida`) is computed from the policy dates
 
 `tests/mobile-policy-wallet.test.ts` covers the coordinator (locked gate, online, stored copy, no copy, failed save, revoked session, late responses after locking), `tests/mobile-policies-api.test.ts` the HTTP adapter and formatting, and the native Pact interaction `mobile own policy list` the contract with the gateway. They run with injected collaborators and mocked Expo modules. No screen rendering test exists for `WalletScreen`; render it on a device or emulator and check every state, the language switch and screen-reader labels.
 
+## Claim report
+
+The claim report lets a signed-in customer report a claim on one of their policies, with photos or video as evidence. Code: `src/features/claim-report`; route `/claim-report`. It is opened from the **Reportar siniestro** tile of the Claims tab and from the same action in the detail of a policy. The server side, limits and refusals are described in the [claim report guide](../../modules/policy-claims-payments/claim-report.md).
+
+### Journey
+
+1. **Policy.** Only active mortgage life policies read from `GET /api/v1/policies` can be reported; flight delay is parametric and pays on its own, so it is never offered. With one eligible policy the choice is skipped, and the policy detail offers the action only online.
+2. **Capture (step 1 of 3).** Event type, the exact date and time, an optional place, a description of 40 to 600 characters and one to ten files, at most 50 MiB together. The date and time are chosen on the system pickers, shown in the phone's time zone and sent in UTC with milliseconds. A file comes from the camera (a photo, or a video of up to 30 seconds) or from the gallery; photos are compressed on capture. The phone checks the file type (JPEG, PNG, HEIC, MP4, QuickTime), the count, the size, that the event is not in the future and falls inside the policy dates, and the description, and each problem is shown next to its field.
+3. **Review (step 2 of 3).** The summary, the files and the note that sending creates a single case. **Editar** returns to the capture without losing anything.
+4. **Send.** The phone hashes each file, creates the draft, uploads each file and submits. The result shows the case number `SIN-YYYY-NNNNN`. A partial failure says that the report is not filed yet and never claims reception.
+
+### Retries and failures
+
+- One idempotency key and one declaration are kept for the whole attempt. A retry sends again only what the server lacks, so repeating a send never creates a second case. Changing the report after a failure starts a new declaration and a new key.
+- The size declared for a file is that of the copy the picker hands over, because the picker reports the size of the original while the server checks the size of what it receives.
+- The native layer streams each file from its path with a known length; a file is read into memory only to hash it.
+- Each failure of the contract has its own message: session, coverage dates, a changed file, an unsupported type, missing files and an unavailable service. A development build also shows the underlying cause under the generic message; a customer never sees it.
+
+### Permissions and the background
+
+- The camera needs the system permission, requested when the customer takes a photo or records a video. If it is denied the screen says so, explains that the gallery still works and offers the system settings. The gallery uses the system picker and needs no permission. The usage descriptions are declared in `app.json` in both languages.
+- The camera and the gallery are system activities, so the app goes to the background and locks. The report stays in memory but hidden while the session is revalidated, and returns intact; it is dropped when the session ends or another account signs in. Nothing of the report is written to the device, so it does not survive the app being closed; resuming an interrupted upload is separate work.
+
+### Limits and verification
+
+- The event types (collision, theft, damage, other) are provisional values taken from the approved prototype, and no per-product list exists yet. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
+- Reporting from the web, scanning documents, the location choice and the status view are separate work.
+- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers the limits, the declaration, the retry sequence with a server that remembers its drafts, and every refusal of the contract. The camera, the pickers and the native upload need a development build; they are not exercised by unit tests.
+
 ## Protected local data
 
 Design and rules are in the [architecture guide](architecture.md#protected-local-data). This section is the operating guide for anyone adding a screen that reads or writes data on the device.
