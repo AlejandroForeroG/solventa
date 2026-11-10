@@ -35,6 +35,9 @@ import { SqlIdentityVerifications } from './adapters/outbound/sql-identity-verif
 import { SyntheticVerificationCorpus, syntheticKycSource } from './adapters/outbound/synthetic-identity-verification';
 import { KycProvider } from './adapters/outbound/kyc-provider';
 import { NotificationPreferences } from './application/notification-preferences';
+import { PartnerAuthorizations } from './application/partner-authorizations';
+import { authorizePartnerOfferAccess } from './application/partner-offer-access';
+import { SqlPartnerAuthorizations } from './adapters/outbound/sql-partner-authorizations';
 import { SqlNotificationPreferences } from './adapters/outbound/sql-notification-preferences';
 
 function securityFor(env: IdentityEnv) {
@@ -114,6 +117,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         integrity: new HmacIntegrity(this.env.CONSENT_SEAL_KEY ?? ''), platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
       }),
       notificationPreferences: new NotificationPreferences(new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString)),
+      partnerAuthorizations: new PartnerAuthorizations({ store: new SqlPartnerAuthorizations(this.env.IDENTITY_DB.connectionString), now: () => new Date() }),
       verificationAccess: (identity, operation) => new ApiAccess(new SqlPartnerAccess(this.env.IDENTITY_DB.connectionString),
         new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)).mobileUser(identity, operation),
       mobile: config ? {
@@ -149,6 +153,13 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env) }, request);
     } catch { decision = { allowed: false, error: 'access_unavailable', status: 503 }; }
     finally { await shared?.close(); }
+    if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return decision;
+  }
+  async authorizePartnerOfferAccessV1(request: unknown) {
+    const decision = await authorizePartnerOfferAccess({ authorize: input => authorize(this.env, input),
+      authorizations: new SqlPartnerAuthorizations(this.env.IDENTITY_DB.connectionString),
+      verifyConsents: input => consentsFor(this.env, false).verifyScopes(input), security: securityFor(this.env) }, request);
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return decision;
   }

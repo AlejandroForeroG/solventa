@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import type { AcceptedOffer, OfferAcceptanceSnapshot, OfferCreationSnapshot, OfferStore, StoredOffer, StoredOfferRequest } from '../../application/ports/offer-store';
-import { offerRequestIdentity, type OfferActor, type OfferQuote } from '../../domain/offer';
+import { offerRequestIdentity, type OfferActor, type OfferCapture, type OfferQuote } from '../../domain/offer';
 
 type OfferRow = { terms: StoredOffer['terms']; terms_seal: string; consent_reference: string; consent_version: string };
 type QuoteSnapshot = { id: string; quoteCode: string; result: { sumInsured: number; termMonths: number; validUntil: string }; request: { inputs: { ageYears: number } } };
@@ -76,6 +76,14 @@ export class SqlOfferStore implements OfferStore {
     return this.connection(async c => {
       const r = await c.query<OfferRow>('SELECT terms, terms_seal, consent_reference, consent_version FROM acquisition.offer_contexts WHERE offer_id=$1 AND client_id=$2 AND subject_token=$3', [offerId, actor.clientId, actor.subjectToken]);
       return r.rows[0] ? fromRow(r.rows[0]) : null;
+    });
+  }
+  async explanation(actor: OfferActor, offerId: string) {
+    return this.connection(async c => {
+      const r = await c.query<{ input_snapshot: OfferCapture }>(`SELECT d.input_snapshot FROM acquisition.offer_contexts ctx
+        JOIN acquisition.offers o ON o.id=ctx.offer_id JOIN acquisition.underwriting_decisions d ON d.id=o.decision_id
+        WHERE ctx.offer_id=$1 AND ctx.client_id=$2 AND ctx.subject_token=$3`, [offerId, actor.clientId, actor.subjectToken]);
+      return r.rows[0]?.input_snapshot ?? null;
     });
   }
   async create(input: Parameters<OfferStore['create']>[0]) {

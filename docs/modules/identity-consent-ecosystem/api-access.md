@@ -23,7 +23,7 @@ The table lists canonical URLs; deployment and DNS/certificate readiness require
 | Solventa web browser | Sealed cookie from the [existing session](authentication.md) | WorkOS session with verified email, active local user/session and the web user operation policy |
 | Mobile application | WorkOS user JWT after native PKCE | [Native connection](mobile-authentication.md): verified account plus active local session, never an M2M secret or web cookie |
 
-`subjectToken` is the customer's internal pseudonymous identifier. It is not an access token and does not authenticate requests. The `/internal/infra` secret is also unsuitable: it is reserved for operational diagnostics. Partner and web user identities are independent: a user session never establishes a partner identity, and a partner credential never authorizes a web user. A user session alone is not a general business permission or consent.
+`subjectToken` is the customer's internal pseudonymous identifier. It is not an access token and does not authenticate requests. The `/internal/infra` secret is also unsuitable: it is reserved for operational diagnostics. A partner that also holds `partner-offers:create` can request an offer only for a customer who authorized it: see [partner authorizations](partner-authorizations.md). Partner and web user identities are independent: a user session never establishes a partner identity, and a partner credential never authorizes a web user. A user session alone is not a general business permission or consent.
 
 ## Partner: configure WorkOS and obtain a token
 
@@ -163,7 +163,7 @@ node infra/partner-access.mjs local register infra/.local/partner-registration.j
 node infra/partner-access.mjs local revoke infra/.local/partner-revocation.json
 ```
 
-`register` accepts exactly `partnerCode`, `provider`, `reference`, `scopes` and `expiresAt`. `partnerCode` contains up to 64 lowercase letters, digits, hyphens or underscores and starts with a letter or digit. `scopes` is exactly `["quotes:create"]`; `expiresAt` is a real future UTC date in `YYYY-MM-DDTHH:mm:ssZ` format, optionally including `.sssZ` milliseconds.
+`register` accepts exactly `partnerCode`, `provider`, `reference`, `scopes` and `expiresAt`. `partnerCode` contains up to 64 lowercase letters, digits, hyphens or underscores and starts with a letter or digit. `scopes` is `["quotes:create"]`, optionally followed by `"partner-offers:create"` for the [partner offer channel](partner-authorizations.md); `expiresAt` is a real future UTC date in `YYYY-MM-DDTHH:mm:ssZ` format, optionally including `.sssZ` milliseconds.
 
 Registration uses the database uniqueness constraint atomically: concurrent attempts for the same provider/reference produce one registration and `credential_exists` for the duplicate. The losing transaction leaves no extra partner or audit row. A serialization rejection permits one complete transaction retry after successful rollback; an uncertain commit is never retried automatically.
 
