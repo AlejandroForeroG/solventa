@@ -15,6 +15,8 @@ import { FinancialEventDelivery } from './adapters/outbound/financial-event-deli
 import type { PolicyImportService } from './adapters/outbound/financial-event-delivery';
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
 import { signalProviderFor } from './adapters/outbound/signal-providers';
+import { PartnerOffers } from './application/partner-offers';
+import { IdentityPartnerOfferAccess } from './adapters/outbound/identity-partner-offer-access';
 
 type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string; POLICY_SERVICE?: PolicyImportService };
 
@@ -42,10 +44,12 @@ export default class extends WorkerEntrypoint<Env> {
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
+    const offers = createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     return createHttp({ quotes,
+      partnerOffers: new PartnerOffers({ access: new IdentityPartnerOfferAccess(this.env.IDENTITY_SERVICE), quotes, offers, protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '') }),
       audit: { decisions: new AuditDecisions(new SqlAuditDecisions(this.env.ACQUISITION_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
-      estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+      estimates: new EstimateQuote(), offers: { offers, authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       // Queue publication keeps its independent lease and minute-cron recovery.
       acceptanceCommitted: (eventId, event) => {

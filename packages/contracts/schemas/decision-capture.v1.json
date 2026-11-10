@@ -51,6 +51,16 @@
         "version": { "type": "string", "minLength": 1 }
       }
     },
+    "channel": {
+      "description": "Present when a partner requested the decision for a customer who authorized it. Identifiers only, never the customer's data.",
+      "type": "object",
+      "required": ["kind", "partnerId", "authorizationId"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["partner"] },
+        "partnerId": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+        "authorizationId": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" }
+      }
+    },
     "outcome": { "type": "string", "minLength": 1 }
   }
 }

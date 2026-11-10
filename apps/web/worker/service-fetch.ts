@@ -4,7 +4,7 @@ function bodyLimit(path: string): number {
   if (path === assistanceSearchPath) return 1024;
   if (/^\/api\/v[12]\/policies(?:\/|$)/.test(path) || /^\/api\/v1\/(?:offers(?:\/|$)|quotes\/[^/]+\/offers(?:\/|$))/.test(path)) return 1024;
   if (/^\/api\/v1\/(?:(?:me\/)?quotes|quote-estimates)(?:\/|$)/.test(path)) return 16 * 1024;
-  if (/^\/api\/v1\/consents(?:\/|$)/.test(path)) return 4 * 1024;
+  if (/^\/api\/v1\/(?:consents|partner\/offers|me\/partner-authorizations)(?:\/|$)/.test(path)) return 4 * 1024;
   if (/^\/api\/v1\/mobile\/identity-verifications(?:\/|$)/.test(path)) return 4 * 1024;
   if (path === '/api/v1/mobile/notification-preferences') return 4 * 1024;
   // Access and native-session endpoints use headers only, never a JSON body.
