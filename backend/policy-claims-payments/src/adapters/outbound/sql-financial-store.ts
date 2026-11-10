@@ -3,7 +3,7 @@ import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IndemnityCandidate, IndemnityNotice, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -218,6 +218,13 @@ class SqlFinancialTransaction implements FinancialTransaction {
       SELECT gen_random_uuid(),'financial_decision',$2,$6,1,$7,correlation_id FROM audited`,
     [action, resourceId, outcome, traceId, actorReference, 'policy.' + action, JSON.stringify(capture)]);
   }
+  // The payment id is the notice's event id, so a payment can be announced at most once; the primary key rejects a duplicate.
+  async announceIndemnity(notice: IndemnityNotice, traceId: string): Promise<void> {
+    const payload = { category: 'parametric_payment_confirmed', clientId: notice.clientId, policyId: notice.policyId,
+      paymentId: notice.paymentId, coverageKind: notice.coverageKind, confirmedAt: notice.confirmedAt };
+    await this.db.query(`INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+      VALUES($1,'policy',$2,'policy.indemnity.notice',1,$3,$4)`, [notice.paymentId, notice.policyId, JSON.stringify(payload), traceId]);
+  }
 }
 
 export class SqlFinancialStore implements FinancialStore {
@@ -329,6 +336,23 @@ export class SqlFinancialStore implements FinancialStore {
       ) SELECT c.id,c.client_id,c.subject_token,c.idempotency_key FROM candidates c JOIN refreshed r ON r.id=c.id
         ORDER BY c.last_changed,c.id,c.command_created_at DESC,c.idempotency_key`, [staleBefore.toISOString(), limit])).rows;
       return rows.map(row => ({ policyId: row.id, actor: { clientId: row.client_id, subjectToken: row.subject_token }, commandKey: row.idempotency_key }));
+    });
+  }
+  pendingIndemnities(staleBefore: Date, limit: number): Promise<IndemnityCandidate[]> {
+    return this.connection(async db => {
+      // Refreshing the payment's activity rotates bounded batches while a provider stays unknown; it changes no financial state.
+      const rows = (await db.query<{ policy_id: string; event_id: string; event_type: string; occurred_at: Date }>(`WITH candidates AS (
+        SELECT pay.id AS payment_id,pay.policy_id,ie.event_id,ie.event_type,c.occurred_at,pay.updated_at AS last_changed
+        FROM policy.payments pay
+        JOIN policy.indemnities i ON i.id=pay.indemnity_id JOIN policy.claims c ON c.id=i.claim_id
+        JOIN policy.inbox_events ie ON ie.policy_id=pay.policy_id AND ie.consumer='policy.parametric.v1'
+        WHERE pay.operation='indemnity' AND pay.status='pending' AND pay.updated_at<$1
+        ORDER BY pay.updated_at,pay.id LIMIT $2
+      ), refreshed AS (
+        UPDATE policy.payments p SET updated_at=now() FROM candidates c WHERE p.id=c.payment_id RETURNING p.id
+      ) SELECT c.policy_id,c.event_id,c.event_type,c.occurred_at FROM candidates c JOIN refreshed r ON r.id=c.payment_id
+        ORDER BY c.last_changed,c.payment_id`, [staleBefore.toISOString(), limit])).rows;
+      return rows.map(row => ({ policyId: row.policy_id, eventId: row.event_id, eventType: row.event_type, occurredAt: row.occurred_at.toISOString() }));
     });
   }
   async rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void> {

@@ -306,6 +306,37 @@ components:
             payoutAmount:
               type: string
               pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - stationId
+            - parameter
+            - unit
+            - threshold
+            - payoutAmount
+          properties:
+            kind:
+              type: string
+              enum:
+                - weather_event
+            stationId:
+              type: string
+              format: uuid
+            parameter:
+              type: string
+              enum:
+                - precipitation_24h
+            unit:
+              type: string
+              enum:
+                - mm
+            threshold:
+              type: integer
+              minimum: 1
+            payoutAmount:
+              type: string
+              pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
     PolicySummary:
       type: object
       additionalProperties: false
@@ -327,6 +358,7 @@ components:
           enum:
             - vida_hipotecario
             - flight_delay
+            - weather_event
         status:
           type: string
           enum:

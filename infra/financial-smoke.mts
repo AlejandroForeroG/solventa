@@ -10,7 +10,8 @@ import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-
 import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
 import type { AcceptedOffer, FinancialResult, SignedOfferAcceptanceV1 } from '../backend/policy-claims-payments/src/domain/financial';
 import type { FinancialDependencies, FinancialStore, PaymentGateway, SignatureProvider } from '../backend/policy-claims-payments/src/application/ports/financial';
-import { acceptedOffer, financialIntegrity, financialNow, flightEvent } from '../tests/financial-fixtures';
+import { MockParametricEventProvider } from '../backend/policy-claims-payments/src/adapters/outbound/mock-parametric-provider';
+import { acceptedOffer, financialIntegrity, financialNow, flightEvent, providerEvent } from '../tests/financial-fixtures';
 
 // Real disposable SQL and the real Policy runtime grants. Only external provider protocols are mocked.
 const config = await settings('local');
@@ -51,7 +52,8 @@ try {
   const store = new SqlFinancialStore(runtime.toString());
   const gateway = new SqlMockPaymentGateway(runtime.toString());
   const base: FinancialDependencies = { enabled: true, environment: 'local', integrity: financialIntegrity, store,
-    payments: gateway, signatures: new MockSignatureProvider(financialIntegrity), now: financialNow, newId: randomUUID };
+    payments: gateway, signatures: new MockSignatureProvider(financialIntegrity), parametric: new MockParametricEventProvider(financialIntegrity, 'local'),
+    now: financialNow, newId: randomUUID };
   const finance = new PolicyFinance(base);
   const count = async (table: string) => Number((await db!.query(`SELECT count(*)::INT4 AS n FROM policy.${table}`)).rows[0].n);
   const captures = async (policyId: string, action: string) => (await db!.query<{ payload: FinancialDecisionCapture }>(
@@ -622,6 +624,58 @@ try {
     [['synthetic-oracle-v1', 'consume', 'authenticated'], ['synthetic-gateway-v1', 'lookup', 'unknown'], ['synthetic-gateway-v1', 'settle', 'confirmed']]);
   assert.equal((await captures(flightPolicy.policyId, 'parametric.accepted')).length, 1);
   assert.equal((await captures(flightPolicy.policyId, 'indemnity.confirmed')).length, 1, 'event replay cannot duplicate historical decisions');
+  // Provider RPC with the weather variant: real SQL, grants, idempotency and the customer notice.
+  const rain = await acceptedOffer('weather_event'); const rainPolicy = await importOffer(rain);
+  assert.equal(ok(await issue(finance, rain, rainPolicy)).policy.status, 'issued');
+  if (rain.payload.coverage.kind !== 'weather_event') throw new Error('unexpected_fixture');
+  const rainReading = { kind: 'weather_precipitation' as const, stationId: rain.payload.coverage.stationId, precipitationMm: 50 };
+  const notices = async (policyId: string) => (await db!.query<{ payload: Record<string, unknown> }>(
+    "SELECT payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='policy.indemnity.notice' ORDER BY created_at", [policyId])).rows.map(row => row.payload);
+  const received = async (service: PolicyFinance, input: unknown) => service.receiveParametricEvent(input, randomUUID());
+  const effectTables = ['claims', 'indemnities', 'payments', 'inbox_events'];
+  const beforeRain = await counts(effectTables);
+  // The smoke clock is fixed at issuance time, so an observation must fall within the minute after it.
+  const observed = { observedAt: '2026-10-16T02:00:30.000Z' };
+  const belowThreshold = await providerEvent(rainPolicy.policyId, { ...rainReading, precipitationMm: 49 }, observed);
+  assert.equal((await received(finance, belowThreshold)).status, 'denied');
+  assert.equal((await received(finance, { ...belowThreshold, signature: 'a'.repeat(64) })).status, 'denied');
+  assert.deepEqual(await counts(effectTables), beforeRain, 'an uncovered or forged event creates no claim, indemnity, payment or inbox row');
+  assert.deepEqual(await notices(rainPolicy.policyId), []);
+  const rainEvent = await providerEvent(rainPolicy.policyId, rainReading, observed);
+  const paidRain = await received(finance, rainEvent);
+  assert.ok(paidRain.status === 'ok' && !paidRain.replayed, JSON.stringify(paidRain));
+  assert.equal((await db.query('SELECT status FROM policy.claims WHERE policy_id=$1', [rainPolicy.policyId])).rows[0].status, 'paid');
+  const rainNotices = await notices(rainPolicy.policyId);
+  assert.equal(rainNotices.length, 1);
+  assert.deepEqual(rainNotices[0], { category: 'parametric_payment_confirmed', clientId: rain.payload.clientId, policyId: rainPolicy.policyId,
+    paymentId: rainNotices[0].paymentId, coverageKind: 'weather_event', confirmedAt: financialNow().toISOString() });
+  const replayedRain = await received(new PolicyFinance(base), rainEvent);
+  assert.ok(replayedRain.status === 'ok' && replayedRain.replayed);
+  assert.equal((await notices(rainPolicy.policyId)).length, 1, 'a replay never announces the payment twice');
+  const sameIdentity = await providerEvent(rainPolicy.policyId, { ...rainReading, precipitationMm: 80 }, { ...observed, providerEventId: rainEvent.providerEventId });
+  const conflict = await received(finance, sameIdentity);
+  assert.ok(conflict.status === 'denied' && conflict.error === 'event_conflict', JSON.stringify(conflict));
+  assert.equal(Number((await db.query("SELECT count(*)::INT4 AS n FROM policy.payments WHERE policy_id=$1 AND operation='indemnity'", [rainPolicy.policyId])).rows[0].n), 1);
+  assert.equal((await captures(rainPolicy.policyId, 'parametric.accepted'))[0].sources[0].source, 'synthetic-parametric-provider-v1');
+
+  // An uncertain provider result leaves the indemnity pending and unannounced; the scheduled recovery finishes it exactly once.
+  const lateRain = await acceptedOffer('weather_event'); const lateRainPolicy = await importOffer(lateRain);
+  assert.equal(ok(await issue(finance, lateRain, lateRainPolicy)).policy.status, 'issued');
+  if (lateRain.payload.coverage.kind !== 'weather_event') throw new Error('unexpected_fixture');
+  const unsure: PaymentGateway = { lookup: input => gateway.lookup(input), refund: input => gateway.refund(input), settle: async () => ({ status: 'uncertain', reference: null }) };
+  const lateEvent = await providerEvent(lateRainPolicy.policyId, { kind: 'weather_precipitation', stationId: lateRain.payload.coverage.stationId, precipitationMm: 120 }, observed);
+  assert.equal((await received(new PolicyFinance({ ...base, payments: unsure }), lateEvent)).status, 'unavailable');
+  const indemnityStatus = async (policyId: string) => (await db!.query("SELECT status FROM policy.payments WHERE policy_id=$1 AND operation='indemnity'", [policyId])).rows[0].status;
+  assert.equal(await indemnityStatus(lateRainPolicy.policyId), 'pending');
+  assert.deepEqual(await notices(lateRainPolicy.policyId), [], 'an uncertain payment is never announced as paid');
+  const recovery = await new PolicyFinance(base).reconcileIndemnities(new Date(Date.now() + 60_000), 25);
+  assert.ok(recovery.some(outcome => outcome.outcome === 'confirmed'), JSON.stringify(recovery));
+  assert.equal(await indemnityStatus(lateRainPolicy.policyId), 'confirmed');
+  assert.equal((await notices(lateRainPolicy.policyId)).length, 1);
+  assert.equal((await captures(lateRainPolicy.policyId, 'indemnity.confirmed'))[0].inputs.trigger, 'reconciliation');
+  assert.deepEqual(await new PolicyFinance(base).reconcileIndemnities(new Date(Date.now() + 60_000), 25), [], 'a second run finds nothing to recover');
+  assert.equal((await notices(lateRainPolicy.policyId)).length, 1);
+
   const laterFlight = await acceptedOffer('flight_delay'); const laterPolicy = await importOffer(laterFlight);
   const issuedAt = '2026-10-16T02:01:00.000Z';
   const laterService = new PolicyFinance({ ...base, now: () => new Date(issuedAt) });
@@ -689,7 +743,7 @@ try {
     assert.equal((await auditRole.query("SELECT has_schema_privilege(current_user,'policy','CREATE') AS allowed")).rows[0].allowed, false);
   } finally { await auditRole.end(); }
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
-  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>('SELECT event_type,payload FROM policy.outbox_events')).rows;
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type<>'policy.indemnity.notice'")).rows; // the customer notice is not a decision capture
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'signature.challenge_created',
     'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'financial.denied'];

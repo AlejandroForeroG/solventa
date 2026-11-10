@@ -1,5 +1,6 @@
 import type { AcceptedOffer, FinancialActor, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
 import type { FinancialAction, FinancialDecisionCapture } from '../financial-decision';
+import type { ParametricEventProvider } from './parametric';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
   offer: AcceptedOffer; termsHash: string; document: string; documentHash: string;
@@ -22,6 +23,10 @@ export type ImportedEvent = { eventId: string; consumer: string; eventType: stri
 export type AcceptanceImport = { status: 'created' } | { status: 'existing'; snapshot: AcceptanceSnapshot };
 // An unfinished customer issuance command whose policy may hold a provider charge without its final state.
 export type IssuanceCandidate = { policyId: string; actor: FinancialActor; commandKey: string };
+// An indemnity whose event was accepted and whose payment is still unconfirmed, with what the audit trail needs to name its event.
+export type IndemnityCandidate = { policyId: string; eventId: string; eventType: string; occurredAt: string };
+// The customer notice SOL-40 consumes; it exists only once the provider confirmed the indemnity payment.
+export type IndemnityNotice = { paymentId: string; policyId: string; clientId: string; coverageKind: 'flight_delay' | 'weather_event'; confirmedAt: string };
 export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
   traceId: string; capture: FinancialDecisionCapture };
 export interface FinancialTransaction {
@@ -42,6 +47,7 @@ export interface FinancialTransaction {
   confirmPremium(policy: StoredPolicy, payment: Payment, traceId: string, capture: FinancialDecisionCapture): Promise<void>;
   completeIssuance(input: IssuanceCommit): Promise<Signature>;
   audit(action: FinancialAction, resourceId: string, traceId: string, outcome: string, actorReference: string, capture: FinancialDecisionCapture): Promise<void>;
+  announceIndemnity(notice: IndemnityNotice, traceId: string): Promise<void>;
 }
 export interface FinancialStore {
   readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null>;
@@ -52,6 +58,8 @@ export interface FinancialStore {
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;
   // Selects and refreshes candidate activity atomically so bounded recovery batches rotate.
   issuanceCandidates(staleBefore: Date, limit: number): Promise<IssuanceCandidate[]>;
+  // Same rotation as issuance recovery, for indemnity payments left pending by an interrupted event.
+  pendingIndemnities(staleBefore: Date, limit: number): Promise<IndemnityCandidate[]>;
   rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void>;
 }
 export interface FinancialIntegrity {
@@ -67,4 +75,4 @@ export interface SignatureProvider {
   sign(policyId: string, documentHash: string): Promise<{ status: 'signed'; receipt: string } | { status: 'failed' }>;
 }
 export type FinancialDependencies = { store: FinancialStore; integrity: FinancialIntegrity; payments: PaymentGateway;
-  signatures: SignatureProvider; now(): Date; newId(): string; environment: FinancialEnvironment; enabled: boolean };
+  signatures: SignatureProvider; parametric: ParametricEventProvider; now(): Date; newId(): string; environment: FinancialEnvironment; enabled: boolean };
