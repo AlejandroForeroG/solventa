@@ -82,8 +82,10 @@ function Coverage({ policy }: { policy: PolicyDetail }) {
   const format = useFormatters();
   const rows: [string, React.ReactNode][] = [['coverage.type', t(`product.${policy.product}`)]];
   if (policy.coverage.kind === 'mortgage_life') rows.push(['coverage.sumInsured', format.copDecimalAmount(policy.coverage.sumInsured)]);
-  else rows.push(['coverage.payout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.threshold', t('coverage.thresholdValue', { minutes: policy.coverage.thresholdMinutes })],
+  else if (policy.coverage.kind === 'flight_delay') rows.push(['coverage.payout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.threshold', t('coverage.thresholdValue', { minutes: policy.coverage.thresholdMinutes })],
     ['coverage.flight', <span className="mono" key="flight">{policy.coverage.flightReference}</span>]);
+  else rows.push(['coverage.rainPayout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.rainThreshold', t('coverage.rainValue', { mm: policy.coverage.threshold })],
+    ['coverage.station', <span className="mono" key="station">{policy.coverage.stationId}</span>]);
   rows.push(['coverage.validity', <Validity policy={policy} key="validity" />], ['coverage.premium', format.copDecimalAmount(policy.premium)]);
   return <>
     <section className="card policy-section" aria-labelledby="policy-coverage"><h2 id="policy-coverage" className="h-card">{t('coverage')}</h2>

@@ -44,3 +44,5 @@ Historical underwriting lookup: [Acquisition audit API and workspace](modules/ac
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
 Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).
+
+Automatic indemnities for flight delay and heavy rainfall: [Parametric payouts](modules/policy-claims-payments/parametric-payouts.md).

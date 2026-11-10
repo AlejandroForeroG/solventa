@@ -44,7 +44,8 @@ function paymentStatus(status: IssuedPolicyFacts['payment']['status']): PolicyPa
 
 function coverageLines(coverage: Coverage): string[] {
   if (coverage.kind === 'mortgage_life') return ['Amparo: fallecimiento del asegurado por cualquier causa.', 'Suma asegurada: ' + pesos(coverage.sumInsured)];
-  return ['Umbral de retraso: ' + coverage.thresholdMinutes + ' minutos', 'Pago por retraso: ' + pesos(coverage.payoutAmount), 'Vuelo asegurado: ' + coverage.flightReference];
+  if (coverage.kind === 'flight_delay') return ['Umbral de retraso: ' + coverage.thresholdMinutes + ' minutos', 'Pago por retraso: ' + pesos(coverage.payoutAmount), 'Vuelo asegurado: ' + coverage.flightReference];
+  return ['Umbral de lluvia: ' + coverage.threshold + ' mm en 24 horas', 'Pago por lluvia intensa: ' + pesos(coverage.payoutAmount), 'Estación asegurada: ' + coverage.stationId];
 }
 
 export function policyDetail(facts: IssuedPolicyFacts, versions: readonly ConditionsVersion[] = CONDITIONS_VERSIONS): PolicyDetail {

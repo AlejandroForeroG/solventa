@@ -44,8 +44,26 @@ const flightDelay: ProductConditions = {
   ]
 };
 
+const weatherEvent: ProductConditions = {
+  productName: 'Lluvia intensa',
+  exclusions: [
+    { code: '7.1', text: 'Precipitaciones inferiores al umbral de milímetros indicado en la cobertura.' },
+    { code: '7.2', text: 'Mediciones de una estación distinta a la estación asegurada en la póliza.' },
+    { code: '7.3', text: 'Lluvias ocurridas antes de la emisión o fuera de la vigencia.' },
+    { code: '7.4', text: 'Mediciones que la fuente de datos meteorológicos no verifique.' }
+  ],
+  clauses: [
+    { title: 'Cláusula 1 · Amparos', lines: ['1.1 Pago único cuando la precipitación verificada en 24 horas de la estación asegurada alcanza el umbral.'] },
+    { title: 'Cláusula 2 · Vigencia', lines: ['2.1 La cobertura rige durante el período indicado en las condiciones particulares.'] },
+    { title: 'Cláusula 3 · Pago de la prima', lines: [
+      '3.1 La prima se cobra una sola vez al emitir la póliza.',
+      '3.2 El cobro queda registrado con un recibo y no genera cargos duplicados.'
+    ] }
+  ]
+};
+
 export const CONDITIONS_VERSIONS: readonly ConditionsVersion[] = [
-  { version: 'academic-conditions-1', since: '2026-01-01T00:00:00.000Z', products: { vida_hipotecario: mortgageLife, flight_delay: flightDelay } }
+  { version: 'academic-conditions-1', since: '2026-01-01T00:00:00.000Z', products: { vida_hipotecario: mortgageLife, flight_delay: flightDelay, weather_event: weatherEvent } }
 ];
 
 // The newest version already in force at the issue time; an earlier time falls back to the first version.
