@@ -13,8 +13,7 @@ export function createClaimReport(baseUrl: string, session: AuthenticatedSession
     flow: new ClaimReportFlow({
       policyId: policy.policyId,
       window: { from: new Date(policy.effectiveFrom), until: new Date(policy.effectiveUntil) },
-      api: createClaimReportApi(baseUrl, session, expoEvidenceUploader),
-      digest: expoFileDigest, newId: randomUUID, now: () => new Date(),
+      api: createClaimReportApi(baseUrl, session, expoEvidenceUploader), digest: expoFileDigest, newId: randomUUID, now: () => new Date(),
     }),
     source: createExpoEvidenceSource(),
   };

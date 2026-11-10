@@ -7,7 +7,8 @@ import type { EvidenceUploader } from './claim-report-api';
 // The report holds at most 50 MiB, so one file is read into memory only to hash it. The file is never sent from that copy.
 export const expoFileDigest: FileDigest = {
   async sha256(uri) {
-    const hash = await digest(CryptoDigestAlgorithm.SHA256, await new File(uri).arrayBuffer());
+    // The native digest takes a typed array; a bare ArrayBuffer is rejected by the bridge.
+    const hash = await digest(CryptoDigestAlgorithm.SHA256, new Uint8Array(await new File(uri).arrayBuffer()));
     return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   },
 };

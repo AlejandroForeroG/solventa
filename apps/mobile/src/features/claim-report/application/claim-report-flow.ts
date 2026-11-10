@@ -5,7 +5,7 @@ import { ClaimReportFailure, type ClaimFailureCode, type ClaimReportApi, type Fi
 export type Phase =
   | { kind: 'editing' }
   | { kind: 'sending'; stage: 'preparing' | 'creating' | 'uploading' | 'submitting'; done: number; total: number }
-  | { kind: 'failed'; failure: ClaimFailureCode; missing: number }
+  | { kind: 'failed'; failure: ClaimFailureCode; missing: number; cause?: string }
   | { kind: 'submitted'; claimNumber: string; submittedAt: string; files: number; bytes: number };
 export type Snapshot = { draft: Draft; issues: readonly Issue[]; rejected: readonly RejectedCandidate[]; phase: Phase };
 
@@ -92,7 +92,9 @@ export class ClaimReportFlow {
       for (const id of failure.detail.missing ?? []) attempt.verified.delete(id);
       // A file whose checksum no longer matches changed on the device: the declaration is stale and the next attempt starts a new one.
       if (failure.code === 'integrity' || failure.code === 'conflict') this.attempt = null;
-      this.emit({ ...this.snapshot, phase: { kind: 'failed', failure: failure.code, missing: failure.detail.missing?.length ?? 0 } });
+      const origin = failure.cause ?? (error instanceof ClaimReportFailure || error instanceof AuthFailure ? undefined : error);
+      const cause = origin === undefined ? undefined : origin instanceof Error ? `${origin.name}: ${origin.message}` : String(origin);
+      this.emit({ ...this.snapshot, phase: { kind: 'failed', failure: failure.code, missing: failure.detail.missing?.length ?? 0, ...(cause ? { cause } : {}) } });
     } finally { this.sending = false; }
   }
 

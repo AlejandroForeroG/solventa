@@ -102,6 +102,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
       </View>}
       {phase.kind === 'failed' && <Text accessibilityRole="alert" style={ui.notice}>
         {phase.failure === 'incomplete' ? copy.failures.incomplete(phase.missing) : copy.failures[phase.failure]}</Text>}
+      {__DEV__ && phase.kind === 'failed' && phase.cause && <Text selectable style={ui.caption}>{`dev: ${phase.cause}`}</Text>}
       <Action label={phase.kind === 'failed' && RETRYABLE.has(phase.failure) ? copy.retry : copy.review.send} disabled={busy} onPress={() => void flow.send()} />
       <Action label={copy.back} secondary disabled={busy} onPress={goBack} />
     </>}

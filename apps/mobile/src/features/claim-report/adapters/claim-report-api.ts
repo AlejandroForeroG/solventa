@@ -58,7 +58,7 @@ export function createClaimReportApi(baseUrl: string, session: AuthenticatedSess
         return read(parse(text));
       } catch (error) {
         if (error instanceof AuthFailure || error instanceof ClaimReportFailure) throw error;
-        throw new ClaimReportFailure('unavailable');
+        throw new ClaimReportFailure('unavailable', {}, error);
       } finally { clearTimeout(timeout); }
     });
 
@@ -88,7 +88,7 @@ export function createClaimReportApi(baseUrl: string, session: AuthenticatedSess
         if (data.state !== 'verified' || data.fileId !== file.id) throw new ClaimReportFailure('invalid_response');
       } catch (error) {
         if (error instanceof AuthFailure || error instanceof ClaimReportFailure) throw error;
-        throw new ClaimReportFailure('unavailable');
+        throw new ClaimReportFailure('unavailable', {}, error);
       } finally { clearTimeout(timer); }
     }),
 

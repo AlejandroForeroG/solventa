@@ -5,8 +5,9 @@ export type ClaimFailureCode =
   | 'incomplete' | 'unavailable' | 'invalid_response';
 
 export class ClaimReportFailure extends Error {
-  constructor(public readonly code: ClaimFailureCode, public readonly detail: { fields?: string[]; missing?: string[] } = {}) {
-    super(code);
+  // The cause is for developers: it names the transport or device error behind a generic outage and never reaches a customer.
+  constructor(public readonly code: ClaimFailureCode, public readonly detail: { fields?: string[]; missing?: string[] } = {}, cause?: unknown) {
+    super(code, cause === undefined ? undefined : { cause });
     this.name = 'ClaimReportFailure';
   }
 }
