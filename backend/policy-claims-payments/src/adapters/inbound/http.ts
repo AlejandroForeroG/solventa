@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { FinancialActor, FinancialResult, PolicyListResult } from '../../domain/financial';
+import { isDocumentKind } from '../../domain/policy-portal';
+import type { DocumentFile, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../../domain/policy-portal';
+import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
@@ -13,6 +16,8 @@ export type PolicyHttpDependencies = {
   finance: {
     listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
+    detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult>;
+    document(input: { actor: FinancialActor; policyId: string; documentId: PolicyDocumentKind; traceId: string }): Promise<PolicyDocumentResult>;
     getByAcceptance(input: { actor: FinancialActor; acceptanceId: string; traceId: string }): Promise<FinancialResult>;
     issue(input: { actor: FinancialActor; policyId: string; idempotencyKey: string; documentHash: string;
       challengeId: string; code: string; traceId: string }): Promise<FinancialResult>;
@@ -47,6 +52,10 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   const app = new Hono<{ Bindings: PolicyEnv }>();
   app.get('/health', (c) => c.json({ service: 'policy-claims-payments', status: 'alive' }));
   app.all('/api/v1/policies', listOwnHandler);
+  // Web portal reads: static paths are registered before the :policyId routes.
+  app.all('/api/v1/policies/issued', handler('policies:read', false, 'list'));
+  app.all('/api/v1/policies/:policyId/detail', handler('policies:read', false, 'detail'));
+  app.all('/api/v1/policies/:policyId/documents/:documentId', handler('policies:read', false, 'document'));
   app.all('/api/v1/policies/:policyId', handler('policies:read'));
   app.all('/api/v1/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
   app.all('/api/v2/policies/:policyId', handler('policies:read'));
@@ -88,12 +97,28 @@ export function createHttp(deps?: PolicyHttpDependencies) {
     } catch { return reply({ error: 'financial_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   }
-  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' = 'issue') {
+  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' | 'list' | 'detail' | 'document' = 'issue') {
     return async (c: import('hono').Context<{ Bindings: PolicyEnv }>) => {
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: Record<string, unknown>, status: 200 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
         { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      const pdfReply = (file: DocumentFile) => new Response(renderPdf(file.title, file.lines), { status: 200, headers: { 'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename="${file.fileName}"`, 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+      // Same opaque response as an absent resource; only a missing import skips the resource-denial record.
+      const refuse = async (result: Extract<FinancialResult, { status: 'denied' | 'unavailable' }>) => {
+        if (result.status === 'denied' && result.error === 'policy_pending') return reply({ error: 'not_found' }, 404);
+        if (result.httpStatus === 404 || result.httpStatus === 403) {
+          let denialTimer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const recorded = await Promise.race([deps?.denyResourceAccess({ operation, traceId }),
+              new Promise<never>((_, reject) => { denialTimer = setTimeout(() => reject(new Error('denial_deadline')), 2000); })]);
+            if (!record(recorded) || recorded.recorded !== true) return reply({ error: 'access_unavailable' }, 503);
+          } catch { return reply({ error: 'access_unavailable' }, 503); }
+          finally { clearTimeout(denialTimer); }
+        }
+        return reply({ error: result.error }, result.httpStatus);
+      };
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const method = operation === 'policies:read' ? 'GET' : 'POST';
@@ -116,8 +141,22 @@ export function createHttp(deps?: PolicyHttpDependencies) {
           || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)
           || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
         const principal = { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() };
+        if (action === 'list') {
+          const listed = await deps.finance.listOwn({ actor: principal, traceId });
+          return listed.status === 'ok' ? reply({ policies: listed.policies, hasMore: listed.hasMore }, 200) : refuse(listed);
+        }
         const policyId = (c.req.param(byAcceptance ? 'acceptanceId' : 'policyId') ?? '').toLowerCase();
         if (!UUID.test(policyId)) return reply({ error: 'invalid_request' }, 400);
+        if (action === 'detail') {
+          const read = await deps.finance.detail({ actor: principal, policyId, traceId });
+          return read.status === 'ok' ? reply({ ...read.detail }, 200) : refuse(read);
+        }
+        if (action === 'document') {
+          const documentId = c.req.param('documentId') ?? '';
+          if (!isDocumentKind(documentId)) return reply({ error: 'invalid_request' }, 400);
+          const read = await deps.finance.document({ actor: principal, policyId, documentId, traceId });
+          return read.status === 'ok' ? pdfReply(read.file) : refuse(read);
+        }
         let result: FinancialResult;
         if (operation === 'policies:read') result = byAcceptance
           ? await deps.finance.getByAcceptance({ actor: principal, acceptanceId: policyId, traceId })
@@ -153,18 +192,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         }
         if (result.status === 'ok') return reply({ ...result.policy, ...(result.payment ? { payment: result.payment } : {}),
           ...(result.challenge ? { challenge: result.challenge } : {}), replayed: result.replayed }, 200);
-        // Same opaque response as an absent resource; only a missing import skips the resource-denial record.
-        if (result.status === 'denied' && result.error === 'policy_pending') return reply({ error: 'not_found' }, 404);
-        if (result.httpStatus === 404 || result.httpStatus === 403) {
-          let denialTimer: ReturnType<typeof setTimeout> | undefined;
-          try {
-            const recorded = await Promise.race([deps.denyResourceAccess({ operation, traceId }),
-              new Promise<never>((_, reject) => { denialTimer = setTimeout(() => reject(new Error('denial_deadline')), 2000); })]);
-            if (!record(recorded) || recorded.recorded !== true) return reply({ error: 'access_unavailable' }, 503);
-          } catch { return reply({ error: 'access_unavailable' }, 503); }
-          finally { clearTimeout(denialTimer); }
-        }
-        return reply({ error: result.error }, result.httpStatus);
+        return refuse(result);
       } catch { return reply({ error: 'financial_unavailable' }, 503); }
       finally {
         clearTimeout(timer);

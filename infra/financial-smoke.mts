@@ -292,6 +292,16 @@ try {
   assert.ok(ownerList.status === 'ok' && ownerList.policies.map(item => item.policyId).includes(policy.policyId) && !ownerList.policies.some(item => item.policyId === legacyPolicy.policyId));
   const unissuedList = await finance.listOwn({ actor: declinedOffer.payload, traceId: randomUUID() });
   assert.deepEqual(unissuedList, { status: 'ok', policies: [], hasMore: false });
+  // The web portal reads the same SQL record: the premium keeps the date of its last stored change, a pending or foreign policy is not readable.
+  const portal = await finance.detail({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() });
+  assert.ok(portal.status === 'ok');
+  const storedPremium = (await db.query("SELECT updated_at FROM policy.payments WHERE policy_id=$1 AND operation='premium'", [policy.policyId])).rows[0];
+  assert.deepEqual(portal.detail.payments.map(item => [item.date, item.status]), [[storedPremium.updated_at.toISOString(), 'paid']]);
+  assert.deepEqual(portal.detail.documents.map(item => item.documentId), ['signed_policy', 'general_conditions', 'premium_receipt']);
+  const pendingDetail = await finance.detail({ actor: declinedOffer.payload, policyId: declinedPolicy.policyId, traceId: randomUUID() });
+  assert.ok(pendingDetail.status === 'denied' && pendingDetail.error === 'policy_pending');
+  const foreignDetail = await finance.detail({ actor: declinedOffer.payload, policyId: policy.policyId, traceId: randomUUID() });
+  assert.ok(foreignDetail.status === 'denied' && foreignDetail.error === 'not_found');
   const financialCounts = await counts(['payments', 'policy_signatures', 'mock_gateway_operations']);
   assert.equal(ok(await issue(new PolicyFinance({ ...base, payments: new SqlMockPaymentGateway(runtime.toString()) }), offer, policy, key)).replayed, true);
   assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations']), financialCounts);
