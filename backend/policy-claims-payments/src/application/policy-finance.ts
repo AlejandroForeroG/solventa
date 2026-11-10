@@ -2,6 +2,8 @@ import { MAX_LISTED_POLICIES, canonical, eventContent, eventWithinIssuedCoverage
 import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyListResult, PolicySummary, PolicyView } from '../domain/financial';
 import { indemnityAmount, occurrenceCovered, occurrenceEvidence } from '../domain/parametric';
 import type { ParametricOccurrence, ParametricResult } from '../domain/parametric';
+import { documentFile, policyDetail } from '../domain/policy-portal';
+import type { IssuedPolicyFacts, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../domain/policy-portal';
 import type { FinancialDependencies, IndemnityCandidate, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
 import { financialDecision, financialEventSource, financialRejection, gatewaySource, providerEventSource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
@@ -124,6 +126,34 @@ export class PolicyFinance {
         policies.push(summary(policy));
       }
       return { status: 'ok', policies, hasMore: records.length > MAX_LISTED_POLICIES };
+    });
+  }
+
+  // Facts of one issued policy after the full integrity check. A policy still in the purchase flow is not a portal policy:
+  // like a missing import it is waiting, so the caller answers the opaque 404 without recording a security denial.
+  private async issuedFacts(input: { actor: FinancialActor; policyId: string }, traceId: string): Promise<IssuedPolicyFacts | Extract<FinancialResult, { status: 'denied' }>> {
+    if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
+    const { policy, premium, signature } = await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor);
+    if (policy.status !== 'issued') return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
+    if (!premium || !signature || !premium.updatedAt) throw new InvalidFinancialRecord();
+    return { policyId: policy.id, offer: policy.offer, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
+      effectiveUntil: policy.effectiveUntil, documentHash: policy.documentHash, signedAt: signature.signedAt,
+      payment: { status: premium.status, reference: premium.providerReference, amount: premium.amount, at: premium.updatedAt } };
+  }
+
+  detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult> {
+    return this.run<PolicyDetailResult>(input.traceId, async traceId => {
+      const facts = await this.issuedFacts(input, traceId);
+      return 'status' in facts ? facts : { status: 'ok', detail: policyDetail(facts) };
+    });
+  }
+
+  document(input: { actor: FinancialActor; policyId: string; documentId: PolicyDocumentKind; traceId: string }): Promise<PolicyDocumentResult> {
+    return this.run<PolicyDocumentResult>(input.traceId, async traceId => {
+      const facts = await this.issuedFacts(input, traceId);
+      if ('status' in facts) return facts;
+      const file = documentFile(input.documentId, facts);
+      return file ? { status: 'ok', file } : reject('not_found', 404);
     });
   }
 
