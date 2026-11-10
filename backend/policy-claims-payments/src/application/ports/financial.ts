@@ -6,7 +6,9 @@ export type StoredPolicy = { id: string; clientId: string; subjectToken: string;
   offer: AcceptedOffer; termsHash: string; document: string; documentHash: string;
   premium: string; currency: string; offerId: string; offerVersion: number; effectiveFrom: string; effectiveUntil: string; coverageSnapshot: unknown };
 export type Payment = { id: string; policyId: string; operation: 'premium' | 'indemnity'; amount: string; currency: 'COP';
-  key: string; hash: string; status: 'pending' | 'confirmed' | 'refunded' | 'declined'; providerReference: string | null };
+  key: string; hash: string; status: 'pending' | 'confirmed' | 'refunded' | 'declined'; providerReference: string | null;
+  // Last state change of the stored payment; only the SQL adapter provides it.
+  updatedAt?: string };
 export type Command = { policyId: string; requestHash: string; result: PolicyView | null };
 export type Inbox = { hash: string | null; policyId: string | null; outcome: string };
 export type Signature = { documentHash: string; receipt: string; signedAt: string; timeSeal: string | null };
