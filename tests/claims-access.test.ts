@@ -106,3 +106,13 @@ test('a grant recorded before canonicalization with an uppercase operator refere
   assert.equal((await changeClaimsGrant(db, 'local', 'grant', input)).changed, false);
   await assert.rejects(changeClaimsGrant(db, 'local', 'grant', { ...input, operatorReference: '90000000-0000-4000-8000-0000000000C2' }), /grant_id_conflict/);
 });
+
+test('reporting a claim is a native owner operation: a verified mobile session may report, the web channel and an unverified email may not', async () => {
+  const api = new ApiAccess(partner, sessions);
+  assert.deepEqual(await api.mobileUser(identity, 'claims:report'), { allowed: true, actor: { kind: 'user', channel: 'mobile', principal, operations: ['claims:report'] } });
+  assert.deepEqual(await api.webUser(identity, 'claims:report'), { allowed: false, error: 'forbidden', status: 403 });
+  assert.deepEqual(await api.mobileUser({ ...identity, emailVerified: false }, 'claims:report'), { allowed: false, error: 'unauthorized', status: 401 });
+  assert.deepEqual(await new ApiAccess(partner, { ...sessions, find: async () => null }).mobileUser(identity, 'claims:report'), { allowed: false, error: 'unauthorized', status: 401 });
+  // Reporting confers no analyst permission, and an analyst grant confers no right to report.
+  assert.equal((await new ApiAccess(partner, sessions, undefined, grantedFor('claims:read', 'claims:decide')).mobileUser(identity, 'claims:read')).allowed, false);
+});
