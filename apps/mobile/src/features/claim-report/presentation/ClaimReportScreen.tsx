@@ -8,6 +8,7 @@ import { useAuthenticatedSession, useAuthentication } from '../../authentication
 import { createPoliciesApi } from '../../policy-wallet/adapters/policies-api';
 import { policyReference, validityAt } from '../../policy-wallet/domain/wallet';
 import { ActivePolicies } from '../application/active-policies';
+import { isReportableProduct } from '../domain/report';
 import { ClaimReportForm } from './ClaimReportForm';
 import { claimReportMessages, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
@@ -26,7 +27,7 @@ export function ClaimReportScreen({ policyId }: { policyId?: string }) {
 function Authenticated({ copy, locale, requested }: { copy: ClaimReportCopy; locale: ClaimReportLocale; requested?: string }) {
   const current = useAuthenticatedSession();
   const [session] = useState(current);
-  const [policies] = useState(() => new ActivePolicies(() => createPoliciesApi(session.baseUrl, session).list(), (policy, now) => validityAt(policy, now) === 'active', Date.now));
+  const [policies] = useState(() => new ActivePolicies(() => createPoliciesApi(session.baseUrl, session).list(), (policy, now) => isReportableProduct(policy.product) && validityAt(policy, now) === 'active', Date.now));
   const load = useSyncExternalStore(policies.subscribe, policies.getSnapshot, policies.getSnapshot);
   const [chosen, choose] = useState<string | undefined>(requested);
   useEffect(() => { void policies.refresh(); }, [policies]);

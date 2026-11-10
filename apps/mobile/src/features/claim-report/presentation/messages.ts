@@ -25,7 +25,7 @@ type Copy = {
 const es: Copy = {
   title: 'Reportar siniestro', back: 'Volver', retry: 'Reintentar', cancel: 'Cancelar', step: step => `Paso ${step} de 3`,
   policy: { heading: 'Elige la póliza', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
-    none: 'No tienes pólizas vigentes para reportar un siniestro.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre tus pólizas vigentes.' },
+    none: 'No tienes pólizas de Vida hipotecario vigentes para reportar un siniestro.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Robo', damage: 'Daño', other: 'Otro' },
@@ -55,7 +55,7 @@ const es: Copy = {
 const en: Copy = {
   title: 'Report a claim', back: 'Back', retry: 'Try again', cancel: 'Cancel', step: step => `Step ${step} of 3`,
   policy: { heading: 'Choose the policy', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
-    none: 'You have no active policy to report a claim on.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among your active policies.' },
+    none: 'You have no active mortgage life policy to report a claim on.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
   fields: { eventType: 'Type of event', occurredAt: 'When it happened', date: 'Date', time: 'Time', place: 'Place (optional)', placeHint: 'Address or landmark',
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
   eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Other' },

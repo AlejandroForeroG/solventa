@@ -5,7 +5,7 @@ import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/s
 import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
 import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
-import { admit, contentTypeOf, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
+import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
 
 const baseUrl = 'https://dev.solventa.site';
 const policyId = '20000000-0000-4000-8000-000000000001';
@@ -267,4 +267,10 @@ test('the submission accepts only the case number of the claim it asked for', as
   for (const body of [{ claimId: 'other', claimNumber: 'SIN-2026-09127', submittedAt: now.toISOString() }, { claimId, claimNumber: 'SIN-26-1', submittedAt: now.toISOString() }, { claimId, claimNumber: 'SIN-2026-09127', submittedAt: 'soon' }]) {
     await assert.rejects(http(() => json(body)).submit(claimId), (error: ClaimReportFailure) => error.code === 'invalid_response');
   }
+});
+
+test('only a mortgage life policy can be reported, because flight delay pays on its own', () => {
+  assert.equal(isReportableProduct('vida_hipotecario'), true);
+  assert.equal(isReportableProduct('flight_delay'), false);
+  assert.equal(isReportableProduct('anything_else'), false);
 });

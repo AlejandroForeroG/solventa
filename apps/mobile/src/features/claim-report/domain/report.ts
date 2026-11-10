@@ -39,6 +39,9 @@ export type RejectedCandidate = 'file_type' | 'empty' | 'too_many' | 'total_size
 const EXTENSIONS: Record<string, EvidenceContentType> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', heif: 'image/heic', mp4: 'video/mp4', mov: 'video/quicktime' };
 const length = (text: string) => [...text].length;
 
+// Flight delay is parametric and pays without a report, so only mortgage life policies are reportable.
+export const isReportableProduct = (product: string): boolean => product === 'vida_hipotecario';
+
 export const kindOf = (contentType: EvidenceContentType): EvidenceKind => contentType.startsWith('video/') ? 'video' : 'photo';
 
 // Picker libraries disagree on spellings such as image/jpg, so the type is normalized and, when absent, taken from the file extension.
