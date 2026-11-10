@@ -8,4 +8,6 @@ export interface Timer { after(milliseconds: number): Promise<void> }
 export interface Protector {
   fingerprint(partnerId: string, request: QuoteRequest): Promise<string>;
   documentToken(documentNumber: string): Promise<string>;
+  // Keeps one partner's idempotency key from replaying another partner's result for the same customer.
+  partnerKey(partnerId: string, idempotencyKey: string): Promise<string>;
 }

@@ -110,6 +110,30 @@ The explicit `academic-mortgage-1` rule requires verified identity, active affil
 
 After acceptance, resolve the policy through the [Policy flow](../policy-claims-payments/README.md#financial-http-flow). The [offers OpenAPI](../../../packages/contracts/openapi/v1/offers.yaml), [event schema](../../../packages/contracts/schemas/financial-event.v1.json) and [synthetic examples](../../../packages/contracts/examples/financial.json) describe the boundaries. Example signatures are deliberately invalid and never authenticate a message. Additive offer migrations and runtime grants are prerequisites; resource/secret provisioning and a real browser/Queue/SQL acceptance check are separate from builds. Unit and HTTP checks run in `npm run test:financial`; SQL checks run in `npm run test:offers:sql`.
 
+## Partner offers
+
+`POST /api/v1/partner/offers` lets a distribution partner obtain the same profiled mortgage life offer as the customer's own web journey, for a customer who authorized that partner. Contract: [partner-offers.yaml](../../../packages/contracts/openapi/v1/partner-offers.yaml) with the [corpus](../../../packages/contracts/examples/partner-offers.json). Authorization, its limits and Identity's private check are in [Partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).
+
+| Layer | Code |
+|---|---|
+| HTTP | `src/adapters/inbound/partner-offers-http.ts`: only `POST`, a Bearer token and a body of at most 4096 bytes; a browser session is not a partner credential |
+| Use case | `src/application/partner-offers.ts`, which coordinates the steps below through ports |
+| Identity | `src/adapters/outbound/identity-partner-offer-access.ts` calls `authorizePartnerOfferAccessV1` with a 2 s deadline and validates the untrusted reply; `src/application/ports/partner-offer-access.ts` is the port |
+| Reuse | `CreateQuote.createFor` and `OfferService.create`, unchanged rules, so a partner offer cannot price differently from a web offer |
+| Response | `src/domain/partner-offer.ts` builds the partner view from the stored decision capture |
+
+The request is `{ authorizationId, product, customer, credit }`: the authorization the customer created plus the same quote fields as `POST /quotes`. The partner never names the customer. Identity answers who the customer is and whether their consent is fresh in one call, the only internal remote dependency of the flow. Each request then runs in this order: authorization check (timed as `identity_access`), `Idempotency-Key`, quote validation, quote saved for the customer, offer profiling with the existing `ReadSignal` degradation, offer saved, response.
+
+- **Customer and ownership.** The quote and the offer belong to the customer's `clientId` and `subjectToken` from Identity, never to the partner. A customer identifier, document or unknown property in the body is rejected (400) or ignored for identity; the `customer` block only supplies age and display data for the quote rules. The partner and its authorization are recorded in the decision capture's optional `channel` (`kind: partner`, `partnerId`, `authorizationId`), which holds identifiers only.
+- **Idempotency.** The key is scoped to the partner with a keyed hash, so another partner using the same key for the same customer creates its own offer and never replays this one. The same key and request returns 200 with the original offer and no second quote; the same key with another request is 409 `idempotency_key_reused`. A revoked authorization or consent blocks a retry too.
+- **Validity.** `validity.expiresAt` is never later than the customer's consent, the authorization given to the partner or the quote's validity, and is at most the 15-minute offer window.
+- **Signals and degradation.** The response lists each signal's scope, origin (`live`, `stored_copy` or `default`), `degraded`, `confidence` (100, 60, 0) and `failure`. A replaced source makes the offer `preliminary` and `contractable: false`; a partner cannot accept offers at all, because acceptance stays in the customer's web journey and the offer routes reject an `Authorization` header. The 120 ms provider budget and 700 ms hard limit apply unchanged.
+- **Explanation.** `explanation` carries the rating and underwriting rule versions and the base and adjustment rates in parts per million. Raw signal values, the debt ratio, the payment score and the customer's identifiers are never returned.
+- **Errors.** 400 `validation_error` (nothing stored), 401 with `WWW-Authenticate`, 403 `forbidden` (no scope, or an authorization the partner does not hold, indistinguishable from an unknown one) or `consent_required`, 409 `declined`, `conflict` or `idempotency_key_reused`, 503 `access_unavailable` (Identity could not verify in time; nothing priced) or `financial_unavailable`, 500 `internal_error`. A 503 or 500 may follow a commit, so retry with the same key.
+- **Observability.** Each attempt logs one `mortgage_offer_profiled` line with `channel: "partner"`, the result, the offer status and the timing of every dependency, so [dependency percentiles](../../../infra/load/README.md) include partner calls. The line holds no customer data.
+
+Limits. The offer is synthetic: signal providers are the configured mocks and no real settlement, coverage or signature is involved. The route is not wired to the ACORD translator: partners send the JSON contract above. Evidence is in-process: the partner journey test runs the real gateway, Identity and Acquisition use cases with in-memory persistence, a local key set standing in for the WorkOS Connect issuer and the mock providers; the SQL adapters have their own suites and no run against a real WorkOS issuer, workerd or a deployed environment exists. The partner portal that would let a partner see its authorizations and transactions is a separate story.
+
 ## External integrations
 
 Mortgage offer profiling uses `SIGNAL_PROVIDER` through `ReadSignal`; flight offers retain the separate `MockFlightSchedule` fixture. The direct/aggregator translators produce the fields underwriting reads (`monthlyIncomeCop`, `monthlyObligationsCop`, `score`, `active`, `verified`). Neither the ACORD translator nor a standalone signal endpoint is public. No adapter here connects to a real signal, payment, signature or oracle provider.
@@ -244,6 +268,7 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 
 - [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
+- [Partner offers](#partner-offers) and [partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).
 - [Contracts and decision capture](../../shared/contracts/README.md).
 - [Boundaries and communication](../../architecture.md).
 - [Operations](../../infrastructure/README.md).

@@ -18,4 +18,5 @@ export class HmacProtector implements Protector {
     return this.sign(JSON.stringify(['request', partnerId, request.product, c.fullName, c.documentType, c.documentNumber, c.birthDate, c.city, k.partnerCreditId, k.amount, k.termMonths]));
   }
   documentToken(documentNumber: string) { return this.sign(JSON.stringify(['document', documentNumber])); }
+  partnerKey(partnerId: string, idempotencyKey: string) { return this.sign(JSON.stringify(['partner-key', partnerId, idempotencyKey])); }
 }
