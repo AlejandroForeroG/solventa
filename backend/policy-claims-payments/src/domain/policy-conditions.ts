@@ -1,11 +1,12 @@
 import type { AcceptedOffer } from './financial';
 
 // The wording is academic demonstration text, kept in es-CO because it is the contract language of the document.
-// It is joined to a policy when it is read, so it is not part of the signed document or its hash.
-export const CONDITIONS_VERSION = 'academic-conditions-1';
+// A policy is joined to the version in force when it was issued, so it is not part of the signed document or its hash.
+// A published version is never edited: a change is a new entry with a later `since`, so older policies keep their wording.
 export type Exclusion = { code: string; text: string };
 export type Clause = { title: string; lines: string[] };
 export type ProductConditions = { productName: string; exclusions: Exclusion[]; clauses: Clause[] };
+export type ConditionsVersion = { version: string; since: string; products: Record<AcceptedOffer['product'], ProductConditions> };
 
 const mortgageLife: ProductConditions = {
   productName: 'Vida hipotecario',
@@ -43,6 +44,13 @@ const flightDelay: ProductConditions = {
   ]
 };
 
-export function conditionsFor(product: AcceptedOffer['product']): ProductConditions {
-  return product === 'flight_delay' ? flightDelay : mortgageLife;
+export const CONDITIONS_VERSIONS: readonly ConditionsVersion[] = [
+  { version: 'academic-conditions-1', since: '2026-01-01T00:00:00.000Z', products: { vida_hipotecario: mortgageLife, flight_delay: flightDelay } }
+];
+
+// The newest version already in force at the issue time; an earlier time falls back to the first version.
+export function conditionsFor(product: AcceptedOffer['product'], issuedAt: string, versions: readonly ConditionsVersion[] = CONDITIONS_VERSIONS): ProductConditions & { version: string } {
+  const inForce = versions.filter(item => Date.parse(item.since) <= Date.parse(issuedAt));
+  const applied = inForce.length ? inForce.reduce((latest, item) => (Date.parse(item.since) > Date.parse(latest.since) ? item : latest)) : versions[0];
+  return { version: applied.version, ...applied.products[product] };
 }

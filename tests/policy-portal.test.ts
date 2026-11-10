@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { issuanceTimeContent, offerContent, paymentContent, policyDocument } from '../backend/policy-claims-payments/src/domain/financial';
-import { conditionsFor, CONDITIONS_VERSION } from '../backend/policy-claims-payments/src/domain/policy-conditions';
+import { conditionsFor } from '../backend/policy-claims-payments/src/domain/policy-conditions';
 import { documentFile, policyDetail } from '../backend/policy-claims-payments/src/domain/policy-portal';
 import type { IssuedPolicyFacts } from '../backend/policy-claims-payments/src/domain/policy-portal';
 import type { FinancialStore, Payment, PolicyRecord, StoredPolicy } from '../backend/policy-claims-payments/src/application/ports/financial';
@@ -11,6 +11,7 @@ import { renderPdf } from '../backend/policy-claims-payments/src/adapters/inboun
 import { acceptedOffer, financialIntegrity, financialNow } from './financial-fixtures';
 
 const paidAt = '2026-10-16T02:00:05.000Z';
+const issued = financialNow().toISOString();
 
 async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay'): Promise<PolicyRecord> {
   const offer = (await acceptedOffer(product)).payload, id = randomUUID(), document = policyDocument(id, offer);
@@ -44,7 +45,7 @@ test('the detail of an issued policy gives its coverage, product exclusions, doc
   assert.deepEqual(result.detail, {
     policyId: record.policy.id, product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: record.policy.effectiveFrom, effectiveUntil: record.policy.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' },
-    exclusions: conditionsFor('vida_hipotecario').exclusions, conditionsVersion: CONDITIONS_VERSION,
+    exclusions: conditionsFor('vida_hipotecario', issued).exclusions, conditionsVersion: conditionsFor('vida_hipotecario', issued).version,
     documents: [{ documentId: 'signed_policy', issuedAt: financialNow().toISOString() }, { documentId: 'general_conditions', issuedAt: financialNow().toISOString() },
       { documentId: 'premium_receipt', issuedAt: paidAt }],
     payments: [{ date: paidAt, amount: '86400.0000', currency: 'COP', status: 'paid', reference: record.premium?.providerReference }] });
@@ -58,8 +59,8 @@ test('each product shows its own exclusions and coverage', async () => {
   const result = await financeFor([flight]).detail({ actor: actorOf(flight), policyId: flight.policy.id, traceId: randomUUID() });
   assert.ok(result.status === 'ok');
   assert.equal(result.detail.coverage.kind, 'flight_delay');
-  assert.deepEqual(result.detail.exclusions, conditionsFor('flight_delay').exclusions);
-  assert.notDeepEqual(result.detail.exclusions, conditionsFor('vida_hipotecario').exclusions);
+  assert.deepEqual(result.detail.exclusions, conditionsFor('flight_delay', issued).exclusions);
+  assert.notDeepEqual(result.detail.exclusions, conditionsFor('vida_hipotecario', issued).exclusions);
   assert.ok(mortgage.policy.id !== flight.policy.id);
 });
 
@@ -105,8 +106,8 @@ test('the documents carry the policy facts and the product conditions', async ()
   const policyText = policy.lines.join('\n');
   for (const expected of [record.policy.id, 'Suma asegurada: $ 320.000.000', 'Prima: $ 86.400 (pago único)', record.policy.documentHash, 'Emitida: 2026-10-15 21:00 (hora de Colombia)']) assert.ok(policyText.includes(expected), expected);
   const conditions = (await get('general_conditions')).lines.join('\n');
-  assert.ok(conditions.includes(CONDITIONS_VERSION));
-  for (const item of conditionsFor('vida_hipotecario').exclusions) assert.ok(conditions.includes(item.code + ' ' + item.text));
+  assert.ok(conditions.includes(conditionsFor('vida_hipotecario', issued).version));
+  for (const item of conditionsFor('vida_hipotecario', issued).exclusions) assert.ok(conditions.includes(item.code + ' ' + item.text));
   const receipt = (await get('premium_receipt')).lines.join('\n');
   for (const expected of [record.premium?.providerReference as string, 'Monto: $ 86.400', 'Estado: pagado']) assert.ok(receipt.includes(expected), expected);
 });
@@ -142,4 +143,22 @@ test('the PDF is a deterministic, well-formed file with correct offsets, Latin-1
   offsets.forEach((offset, index) => assert.equal(text.slice(offset, offset + `${index + 1} 0 obj`.length), `${index + 1} 0 obj`));
   assert.equal(text.slice(Number(/startxref\n(\d+)/.exec(text)?.[1])).startsWith('xref'), true);
   assert.equal(renderPdf('Vacío', []).length > 0, true);
+});
+
+test('a policy keeps the conditions that were in force when it was issued, even after a new version is published', async () => {
+  const record = await issuedRecord('vida_hipotecario');
+  const first = conditionsFor('vida_hipotecario', issued);
+  const changed = { ...first, version: 'academic-conditions-2', exclusions: [{ code: '7.1', text: 'Texto nuevo de prueba.' }] };
+  const versions = [{ version: first.version, since: '2026-01-01T00:00:00.000Z', products: { vida_hipotecario: first, flight_delay: first } },
+    { version: changed.version, since: '2026-11-01T00:00:00.000Z', products: { vida_hipotecario: changed, flight_delay: changed } }];
+  const facts = (signedAt: string): IssuedPolicyFacts => ({ policyId: record.policy.id, offer: record.policy.offer, premium: record.policy.premium, currency: 'COP',
+    effectiveFrom: record.policy.effectiveFrom, effectiveUntil: record.policy.effectiveUntil, documentHash: record.policy.documentHash, signedAt,
+    payment: { status: 'confirmed', reference: 'MOCK-' + randomUUID(), amount: record.policy.premium, at: signedAt } });
+  const before = policyDetail(facts('2026-10-16T02:00:00.000Z'), versions), after = policyDetail(facts('2026-11-02T00:00:00.000Z'), versions);
+  assert.equal(before.conditionsVersion, 'academic-conditions-1');
+  assert.deepEqual(before.exclusions, first.exclusions);
+  assert.equal(after.conditionsVersion, 'academic-conditions-2');
+  assert.deepEqual(after.exclusions, changed.exclusions);
+  assert.ok(documentFile('general_conditions', facts('2026-10-16T02:00:00.000Z'), versions)?.lines.join('\n').includes(first.exclusions[0].text));
+  assert.ok(documentFile('general_conditions', facts('2026-11-02T00:00:00.000Z'), versions)?.lines.join('\n').includes('Texto nuevo de prueba.'));
 });
