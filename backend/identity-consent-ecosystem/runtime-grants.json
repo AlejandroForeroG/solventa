@@ -80,5 +80,8 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "partner_portal_grants": [
+    "SELECT"
   ]
 }

@@ -4,6 +4,7 @@ Code: `backend/identity-consent-ecosystem`. This module is the authority for ide
 
 ## Documents
 
+- [Partner portal grants and administration](../acquisition-risk/partner-portal.md#grant-administration).
 - [Web authentication: routes, session, configuration and tests](authentication.md).
 - [Native authentication: user tokens, registration, revocation and connection](mobile-authentication.md).
 - [Identity verification: native consent, synthetic evaluation, persisted progress and assisted requests](identity-verification.md).

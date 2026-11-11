@@ -1,4 +1,5 @@
 import { mountAuditDecisions, type AuditHttpDependencies } from './audit-decisions-http';
+import { mountPartnerPortal, type PortalHttpDependencies } from './partner-portal-http';
 import { Hono } from 'hono';
 import type { CreateQuote } from '../../application/create-quote';
 import { quotesHandler } from './quotes-http';
@@ -8,7 +9,7 @@ import { mountOffers, type OffersHttpDependencies } from './offers-http';
 import { mountPartnerOffers } from './partner-offers-http';
 import type { PartnerOffers } from '../../application/partner-offers';
 
-export function createHttp(deps: { quotes: CreateQuote; estimates: EstimateQuote; offers?: OffersHttpDependencies; partnerOffers?: PartnerOffers; audit?: AuditHttpDependencies }) {
+export function createHttp(deps: { quotes: CreateQuote; portal?: PortalHttpDependencies; estimates: EstimateQuote; offers?: OffersHttpDependencies; partnerOffers?: PartnerOffers; audit?: AuditHttpDependencies }) {
   const app = new Hono<{ Bindings: AcquisitionEnv }>();
   app.get('/health', (c) => c.json({ service: 'acquisition-risk', status: 'alive' }));
   app.post('/api/v1/quote-estimates', estimateHandler(deps.estimates));
@@ -16,6 +17,7 @@ export function createHttp(deps: { quotes: CreateQuote; estimates: EstimateQuote
   app.post('/api/v1/me/quotes', quotesHandler(deps.quotes, 'web'));
   if (deps.offers) mountOffers(app, deps.offers);
   if (deps.partnerOffers) mountPartnerOffers(app, { offers: deps.partnerOffers });
+  if (deps.portal) mountPartnerPortal(app, deps.portal);
   if (deps.audit) mountAuditDecisions(app, deps.audit);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
