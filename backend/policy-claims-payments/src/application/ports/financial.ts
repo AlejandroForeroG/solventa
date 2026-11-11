@@ -2,6 +2,7 @@ import type { AcceptedOffer, FinancialActor, FinancialEnvironment, FinancialErro
 import type { FinancialAction, FinancialDecisionCapture, FinancialEvidence, FinancialSource } from '../financial-decision';
 import type { ParametricEventProvider } from './parametric';
 import type { LifecycleChange } from '../../domain/policy-lifecycle';
+import type { AdvisorAuthorization, AdvisorAuthorizationRecord, DelegatedLifecycleExecution } from '../../domain/advisor-authorization';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
   offer: AcceptedOffer; termsHash: string; document: string; documentHash: string;
@@ -35,9 +36,14 @@ export type IndemnityNotice = { paymentId: string; policyId: string; clientId: s
 export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
   traceId: string; capture: FinancialDecisionCapture };
 export interface FinancialTransaction {
+  advisorAuthorization?(id: string, principal: FinancialActor, role: 'owner' | 'advisor'): Promise<AdvisorAuthorizationRecord | null>;
+  advisorAuthorizationCommand?(owner: FinancialActor, key: string): Promise<{ record: AdvisorAuthorizationRecord; requestHash: string } | null>;
+  listAdvisorAuthorizations?(principal: FinancialActor, role: 'owner' | 'advisor', policyId: string | null, limit: number, advisorReference?: string, after?: {grantedAt:string;id:string}): Promise<AdvisorAuthorizationRecord[]>;
+  saveAdvisorAuthorization?(authorization: AdvisorAuthorization, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string): Promise<void>;
+  revokeAdvisorAuthorization?(authorization: AdvisorAuthorization, at: string, capture: FinancialDecisionCapture, traceId: string): Promise<void>;
   lifecycleCommand?(actorId: string, key: string): Promise<{ policyId: string; requestHash: string } | null>;
   lifecycleReplacement?(policyId: string): Promise<boolean>;
-  saveLifecycle?(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string): Promise<void>;
+  saveLifecycle?(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string, execution?: DelegatedLifecycleExecution): Promise<void>;
   policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
   issuanceSnapshot(id: string, actor: FinancialActor, commandKey: string): Promise<{ record: PolicyRecord | null; command: Command | null }>;
   createSignatureChallenge(challenge: SignatureChallenge): Promise<void>;

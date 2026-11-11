@@ -7,7 +7,7 @@ export type CreateQuoteInput = { credential: AccessCredential | null; idempotenc
 
 export type CreateQuoteResult =
   | { status: 'created' | 'replayed'; quote: StoredQuote & { currency: 'COP'; basis: 'minimum_data'; traceId: string } }
-  | { status: 'denied'; error: AccessDenial; httpStatus: 401 | 403 | 503 }
+  | { status: 'denied'; error: AccessDenial; retryAfter?: number; httpStatus: 401 | 403 | 429 | 503 }
   | { status: 'invalid'; errors: FieldError[] }
   | { status: 'idempotency_conflict' };
 export type CreateQuoteForResult = Exclude<CreateQuoteResult, { status: 'denied' }>;
@@ -22,7 +22,7 @@ export class CreateQuote {
     // Before validation, so a caller without access learns nothing about the rules.
     if (!input.credential) return { status: 'denied', error: 'unauthorized', httpStatus: 401 };
     const decision = await this.deps.access.authorize(input.credential, input.traceId);
-    if (!decision.allowed) return { status: 'denied', error: decision.error, httpStatus: decision.status };
+    if (!decision.allowed) return { status: 'denied', error: decision.error, httpStatus: decision.status, ...(decision.retryAfter === undefined ? {} : { retryAfter: decision.retryAfter }) };
     return this.createFor(decision.actor, input);
   }
 

@@ -80,5 +80,22 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "partner_portal_grants": [
+    "SELECT"
+  ],
+  "policy_advisor_grants": [
+    "SELECT"
+  ],
+  "partner_quota_policy": [
+    "SELECT"
+  ],
+  "partner_quota_overrides": [
+    "SELECT"
+  ],
+  "partner_quota_windows": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }

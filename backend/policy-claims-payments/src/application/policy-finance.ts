@@ -4,12 +4,14 @@ import { indemnityAmount, occurrenceCovered, occurrenceEvidence } from '../domai
 import type { ParametricOccurrence, ParametricResult } from '../domain/parametric';
 import { documentFile, policyDetail } from '../domain/policy-portal';
 import type { IssuedPolicyFacts, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../domain/policy-portal';
-import type { FinancialDependencies, IndemnityCandidate, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
+import type { FinancialDependencies, FinancialTransaction, IndemnityCandidate, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
 import { financialDecision, financialEventSource, financialRejection, gatewaySource, providerEventSource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
 
 import { isLifecycleChange, lifecycleContent } from '../domain/policy-lifecycle';
 import type { LifecycleAction, LifecycleChange } from '../domain/policy-lifecycle';
+import { ADVISOR_AUTHORIZATION_RULE, advisorAuthorizationContent, advisorAuthorizationView, isAdvisorAuthorization } from '../domain/advisor-authorization';
+import type { AdvisorApprovalResult, AdvisorAuthorization, AdvisorAuthorizationRecord, AdvisorAuthorizationsResult, AdvisorIdentity, AdvisorLifecycleResult, AdvisorTarget, DelegatedLifecycleExecution } from '../domain/advisor-authorization';
 
 class Rejection extends Error {
   constructor(readonly code: FinancialErrorCode, readonly httpStatus: 400 | 403 | 404 | 409 = 409) { super(code); }
@@ -31,6 +33,9 @@ const historicalView = (value: PolicyView) => { const { lifecycle: _lifecycle, .
 type IssuanceContext = { actor: FinancialActor; policyId: string; documentHash: string; commandKey: string; traceId: string; trigger?: 'reconciliation' };
 export type IndemnityOutcome = { traceId: string; outcome: 'confirmed' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refunded' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
+type LifecycleInput = { actor: FinancialActor; policyId: string; action: LifecycleAction; replacementPolicyId: string | null;
+  documentHash: string; reason: string; idempotencyKey: string; traceId: string };
+type DelegationContext = { identity: AdvisorIdentity; authorization: AdvisorAuthorization };
 
 export class PolicyFinance {
   constructor(private readonly deps: FinancialDependencies) {}
@@ -122,16 +127,22 @@ export class PolicyFinance {
     });
   }
 
-  changeLifecycle(input: { actor: FinancialActor; policyId: string; action: LifecycleAction; replacementPolicyId: string | null;
-    documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult> {
+  changeLifecycle(input: LifecycleInput): Promise<FinancialResult> {
     return this.run(input.traceId, async traceId => {
-      if (!validActor(input.actor) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
-        || !['modified', 'renewed', 'cancelled'].includes(input.action) || !/^[a-z][a-z_]{2,63}$/.test(input.reason)
-        || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
-        || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
-      const key = await this.deps.integrity.digest(JSON.stringify(['lifecycle-key-v1', input.actor.clientId, input.idempotencyKey]));
-      const hash = await this.deps.integrity.digest(JSON.stringify(['lifecycle-request-v1', input.policyId, input.action, input.replacementPolicyId, input.documentHash, input.reason]));
-      return this.deps.store.transaction(async tx => {
+      return this.deps.store.transaction(tx => this.applyLifecycle(tx, input, traceId));
+    });
+  }
+
+  private async applyLifecycle(tx: FinancialTransaction, input: LifecycleInput, traceId: string, delegated?: DelegationContext): Promise<FinancialResult> {
+        if (!validActor(input.actor) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
+          || !['modified', 'renewed', 'cancelled'].includes(input.action) || !/^[a-z][a-z_]{2,63}$/.test(input.reason)
+          || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
+          || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
+        const executorId = delegated?.identity.clientId ?? input.actor.clientId;
+        const key = await this.deps.integrity.digest(JSON.stringify([delegated ? 'lifecycle-key-v2' : 'lifecycle-key-v1', executorId, input.idempotencyKey]));
+        const hash = await this.deps.integrity.digest(JSON.stringify(delegated
+          ? ['lifecycle-request-v2', delegated.authorization.id, input.actor.clientId, input.policyId, input.action, input.replacementPolicyId, input.documentHash, input.reason]
+          : ['lifecycle-request-v1', input.policyId, input.action, input.replacementPolicyId, input.documentHash, input.reason]));
         if (!tx.lifecycleCommand || !tx.lifecycleReplacement || !tx.saveLifecycle) throw Error('lifecycle_not_configured');
         // Lock both owned policies in deterministic order; a payment or another lifecycle command shares these locks.
         const records = new Map<string, PolicyRecord>();
@@ -140,14 +151,25 @@ export class PolicyFinance {
         }
         const source = records.get(input.policyId);
         if (!source) throw Error('lifecycle_source_missing');
+        if (delegated) {
+          const refreshed = await this.checkedAdvisorAuthorization(await tx.advisorAuthorization?.(delegated.authorization.id, delegated.identity, 'advisor'));
+          this.requireAdvisorPermission(delegated.identity);
+          if (refreshed.revokedAt || Date.parse(refreshed.authorization.expiresAt) <= this.deps.now().getTime()
+            || refreshed.authorization.seal !== delegated.authorization.seal
+            || canonical(refreshed.authorization.owner) !== canonical(input.actor)
+            || refreshed.authorization.advisor.clientId !== delegated.identity.clientId
+            || refreshed.authorization.advisor.subjectToken !== delegated.identity.subjectToken
+            || refreshed.authorization.advisorReference !== delegated.identity.advisorReference) return reject('not_found', 404);
+        }
         const { policy } = source;
         if (policy.documentHash !== input.documentHash) return reject('document_mismatch');
-        const prior = await tx.lifecycleCommand(input.actor.clientId, key);
+        const prior = await tx.lifecycleCommand(executorId, key);
         if (prior && (prior.policyId !== policy.id || prior.requestHash !== hash)) return reject('idempotency_conflict');
         if (prior && policy.lifecycle) return { status: 'ok', replayed: true, policy: view(policy), ...paid(source.premium) };
         if (policy.status !== 'issued' || policy.lifecycle || !source.signature) return reject('policy_not_active');
         const now = this.deps.now();
         const replacement = input.replacementPolicyId ? records.get(input.replacementPolicyId) : undefined;
+        if (delegated && (replacement?.policy.documentHash ?? null) !== delegated.authorization.replacementDocumentHash) return reject('document_mismatch');
         if (input.action !== 'cancelled') {
           if (input.replacementPolicyId && await tx.lifecycleReplacement(input.replacementPolicyId)) return reject('policy_not_active');
           if (!replacement || !replacement.signature || replacement.policy.status !== 'issued' || replacement.policy.lifecycle
@@ -167,10 +189,155 @@ export class PolicyFinance {
         const capture = this.decision('policy.lifecycle.changed', traceId, policy, input.action, { payment: source.premium ?? undefined });
         capture.rule.version = change.ruleVersion;
         capture.inputs.lifecycle = change;
-        await tx.saveLifecycle(change, input.actor.clientId, key, hash, capture, traceId);
+        const execution: DelegatedLifecycleExecution | undefined = delegated ? { authorizationId: delegated.authorization.id,
+          ownerClientId: delegated.authorization.owner.clientId, advisorClientId: delegated.identity.clientId,
+          advisorReference: delegated.authorization.advisorReference, grantedAt: delegated.authorization.grantedAt,
+          expiresAt: delegated.authorization.expiresAt, authorizationExpiresAt: delegated.identity.authorizationExpiresAt,
+          authorizationSeal: delegated.authorization.seal } : undefined;
+        if (execution) capture.inputs.authorization = execution;
+        await tx.saveLifecycle(change, executorId, key, hash, capture, traceId, execution);
+        if (delegated) {
+          this.requireAdvisorPermission(delegated.identity);
+          if (Date.parse(delegated.authorization.expiresAt) <= this.deps.now().getTime()) throw Error('advisor_approval_expired');
+        }
         return { status: 'ok', replayed: false, policy: view({ ...policy, lifecycle: change }), ...paid(source.premium) };
+  }
+
+  private requireAdvisorPermission(identity: AdvisorIdentity) {
+    const expires = Date.parse(identity.authorizationExpiresAt), now = this.deps.now().getTime();
+    if (!validActor(identity) || !UUID.test(identity.advisorReference) || !iso(identity.authorizationExpiresAt)
+      || !(expires > now) || expires > now + 5500) throw Error('advisor_access_expired');
+  }
+
+  private async checkedAdvisorAuthorization(record: AdvisorAuthorizationRecord | null | undefined): Promise<AdvisorAuthorizationRecord> {
+    if (!record) return reject('not_found', 404);
+    if (!isAdvisorAuthorization(record.authorization) || (record.revokedAt !== null && !iso(record.revokedAt))
+      || (record.changeId !== null && !UUID.test(record.changeId))
+      || !await this.deps.integrity.verify(advisorAuthorizationContent(record.authorization), record.authorization.seal)) return reject('integrity_violation');
+    return record;
+  }
+
+  createAdvisorAuthorization(input: { actor: FinancialActor; advisor: AdvisorTarget; policyId: string; action: LifecycleAction;
+    replacementPolicyId: string | null; documentHash: string; expiresAt: string; idempotencyKey: string; traceId: string }): Promise<AdvisorApprovalResult> {
+    return this.run<AdvisorApprovalResult>(input.traceId, async traceId => {
+      const now = this.deps.now();
+      if (!validActor(input.actor) || !validActor(input.advisor.principal) || input.actor.clientId === input.advisor.principal.clientId
+        || !UUID.test(input.advisor.reference) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
+        || !['modified', 'renewed', 'cancelled'].includes(input.action) || !iso(input.expiresAt)
+        || new Date(input.expiresAt).toISOString().slice(0,19) !== input.expiresAt.slice(0,19)
+        || Date.parse(input.expiresAt) <= now.getTime() || Date.parse(input.expiresAt) > now.getTime() + 7 * 86400000
+        || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
+        || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
+      const key = await this.deps.integrity.digest(JSON.stringify(['advisor-approval-key-v1', input.actor.clientId, input.idempotencyKey]));
+      const requestHash = await this.deps.integrity.digest(JSON.stringify(['advisor-approval-request-v1', input.policyId, input.advisor.reference,
+        input.action, input.replacementPolicyId, input.documentHash, input.expiresAt]));
+      return this.deps.store.transaction(async tx => {
+        if (!tx.advisorAuthorizationCommand || !tx.saveAdvisorAuthorization) throw Error('advisor_approval_unavailable');
+        const records = new Map<string, PolicyRecord>();
+        for (const id of [...new Set([input.policyId, ...(input.replacementPolicyId ? [input.replacementPolicyId] : [])])].sort()) {
+          records.set(id, await this.checked(await tx.policy(id, input.actor), input.actor));
+        }
+        const prior = await tx.advisorAuthorizationCommand(input.actor, key);
+        if (prior) {
+          const record = await this.checkedAdvisorAuthorization(prior.record);
+          if (prior.requestHash !== requestHash) return reject('idempotency_conflict');
+          return { status: 'ok', authorization: advisorAuthorizationView(record, this.deps.now().getTime()), replayed: true };
+        }
+        const source = records.get(input.policyId), replacement = input.replacementPolicyId ? records.get(input.replacementPolicyId) : null;
+        if (!source || source.policy.status !== 'issued' || source.policy.lifecycle || !source.signature) return reject('policy_not_active');
+        if (source.policy.documentHash !== input.documentHash) return reject('document_mismatch');
+        if (input.action !== 'cancelled' && (!replacement || replacement.policy.status !== 'issued' || replacement.policy.lifecycle || !replacement.signature
+          || replacement.policy.id === source.policy.id || replacement.policy.offer.product !== source.policy.offer.product)) return reject('policy_not_active');
+        const grantedAt = this.deps.now().toISOString();
+        if (Date.parse(input.expiresAt) <= Date.parse(grantedAt)) return reject('invalid_request', 400);
+        const value: AdvisorAuthorization = { id: this.deps.newId(), policyId: input.policyId, owner: { clientId: input.actor.clientId, subjectToken: input.actor.subjectToken },
+          advisor: { clientId: input.advisor.principal.clientId, subjectToken: input.advisor.principal.subjectToken }, advisorReference: input.advisor.reference, action: input.action,
+          documentHash: input.documentHash, replacementPolicyId: input.replacementPolicyId, replacementDocumentHash: replacement?.policy.documentHash ?? null,
+          grantedAt, expiresAt: new Date(input.expiresAt).toISOString(), ruleVersion: ADVISOR_AUTHORIZATION_RULE, seal: '' };
+        value.seal = await this.deps.integrity.digest(advisorAuthorizationContent(value));
+        const capture = this.decision('policy.advisor.authorization.granted', traceId, source.policy, 'granted');
+        capture.rule.version = ADVISOR_AUTHORIZATION_RULE; capture.inputs.resourceId = value.id; capture.inputs.policyId = value.policyId; capture.inputs.authorization = value;
+        if (!(Date.parse(input.advisor.expiresAt) > this.deps.now().getTime()) || Date.parse(input.advisor.expiresAt) > this.deps.now().getTime() + 5500) throw Error('advisor_eligibility_expired');
+        await tx.saveAdvisorAuthorization(value, key, requestHash, capture, traceId);
+        if (!(Date.parse(input.advisor.expiresAt) > this.deps.now().getTime())) throw Error('advisor_eligibility_expired');
+        return { status: 'ok', authorization: advisorAuthorizationView({ authorization: value, revokedAt: null, changeId: null }, this.deps.now().getTime()), replayed: false };
       });
     });
+  }
+
+  private approvalCursor(after?:string) {
+    if(after===undefined)return undefined;
+    const parts=after.split('|');
+    if(parts.length!==2||!iso(parts[0])||!UUID.test(parts[1]))return reject('invalid_request',400);
+    return{grantedAt:parts[0],id:parts[1]};
+  }
+
+  listAdvisorAuthorizations(input: { actor: FinancialActor; policyId: string; traceId: string; after?:string }): Promise<AdvisorAuthorizationsResult> {
+    return this.run<AdvisorAuthorizationsResult>(input.traceId, async () => {
+      if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
+      const after=this.approvalCursor(input.after);
+      return this.deps.store.transaction(async tx => {
+        await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
+        if (!tx.listAdvisorAuthorizations) throw Error('advisor_approval_unavailable');
+        const records = await tx.listAdvisorAuthorizations(input.actor, 'owner', input.policyId, 21, undefined, after);
+        const checked = await Promise.all(records.slice(0, 20).map(record => this.checkedAdvisorAuthorization(record)));
+        return { status: 'ok', authorizations: checked.map(record => advisorAuthorizationView(record, this.deps.now().getTime())), hasMore: records.length > 20, nextCursor: records.length > 20 ? checked[19].authorization.grantedAt+'|'+checked[19].authorization.id : null };
+      });
+    });
+  }
+
+  revokeAdvisorAuthorization(input: { actor: FinancialActor; policyId: string; authorizationId: string; traceId: string }): Promise<AdvisorApprovalResult> {
+    return this.run<AdvisorApprovalResult>(input.traceId, async traceId => {
+      if (!validActor(input.actor) || !UUID.test(input.policyId) || !UUID.test(input.authorizationId)) return reject('invalid_request', 400);
+      return this.deps.store.transaction(async tx => {
+        const source = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
+        const record = await this.checkedAdvisorAuthorization(await tx.advisorAuthorization?.(input.authorizationId, input.actor, 'owner'));
+        if (record.authorization.policyId !== input.policyId) return reject('not_found', 404);
+        if (record.revokedAt) return { status: 'ok', authorization: advisorAuthorizationView(record, this.deps.now().getTime()), replayed: true };
+        if (!tx.revokeAdvisorAuthorization) throw Error('advisor_approval_unavailable');
+        const at = this.deps.now().toISOString(), capture = this.decision('policy.advisor.authorization.revoked', traceId, source.policy, 'revoked');
+        capture.rule.version = ADVISOR_AUTHORIZATION_RULE; capture.inputs.resourceId = record.authorization.id; capture.inputs.policyId = input.policyId;
+        capture.inputs.authorizationId = record.authorization.id;
+        await tx.revokeAdvisorAuthorization(record.authorization, at, capture, traceId);
+        return { status: 'ok', authorization: advisorAuthorizationView({ ...record, revokedAt: at }, this.deps.now().getTime()), replayed: false };
+      });
+    });
+  }
+
+  advisorAuthorizations(input: { actor: AdvisorIdentity; traceId: string; after?:string }): Promise<AdvisorAuthorizationsResult> {
+    return this.run<AdvisorAuthorizationsResult>(input.traceId, async () => {
+      this.requireAdvisorPermission(input.actor);
+      const after=this.approvalCursor(input.after);
+      return this.deps.store.transaction(async tx => {
+        if (!tx.listAdvisorAuthorizations) throw Error('advisor_approval_unavailable');
+        const records = await tx.listAdvisorAuthorizations(input.actor, 'advisor', null, 21, input.actor.advisorReference, after);
+        const checked = await Promise.all(records.slice(0, 20).map(record => this.checkedAdvisorAuthorization(record)));
+        this.requireAdvisorPermission(input.actor);
+        return { status: 'ok', authorizations: checked.map(record => advisorAuthorizationView(record, this.deps.now().getTime())), hasMore: records.length > 20, nextCursor: records.length > 20 ? checked[19].authorization.grantedAt+'|'+checked[19].authorization.id : null };
+      });
+    });
+  }
+
+  async changeAdvisorLifecycle(input: { actor: AdvisorIdentity; authorizationId: string; reason: string; idempotencyKey: string; traceId: string }): Promise<AdvisorLifecycleResult> {
+    const result = await this.run(input.traceId, async traceId => {
+      this.requireAdvisorPermission(input.actor);
+      if (!UUID.test(input.authorizationId)) return reject('invalid_request', 400);
+      return this.deps.store.transaction(async tx => {
+        const record = await this.checkedAdvisorAuthorization(await tx.advisorAuthorization?.(input.authorizationId, input.actor, 'advisor'));
+        const value = record.authorization;
+        if (value.advisorReference !== input.actor.advisorReference || record.revokedAt || Date.parse(value.expiresAt) <= this.deps.now().getTime()) return reject('not_found', 404);
+        const result = await this.applyLifecycle(tx, { actor: value.owner, policyId: value.policyId, action: value.action,
+          replacementPolicyId: value.replacementPolicyId, documentHash: value.documentHash, reason: input.reason,
+          idempotencyKey: input.idempotencyKey, traceId }, traceId, { identity: input.actor, authorization: value });
+        this.requireAdvisorPermission(input.actor);
+        if (Date.parse(value.expiresAt) <= this.deps.now().getTime()) throw Error('advisor_approval_expired');
+        return result;
+      });
+    });
+    if (result.status !== 'ok') return result;
+    const change = result.policy.lifecycle;
+    if (!change) return { status: 'unavailable', error: 'financial_unavailable', httpStatus: 503, traceId: input.traceId };
+    return { status: 'ok', policyId: change.policyId, changeId: change.changeId, action: change.action, changedAt: change.at, replayed: result.replayed };
   }
 
   listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult> {

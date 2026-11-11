@@ -1,3 +1,5 @@
+import { advisorEs, advisorEn } from '../advisor/messages';
+import { portalEs, portalEn } from '../partner-portal/messages';
 import { auditEs, auditEn } from '../audit/messages';
 import { claimsEs, claimsEn } from '../claims/messages';
 import { policiesEs, policiesEn } from '../policies/messages';
@@ -8,6 +10,8 @@ export const locales = ['es-CO', 'en-US'] as const;
 export type Locale = (typeof locales)[number];
 
 const esCO = {
+  ...portalEs,
+  ...advisorEs,
   'landing.home': 'Inicio de Solventa',
   'landing.product': 'Seguro de vida hipotecario',
   'landing.title': 'Conoce el seguro de vida de tu crédito.',
@@ -342,6 +346,8 @@ const esCO = {
 };
 
 const enUS: typeof esCO = {
+  ...portalEn,
+  ...advisorEn,
   'landing.home': 'Solventa home',
   'landing.product': 'Mortgage life insurance',
   'landing.title': 'Understand the life insurance for your loan.',

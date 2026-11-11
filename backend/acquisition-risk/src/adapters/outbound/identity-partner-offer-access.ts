@@ -23,6 +23,9 @@ function decisionFrom(reply: unknown): PartnerOfferDecision {
       customer: { clientId: customer.clientId.toLowerCase(), subjectToken: customer.subjectToken.toLowerCase() },
       consent: { consentId: consent.consentId, textVersion: consent.textVersion, expiresAt: consent.expiresAt } };
   }
+  if (reply.allowed === false && reply.status === 429 && reply.error === 'quota_exceeded' && typeof reply.retryAfter === 'number'
+    && Number.isSafeInteger(reply.retryAfter) && reply.retryAfter >= 1 && reply.retryAfter <= 86400)
+    return { allowed: false, error: 'quota_exceeded', status: 429, retryAfter: reply.retryAfter };
   // A 400 from Identity means this adapter sent an invalid request: an integration failure, never a caller error.
   if (reply.status === 401 && reply.error === 'unauthorized') return { allowed: false, error: 'unauthorized', status: 401 };
   if (reply.status === 403 && reply.error === 'forbidden') return { allowed: false, error: 'forbidden', status: 403 };

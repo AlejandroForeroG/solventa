@@ -9,7 +9,7 @@ import { partnerOfferView, type PartnerOfferView } from '../domain/partner-offer
 export type PartnerOfferInput = { token: string; body: unknown; idempotencyKey: string | null; traceId: string; timings?: DependencyTimings };
 export type PartnerOfferResult =
   | { status: 'created' | 'replayed'; offer: PartnerOfferView }
-  | { status: 'denied'; error: PartnerOfferDenial; httpStatus: 401 | 403 | 503 }
+  | { status: 'denied'; error: PartnerOfferDenial; retryAfter?: number; httpStatus: 401 | 403 | 429 | 503 }
   | { status: 'invalid'; errors: FieldError[] }
   | { status: 'idempotency_conflict' | 'declined' | 'conflict' | 'unavailable' };
 
@@ -30,7 +30,7 @@ export class PartnerOffers {
     const run = <T>(name: string, call: () => Promise<T>) => input.timings ? input.timings.measure(name, call) : call();
     const access = await run('identity_access', () => this.deps.access.authorize({ token: input.token, authorizationId: id, traceId: input.traceId }));
     if (!access.allowed) {
-      return access.status === 400 ? { status: 'denied', error: 'access_unavailable', httpStatus: 503 } : { status: 'denied', error: access.error, httpStatus: access.status };
+      return access.status === 400 ? { status: 'denied', error: 'access_unavailable', httpStatus: 503 } : { status: 'denied', error: access.error, httpStatus: access.status, ...(access.retryAfter === undefined ? {} : { retryAfter: access.retryAfter }) };
     }
     const key = input.idempotencyKey;
     if (key === null || key.length < 1) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'required' }] };
