@@ -252,7 +252,7 @@ export class PolicyFinance {
         const value: AdvisorAuthorization = { id: this.deps.newId(), policyId: input.policyId, owner: { clientId: input.actor.clientId, subjectToken: input.actor.subjectToken },
           advisor: { clientId: input.advisor.principal.clientId, subjectToken: input.advisor.principal.subjectToken }, advisorReference: input.advisor.reference, action: input.action,
           documentHash: input.documentHash, replacementPolicyId: input.replacementPolicyId, replacementDocumentHash: replacement?.policy.documentHash ?? null,
-          grantedAt, expiresAt: input.expiresAt, ruleVersion: ADVISOR_AUTHORIZATION_RULE, seal: '' };
+          grantedAt, expiresAt: new Date(input.expiresAt).toISOString(), ruleVersion: ADVISOR_AUTHORIZATION_RULE, seal: '' };
         value.seal = await this.deps.integrity.digest(advisorAuthorizationContent(value));
         const capture = this.decision('policy.advisor.authorization.granted', traceId, source.policy, 'granted');
         capture.rule.version = ADVISOR_AUTHORIZATION_RULE; capture.inputs.resourceId = value.id; capture.inputs.policyId = value.policyId; capture.inputs.authorization = value;

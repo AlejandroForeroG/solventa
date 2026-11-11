@@ -889,6 +889,13 @@ try {
       policyId:target.policy.policyId,action:'cancelled',replacementPolicyId:null,documentHash:target.policy.documentHash,expiresAt,idempotencyKey:randomUUID(),traceId:randomUUID()});
     assert.equal(result.status,'ok',JSON.stringify(result));if(result.status!=='ok')throw Error('approval_fixture');return result.authorization;
   };
+  const timestampTarget=await makeLifecyclePolicy();
+  const shortExpiry=new Date(Date.now()+86400000).toISOString().replace(/\.\d{3}Z$/,'Z');
+  const timestampApproval=await approve(timestampTarget,shortExpiry);
+  assert.equal(timestampApproval.expiresAt,new Date(shortExpiry).toISOString());
+  const timestampList=await advisorService.listAdvisorAuthorizations({actor:ownerActor,policyId:timestampTarget.policy.policyId,traceId:randomUUID()});
+  assert.equal(timestampList.status,'ok',JSON.stringify(timestampList));
+  assert.equal((await advisorService.revokeAdvisorAuthorization({actor:ownerActor,policyId:timestampTarget.policy.policyId,authorizationId:timestampApproval.authorizationId,traceId:randomUUID()})).status,'ok');
   const delegatedTarget=await makeLifecyclePolicy(),authorization=await approve(delegatedTarget);
   const delegatedCommand={authorizationId:authorization.authorizationId,reason:'customer_request',idempotencyKey:randomUUID(),traceId:randomUUID()};
   const externalBefore=await count('mock_gateway_operations');

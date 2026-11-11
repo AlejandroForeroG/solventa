@@ -49,10 +49,11 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
       {!page.authorizations.length&&<p>{t('empty')}</p>}
       <ul className="policy-documents">{page.authorizations.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
+        {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}
         {policy&&<p className="mono">{t('reference')}: {a.advisorReference}</p>}
         {!policy&&a.status==='active'&&<div className="check"><input id={'approve-'+a.authorizationId} type="checkbox" checked={selected===a.authorizationId&&executeConfirmed} disabled={busy}
           onChange={e=>{setSelected(a.authorizationId);setExecuteConfirmed(e.target.checked);}}/><label htmlFor={'approve-'+a.authorizationId}>{t('executeConfirm')}</label></div>}
-      </div>{a.status==='active'&&(policy?<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void run(()=>revokeApproval(a))}>{t('revoke')}</button>
+      </div>{(policy?!a.revokedAt:a.status==='active')&&(policy?<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void run(()=>revokeApproval(a))}>{t('revoke')}</button>
         :<button type="button" className="btn btn-secondary btn-small" disabled={busy||selected!==a.authorizationId||!executeConfirmed||Date.parse(a.expiresAt)<=Date.now()} onClick={()=>void run(()=>{
           let key=executions.current.get(a.authorizationId);if(!key){key=crypto.randomUUID();executions.current.set(a.authorizationId,key);}return executeApproval(a,key);
         })}>{t('execute')}</button>)}</li>)}</ul>{page.hasMore&&<p className="note">{t('more')}</p>}<div className="actions">{cursors.length>1&&<button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>{setResult(null);setCursors(v=>v.slice(0,-1));}}>{t('previous')}</button>}{page.nextCursor&&<button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>{setResult(null);setCursors(v=>[...v,page.nextCursor??undefined]);}}>{t('next')}</button>}</div>

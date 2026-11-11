@@ -11,7 +11,7 @@ export type AdvisorAuthorizationRecord = { authorization: AdvisorAuthorization; 
 export type AdvisorAuthorizationView = {
   authorizationId: string; advisorReference: string; policyId: string; action: LifecycleAction;
   replacementPolicyId: string | null; documentHash: string; grantedAt: string; expiresAt: string;
-  status: 'active' | 'expired' | 'revoked' | 'executed'; changeId: string | null;
+  status: 'active' | 'expired' | 'revoked' | 'executed'; changeId: string | null; revokedAt: string | null;
 };
 export type AdvisorIdentity = FinancialActor & { advisorReference: string; authorizationExpiresAt: string };
 export type AdvisorTarget = { principal: FinancialActor; reference: string; expiresAt: string };
@@ -47,5 +47,5 @@ export function advisorAuthorizationView(record: AdvisorAuthorizationRecord, now
   const value = record.authorization;
   return { authorizationId: value.id, advisorReference: value.advisorReference, policyId: value.policyId, action: value.action,
     replacementPolicyId: value.replacementPolicyId, documentHash: value.documentHash, grantedAt: value.grantedAt, expiresAt: value.expiresAt,
-    status: record.changeId ? 'executed' : record.revokedAt ? 'revoked' : Date.parse(value.expiresAt) <= now ? 'expired' : 'active', changeId: record.changeId };
+    status: record.changeId ? 'executed' : record.revokedAt ? 'revoked' : Date.parse(value.expiresAt) <= now ? 'expired' : 'active', changeId: record.changeId, revokedAt: record.revokedAt };
 }
