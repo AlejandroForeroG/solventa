@@ -224,6 +224,7 @@ export class PolicyFinance {
       if (!validActor(input.actor) || !validActor(input.advisor.principal) || input.actor.clientId === input.advisor.principal.clientId
         || !UUID.test(input.advisor.reference) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
         || !['modified', 'renewed', 'cancelled'].includes(input.action) || !iso(input.expiresAt)
+        || new Date(input.expiresAt).toISOString().slice(0,19) !== input.expiresAt.slice(0,19)
         || Date.parse(input.expiresAt) <= now.getTime() || Date.parse(input.expiresAt) > now.getTime() + 7 * 86400000
         || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
         || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
