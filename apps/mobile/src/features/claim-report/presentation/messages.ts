@@ -6,7 +6,7 @@ export type ClaimReportLocale = 'es-CO' | 'en-US';
 
 type Copy = {
   title: string; back: string; retry: string; cancel: string; step: (step: number) => string;
-  policy: { heading: string; loading: string; failed: string; none: string; signedOut: string; unknown: string }; resuming: string;
+  policy: { heading: string; loading: string; failed: string; none: string; partial: string; signedOut: string; unknown: string }; resuming: string;
   fields: { eventType: string; occurredAt: string; date: string; time: string; place: string; placeHint: string; description: string; descriptionHint: string;
     counter: (used: number, max: number) => string; minimum: (min: number) => string };
   eventTypes: Record<EventType, string>;
@@ -27,7 +27,7 @@ type Copy = {
 const es: Copy = {
   title: 'Reportar siniestro', back: 'Volver', retry: 'Reintentar', cancel: 'Cancelar', step: step => `Paso ${step} de 3`,
   policy: { heading: 'Elige la póliza', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
-    none: 'No tienes pólizas de Vida hipotecario vigentes para reportar un siniestro.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
+    none: 'No tienes pólizas de Vida hipotecario vigentes para reportar un siniestro.', partial: 'Solo revisamos tus 6 pólizas más recientes. Si la póliza que buscas es más antigua, aún no podemos mostrarla aquí.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Robo', damage: 'Daño', other: 'Otro' },
@@ -58,7 +58,7 @@ const es: Copy = {
 const en: Copy = {
   title: 'Report a claim', back: 'Back', retry: 'Try again', cancel: 'Cancel', step: step => `Step ${step} of 3`,
   policy: { heading: 'Choose the policy', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
-    none: 'You have no active mortgage life policy to report a claim on.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
+    none: 'You have no active mortgage life policy to report a claim on.', partial: 'We only checked your 6 most recent policies. If the one you need is older, it cannot be shown here yet.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
   fields: { eventType: 'Type of event', occurredAt: 'When it happened', date: 'Date', time: 'Time', place: 'Place (optional)', placeHint: 'Address or landmark',
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
   eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Other' },

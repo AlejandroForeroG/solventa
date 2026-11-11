@@ -51,6 +51,7 @@ function Authenticated({ copy, locale, requested, hidden }: { copy: ClaimReportC
     return <Page title={copy.policy.heading} subtitle={copy.title}>
       {chosen && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.unknown}</Text>}
       {options.length === 0 && <Text style={ui.body}>{copy.policy.none}</Text>}
+      {load.partial && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.partial}</Text>}
       <View style={ui.section}>
         {options.map(item => <Pressable key={item.policyId} accessibilityRole="button" onPress={() => choose(item.policyId)} style={({ pressed }) => [ui.card, pressed && ui.dimmed]}>
           <Text style={ui.subtitle}>{copy.products[item.product]}</Text>

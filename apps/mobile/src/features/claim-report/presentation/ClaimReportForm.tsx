@@ -6,6 +6,7 @@ import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, TextInput
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { policyReference } from '../../policy-wallet/domain/wallet';
 import type { AuthenticatedSession } from '../../policy-wallet/application/ports';
+import { useNow } from '../../policy-wallet/presentation/use-now';
 import { createClaimReport } from '../adapters/create-claim-report';
 import type { CaptureOutcome } from '../application/ports';
 import { descriptionLength, EVENT_TYPES, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
@@ -21,6 +22,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
   const [pickerFailed, setPickerFailed] = useState(false);
+  const now = useNow();
   const { draft, issues, rejected, phase } = state;
   const busy = phase.kind === 'sending';
   const header = `${copy.products[policy.product]} · ${policyReference(policy.policyId)}`;
@@ -48,7 +50,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
       </Group>
 
       <Group label={copy.fields.occurredAt} issues={issues} field="occurredAt" copy={copy}>
-        <When value={draft.occurredAt} from={new Date(policy.effectiveFrom)} copy={copy} locale={locale} onChange={date => flow.setOccurredAt(date)} />
+        <When value={draft.occurredAt} from={new Date(policy.effectiveFrom)} now={now} copy={copy} locale={locale} onChange={date => flow.setOccurredAt(date)} />
       </Group>
 
       <Group label={copy.fields.place} issues={issues} field="place" copy={copy}>
@@ -133,16 +135,16 @@ function Item({ item, copy, locale, position, onRemove }: { item: EvidenceItem; 
 }
 
 // The exact moment of the event is chosen on the system pickers and shown in the phone's time zone; it travels to the server in UTC.
-function When({ value, from, copy, locale, onChange }: { value: Date; from: Date; copy: ClaimReportCopy; locale: ClaimReportLocale; onChange: (date: Date) => void }) {
+function When({ value, from, now, copy, locale, onChange }: { value: Date; from: Date; now: number; copy: ClaimReportCopy; locale: ClaimReportLocale; onChange: (date: Date) => void }) {
   const merge = (mode: 'date' | 'time', picked: Date) => {
     const next = new Date(value);
     if (mode === 'date') next.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate()); else next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
     onChange(next);
   };
-  const open = (mode: 'date' | 'time') => DateTimePickerAndroid.open({ value, mode, maximumDate: new Date(), ...(mode === 'date' ? { minimumDate: from } : {}),
+  const open = (mode: 'date' | 'time') => DateTimePickerAndroid.open({ value, mode, maximumDate: new Date(now), ...(mode === 'date' ? { minimumDate: from } : {}),
     onChange: (event, picked) => { if (event.type === 'set' && picked) merge(mode, picked); } });
   if (Platform.OS === 'ios') {
-    return <DateTimePicker value={value} mode="datetime" minimumDate={from} maximumDate={new Date()} onChange={(_, picked) => { if (picked) onChange(picked); }} />;
+    return <DateTimePicker value={value} mode="datetime" minimumDate={from} maximumDate={new Date(now)} onChange={(_, picked) => { if (picked) onChange(picked); }} />;
   }
   return <View style={ui.row}>
     <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.date} onPress={() => open('date')} style={[ui.picker, ui.grow]}>
