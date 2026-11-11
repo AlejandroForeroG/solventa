@@ -39,7 +39,10 @@ export function ClaimsScreen() {
 
   return <Page title={copy.claims}>
     {auth.status === 'authenticated'
-      ? <Tile title={copy.assistance} detail={copy.assistanceDetail} href="/assistance-providers" />
+      ? <>
+        <Tile title={copy.reportClaim} detail={copy.reportClaimDetail} href="/claim-report" />
+        <Tile title={copy.assistance} detail={copy.assistanceDetail} href="/assistance-providers" />
+      </>
       : <Tile title={copy.signIn} detail={copy.back} href="/" />}
   </Page>;
 }
