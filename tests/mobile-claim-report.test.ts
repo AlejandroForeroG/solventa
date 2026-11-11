@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
 import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
+import { ActivePolicies } from '../apps/mobile/src/features/claim-report/application/active-policies';
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
 import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
 import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
@@ -273,4 +274,18 @@ test('only a mortgage life policy can be reported, because flight delay pays on 
   assert.equal(isReportableProduct('vida_hipotecario'), true);
   assert.equal(isReportableProduct('flight_delay'), false);
   assert.equal(isReportableProduct('anything_else'), false);
+});
+
+test('the policy list says when older policies were not read, so the screen never claims there are none', async () => {
+  const policy = (product: string) => ({ policyId, product }) as never;
+  const read = async (hasMore: boolean) => {
+    const options = new ActivePolicies(async () => ({ policies: [policy('flight_delay'), policy('vida_hipotecario')], hasMore }), item => isReportableProduct((item as { product: string }).product), () => now.getTime());
+    await options.refresh();
+    return options.getSnapshot();
+  };
+  assert.deepEqual(await read(true), { status: 'ready', policies: [policy('vida_hipotecario')], partial: true });
+  assert.deepEqual(await read(false), { status: 'ready', policies: [policy('vida_hipotecario')], partial: false });
+  const failing = new ActivePolicies(async () => { throw new Error('offline'); }, () => true, () => now.getTime());
+  await failing.refresh();
+  assert.deepEqual(failing.getSnapshot(), { status: 'failed' });
 });
