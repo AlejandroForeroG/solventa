@@ -1,3 +1,4 @@
+import { portalApp } from '../../support/partner-portal-fakes';
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
@@ -227,6 +228,7 @@ function nativeAssistanceWorld(): Partial<World> {
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
   'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
   'an auditor reconstructing the retained original mock contract': () => auditWorld(origin, 'recovered'),
   'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),

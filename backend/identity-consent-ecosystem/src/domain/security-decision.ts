@@ -1,5 +1,5 @@
 export const securityChannels = ['partner', 'web', 'mobile', 'internal'] as const;
-export const securityOperations = ['underwriting-decisions:read', 'claims:read', 'claims:decide', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'web:session', 'mobile:session', 'mobile:devices', 'consent:use',
+export const securityOperations = ['partner-portal:read', 'underwriting-decisions:read', 'claims:read', 'claims:decide', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'web:session', 'mobile:session', 'mobile:devices', 'consent:use',
   'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write',
   'notification-preferences:read', 'notification-preferences:write', 'partner-authorizations:read', 'partner-authorizations:write', 'partner-offers:create'] as const;
 export const securityCauses = ['unauthorized', 'forbidden', 'consent_missing', 'consent_revoked', 'consent_expired', 'consent_invalid', 'consent_request_invalid'] as const;

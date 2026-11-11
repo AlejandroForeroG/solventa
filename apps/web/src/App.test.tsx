@@ -107,7 +107,7 @@ describe('my policies route in the application', () => {
   it('requires sign-in and does not render the public calculator on the policies route', async () => {
     window.history.replaceState(null, '', '/polizas'); serve(401); render(<App />);
     await screen.findByRole('heading', { name: 'Mis pólizas' });
-    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(await screen.findAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
   });
   it('lists the policies of a signed-in user and links the section from the header', async () => {

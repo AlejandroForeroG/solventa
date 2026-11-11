@@ -64,7 +64,7 @@
     "test:integrations": "tsx --test tests/signal-providers.test.ts tests/acord-life-quote.test.ts tests/identity-verification-provider.test.ts tests/assistance-search.test.ts tests/assistance-http.test.ts",
     "test:partner-access:sql": "tsx infra/partner-access-smoke.mts",
     "test:partner-authorizations:sql": "tsx infra/partner-authorizations-smoke.mts",
-    "test:quotes": "tsx --test tests/quotes.test.ts tests/partner-offers.test.ts tests/partner-offer-journey.test.ts tests/quote-estimates.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts",
+    "test:quotes": "tsx --test tests/quotes.test.ts tests/partner-offers.test.ts tests/partner-offer-journey.test.ts tests/quote-estimates.test.ts tests/quotes-http.test.ts tests/identity-api-access.test.ts tests/web-worker.test.ts tests/partner-portal.test.ts",
     "test:quotes:sql": "tsx infra/quotes-smoke.mts",
     "test:financial": "tsx --test tests/financial-access.test.ts tests/financial-http.test.ts tests/financial-contract.test.ts tests/financial.test.ts tests/policy-portal.test.ts tests/offers.test.ts tests/decision-reconstruction.test.ts tests/underwriting-audit.test.ts tests/claims-access.test.ts tests/claims-inbox.test.ts tests/dependency-timings.test.ts tests/resource-access-denials.test.ts tests/financial-event-delivery.test.ts tests/parametric-payout.test.ts tests/parametric-provider.test.ts tests/financial-sql-lifecycle.test.mjs",
     "test:financial:sql": "tsx infra/financial-smoke.mts",
@@ -80,7 +80,9 @@
     "test:identity-verification:sql": "tsx infra/identity-verifications-smoke.mts",
     "test:notification-preferences": "tsx --test tests/notification-preferences.test.ts",
     "test:notification-preferences:sql": "tsx infra/notification-preferences-smoke.mts",
-    "db:migrations": "node infra/migrations.mjs"
+    "db:migrations": "node infra/migrations.mjs",
+    "test:partner-portal": "tsx --test tests/partner-portal.test.ts",
+    "test:partner-portal:sql": "tsx infra/partner-portal-smoke.mts"
   },
   "devDependencies": {
     "@pact-foundation/pact": "^17.1.4",
