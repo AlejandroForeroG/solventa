@@ -27,6 +27,8 @@ export type OfferCapture = {
     failure?: OfferSignalFailure; substitute?: SignalSubstitute; confidence?: number }[];
   consent: { status: 'verified'; id: string; version: number };
   rule: { id: 'mortgage-underwriting'; version: string }; outcome: 'accepted' | 'declined' | 'preliminary';
+  // Present when a partner requested the offer for a customer who authorized it.
+  channel?: { kind: 'partner'; partnerId: string; authorizationId: string };
 };
 
 // This version is an executable academic rule, not an actuarial tariff or a real insurance offer.

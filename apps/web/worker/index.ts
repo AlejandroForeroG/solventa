@@ -8,6 +8,7 @@ import { fetchService } from './service-fetch';
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 const offersPath = /^\/api\/v1\/offers(\/|$)/;
+const partnerOffersPath = /^\/api\/v1\/partner\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
 const claimsPath = /^\/api\/v1\/claims(\/|$)/;
 const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
@@ -57,11 +58,11 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
-      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile)(\/|$)/.test(path)) {
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile|me\/partner-authorizations)(\/|$)/.test(path)) {
         try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
         catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
       }
-      const response = isQuotesPath(path) || offersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
+      const response = isQuotesPath(path) || offersPath.test(path) || partnerOffersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
         : claimEvidencePath.test(path) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
         : claimsPath.test(path) || path === assistanceSearchPath ? await forwardToPolicy(request, env, headers, 'service_unavailable')

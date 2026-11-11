@@ -68,5 +68,9 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "policy_lifecycle_changes": [
+    "SELECT",
+    "INSERT"
   ]
 }

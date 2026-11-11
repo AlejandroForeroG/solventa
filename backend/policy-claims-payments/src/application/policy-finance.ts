@@ -1,26 +1,35 @@
 import { MAX_LISTED_POLICIES, canonical, eventContent, eventWithinIssuedCoverage, FINANCIAL_RULE, HEX, InvalidFinancialRecord, isAcceptedOffer, isOfferEnvelope, isParametricEnvelope, issuanceTimeContent, iso, offerContent, paymentContent, policyDocument, UUID } from '../domain/financial';
 import type { FinancialActor, FinancialErrorCode, FinancialResult, PaymentView, PolicyListResult, PolicySummary, PolicyView } from '../domain/financial';
-import type { FinancialDependencies, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
-import { financialDecision, financialEventSource, financialRejection, gatewaySource } from './financial-decision';
+import { indemnityAmount, occurrenceCovered, occurrenceEvidence } from '../domain/parametric';
+import type { ParametricOccurrence, ParametricResult } from '../domain/parametric';
+import { documentFile, policyDetail } from '../domain/policy-portal';
+import type { IssuedPolicyFacts, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../domain/policy-portal';
+import type { FinancialDependencies, IndemnityCandidate, IssuanceCandidate, Payment, PolicyRecord, StoredPolicy } from './ports/financial';
+import { financialDecision, financialEventSource, financialRejection, gatewaySource, providerEventSource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
+
+import { isLifecycleChange, lifecycleContent } from '../domain/policy-lifecycle';
+import type { LifecycleAction, LifecycleChange } from '../domain/policy-lifecycle';
 
 class Rejection extends Error {
   constructor(readonly code: FinancialErrorCode, readonly httpStatus: 400 | 403 | 404 | 409 = 409) { super(code); }
 }
 const reject = (code: FinancialErrorCode, httpStatus: 400 | 403 | 404 | 409 = 409): never => { throw new Rejection(code, httpStatus); };
-const view = (policy: StoredPolicy): PolicyView => ({ policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
+const view = (policy: StoredPolicy): PolicyView => ({ ...(policy.lifecycle ? { lifecycle: policy.lifecycle } : {}), policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
   status: policy.status, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
   effectiveUntil: policy.effectiveUntil, document: policy.document, documentHash: policy.documentHash, synthetic: true, providerMode: 'mock' });
 const summary = (policy: StoredPolicy): PolicySummary => {
   if (policy.status !== 'issued') throw new InvalidFinancialRecord();
-  return { policyId: policy.id, product: policy.offer.product, status: 'issued', premium: policy.premium, currency: 'COP',
+  return { ...(policy.lifecycle ? { contractStatus: policy.lifecycle.action } : {}), policyId: policy.id, product: policy.offer.product, status: 'issued', premium: policy.premium, currency: 'COP',
     effectiveFrom: policy.effectiveFrom, effectiveUntil: policy.effectiveUntil, coverage: policy.offer.coverage };
 };
 // Only a provider-acknowledged premium exposes its synthetic receipt reference.
 const paid = (premium: Payment | null): { payment?: PaymentView } => premium ? { payment: { status: premium.status,
   reference: premium.status === 'confirmed' || premium.status === 'refunded' ? premium.providerReference : null } } : {};
 const validActor = (actor: FinancialActor) => UUID.test(actor.clientId) && UUID.test(actor.subjectToken);
+const historicalView = (value: PolicyView) => { const { lifecycle: _lifecycle, ...issued } = value; return canonical(issued); };
 type IssuanceContext = { actor: FinancialActor; policyId: string; documentHash: string; commandKey: string; traceId: string; trigger?: 'reconciliation' };
+export type IndemnityOutcome = { traceId: string; outcome: 'confirmed' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refunded' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 
 export class PolicyFinance {
@@ -50,6 +59,8 @@ export class PolicyFinance {
   private async checked(record: PolicyRecord | null, actor?: FinancialActor): Promise<PolicyRecord> {
     if (!record) return reject('not_found', 404);
     const { policy, premium, signature } = record;
+    if (policy.lifecycle && (!isLifecycleChange(policy.lifecycle) || policy.lifecycle.policyId !== policy.id
+      || policy.lifecycle.sourceDocumentHash !== policy.documentHash || !await this.deps.integrity.verify(lifecycleContent(policy.lifecycle), policy.lifecycle.documentHash))) return reject('integrity_violation');
     if (actor && (policy.clientId !== actor.clientId || policy.subjectToken !== actor.subjectToken)) return reject('not_found', 404);
     const offer = policy.offer;
     if (!isAcceptedOffer(offer) || !(await this.deps.integrity.verify(offerContent(offer), policy.termsHash))
@@ -111,16 +122,99 @@ export class PolicyFinance {
     });
   }
 
-  listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult> {
+  changeLifecycle(input: { actor: FinancialActor; policyId: string; action: LifecycleAction; replacementPolicyId: string | null;
+    documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult> {
+    return this.run(input.traceId, async traceId => {
+      if (!validActor(input.actor) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
+        || !['modified', 'renewed', 'cancelled'].includes(input.action) || !/^[a-z][a-z_]{2,63}$/.test(input.reason)
+        || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
+        || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
+      const key = await this.deps.integrity.digest(JSON.stringify(['lifecycle-key-v1', input.actor.clientId, input.idempotencyKey]));
+      const hash = await this.deps.integrity.digest(JSON.stringify(['lifecycle-request-v1', input.policyId, input.action, input.replacementPolicyId, input.documentHash, input.reason]));
+      return this.deps.store.transaction(async tx => {
+        if (!tx.lifecycleCommand || !tx.lifecycleReplacement || !tx.saveLifecycle) throw Error('lifecycle_not_configured');
+        // Lock both owned policies in deterministic order; a payment or another lifecycle command shares these locks.
+        const records = new Map<string, PolicyRecord>();
+        for (const id of [...new Set([input.policyId, ...(input.replacementPolicyId ? [input.replacementPolicyId] : [])])].sort()) {
+          records.set(id, await this.checked(await tx.policy(id, input.actor), input.actor));
+        }
+        const source = records.get(input.policyId);
+        if (!source) throw Error('lifecycle_source_missing');
+        const { policy } = source;
+        if (policy.documentHash !== input.documentHash) return reject('document_mismatch');
+        const prior = await tx.lifecycleCommand(input.actor.clientId, key);
+        if (prior && (prior.policyId !== policy.id || prior.requestHash !== hash)) return reject('idempotency_conflict');
+        if (prior && policy.lifecycle) return { status: 'ok', replayed: true, policy: view(policy), ...paid(source.premium) };
+        if (policy.status !== 'issued' || policy.lifecycle || !source.signature) return reject('policy_not_active');
+        const now = this.deps.now();
+        const replacement = input.replacementPolicyId ? records.get(input.replacementPolicyId) : undefined;
+        if (input.action !== 'cancelled') {
+          if (input.replacementPolicyId && await tx.lifecycleReplacement(input.replacementPolicyId)) return reject('policy_not_active');
+          if (!replacement || !replacement.signature || replacement.policy.status !== 'issued' || replacement.policy.lifecycle
+            || replacement.policy.id === policy.id || replacement.policy.offer.product !== policy.offer.product
+            || Date.parse(replacement.signature.signedAt) < Date.parse(source.signature.signedAt)
+            || Date.parse(replacement.policy.effectiveFrom) > now.getTime()
+            || Date.parse(replacement.policy.effectiveUntil) <= now.getTime()) return reject('policy_not_active');
+          if (input.action === 'renewed' && (now.getTime() < Date.parse(policy.effectiveUntil)
+            || Date.parse(replacement.policy.effectiveFrom) < Date.parse(policy.effectiveUntil))) return reject('invalid_request', 400);
+        }
+        if (input.action === 'modified' && now.getTime() >= Date.parse(policy.effectiveUntil)) return reject('policy_not_active');
+        const change: LifecycleChange = { changeId: this.deps.newId(), policyId: policy.id, action: input.action,
+          reason: input.reason, at: now.toISOString(), replacementPolicyId: input.replacementPolicyId,
+          sourceDocumentHash: policy.documentHash, replacementDocumentHash: replacement?.policy.documentHash ?? null,
+          refund: 'not_automated', ruleVersion: 'academic-policy-lifecycle-1', documentHash: '' };
+        change.documentHash = await this.deps.integrity.digest(lifecycleContent(change));
+        const capture = this.decision('policy.lifecycle.changed', traceId, policy, input.action, { payment: source.premium ?? undefined });
+        capture.rule.version = change.ruleVersion;
+        capture.inputs.lifecycle = change;
+        await tx.saveLifecycle(change, input.actor.clientId, key, hash, capture, traceId);
+        return { status: 'ok', replayed: false, policy: view({ ...policy, lifecycle: change }), ...paid(source.premium) };
+      });
+    });
+  }
+
+  listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult> {
     return this.run<PolicyListResult>(input.traceId, async () => {
       if (!validActor(input.actor)) return reject('invalid_request', 400);
-      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1);
+      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1, input.includeEnded ?? true);
       const policies: PolicySummary[] = [];
       for (const record of records.slice(0, MAX_LISTED_POLICIES)) {
         const { policy } = await this.checked(record, input.actor);
         policies.push(summary(policy));
       }
       return { status: 'ok', policies, hasMore: records.length > MAX_LISTED_POLICIES };
+    });
+  }
+
+  // Facts of one issued policy after the full integrity check. A policy still in the purchase flow is not a portal policy:
+  // like a missing import it is waiting, so the caller answers the opaque 404 without recording a security denial.
+  private async issuedFacts(input: { actor: FinancialActor; policyId: string }, traceId: string): Promise<IssuedPolicyFacts | Extract<FinancialResult, { status: 'denied' }>> {
+    if (!validActor(input.actor) || !UUID.test(input.policyId)) return reject('invalid_request', 400);
+    const { policy, premium, signature } = await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor);
+    if (policy.status !== 'issued') return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
+    if (!premium || !signature || !premium.updatedAt) throw new InvalidFinancialRecord();
+    return { ...(policy.lifecycle ? { lifecycle: policy.lifecycle } : {}), policyId: policy.id, offer: policy.offer, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
+      effectiveUntil: policy.effectiveUntil, documentHash: policy.documentHash, signedAt: signature.signedAt,
+      payment: { status: premium.status, reference: premium.providerReference, amount: premium.amount, at: premium.updatedAt } };
+  }
+
+  detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult> {
+    return this.run<PolicyDetailResult>(input.traceId, async traceId => {
+      const facts = await this.issuedFacts(input, traceId);
+      return 'status' in facts ? facts : { status: 'ok', detail: policyDetail(facts) };
+    });
+  }
+
+  document(input: { actor: FinancialActor; policyId: string; documentId: PolicyDocumentKind; traceId: string }): Promise<PolicyDocumentResult> {
+    return this.run<PolicyDocumentResult>(input.traceId, async traceId => {
+      const facts = await this.issuedFacts(input, traceId);
+      if ('status' in facts) return facts;
+      const file = documentFile(input.documentId, facts);
+      if (file && facts.lifecycle) file.lines.unshift('Estado contractual: ' + facts.lifecycle.action,
+        'Cambio registrado: ' + facts.lifecycle.at, 'Motivo: ' + facts.lifecycle.reason,
+        'Reemplazo: ' + (facts.lifecycle.replacementPolicyId ?? 'no aplica'), 'Devolución automática: no realizada',
+        'Huella del cambio: ' + facts.lifecycle.documentHash, 'El documento y el recibo originales se conservan como evidencia histórica.', '');
+      return file ? { status: 'ok', file } : reject('not_found', 404);
     });
   }
 
@@ -239,7 +333,7 @@ export class PolicyFinance {
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if ((policy.status !== 'issued' && policy.status !== 'refunded')
-            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+            || historicalView(previous.result) !== historicalView(view(policy))) return reject('integrity_violation');
           if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
@@ -285,7 +379,7 @@ export class PolicyFinance {
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if ((policy.status !== 'issued' && policy.status !== 'refunded')
-            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+            || historicalView(previous.result) !== historicalView(view(policy))) return reject('integrity_violation');
           if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
@@ -502,8 +596,7 @@ export class PolicyFinance {
   }
 
   private async checkPayment(payment: Payment, policy: StoredPolicy): Promise<void> {
-    const amount = payment.operation === 'premium' ? policy.premium
-      : policy.offer.coverage.kind === 'flight_delay' ? policy.offer.coverage.payoutAmount : null;
+    const amount = payment.operation === 'premium' ? policy.premium : indemnityAmount(policy.offer.coverage);
     if (!amount || !UUID.test(payment.id) || payment.policyId !== policy.id || payment.amount !== amount || payment.currency !== 'COP'
       || payment.key !== (payment.operation === 'premium' ? 'initial-premium' : 'parametric-once')
       || (payment.status === 'pending' && payment.providerReference !== null)
@@ -527,56 +620,135 @@ export class PolicyFinance {
     return { ...settled, sources: [lookupSource, gatewaySource('settle', settled, payment, this.deps.now().toISOString())] };
   }
 
+  // Internal Queue boundary: a sealed flight-delay envelope from the synthetic oracle.
   consumeParametricEvent(input: unknown, trace: string): Promise<FinancialResult> {
     return this.run(trace, async traceId => {
       if (!isParametricEnvelope(input, this.deps.environment) || Date.parse(input.occurredAt) > this.deps.now().getTime() + 60000
         || !(await this.deps.integrity.verify(eventContent(input), input.signature))) return reject('invalid_event', 400);
-      const hash = await this.deps.integrity.digest(eventContent(input));
-      const source = financialEventSource(input, this.deps.now().toISOString());
-      const plan = await this.deps.store.transaction(async tx => {
-        const { policy, signature } = await this.checked(await tx.policy(input.payload.policyId));
-        const previous = await tx.inbox(input.eventId, 'policy.parametric.v1');
-        if (previous && (previous.hash !== hash || previous.policyId !== policy.id)) return reject('event_conflict');
-        if (policy.status !== 'issued') return reject('policy_not_active');
-        const coverage = policy.offer.coverage;
-        if (coverage.kind !== 'flight_delay' || coverage.flightReference !== input.payload.flightReference
-          || input.payload.delayMinutes < coverage.thresholdMinutes || !signature
-          || !eventWithinIssuedCoverage(input.occurredAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)) return reject('event_not_covered');
-        let payment = await tx.payment(policy.id, 'indemnity');
-        if (!previous && payment) return reject('event_conflict');
-        if (!payment) {
-          payment = { id: this.deps.newId(), policyId: policy.id, operation: 'indemnity', amount: coverage.payoutAmount,
-            currency: 'COP', key: 'parametric-once', hash: '', status: 'pending', providerReference: null };
-          payment.hash = await this.deps.integrity.digest(paymentContent(payment));
-          await tx.createPayment(payment, traceId, { id: this.deps.newId(), indemnityId: this.deps.newId(), occurredAt: input.occurredAt });
-          await tx.recordInbox(input.eventId, 'policy.parametric.v1', hash, policy.id, input.eventType, traceId);
-          await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', 'synthetic-oracle-v1',
-            this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
-              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
-        }
-        await this.checkPayment(payment, policy);
-        return { policy, payment, replayed: !!previous };
-      });
-      const settled = await this.settle(plan.payment);
-      if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
-      if (settled.status === 'declined') return reject('payment_declined');
-      await this.deps.store.transaction(async tx => {
-        const { policy, signature } = await this.checked(await tx.policy(plan.policy.id));
-        const payment = await tx.payment(policy.id, 'indemnity');
-        if (!payment) throw new Error('financial_intent_missing');
-        await this.checkPayment(payment, policy);
-        if (payment.status !== 'confirmed') {
-          await tx.setPaymentStatus(payment.id, 'confirmed', settled.reference);
-          if (!signature) throw new Error('financial_issuance_evidence_missing');
-          await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', 'synthetic-oracle-v1',
-            this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...payment, status: 'confirmed', providerReference: settled.reference }, sources: [source, ...settled.sources],
-              issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash },
-            event: { eventId: input.eventId, eventType: input.eventType, environment: input.environment, occurredAt: input.occurredAt, delayMinutes: input.payload.delayMinutes } }));
-        }
-      });
-      return { status: 'ok', replayed: plan.replayed, policy: view(plan.policy) };
+      const occurrence: ParametricOccurrence = { eventId: input.eventId, eventType: input.eventType, occurredAt: input.occurredAt, payload: input.payload };
+      const { policy, replayed } = await this.applyOccurrence(traceId, occurrence, await this.deps.integrity.digest(eventContent(input)),
+        financialEventSource(input, this.deps.now().toISOString()));
+      return { status: 'ok', replayed, policy: view(policy) };
     });
+  }
+
+  // Private RPC boundary: the provider adapter authenticates and translates its own versioned format before the shared core runs.
+  receiveParametricEvent(input: unknown, trace: string): Promise<ParametricResult> {
+    return this.run<Extract<ParametricResult, { status: 'ok' }>>(trace, async traceId => {
+      const received = await this.deps.parametric.receive(input);
+      if (received.status !== 'verified' || Date.parse(received.occurrence.occurredAt) > this.deps.now().getTime() + 60000) return reject('invalid_event', 400);
+      const { policy, replayed, reference } = await this.applyOccurrence(traceId, received.occurrence, await this.deps.integrity.digest(received.content),
+        providerEventSource(received.occurrence, this.deps.now().toISOString()));
+      return { status: 'ok', replayed, policyId: policy.id, indemnity: { status: 'confirmed', reference } };
+    });
+  }
+
+  // One effect per policy: the first covered occurrence creates the claim, indemnity and payment; any other identity or content is a conflict.
+  private async applyOccurrence(traceId: string, occurrence: ParametricOccurrence, hash: string, source: FinancialSource) {
+    const event = occurrenceEvidence(occurrence, this.deps.environment);
+    const plan = await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(occurrence.payload.policyId));
+      const previous = await tx.inbox(occurrence.eventId, 'policy.parametric.v1');
+      if (previous && (previous.hash !== hash || previous.policyId !== policy.id)) return reject('event_conflict');
+      if (policy.status !== 'issued') return reject('policy_not_active');
+      if (!previous && policy.lifecycle && Date.parse(occurrence.occurredAt) >= Date.parse(policy.lifecycle.at)) return reject('event_not_covered');
+      const coverage = policy.offer.coverage;
+      const amount = indemnityAmount(coverage);
+      if (!amount || !occurrenceCovered(coverage, occurrence) || !signature
+        || !eventWithinIssuedCoverage(occurrence.occurredAt, signature.signedAt, policy.effectiveFrom, policy.effectiveUntil)) return reject('event_not_covered');
+      let payment = await tx.payment(policy.id, 'indemnity');
+      if (!previous && payment) return reject('event_conflict');
+      if (!payment) {
+        payment = { id: this.deps.newId(), policyId: policy.id, operation: 'indemnity', amount,
+          currency: 'COP', key: 'parametric-once', hash: '', status: 'pending', providerReference: null };
+        payment.hash = await this.deps.integrity.digest(paymentContent(payment));
+        await tx.createPayment(payment, traceId, { id: this.deps.newId(), indemnityId: this.deps.newId(), occurredAt: occurrence.occurredAt });
+        await tx.recordInbox(occurrence.eventId, 'policy.parametric.v1', hash, policy.id, occurrence.eventType, traceId);
+        await tx.audit('parametric.accepted', policy.id, traceId, 'accepted', source.source,
+          this.decision('parametric.accepted', traceId, policy, 'accepted', { payment, sources: [source],
+            issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event }));
+      }
+      await this.checkPayment(payment, policy);
+      return { policy, payment, replayed: !!previous };
+    });
+    const reference = await this.settleIndemnity(plan.payment, traceId, source.source, [source], event);
+    return { policy: plan.policy, replayed: plan.replayed, reference };
+  }
+
+  // Provider settlement, then the confirmation with its audit and customer notice in one owner transaction.
+  // An uncertain provider result throws before anything is announced, so only a confirmed payment reaches the customer.
+  private async settleIndemnity(payment: Payment, traceId: string, actor: string, sources: FinancialSource[], event: FinancialEvidence['event'], trigger?: 'reconciliation'): Promise<string> {
+    if (payment.status === 'declined') return reject('payment_declined');
+    const settled = await this.settle(payment);
+    if (settled.status === 'uncertain') throw new Error('financial_provider_uncertain');
+    if (settled.status === 'declined') {
+      await this.recordDeclinedIndemnity(payment, traceId, actor, [...sources, ...settled.sources], settled.reference, event, trigger);
+      return reject('payment_declined');
+    }
+    if (!settled.reference) throw new Error('financial_provider_reference_missing');
+    const { reference } = settled;
+    await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(payment.policyId));
+      const current = await tx.payment(policy.id, 'indemnity');
+      if (!current) throw new Error('financial_intent_missing');
+      await this.checkPayment(current, policy);
+      if (current.status === 'confirmed') return;
+      const { kind } = policy.offer.coverage;
+      if (!signature || kind === 'mortgage_life') throw new Error('financial_issuance_evidence_missing');
+      await tx.setPaymentStatus(current.id, 'confirmed', reference);
+      await tx.audit('indemnity.confirmed', policy.id, traceId, 'confirmed', actor,
+        this.decision('indemnity.confirmed', traceId, policy, 'confirmed', { payment: { ...current, status: 'confirmed', providerReference: reference },
+          sources: [...sources, ...settled.sources], issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event, ...(trigger ? { trigger } : {}) }));
+      await tx.announceIndemnity({ paymentId: current.id, policyId: policy.id, clientId: policy.clientId, coverageKind: kind,
+        confirmedAt: this.deps.now().toISOString() }, traceId);
+    });
+    return reference;
+  }
+
+  // A declined payment is terminal: it is recorded with its decision so the recovery stops selecting it and a replay never reaches the gateway again.
+  private async recordDeclinedIndemnity(payment: Payment, traceId: string, actor: string, sources: FinancialSource[], reference: string | null,
+    event: FinancialEvidence['event'], trigger?: 'reconciliation'): Promise<void> {
+    await this.deps.store.transaction(async tx => {
+      const { policy, signature } = await this.checked(await tx.policy(payment.policyId));
+      const current = await tx.payment(policy.id, 'indemnity');
+      if (!current) throw new Error('financial_intent_missing');
+      await this.checkPayment(current, policy);
+      if (current.status !== 'pending') return;
+      if (!signature) throw new Error('financial_issuance_evidence_missing');
+      await tx.setPaymentStatus(current.id, 'declined', reference);
+      await tx.audit('indemnity.declined', policy.id, traceId, 'declined', actor,
+        this.decision('indemnity.declined', traceId, policy, 'declined', { payment: { ...current, status: 'declined', providerReference: reference },
+          sources, issuance: { signedAt: signature.signedAt, documentHash: signature.documentHash }, event, ...(trigger ? { trigger } : {}) }));
+    });
+  }
+
+  // Finishes indemnities whose event was accepted but whose payment stayed pending (a crash between the two transactions, or an
+  // uncertain provider answer). Settlement is idempotent per payment, so recovery never pays twice and never starts a second effect.
+  async reconcileIndemnities(staleBefore: Date, limit: number): Promise<IndemnityOutcome[]> {
+    if (!this.deps.enabled) return [];
+    const outcomes: IndemnityOutcome[] = [];
+    for (const candidate of await this.deps.store.pendingIndemnities(staleBefore, limit)) outcomes.push(await this.recoverIndemnity(candidate));
+    return outcomes;
+  }
+
+  private async recoverIndemnity(candidate: IndemnityCandidate): Promise<IndemnityOutcome> {
+    const traceId = this.deps.newId();
+    let unchanged = false;
+    const result = await this.run<{ status: 'ok' }>(traceId, async () => {
+      const payment = await this.deps.store.transaction(async tx => {
+        const { policy } = await this.checked(await tx.policy(candidate.policyId));
+        const pending = await tx.payment(policy.id, 'indemnity');
+        if (!pending) return reject('integrity_violation');
+        await this.checkPayment(pending, policy);
+        return pending;
+      });
+      if (payment.status === 'confirmed') { unchanged = true; return { status: 'ok' }; }
+      await this.settleIndemnity(payment, traceId, 'financial-reconciliation-v1', candidate.sources, candidate.event, 'reconciliation');
+      return { status: 'ok' };
+    });
+    if (result.status === 'unavailable') return { traceId, outcome: 'unavailable' };
+    if (result.status === 'denied') return { traceId, outcome: 'rejected', error: result.error };
+    return { traceId, outcome: unchanged ? 'unchanged' : 'confirmed' };
   }
 }
 

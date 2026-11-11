@@ -146,11 +146,17 @@ function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; 
     <Text accessibilityRole="header" style={styles.subtitle}>{copy.coverage}</Text>
     {coverage.kind === 'mortgage_life'
       ? <Row label={`${copy.coverages.mortgage_life} · ${copy.coverages.sumInsured}`} value={formatMoney(coverage.sumInsured, locale)} />
-      : <>
-        <Row label={copy.coverages.threshold} value={`${coverage.thresholdMinutes} ${copy.coverages.minutes}`} />
-        <Row label={copy.coverages.payout} value={formatMoney(coverage.payoutAmount, locale)} />
-        <Row label={copy.coverages.flight} value={coverage.flightReference.slice(0, 8).toUpperCase()} />
-      </>}
+      : coverage.kind === 'flight_delay'
+        ? <>
+          <Row label={copy.coverages.threshold} value={`${coverage.thresholdMinutes} ${copy.coverages.minutes}`} />
+          <Row label={copy.coverages.payout} value={formatMoney(coverage.payoutAmount, locale)} />
+          <Row label={copy.coverages.flight} value={coverage.flightReference.slice(0, 8).toUpperCase()} />
+        </>
+        : <>
+          <Row label={copy.coverages.rainThreshold} value={`${coverage.threshold} ${coverage.unit}`} />
+          <Row label={copy.coverages.payout} value={formatMoney(coverage.payoutAmount, locale)} />
+          <Row label={copy.coverages.station} value={coverage.stationId.slice(0, 8).toUpperCase()} />
+        </>}
     <Text style={styles.caption}>{copy.document}</Text>
     {/* A report needs the server, so a stored copy never offers it. */}
     {state.source !== 'stored' && isReportableProduct(policy.product) && validityAt(policy, now) === 'active'

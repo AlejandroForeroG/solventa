@@ -18,4 +18,6 @@ See [permissions, events and SQL operations](../../infrastructure/data-model.md)
 
 `underwriting_audit_grants` is Identity-owned, with client FK, grant/expiry timestamps, optional revocation timestamp and opaque granting-operator reference. Expiry is mandatory and limited to 90 days from grant. Runtime has SELECT only, including no ability to self-grant or revoke. The [audit permission procedure](api-access.md#underwriting-audit-permission) defines administrative writes, atomic audit and revocation behavior. No other owner reads this table directly.
 
+`partner_authorizations` is Identity-owned: partner and client foreign keys, one `operation` limited to `partner-offers:create`, grant and expiry timestamps (at most 90 days) and an optional revocation timestamp. The customer creates and revokes rows through the web routes, and the runtime role can SELECT, INSERT and UPDATE but not DELETE; see [partner authorizations](partner-authorizations.md).
+
 `claims_access_grants` is Identity-owned like `underwriting_audit_grants` and adds a mandatory `operation` limited to `claims:read` and `claims:decide`. The same 90-day maximum, revocation, operator-reference and runtime SELECT-only rules apply; see [claims permissions](api-access.md#claims-permissions).

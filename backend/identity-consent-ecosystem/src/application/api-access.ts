@@ -1,7 +1,7 @@
 import type { IdentitySessions, Principal, VerifiedIdentity } from './authentication';
 
 export type ClaimsOperation = 'claims:read' | 'claims:decide';
-export type ApiOperation = 'underwriting-decisions:read' | ClaimsOperation | 'assistance-providers:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write' | 'claims:report';
+export type ApiOperation = 'underwriting-decisions:read' | ClaimsOperation | 'assistance-providers:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'policies:manage' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write' | 'partner-authorizations:read' | 'partner-authorizations:write' | 'partner-offers:create' | 'claims:report';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -16,10 +16,10 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'claims:read', 'claims:decide', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report'];
+const operations: readonly ApiOperation[] = ['underwriting-decisions:read', 'claims:read', 'claims:decide', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'partner-authorizations:read', 'partner-authorizations:write', 'partner-offers:create', 'claims:report'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
-const partnerOperations: readonly ApiOperation[] = ['quotes:create'];
-const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:') && !operation.startsWith('notification-preferences:') && operation !== 'claims:report');
+const partnerOperations: readonly ApiOperation[] = ['quotes:create', 'partner-offers:create'];
+const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:') && !operation.startsWith('notification-preferences:') && operation !== 'partner-offers:create' && operation !== 'claims:report');
 // A native customer reads their own policies but cannot buy, accept or issue: those financial steps stay web-only.
 const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'policies:read', 'assistance-providers:read', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
