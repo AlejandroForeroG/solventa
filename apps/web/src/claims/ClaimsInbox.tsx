@@ -94,7 +94,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
             <td className="mono audit-id">{item.policyId}</td>
             <td><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
             <td className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
-            <td className="mono claims-amount">{item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
+            <td className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
             <td>{t('evidence', { provided: item.evidence.provided, required: item.evidence.required, status: t(`evidenceStatus.${item.evidence.status}`) })}</td>
             <td><span className={`claims-badge claims-priority-${item.priority}`}>{t(`priority.${item.priority}`)}</span></td>
           </tr>)}</tbody></table></div>

@@ -12,7 +12,7 @@ The list is an operational permission: an authorized analyst reads open claims o
 
 Only open claims: `unassigned`, `in_review`, `pending_information` and `escalated`. Claims written by the parametric payment flow (`approved`, then `paid`) are not open and keep their existing values and insert statement. `claims.status` is still unconstrained SQL text, so an unknown state or an open claim missing its number or estimated amount fails the page with 503 rather than being hidden or guessed.
 
-Order: priority (high first), `created_at` ascending, `estimated_amount` descending, then claim id. Pass the last item's id as `before` to continue; filters must be repeated. There is no total, and a cursor that no longer exists returns an empty page. Filters are `state`, `overdue=true` and `query` (exact claim number or policy UUID). Unknown, duplicate or empty parameters return 400 after authorization.
+Order: priority (high first), `created_at` ascending, `estimated_amount` descending, then claim id. A claim without an estimate, such as one reported by the customer before an analyst values it, sorts after every estimated claim of the same priority and age and returns `estimatedAmount: null`; the list never replaces a missing estimate with zero. A missing claim number, currency or a malformed value still fails the whole read closed. Pass the last item's id as `before` to continue; filters must be repeated. There is no total, and a cursor that no longer exists returns an empty page. Filters are `state`, `overdue=true` and `query` (exact claim number or policy UUID). Unknown, duplicate or empty parameters return 400 after authorization.
 
 Derived values, never supplied by a caller:
 
@@ -22,7 +22,7 @@ Derived values, never supplied by a caller:
 
 ## Data
 
-Migration `0009_claims_inbox.sql` adds nullable `claim_number` (unique, `SIN-YYYY-NNNNN`), `estimated_amount DECIMAL(19,4)` and `assignee_id`, plus `currency` (default `COP`), `evidence_required` (default 0) and a partial index of open claims by `created_at`. Existing rows and the parametric insert are unchanged. The runtime grants did not change. Apply it before integrating code that needs it, following the [migration guide](../../infrastructure/migrations.md), and verify with the environment's schema verification.
+Migration `0009_claims_inbox.sql` adds nullable `claim_number` (unique, `SIN-YYYY-NNNNN`), `estimated_amount DECIMAL(19,4)` and `assignee_id`, plus `currency` (default `COP`), `evidence_required` (default 0) and a partial index of open claims by `created_at`. Existing rows and the parametric insert are unchanged. The runtime grants did not change. Normal Deploy applies it, together with Identity's `0012_claims_access_grants.sql`, in the environment's migration job before publishing the code that reads it; see the [migration guide](../../infrastructure/migrations.md) for status, manual application and recovery. The code and migration ship together, so a deployment that does not receive both fails schema verification.
 
 `assignee_id` holds an Identity client UUID without a foreign key, because owners do not read each other's tables. The claim number has no counter yet: whichever flow creates claims (assisted or mobile reports) must allocate it, as quotes and consents do.
 
