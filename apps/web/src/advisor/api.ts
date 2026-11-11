@@ -1,7 +1,7 @@
 import { fetchWithSession } from '../session-fetch';
 
 export type Approval = { authorizationId:string; advisorReference:string; policyId:string; action:'modified'|'renewed'|'cancelled'; replacementPolicyId:string|null;
-  documentHash:string; grantedAt:string; expiresAt:string; status:'active'|'expired'|'revoked'|'executed'; changeId:string|null };
+  documentHash:string; grantedAt:string; expiresAt:string; status:'active'|'expired'|'revoked'|'executed'; changeId:string|null; revokedAt:string|null };
 export type ApprovalList = { authorizations:Approval[]; hasMore:boolean; nextCursor:string|null; advisorReference?:string };
 export type Outcome<T> = {kind:'ok';value:T}|{kind:'unauthenticated'|'forbidden'|'invalid'|'conflict'|'unavailable'};
 const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -13,7 +13,8 @@ export const validApproval=(v:unknown):v is Approval=>record(v)&&uuid(v.authoriz
   &&typeof v.documentHash==='string'&&/^[0-9a-f]{64}$/.test(v.documentHash)&&instant(v.grantedAt)&&instant(v.expiresAt)
   &&Date.parse(v.expiresAt)>Date.parse(v.grantedAt)&&Date.parse(v.expiresAt)-Date.parse(v.grantedAt)<=7*86400000
   &&typeof v.status==='string'&&['active','expired','revoked','executed'].includes(v.status)&&(v.changeId===null||uuid(v.changeId))
-  &&(v.status==='executed'?uuid(v.changeId):v.changeId===null);
+  &&(v.status==='executed'?uuid(v.changeId):v.changeId===null)&&(v.revokedAt===null||instant(v.revokedAt))
+  &&(v.status==='revoked'?instant(v.revokedAt):v.status==='active'?v.revokedAt===null:true);
 async function request<T>(path:string,options:RequestInit,valid:(v:Record<string,unknown>)=>T|null):Promise<Outcome<T>> {
   try {
     const response=await fetchWithSession(path,{cache:'no-store',...options});
@@ -40,10 +41,10 @@ export async function grantApproval(policyId:string,input:Omit<ApprovalCommand,'
   if(hash.kind!=='ok')return hash;
   return request(`/api/v1/policies/${encodeURIComponent(policyId)}/advisor-authorizations`,{method:'POST',headers:{'content-type':'application/json','idempotency-key':key},body:JSON.stringify({...input,documentHash:hash.value})},v=>
     validApproval(v.authorization)&&v.authorization.policyId===policyId&&v.authorization.advisorReference===input.advisorReference.toLowerCase()
-      &&v.authorization.action===input.action&&v.authorization.replacementPolicyId===input.replacementPolicyId&&v.authorization.documentHash===hash.value&&v.authorization.expiresAt===input.expiresAt?v.authorization:null);
+      &&v.authorization.action===input.action&&v.authorization.replacementPolicyId===input.replacementPolicyId&&v.authorization.documentHash===hash.value&&Date.parse(v.authorization.expiresAt)===Date.parse(input.expiresAt)?v.authorization:null);
 }
 export const revokeApproval=(approval:Approval)=>request(`/api/v1/policies/${encodeURIComponent(approval.policyId)}/advisor-authorizations/${encodeURIComponent(approval.authorizationId)}/revoke`,{method:'POST'},v=>
-  validApproval(v.authorization)&&v.authorization.authorizationId===approval.authorizationId&&['revoked','executed'].includes(v.authorization.status)?v.authorization:null);
+  validApproval(v.authorization)&&v.authorization.authorizationId===approval.authorizationId&&v.authorization.revokedAt!==null&&['revoked','executed'].includes(v.authorization.status)?v.authorization:null);
 export const executeApproval=(approval:Approval,key:string)=>request(`/api/v1/advisor-authorizations/${encodeURIComponent(approval.authorizationId)}/lifecycle`,
   {method:'POST',headers:{'content-type':'application/json','idempotency-key':key},body:JSON.stringify({reason:approval.action==='modified'?'coverage_change':approval.action==='renewed'?'term_renewal':'customer_request'})},v=>
     uuid(v.changeId)&&v.policyId===approval.policyId&&v.action===approval.action&&instant(v.changedAt)&&typeof v.replayed==='boolean'?{changeId:v.changeId}:null);

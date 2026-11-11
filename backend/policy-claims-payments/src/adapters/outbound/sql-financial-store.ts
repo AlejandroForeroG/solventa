@@ -19,8 +19,8 @@ function advisorRecord(row: AdvisorRow): AdvisorAuthorizationRecord {
   if (!isAdvisorAuthorization(value) || value.id !== row.id || value.policyId !== row.policy_id
     || value.owner.clientId !== row.owner_id || value.owner.subjectToken !== row.owner_subject
     || value.advisor.clientId !== row.advisor_id || value.advisor.subjectToken !== row.advisor_subject
-    || value.advisorReference !== row.advisor_reference || value.grantedAt !== row.granted_at.toISOString()
-    || value.expiresAt !== row.expires_at.toISOString()) throw new InvalidFinancialRecord();
+    || value.advisorReference !== row.advisor_reference || Date.parse(value.grantedAt) !== row.granted_at.getTime()
+    || Date.parse(value.expiresAt) !== row.expires_at.getTime()) throw new InvalidFinancialRecord();
   return { authorization: value, revokedAt: row.revoked_at?.toISOString() ?? null, changeId: row.change_id };
 }
 

@@ -378,6 +378,7 @@ components:
         - expiresAt
         - status
         - changeId
+        - revokedAt
       properties:
         authorizationId:
           type: string
@@ -417,6 +418,10 @@ components:
         changeId:
           type: string
           format: uuid
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
           nullable: true
     ApprovalList:
       type: object

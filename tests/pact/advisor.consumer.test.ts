@@ -15,7 +15,7 @@ for(const mode of ['ready','revoked','unavailable'] as const)test(`advisor execu
     .willRespondWith({status,headers:{'Content-Type':'application/json'},body:status===200?{status:'ok',policyId:lifecycleIds.policyId,changeId:MatchersV3.uuid('02000000-0000-4000-8000-000000000005'),action:'cancelled',changedAt:MatchersV3.iso8601DateTimeWithMillis('2026-11-11T12:00:00.000Z'),replayed:false,traceId:MatchersV3.uuid('50000000-0000-4000-8000-000000000001')}:{error:mode==='revoked'?'not_found':'financial_unavailable',traceId:MatchersV3.uuid('50000000-0000-4000-8000-000000000001')}});
   await pact.executeTest(async server=>{
     const original=globalThis.fetch;globalThis.fetch=(input,init)=>original(typeof input==='string'&&input.startsWith('/')?server.url+input:input,init);
-    try{const result=await executeApproval({authorizationId:advisorIds.authorizationId,advisorReference:advisorIds.reference,policyId:lifecycleIds.policyId,action:'cancelled',replacementPolicyId:null,documentHash:'a'.repeat(64),grantedAt:'2026-11-11T00:00:00.000Z',expiresAt:'2026-11-12T00:00:00.000Z',status:'active',changeId:null},'advisor-cancel-1');assert.equal(result.kind,mode==='ready'?'ok':mode==='revoked'?'forbidden':'unavailable');}
+    try{const result=await executeApproval({authorizationId:advisorIds.authorizationId,advisorReference:advisorIds.reference,policyId:lifecycleIds.policyId,action:'cancelled',replacementPolicyId:null,documentHash:'a'.repeat(64),grantedAt:'2026-11-11T00:00:00.000Z',expiresAt:'2026-11-12T00:00:00.000Z',status:'active',changeId:null,revokedAt:null},'advisor-cancel-1');assert.equal(result.kind,mode==='ready'?'ok':mode==='revoked'?'forbidden':'unavailable');}
     finally{globalThis.fetch=original;}
   });
 });

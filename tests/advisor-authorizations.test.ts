@@ -21,6 +21,13 @@ async function fixture(action:'cancelled'|'modified'|'renewed'='cancelled') {
     expiresAt:new Date(Date.parse(start)+86400000).toISOString(),idempotencyKey:randomUUID(),traceId:randomUUID()};
   return{...f,source,replacement,owner,advisor,input};
 }
+test('equivalent RFC 3339 approval expiry is sealed in canonical UTC and remains replayable',async()=>{
+  const f=await fixture(),input={...f.input,expiresAt:'2026-10-17T02:01:00Z'};
+  const created=await f.finance.createAdvisorAuthorization(input);assert.equal(created.status,'ok');
+  if(created.status!=='ok')return;assert.equal(created.authorization.expiresAt,'2026-10-17T02:01:00.000Z');
+  const replay=await f.finance.createAdvisorAuthorization(input);assert.equal(replay.status,'ok');if(replay.status==='ok')assert.equal(replay.replayed,true);
+  assert.equal((await f.finance.revokeAdvisorAuthorization({actor:f.owner,policyId:f.input.policyId,authorizationId:created.authorization.authorizationId,traceId:randomUUID()})).status,'ok');
+});
 test('a customer approves one action; only its advisor executes without access to payments or signed bytes',async()=>{
   const f=await fixture('modified'),approval=await f.finance.createAdvisorAuthorization(f.input);assert.equal(approval.status,'ok');if(approval.status!=='ok')return;
   const command={actor:f.advisor,authorizationId:approval.authorization.authorizationId,reason:'coverage_change',idempotencyKey:randomUUID(),traceId:randomUUID()};
