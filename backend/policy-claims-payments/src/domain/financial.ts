@@ -24,11 +24,11 @@ export type FinancialEnvelope<T, Kind extends string> = {
 export type SignedOfferAcceptanceV1 = FinancialEnvelope<AcceptedOffer, 'offer.accepted'>;
 export type SignedParametricEventV1 = FinancialEnvelope<ParametricPayload, 'flight.delay_verified'>;
 export type PolicyStatus = 'pending' | 'charged' | 'issued' | 'refunding' | 'refunded';
-export type PolicyView = { policyId: string; offerId: string; offerVersion: number; status: PolicyStatus;
+export type PolicyView = { lifecycle?: import('./policy-lifecycle').LifecycleChange; policyId: string; offerId: string; offerVersion: number; status: PolicyStatus;
   premium: string; currency: 'COP'; effectiveFrom: string; effectiveUntil: string;
   document: string; documentHash: string; synthetic: true; providerMode: 'mock' };
 // The customer's wallet shows these fields only: the reviewed document, its hash and the payment stay on the policy read route.
-export type PolicySummary = { policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
+export type PolicySummary = { contractStatus?: 'modified' | 'renewed' | 'cancelled'; policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: Coverage };
 // Bounded so the native device can keep the whole list in its protected copy.
 export const MAX_LISTED_POLICIES = 6;

@@ -11,6 +11,10 @@ const offersPath = /^\/api\/v1\/offers(\/|$)/;
 const partnerOffersPath = /^\/api\/v1\/partner\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
 const claimsPath = /^\/api\/v1\/claims(\/|$)/;
+const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
+// One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
+const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
+const EVIDENCE_DEADLINE_MS = 120_000;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
@@ -31,6 +35,20 @@ async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<st
   catch { return unavailable(request, headers, error); }
 }
 
+// An evidence file streams to Policy without buffering it in the gateway, so a video never competes for Worker memory and a slow mobile link
+// is not cut by the five-second budget of the small JSON routes. Policy still authenticates before reading a byte.
+async function forwardEvidence(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+  const length = request.headers.get('content-length');
+  if (!length || !/^\d+$/.test(length) || Number(length) < 1 || Number(length) > MAX_EVIDENCE_BYTES) {
+    await request.body?.cancel().catch(() => {});
+    const supplied = request.headers.get('x-trace-id') ?? '';
+    const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
+    return Response.json({ error: 'invalid_request', fields: ['body'], traceId }, { status: 400, headers: { ...headers, 'x-trace-id': traceId } });
+  }
+  try { return await env.POLICY.fetch(new Request(request, { signal: AbortSignal.timeout(EVIDENCE_DEADLINE_MS) })); }
+  catch { return unavailable(request, headers, 'service_unavailable'); }
+}
+
 async function route(request: Request, env: WebEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
     const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
@@ -46,6 +64,7 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
       }
       const response = path === '/api/v1/partner-portal' || isQuotesPath(path) || offersPath.test(path) || partnerOffersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
+        : claimEvidencePath.test(path) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
         : claimsPath.test(path) || path === assistanceSearchPath ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);

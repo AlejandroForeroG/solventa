@@ -71,6 +71,7 @@ try {
   const tie = new Date().toISOString();
   const tieSmall = await seed({ status: 'unassigned', days: 0, amount: '5.0000', at: tie });
   const tieLarge = await seed({ status: 'unassigned', days: 0, amount: '50.0000', at: tie });
+  const tieNone = await seed({ status: 'unassigned', days: 0, amount: null, at: tie });
 
   const clock = { now: () => new Date() };
   const store = new SqlClaimInbox(runtime.toString());
@@ -79,11 +80,13 @@ try {
   const auditRows = async () => Number((await db!.query(`SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE action='claims.inbox.read'`)).rows[0].n);
 
   const first = await inbox.list({}, reader());
-  assert.equal(first.items.length, 9, 'only open claims are listed');
+  assert.equal(first.items.length, 10, 'only open claims are listed, including one not yet estimated');
   const expected = [high1, high2, escalated, medium1, medium2, low1, low2];
   assert.deepEqual(first.items.slice(0, 7).map(item => item.claimId), expected.map(item => item.id));
   const tail = first.items.slice(7).map(item => item.claimId);
   assert.ok(tail.includes(tieLarge.id) && tail.includes(tieSmall.id) && tail.indexOf(tieLarge.id) < tail.indexOf(tieSmall.id), 'same age orders by larger amount first');
+  assert.ok(tail.includes(tieNone.id) && tail.indexOf(tieSmall.id) < tail.indexOf(tieNone.id), 'a claim without an estimate sorts after every estimated one');
+  assert.equal(first.items.find(item => item.claimId === tieNone.id)?.estimatedAmount, null);
   const rank: Record<ClaimPriority, number> = { high: 1, medium: 2, low: 3 };
   assert.ok(first.items.every((item, index) => index === 0 || rank[first.items[index - 1].priority] <= rank[item.priority]), 'priority never increases down the list');
   for (const item of first.items) assert.equal(item.priority, priorityOf(item.state, item.ageDays), 'SQL ordering and domain priority agree');
@@ -94,12 +97,12 @@ try {
 
   const stateOnly = await inbox.list({ state: 'unassigned' }, reader());
   assert.deepEqual(new Set(stateOnly.items.map(item => item.state)), new Set(['unassigned']));
-  assert.equal(stateOnly.items.length, 3);
+  assert.equal(stateOnly.items.length, 4);
   assert.equal((await inbox.list({ state: 'paid' }, reader())).items.length, 0);
   const overdue = await inbox.list({ overdue: true }, reader());
   assert.deepEqual(overdue.items.map(item => item.claimId), [high1.id, high2.id]);
   assert.deepEqual((await inbox.list({ query: high1.number }, reader())).items.map(item => item.claimId), [high1.id]);
-  assert.equal((await inbox.list({ query: policyId }, reader())).items.length, 9);
+  assert.equal((await inbox.list({ query: policyId }, reader())).items.length, 10);
   assert.equal((await inbox.list({ query: 'SIN-2026-99999' }, reader())).items.length, 0);
   assert.equal((await inbox.list({ before: randomUUID() }, reader())).items.length, 0);
   assert.equal(first.items.find(item => item.claimId === escalated.id)?.assigneeId !== null, true);
@@ -122,7 +125,7 @@ try {
   const page3 = page2.next ? await inbox.list({ before: page2.next }, reader()) : { items: [], next: null };
   const everyone = [...page1.items, ...page2.items, ...page3.items];
   assert.equal(new Set(everyone.map(item => item.claimId)).size, everyone.length, 'no claim repeats across pages');
-  assert.equal(everyone.length, 9 + 3 + 12, 'every open claim appears exactly once');
+  assert.equal(everyone.length, 10 + 3 + 12, 'every open claim appears exactly once');
   assert.equal(page3.next, null);
 
   const before = await auditRows();
@@ -147,7 +150,7 @@ try {
   await seed({ status: 'in_review', days: 1, amount: null, number: null });
   await assert.rejects(inbox.list({ state: 'in_review' }, reader()), InvalidClaimRecord);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'fail-closed-on-incomplete-open-claim'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'fail-closed-on-incomplete-open-claim', 'unestimated-claim-last'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);
