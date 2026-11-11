@@ -292,7 +292,8 @@ The claim report lets a signed-in customer report a claim on one of their polici
 
 - One idempotency key and one declaration are kept for the whole attempt. A retry sends again only what the server lacks, so repeating a send never creates a second case. Changing the report after a failure starts a new declaration and a new key.
 - The size declared for a file is that of the copy the picker hands over, because the picker reports the size of the original while the server checks the size of what it receives.
-- The native layer streams each file from its path with a known length; a file is read into memory only to hash it.
+- The native layer streams each file from its path with a known length; a file is read into memory only to hash it, so the largest allowed file (a video near the 50 MiB limit) briefly needs that much memory on a phone with little RAM. That limit has not been measured on such a device, and an incremental hash is the way out if it proves too tight.
+- An upload has a 120 second deadline. When it expires the transfer is cancelled and has stopped before the failure is shown, so a retry never runs next to the attempt that timed out.
 - Each failure of the contract has its own message: session, coverage dates, a changed file, an unsupported type, missing files and an unavailable service. A development build also shows the underlying cause under the generic message; a customer never sees it.
 
 ### Permissions and the background
