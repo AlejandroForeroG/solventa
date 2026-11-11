@@ -1,0 +1,769 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Advisor authorizations
+  version: 1.0.0
+  description: An owner grants one document-bound policy action to a separately
+    enabled advisor. Real sessions, customer approval, persistence and audit are
+    required. Existing owner lifecycle remains available. No delegated purchase,
+    charge, signature or customer-wide portfolio access.
+servers:
+  - url: /api/v1
+tags:
+  - name: Advisor authorizations
+    description: Explicitly approved policy lifecycle actions.
+paths:
+  /policies/{policyId}/advisor-authorizations:
+    parameters:
+      - name: policyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      tags:
+        - Advisor authorizations
+      operationId: listOwnerAdvisorAuthorizations
+      summary: Read approvals of one owned policy
+      responses:
+        "200":
+          description: Confirmed durable result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalList"
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Always no-store.
+              schema:
+                type: string
+                enum:
+                  - no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      parameters:
+        - name: after
+          in: query
+          required: false
+          description: Opaque nextCursor returned by the preceding page; scoped to the
+            authenticated owner or advisor.
+          schema:
+            type: string
+            maxLength: 80
+            pattern: ^.+\|[0-9a-fA-F-]{36}$
+    post:
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      tags:
+        - Advisor authorizations
+      operationId: grantAdvisorAuthorization
+      summary: Approve one policy action for an eligible advisor
+      description: Origin must match the allowed request host. The server derives the
+        owner from the sealed session and verifies advisor eligibility in one
+        Identity RPC. Approval lasts at most seven days. Replacement must be a
+        distinct owned, issued policy; execution revalidates business timing and
+        both document hashes. Maximum 1024 JSON bytes.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable key for this exact approval command. Replay returns its
+            current state without reactivating a revoked approval; revoked or
+            expired approvals never permit execution replay.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - advisorReference
+                - action
+                - replacementPolicyId
+                - documentHash
+                - expiresAt
+              properties:
+                advisorReference:
+                  type: string
+                  format: uuid
+                action:
+                  type: string
+                  enum:
+                    - modified
+                    - renewed
+                    - cancelled
+                replacementPolicyId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                documentHash:
+                  type: string
+                  pattern: ^[0-9a-f]{64}$
+                expiresAt:
+                  type: string
+                  format: date-time
+                  pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$
+                  description: A real UTC calendar instant with Z and zero to three fractional
+                    digits; future and at most seven days. Stored and returned
+                    in canonical UTC with milliseconds.
+      responses:
+        "200":
+          description: Confirmed durable result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalResult"
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Always no-store.
+              schema:
+                type: string
+                enum:
+                  - no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+  /policies/{policyId}/advisor-authorizations/{authorizationId}/revoke:
+    post:
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      tags:
+        - Advisor authorizations
+      operationId: revokeAdvisorAuthorization
+      summary: Revoke an approval as its owner
+      description: Same-Origin POST. Idempotent append-only revocation shares policy
+        locking with execution. An already executed action remains recorded and
+        is not undone.
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: authorizationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Confirmed durable result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRevocation"
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Always no-store.
+              schema:
+                type: string
+                enum:
+                  - no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+  /advisor-authorizations:
+    get:
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      tags:
+        - Advisor authorizations
+      operationId: listAdvisorAuthorizations
+      summary: Read approvals addressed to the current enabled advisor
+      description: Web only, active administrative professional grant and session
+        lease up to five seconds. At most twenty newest approvals of the current
+        professional grant reference; no customer identities or policy
+        documents.
+      responses:
+        "200":
+          description: Confirmed durable result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisorApprovalList"
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Always no-store.
+              schema:
+                type: string
+                enum:
+                  - no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+      parameters:
+        - name: after
+          in: query
+          required: false
+          description: Opaque nextCursor returned by the preceding page; scoped to the
+            authenticated owner or advisor.
+          schema:
+            type: string
+            maxLength: 80
+            pattern: ^.+\|[0-9a-fA-F-]{36}$
+  /advisor-authorizations/{authorizationId}/lifecycle:
+    post:
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      tags:
+        - Advisor authorizations
+      operationId: executeAdvisorLifecycle
+      summary: Execute the exact approved policy action
+      description: Same-Origin POST. Rechecks professional eligibility and customer
+        approval after locks, before durable completion and replay. Owner and
+        executor remain distinct in audit/capture; the notice targets the owner.
+        Refunds are not automated. Returns no payment, signature or full policy
+        document.
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable key for retrying this exact command. Approval revocation or
+            expiry never permits replay.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[!-~]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  pattern: ^[a-z][a-z_]{2,63}$
+      responses:
+        "200":
+          description: Confirmed durable result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisorExecution"
+          headers:
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              description: Always no-store.
+              schema:
+                type: string
+                enum:
+                  - no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "405":
+          $ref: "#/components/responses/Error405"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "503":
+          $ref: "#/components/responses/Error503"
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+  schemas:
+    AdvisorAuthorization:
+      type: object
+      additionalProperties: false
+      required:
+        - authorizationId
+        - advisorReference
+        - policyId
+        - action
+        - replacementPolicyId
+        - documentHash
+        - grantedAt
+        - expiresAt
+        - status
+        - changeId
+        - revokedAt
+      properties:
+        authorizationId:
+          type: string
+          format: uuid
+        advisorReference:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+        replacementPolicyId:
+          type: string
+          format: uuid
+          nullable: true
+        documentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        grantedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - active
+            - expired
+            - revoked
+            - executed
+        changeId:
+          type: string
+          format: uuid
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ApprovalList:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - authorizations
+        - hasMore
+        - traceId
+        - nextCursor
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        authorizations:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/AdvisorAuthorization"
+        hasMore:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+        nextCursor:
+          type: string
+          nullable: true
+          maxLength: 80
+    ApprovalResult:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - authorization
+        - replayed
+        - traceId
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        authorization:
+          $ref: "#/components/schemas/AdvisorAuthorization"
+        replayed:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+    ApprovalRevocation:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - authorization
+        - replayed
+        - traceId
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        authorization:
+          $ref: "#/components/schemas/AdvisorAuthorization"
+        replayed:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+    AdvisorApprovalList:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - authorizations
+        - hasMore
+        - traceId
+        - advisorReference
+        - nextCursor
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        authorizations:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/AdvisorAuthorization"
+        hasMore:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+        advisorReference:
+          type: string
+          format: uuid
+        nextCursor:
+          type: string
+          nullable: true
+          maxLength: 80
+    AdvisorExecution:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - policyId
+        - changeId
+        - action
+        - changedAt
+        - replayed
+        - traceId
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        policyId:
+          type: string
+          format: uuid
+        changeId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+        changedAt:
+          type: string
+          format: date-time
+        replayed:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+  responses:
+    Error400:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error401:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error403:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error404:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error405:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error409:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid
+    Error503:
+      description: Invalid input, denied access, opaque missing approval, conflict or
+        unavailable dependency as indicated by the error code.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - error
+              - traceId
+            properties:
+              error:
+                type: string
+                enum:
+                  - invalid_request
+                  - unauthorized
+                  - forbidden
+                  - not_found
+                  - method_not_allowed
+                  - idempotency_conflict
+                  - policy_not_active
+                  - document_mismatch
+                  - integrity_violation
+                  - access_unavailable
+                  - financial_unavailable
+              traceId:
+                type: string
+                format: uuid

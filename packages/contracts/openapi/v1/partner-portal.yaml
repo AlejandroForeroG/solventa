@@ -1,0 +1,350 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Partner portal
+  version: 1.0.0
+  description: Explicitly authorized partner web consultation. No credential mutation,
+    quota enforcement or external-provider activity is simulated by this read.
+servers:
+- url: /api/v1
+tags:
+- name: Partner portal
+  description: Partner-isolated integration metadata and recorded channel facts.
+paths:
+  /partner-portal:
+    get:
+      operationId: readPartnerPortal
+      summary: Read the explicitly granted partner integration
+      description: Web-only read. Both UTC dates are inclusive, with at most 31 days.
+        Unknown and repeated parameters are rejected. The server derives the partner
+        from Identity, never from a caller-supplied partner id. Counts cover the entire
+        period; the list contains the 20 most recent facts in descending time/id/kind
+        order. completed means a stored minimum quote; accepted/preliminary/declined
+        describe underwriting decisions, not customer acceptance, payment or issuance.
+        Request failures are outside this ledger. This legacy shape cannot represent configured quotas and returns 503 after quota activation; migrate to v2. Versions
+        are the global registry; operation paths in the catalog define actual availability.
+        The response contains registration references and metadata, never provider
+        references, tokens, customer identities or secrets.
+      tags:
+      - Partner portal
+      security:
+      - WebSession: []
+      - LocalWebSession: []
+      parameters:
+      - name: from
+        in: query
+        required: true
+        description: Inclusive UTC calendar date.
+        schema: &id001
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        description: Inclusive UTC calendar date.
+        schema: *id001
+      - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        '200':
+          description: Authorized partner data from a consistent Acquisition snapshot;
+            real empty results contain zero counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerPortal'
+              example:
+                traceId: 11111111-1111-4111-8111-111111111111
+                partner:
+                  id: 22222222-2222-4222-8222-222222222222
+                  code: synthetic-partner
+                credentials:
+                - id: 33333333-3333-4333-8333-333333333333
+                  scopes:
+                  - quotes:create
+                  - partner-offers:create
+                  expiresAt: '2026-12-01T00:00:00.000Z'
+                  status: active
+                hasMoreCredentials: false
+                quota:
+                  configured: false
+                catalog:
+                - product: vida_hipotecario
+                  operations:
+                  - method: POST
+                    path: /api/v1/quotes
+                    scope: quotes:create
+                  - method: POST
+                    path: /api/v1/partner/offers
+                    scope: partner-offers:create
+                versions:
+                - id: v1
+                - id: v2
+                period:
+                  from: '2026-11-01'
+                  to: '2026-11-07'
+                  timeZone: UTC
+                updatedAt: '2026-11-07T12:00:00.000Z'
+                totals:
+                  completed: 1
+                  accepted: 1
+                  preliminary: 0
+                  declined: 0
+                items:
+                - id: 44444444-4444-4444-8444-444444444444
+                  reference: 44444444-4444-4444-8444-444444444444
+                  kind: offer_decision
+                  occurredAt: '2026-11-07T11:00:00.000Z'
+                  result: accepted
+                  ruleVersion: mortgage-underwriting-1
+                - id: 55555555-5555-4555-8555-555555555555
+                  reference: COT-2026-00001
+                  kind: quote
+                  occurredAt: '2026-11-07T10:00:00.000Z'
+                  result: completed
+                  ruleVersion: provisional-1
+                hasMore: false
+        '400':
+          description: Invalid or repeated query, invalid dates, range longer than
+            31 days, unknown parameter, or an Authorization header.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalError'
+        '401':
+          description: No current web session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalError'
+        '403':
+          description: No current explicit grant to an active partner.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalError'
+        '405':
+          description: Only GET is supported; Allow is GET.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalError'
+        '503':
+          description: Authorization, lease or data unavailable; no zero counts are
+            substituted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalError'
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local HTTP development only.
+  schemas:
+    PartnerPortal:
+      type: object
+      additionalProperties: false
+      required:
+      - traceId
+      - partner
+      - credentials
+      - hasMoreCredentials
+      - quota
+      - catalog
+      - versions
+      - period
+      - updatedAt
+      - totals
+      - items
+      - hasMore
+      properties:
+        traceId: &id002
+          type: string
+          format: uuid
+        partner:
+          type: object
+          additionalProperties: false
+          required:
+          - id
+          - code
+          properties:
+            id: *id002
+            code: &id005
+              type: string
+              minLength: 1
+              maxLength: 128
+        credentials:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - id
+            - scopes
+            - expiresAt
+            - status
+            properties:
+              id: *id002
+              scopes:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                maxItems: 32
+              expiresAt: &id003
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum:
+                - active
+                - expired
+                - revoked
+          maxItems: 20
+        hasMoreCredentials: &id006
+          type: boolean
+        quota:
+          type: object
+          additionalProperties: false
+          required:
+          - configured
+          properties:
+            configured:
+              type: boolean
+              enum:
+              - false
+        catalog:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - product
+            - operations
+            properties:
+              product:
+                type: string
+                enum:
+                - vida_hipotecario
+              operations:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required:
+                  - method
+                  - path
+                  - scope
+                  properties:
+                    method:
+                      type: string
+                      enum:
+                      - POST
+                    path:
+                      type: string
+                      enum:
+                      - /api/v1/quotes
+                      - /api/v1/partner/offers
+                    scope:
+                      type: string
+                      enum:
+                      - quotes:create
+                      - partner-offers:create
+        versions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - id
+            properties:
+              id:
+                type: string
+                pattern: ^v[1-9][0-9]*$
+              deprecatedAt: *id001
+              sunset: *id001
+          minItems: 1
+        period:
+          type: object
+          additionalProperties: false
+          required:
+          - from
+          - to
+          - timeZone
+          properties:
+            from: *id001
+            to: *id001
+            timeZone:
+              type: string
+              enum:
+              - UTC
+        updatedAt: *id003
+        totals:
+          type: object
+          additionalProperties: false
+          required:
+          - completed
+          - accepted
+          - preliminary
+          - declined
+          properties:
+            completed: &id004
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            accepted: *id004
+            preliminary: *id004
+            declined: *id004
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - id
+            - reference
+            - kind
+            - occurredAt
+            - result
+            - ruleVersion
+            properties:
+              id: *id002
+              reference: *id005
+              kind:
+                type: string
+                enum:
+                - quote
+                - offer_decision
+              occurredAt: *id003
+              result:
+                type: string
+                enum:
+                - completed
+                - accepted
+                - preliminary
+                - declined
+              ruleVersion: *id005
+          maxItems: 20
+        hasMore: *id006
+    PortalError:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      - traceId
+      properties:
+        error:
+          type: string
+          enum:
+          - invalid_request
+          - unauthorized
+          - forbidden
+          - access_unavailable
+          - portal_unavailable
+          - method_not_allowed
+        traceId: *id002

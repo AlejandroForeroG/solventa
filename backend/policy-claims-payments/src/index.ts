@@ -17,7 +17,11 @@ const RECONCILIATION_BATCH = 25;
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
-    const response = await createHttp({ finance: createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }),
+    const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
+    const response = await createHttp({ finance,
+      advisor: { finance, authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+        approve: input => this.env.IDENTITY_SERVICE.authorizeAdvisorApprovalV1(input),
+        deny: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input) },
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },

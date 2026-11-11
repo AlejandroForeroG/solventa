@@ -22,6 +22,7 @@ const lost = vi.fn();
 const show = (english = false) => render(<I18n initial={english ? 'en-US' : 'es-CO'}><PolicyPortal onSessionLost={lost} /></I18n>);
 function serve(routes: Record<string, () => Response | Promise<Response>>) {
   const fetch = vi.fn(async (url: string) => {
+    if (url.endsWith('/advisor-authorizations') && !routes[url]) return json({status:'ok',authorizations:[],hasMore:false});
     const route = routes[url];
     if (!route) throw new Error('unexpected ' + url);
     return route();

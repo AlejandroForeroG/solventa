@@ -3,18 +3,20 @@ info:
   title: Solventa API - Quotes
   version: 1.2.1
   description: >
-    Quote with minimum data. The same input and rule version always give the same premium;
-    no external source is queried. Latency target: p95 <= 250 ms and p99 <= 500 ms.
-    Saved quotes require authentication and the quotes:create permission verified by Identity;
-    see identity-access.yaml. The anonymous calculator returns only an indicative estimate,
-    without persistence or external data.
-    When Identity returns a 401 or 403 authorization denial, its minimal security audit and outbox
-    have committed together without credentials or request data. Failure to persist that decision
-    returns 503 access_unavailable and blocks the quote. Missing, malformed or oversized HTTP
-    credentials retain their channel and reach Identity as empty credential values for a recorded
-    denial; oversized Origin values are treated as an unconfigured origin. An invalid internal RPC
-    reply is unavailable rather than an unaudited authentication denial. No quote denial response
-    confirms email delivery or a notification deadline.
+    Quote with minimum data. The same input and rule version always give the
+    same premium; no external source is queried. Latency target: p95 <= 250 ms
+    and p99 <= 500 ms. Saved quotes require authentication and the quotes:create
+    permission verified by Identity; see identity-access.yaml. The anonymous
+    calculator returns only an indicative estimate, without persistence or
+    external data. When Identity returns a 401 or 403 authorization denial, its
+    minimal security audit and outbox have committed together without
+    credentials or request data. Failure to persist that decision returns 503
+    access_unavailable and blocks the quote. Missing, malformed or oversized
+    HTTP credentials retain their channel and reach Identity as empty credential
+    values for a recorded denial; oversized Origin values are treated as an
+    unconfigured origin. An invalid internal RPC reply is unavailable rather
+    than an unaudited authentication denial. No quote denial response confirms
+    email delivery or a notification deadline.
 servers:
   - url: /api/v1
 tags:
@@ -25,13 +27,15 @@ paths:
     post:
       operationId: estimateQuote
       summary: Calculate an anonymous preliminary estimate
-      tags: [Quotes]
+      tags: [ Quotes ]
       description: >
-        Accepts only age, loan amount and term as integers, in a JSON body of at most 1024 bytes.
-        Uses the same provisional rating rule as saved quotes, without Identity, SQL or external sources.
-        No quote, decision, consent, audit or outbox is created. No quote identifier or validity is issued.
-        The result is indicative and cannot be used to contract. After sign-in, the saved-quote endpoint
-        independently validates identity and date of birth and recalculates the price.
+        Accepts only age, loan amount and term as integers, in a JSON body of at
+        most 1024 bytes. Uses the same provisional rating rule as saved quotes,
+        without Identity, SQL or external sources. No quote, decision, consent,
+        audit or outbox is created. No quote identifier or validity is issued.
+        The result is indicative and cannot be used to contract. After sign-in,
+        the saved-quote endpoint independently validates identity and date of
+        birth and recalculates the price.
       security: []
       parameters:
         - $ref: './common.yaml#/components/parameters/TraceId'
@@ -58,14 +62,16 @@ paths:
                 ruleVersion: provisional-1
                 traceId: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
         '400':
-          description: Invalid JSON, media type, oversized body or unsupported fields. No values or unknown property names are echoed.
+          description: Invalid JSON, media type, oversized body or unsupported fields. No
+            values or unknown property names are echoed.
           headers:
             X-Trace-Id: { $ref: '#/components/headers/TraceId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EstimateValidationError' }
         '503':
-          description: The calculator service is unavailable. No write occurs; retry the calculation without an idempotency key.
+          description: The calculator service is unavailable. No write occurs; retry the
+            calculation without an idempotency key.
           headers:
             X-Trace-Id: { $ref: '#/components/headers/TraceId' }
           content:
@@ -75,7 +81,7 @@ paths:
     post:
       operationId: createPartnerQuote
       summary: Create a quote as a partner
-      tags: [Quotes]
+      tags: [ Quotes ]
       description: The partner is the actor. The customer data comes from the request body.
       security:
         - PartnerBearer: []
@@ -94,16 +100,52 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/Internal' }
         '503': { $ref: '#/components/responses/Unavailable' }
+        "429":
+          description: The partner has exhausted its shared current UTC-day admission
+            quota. No quote or offer effect is started. HTTP retries consume
+            units only when admitted. Retry after the UTC reset.
+          headers:
+            Retry-After:
+              description: Whole seconds until the next UTC day.
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 86400
+            X-Trace-Id:
+              description: Canonical correlation identifier.
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - error
+                  - traceId
+                properties:
+                  error:
+                    type: string
+                    enum:
+                      - quota_exceeded
+                  traceId:
+                    type: string
+                    format: uuid
+              example:
+                error: quota_exceeded
+                traceId: 11111111-1111-4111-8111-111111111111
   /me/quotes:
     post:
       operationId: createUserQuote
       summary: Create a quote as the authenticated web user
-      tags: [Quotes]
+      tags: [ Quotes ]
       description: >
-        The actor is the user of the sealed session cookie; the quote belongs to that user's own
-        subject and no user identifier is taken from the body. A write must carry the same Origin
-        as its actual allowed request host, including during canonical/legacy domain transition.
-        Requests with an Authorization header are rejected with 400. If the session expired,
+        The actor is the user of the sealed session cookie; the quote belongs to
+        that user's own subject and no user identifier is taken from the body. A
+        write must carry the same Origin as its actual allowed request host,
+        including during canonical/legacy domain transition. Requests with an
+        Authorization header are rejected with 400. If the session expired,
         renew it through /auth/session and retry once.
       security:
         - WebSession: []
@@ -152,14 +194,17 @@ components:
       in: header
       required: false
       description: Language of text messages. It never changes amounts or currency.
-      schema: { type: string, enum: [es-CO, en-US], default: es-CO }
+      schema: { type: string, enum: [ es-CO, en-US ], default: es-CO }
   headers:
     TraceId:
-      description: Request correlation UUID with version 1 through 8 and RFC variant, normalized to lowercase. Missing or invalid values are replaced before calling Identity; the response and security denial share this correlation.
+      description: Request correlation UUID with version 1 through 8 and RFC variant,
+        normalized to lowercase. Missing or invalid values are replaced before
+        calling Identity; the response and security denial share this
+        correlation.
       schema: { type: string, format: uuid }
     WwwAuthenticate:
       description: Challenge for a missing or invalid partner token.
-      schema: { type: string, enum: ['Bearer realm="solventa"'] }
+      schema: { type: string, enum: [ 'Bearer realm="solventa"' ] }
   requestBodies:
     QuoteRequest:
       required: true
@@ -177,7 +222,8 @@ components:
           schema:
             $ref: '#/components/schemas/Quote'
     Replayed:
-      description: The Idempotency-Key was reused with the same request. Returns the original quote without creating another.
+      description: The Idempotency-Key was reused with the same request. Returns the
+        original quote without creating another.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -185,7 +231,8 @@ components:
           schema:
             $ref: '#/components/schemas/Quote'
     Invalid:
-      description: One or more fields break the rules, or a web request carries an Authorization header. No quote is stored.
+      description: One or more fields break the rules, or a web request carries an
+        Authorization header. No quote is stored.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -212,7 +259,8 @@ components:
           schema:
             $ref: '#/components/schemas/AccessError'
     Forbidden:
-      description: The partner credential is inactive, expired, revoked or lacks the scope, or a web write carries an unauthorized Origin.
+      description: The partner credential is inactive, expired, revoked or lacks the
+        scope, or a web write carries an unauthorized Origin.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -232,7 +280,11 @@ components:
             message: The idempotency key was already used with a different request.
             traceId: 7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47
     Unavailable:
-      description: Access could not be verified, a service is unavailable, or Identity could not commit its required security-denial audit/outbox. The response confirms no successful quote or durable denial record. A gateway failure can leave the write outcome unknown; retry with the same Idempotency-Key and unchanged body.
+      description: Access could not be verified, a service is unavailable, or Identity
+        could not commit its required security-denial audit/outbox. The response
+        confirms no successful quote or durable denial record. A gateway failure
+        can leave the write outcome unknown; retry with the same Idempotency-Key
+        and unchanged body.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -240,7 +292,8 @@ components:
           schema:
             $ref: '#/components/schemas/AccessError'
     Internal:
-      description: An internal quote error occurred. The write outcome may be uncertain; retry with the same Idempotency-Key and unchanged body.
+      description: An internal quote error occurred. The write outcome may be
+        uncertain; retry with the same Idempotency-Key and unchanged body.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -251,7 +304,7 @@ components:
     EstimateRequest:
       type: object
       additionalProperties: false
-      required: [ageYears, amount, termMonths]
+      required: [ ageYears, amount, termMonths ]
       properties:
         ageYears: { type: integer, minimum: 18, maximum: 70 }
         amount: { type: integer, minimum: 1, maximum: 9007199254740991 }
@@ -259,21 +312,30 @@ components:
     Estimate:
       type: object
       additionalProperties: false
-      required: [premiumMonthly, currency, sumInsured, termMonths, basis, ruleVersion, traceId]
+      required:
+        [
+          premiumMonthly,
+          currency,
+          sumInsured,
+          termMonths,
+          basis,
+          ruleVersion,
+          traceId
+        ]
       properties:
         premiumMonthly: { type: integer, minimum: 0 }
-        currency: { type: string, enum: [COP] }
+        currency: { type: string, enum: [ COP ] }
         sumInsured: { type: integer, minimum: 1, maximum: 9007199254740991 }
         termMonths: { type: integer, minimum: 12, maximum: 240 }
-        basis: { type: string, enum: [minimum_data] }
+        basis: { type: string, enum: [ minimum_data ] }
         ruleVersion: { type: string, minLength: 1 }
         traceId: { type: string, format: uuid }
     EstimateValidationError:
       type: object
       additionalProperties: false
-      required: [error, errors, traceId]
+      required: [ error, errors, traceId ]
       properties:
-        error: { type: string, enum: [validation_error] }
+        error: { type: string, enum: [ validation_error ] }
         errors:
           type: array
           minItems: 1
@@ -282,18 +344,18 @@ components:
     QuoteRequest:
       type: object
       additionalProperties: false
-      required: [product, customer, credit]
+      required: [ product, customer, credit ]
       properties:
         product:
           type: string
-          enum: [vida_hipotecario]
+          enum: [ vida_hipotecario ]
         customer:
           type: object
           additionalProperties: false
-          required: [fullName, documentType, documentNumber, birthDate, city]
+          required: [ fullName, documentType, documentNumber, birthDate, city ]
           properties:
             fullName: { type: string, minLength: 1, maxLength: 120 }
-            documentType: { type: string, enum: [CC] }
+            documentType: { type: string, enum: [ CC ] }
             documentNumber: { type: string, pattern: '^[0-9]{6,10}$' }
             birthDate:
               type: string
@@ -303,7 +365,7 @@ components:
         credit:
           type: object
           additionalProperties: false
-          required: [partnerCreditId, amount, termMonths]
+          required: [ partnerCreditId, amount, termMonths ]
           properties:
             partnerCreditId: { type: string, minLength: 1, maxLength: 64 }
             amount:
@@ -317,14 +379,25 @@ components:
     Quote:
       type: object
       additionalProperties: false
-      required: [quoteId, premiumMonthly, currency, sumInsured, termMonths, validUntil, basis, ruleVersion, traceId]
+      required:
+        [
+          quoteId,
+          premiumMonthly,
+          currency,
+          sumInsured,
+          termMonths,
+          validUntil,
+          basis,
+          ruleVersion,
+          traceId
+        ]
       properties:
         quoteId: { type: string, pattern: '^COT-[0-9]{4}-[0-9]{5}$' }
         premiumMonthly:
           type: integer
           minimum: 0
           description: Estimated monthly premium in Colombian pesos, no decimals.
-        currency: { type: string, enum: [COP] }
+        currency: { type: string, enum: [ COP ] }
         sumInsured: { type: integer, minimum: 1 }
         termMonths: { type: integer, minimum: 12, maximum: 240 }
         validUntil:
@@ -333,7 +406,7 @@ components:
           description: Issue time plus 30 days.
         basis:
           type: string
-          enum: [minimum_data]
+          enum: [ minimum_data ]
           description: Calculated only from the submitted data, with no external source.
         ruleVersion:
           type: string
@@ -342,14 +415,14 @@ components:
     FieldError:
       type: object
       additionalProperties: false
-      required: [field, code]
+      required: [ field, code ]
       properties:
         field:
           type: string
           description: >
-            Known field path, for example customer.birthDate. Unknown property names are never
-            echoed; their error identifies the customer or credit container, or an empty string
-            for the request root.
+            Known field path, for example customer.birthDate. Unknown property
+            names are never echoed; their error identifies the customer or
+            credit container, or an empty string for the request root.
         code:
           type: string
           enum:
@@ -362,13 +435,14 @@ components:
             - unsupported_product
         params:
           type: object
-          description: Numbers to build the message, for example age, min and max. Never personal data.
+          description: Numbers to build the message, for example age, min and max. Never
+            personal data.
     ValidationError:
       type: object
       additionalProperties: false
-      required: [error, message, errors, traceId]
+      required: [ error, message, errors, traceId ]
       properties:
-        error: { type: string, enum: [validation_error] }
+        error: { type: string, enum: [ validation_error ] }
         message: { type: string }
         errors:
           type: array
@@ -380,17 +454,24 @@ components:
       type: object
       additionalProperties: false
       description: Only the canonical code and the correlation id, with no provider data.
-      required: [error, traceId]
+      required: [ error, traceId ]
       properties:
         error:
           type: string
-          enum: [unauthorized, forbidden, access_unavailable, service_unavailable, invalid_request]
+          enum:
+            [
+              unauthorized,
+              forbidden,
+              access_unavailable,
+              service_unavailable,
+              invalid_request
+            ]
         traceId: { type: string, format: uuid }
     InternalError:
       type: object
       additionalProperties: false
-      required: [error, message, traceId]
+      required: [ error, message, traceId ]
       properties:
-        error: { type: string, enum: [internal_error] }
+        error: { type: string, enum: [ internal_error ] }
         message: { type: string }
         traceId: { type: string, format: uuid }

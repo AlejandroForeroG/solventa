@@ -7,8 +7,10 @@ import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
+import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
 
 export type PolicyHttpDependencies = {
+  advisor?: AdvisorHttpDependencies;
   assistance?: AssistanceHttpDependencies;
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
@@ -53,6 +55,7 @@ async function smallBody(request: Request): Promise<unknown> {
 export function createHttp(deps?: PolicyHttpDependencies) {
   const app = new Hono<{ Bindings: PolicyEnv }>();
   app.get('/health', (c) => c.json({ service: 'policy-claims-payments', status: 'alive' }));
+  if (deps?.advisor) mountAdvisor(app, deps.advisor, smallBody);
   app.all('/api/v1/policies', listOwnHandler);
   // Web portal reads: static paths are registered before the :policyId routes.
   app.all('/api/v1/policies/issued', handler('policies:read', false, 'list'));
