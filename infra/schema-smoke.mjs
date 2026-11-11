@@ -28,7 +28,7 @@ try {
     console.log(JSON.stringify({ freshSchema: owner.schema, status: 'migrating' }));
     await fresh.query(`CREATE SCHEMA ${owner.schema}`);
     await fresh.query(`CREATE TABLE ${owner.schema}.schema_migrations (version STRING PRIMARY KEY, checksum STRING NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-    // Model an existing environment awaiting the notification, claims, partner authorization and lifecycle upgrades.
+    // Model an existing environment awaiting the notification, claims, claim report, partner authorization and lifecycle upgrades.
     const baseline = catalog.find(entry => entry.owner.schema === owner.schema).migrations
       .filter(migration => !(awaiting[owner.schema] ?? []).includes(migration.version));
     await applyMigrations(fresh, owner, baseline);
