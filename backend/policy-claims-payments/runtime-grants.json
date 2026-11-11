@@ -73,6 +73,11 @@
     "SELECT",
     "INSERT"
   ],
+  "claim_number_counters": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
   "advisor_authorizations": [
     "SELECT",
     "INSERT"
