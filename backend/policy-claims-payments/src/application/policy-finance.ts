@@ -8,22 +8,26 @@ import type { FinancialDependencies, IndemnityCandidate, IssuanceCandidate, Paym
 import { financialDecision, financialEventSource, financialRejection, gatewaySource, providerEventSource } from './financial-decision';
 import type { FinancialAction, FinancialEvidence, FinancialSource } from './financial-decision';
 
+import { isLifecycleChange, lifecycleContent } from '../domain/policy-lifecycle';
+import type { LifecycleAction, LifecycleChange } from '../domain/policy-lifecycle';
+
 class Rejection extends Error {
   constructor(readonly code: FinancialErrorCode, readonly httpStatus: 400 | 403 | 404 | 409 = 409) { super(code); }
 }
 const reject = (code: FinancialErrorCode, httpStatus: 400 | 403 | 404 | 409 = 409): never => { throw new Rejection(code, httpStatus); };
-const view = (policy: StoredPolicy): PolicyView => ({ policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
+const view = (policy: StoredPolicy): PolicyView => ({ ...(policy.lifecycle ? { lifecycle: policy.lifecycle } : {}), policyId: policy.id, offerId: policy.offerId, offerVersion: policy.offerVersion,
   status: policy.status, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
   effectiveUntil: policy.effectiveUntil, document: policy.document, documentHash: policy.documentHash, synthetic: true, providerMode: 'mock' });
 const summary = (policy: StoredPolicy): PolicySummary => {
   if (policy.status !== 'issued') throw new InvalidFinancialRecord();
-  return { policyId: policy.id, product: policy.offer.product, status: 'issued', premium: policy.premium, currency: 'COP',
+  return { ...(policy.lifecycle ? { contractStatus: policy.lifecycle.action } : {}), policyId: policy.id, product: policy.offer.product, status: 'issued', premium: policy.premium, currency: 'COP',
     effectiveFrom: policy.effectiveFrom, effectiveUntil: policy.effectiveUntil, coverage: policy.offer.coverage };
 };
 // Only a provider-acknowledged premium exposes its synthetic receipt reference.
 const paid = (premium: Payment | null): { payment?: PaymentView } => premium ? { payment: { status: premium.status,
   reference: premium.status === 'confirmed' || premium.status === 'refunded' ? premium.providerReference : null } } : {};
 const validActor = (actor: FinancialActor) => UUID.test(actor.clientId) && UUID.test(actor.subjectToken);
+const historicalView = (value: PolicyView) => { const { lifecycle: _lifecycle, ...issued } = value; return canonical(issued); };
 type IssuanceContext = { actor: FinancialActor; policyId: string; documentHash: string; commandKey: string; traceId: string; trigger?: 'reconciliation' };
 export type IndemnityOutcome = { traceId: string; outcome: 'confirmed' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
 export type ReconciliationOutcome = { traceId: string; outcome: 'issued' | 'refunded' | 'unchanged' | 'rejected' | 'unavailable'; error?: FinancialErrorCode };
@@ -55,6 +59,8 @@ export class PolicyFinance {
   private async checked(record: PolicyRecord | null, actor?: FinancialActor): Promise<PolicyRecord> {
     if (!record) return reject('not_found', 404);
     const { policy, premium, signature } = record;
+    if (policy.lifecycle && (!isLifecycleChange(policy.lifecycle) || policy.lifecycle.policyId !== policy.id
+      || policy.lifecycle.sourceDocumentHash !== policy.documentHash || !await this.deps.integrity.verify(lifecycleContent(policy.lifecycle), policy.lifecycle.documentHash))) return reject('integrity_violation');
     if (actor && (policy.clientId !== actor.clientId || policy.subjectToken !== actor.subjectToken)) return reject('not_found', 404);
     const offer = policy.offer;
     if (!isAcceptedOffer(offer) || !(await this.deps.integrity.verify(offerContent(offer), policy.termsHash))
@@ -116,10 +122,61 @@ export class PolicyFinance {
     });
   }
 
-  listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult> {
+  changeLifecycle(input: { actor: FinancialActor; policyId: string; action: LifecycleAction; replacementPolicyId: string | null;
+    documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult> {
+    return this.run(input.traceId, async traceId => {
+      if (!validActor(input.actor) || !UUID.test(input.policyId) || !HEX.test(input.documentHash)
+        || !['modified', 'renewed', 'cancelled'].includes(input.action) || !/^[a-z][a-z_]{2,63}$/.test(input.reason)
+        || !/^[\x21-\x7e]{1,128}$/.test(input.idempotencyKey)
+        || (input.action === 'cancelled' ? input.replacementPolicyId !== null : !input.replacementPolicyId || !UUID.test(input.replacementPolicyId))) return reject('invalid_request', 400);
+      const key = await this.deps.integrity.digest(JSON.stringify(['lifecycle-key-v1', input.actor.clientId, input.idempotencyKey]));
+      const hash = await this.deps.integrity.digest(JSON.stringify(['lifecycle-request-v1', input.policyId, input.action, input.replacementPolicyId, input.documentHash, input.reason]));
+      return this.deps.store.transaction(async tx => {
+        if (!tx.lifecycleCommand || !tx.lifecycleReplacement || !tx.saveLifecycle) throw Error('lifecycle_not_configured');
+        // Lock both owned policies in deterministic order; a payment or another lifecycle command shares these locks.
+        const records = new Map<string, PolicyRecord>();
+        for (const id of [...new Set([input.policyId, ...(input.replacementPolicyId ? [input.replacementPolicyId] : [])])].sort()) {
+          records.set(id, await this.checked(await tx.policy(id, input.actor), input.actor));
+        }
+        const source = records.get(input.policyId);
+        if (!source) throw Error('lifecycle_source_missing');
+        const { policy } = source;
+        if (policy.documentHash !== input.documentHash) return reject('document_mismatch');
+        const prior = await tx.lifecycleCommand(input.actor.clientId, key);
+        if (prior && (prior.policyId !== policy.id || prior.requestHash !== hash)) return reject('idempotency_conflict');
+        if (prior && policy.lifecycle) return { status: 'ok', replayed: true, policy: view(policy), ...paid(source.premium) };
+        if (policy.status !== 'issued' || policy.lifecycle || !source.signature) return reject('policy_not_active');
+        const now = this.deps.now();
+        const replacement = input.replacementPolicyId ? records.get(input.replacementPolicyId) : undefined;
+        if (input.action !== 'cancelled') {
+          if (input.replacementPolicyId && await tx.lifecycleReplacement(input.replacementPolicyId)) return reject('policy_not_active');
+          if (!replacement || !replacement.signature || replacement.policy.status !== 'issued' || replacement.policy.lifecycle
+            || replacement.policy.id === policy.id || replacement.policy.offer.product !== policy.offer.product
+            || Date.parse(replacement.signature.signedAt) < Date.parse(source.signature.signedAt)
+            || Date.parse(replacement.policy.effectiveFrom) > now.getTime()
+            || Date.parse(replacement.policy.effectiveUntil) <= now.getTime()) return reject('policy_not_active');
+          if (input.action === 'renewed' && (now.getTime() < Date.parse(policy.effectiveUntil)
+            || Date.parse(replacement.policy.effectiveFrom) < Date.parse(policy.effectiveUntil))) return reject('invalid_request', 400);
+        }
+        if (input.action === 'modified' && now.getTime() >= Date.parse(policy.effectiveUntil)) return reject('policy_not_active');
+        const change: LifecycleChange = { changeId: this.deps.newId(), policyId: policy.id, action: input.action,
+          reason: input.reason, at: now.toISOString(), replacementPolicyId: input.replacementPolicyId,
+          sourceDocumentHash: policy.documentHash, replacementDocumentHash: replacement?.policy.documentHash ?? null,
+          refund: 'not_automated', ruleVersion: 'academic-policy-lifecycle-1', documentHash: '' };
+        change.documentHash = await this.deps.integrity.digest(lifecycleContent(change));
+        const capture = this.decision('policy.lifecycle.changed', traceId, policy, input.action, { payment: source.premium ?? undefined });
+        capture.rule.version = change.ruleVersion;
+        capture.inputs.lifecycle = change;
+        await tx.saveLifecycle(change, input.actor.clientId, key, hash, capture, traceId);
+        return { status: 'ok', replayed: false, policy: view({ ...policy, lifecycle: change }), ...paid(source.premium) };
+      });
+    });
+  }
+
+  listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult> {
     return this.run<PolicyListResult>(input.traceId, async () => {
       if (!validActor(input.actor)) return reject('invalid_request', 400);
-      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1);
+      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1, input.includeEnded ?? true);
       const policies: PolicySummary[] = [];
       for (const record of records.slice(0, MAX_LISTED_POLICIES)) {
         const { policy } = await this.checked(record, input.actor);
@@ -136,7 +193,7 @@ export class PolicyFinance {
     const { policy, premium, signature } = await this.checked(await this.deps.store.readPolicy(input.policyId, input.actor), input.actor);
     if (policy.status !== 'issued') return { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId };
     if (!premium || !signature || !premium.updatedAt) throw new InvalidFinancialRecord();
-    return { policyId: policy.id, offer: policy.offer, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
+    return { ...(policy.lifecycle ? { lifecycle: policy.lifecycle } : {}), policyId: policy.id, offer: policy.offer, premium: policy.premium, currency: 'COP', effectiveFrom: policy.effectiveFrom,
       effectiveUntil: policy.effectiveUntil, documentHash: policy.documentHash, signedAt: signature.signedAt,
       payment: { status: premium.status, reference: premium.providerReference, amount: premium.amount, at: premium.updatedAt } };
   }
@@ -153,6 +210,10 @@ export class PolicyFinance {
       const facts = await this.issuedFacts(input, traceId);
       if ('status' in facts) return facts;
       const file = documentFile(input.documentId, facts);
+      if (file && facts.lifecycle) file.lines.unshift('Estado contractual: ' + facts.lifecycle.action,
+        'Cambio registrado: ' + facts.lifecycle.at, 'Motivo: ' + facts.lifecycle.reason,
+        'Reemplazo: ' + (facts.lifecycle.replacementPolicyId ?? 'no aplica'), 'Devolución automática: no realizada',
+        'Huella del cambio: ' + facts.lifecycle.documentHash, 'El documento y el recibo originales se conservan como evidencia histórica.', '');
       return file ? { status: 'ok', file } : reject('not_found', 404);
     });
   }
@@ -272,7 +333,7 @@ export class PolicyFinance {
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if ((policy.status !== 'issued' && policy.status !== 'refunded')
-            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+            || historicalView(previous.result) !== historicalView(view(policy))) return reject('integrity_violation');
           if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
@@ -318,7 +379,7 @@ export class PolicyFinance {
         if (previous && (previous.requestHash !== requestHash || previous.policyId !== policy.id)) return reject('idempotency_conflict');
         if (previous?.result) {
           if ((policy.status !== 'issued' && policy.status !== 'refunded')
-            || canonical(previous.result) !== canonical(view(policy))) return reject('integrity_violation');
+            || historicalView(previous.result) !== historicalView(view(policy))) return reject('integrity_violation');
           if (policy.status === 'refunded') return reject('signature_failed');
           return { policy, payment: premium, replayed: true, completed: view(policy) };
         }
@@ -590,6 +651,7 @@ export class PolicyFinance {
       const previous = await tx.inbox(occurrence.eventId, 'policy.parametric.v1');
       if (previous && (previous.hash !== hash || previous.policyId !== policy.id)) return reject('event_conflict');
       if (policy.status !== 'issued') return reject('policy_not_active');
+      if (!previous && policy.lifecycle && Date.parse(occurrence.occurredAt) >= Date.parse(policy.lifecycle.at)) return reject('event_not_covered');
       const coverage = policy.offer.coverage;
       const amount = indemnityAmount(coverage);
       if (!amount || !occurrenceCovered(coverage, occurrence) || !signature

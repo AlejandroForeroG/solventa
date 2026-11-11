@@ -8,7 +8,7 @@ export type PolicyDocumentKind = typeof DOCUMENT_KINDS[number];
 export type PolicyDocumentEntry = { documentId: PolicyDocumentKind; issuedAt: string };
 export type PolicyPaymentStatus = 'paid' | 'pending' | 'failed';
 export type PolicyPaymentEntry = { date: string; amount: string; currency: 'COP'; status: PolicyPaymentStatus; reference: string | null };
-export type PolicyDetail = { policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
+export type PolicyDetail = { lifecycle?: import('./policy-lifecycle').LifecycleChange; policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: Coverage; exclusions: Exclusion[]; conditionsVersion: string;
   documents: PolicyDocumentEntry[]; payments: PolicyPaymentEntry[] };
 export type DocumentFile = { fileName: string; title: string; lines: string[] };
@@ -16,7 +16,7 @@ type Failure = Extract<FinancialResult, { status: 'denied' | 'unavailable' }>;
 export type PolicyDetailResult = { status: 'ok'; detail: PolicyDetail } | Failure;
 export type PolicyDocumentResult = { status: 'ok'; file: DocumentFile } | Failure;
 // Facts of an issued policy after the integrity checks; the premium date is the last change of its payment.
-export type IssuedPolicyFacts = { policyId: string; offer: AcceptedOffer; premium: string; currency: 'COP'; effectiveFrom: string; effectiveUntil: string;
+export type IssuedPolicyFacts = { lifecycle?: import('./policy-lifecycle').LifecycleChange; policyId: string; offer: AcceptedOffer; premium: string; currency: 'COP'; effectiveFrom: string; effectiveUntil: string;
   documentHash: string; signedAt: string;
   payment: { status: 'pending' | 'confirmed' | 'declined' | 'refunded'; reference: string | null; amount: string; at: string } };
 
@@ -53,7 +53,7 @@ export function policyDetail(facts: IssuedPolicyFacts, versions: readonly Condit
   const status = paymentStatus(facts.payment.status);
   const documents: PolicyDocumentEntry[] = [{ documentId: 'signed_policy', issuedAt: facts.signedAt }, { documentId: 'general_conditions', issuedAt: facts.signedAt }];
   if (status === 'paid') documents.push({ documentId: 'premium_receipt', issuedAt: facts.payment.at });
-  return { policyId: facts.policyId, product: facts.offer.product, status: 'issued', premium: facts.premium, currency: facts.currency,
+  return { ...(facts.lifecycle ? { lifecycle: facts.lifecycle } : {}), policyId: facts.policyId, product: facts.offer.product, status: 'issued', premium: facts.premium, currency: facts.currency,
     effectiveFrom: facts.effectiveFrom, effectiveUntil: facts.effectiveUntil, coverage: facts.offer.coverage,
     exclusions: conditions.exclusions, conditionsVersion: conditions.version, documents,
     payments: [{ date: facts.payment.at, amount: facts.payment.amount, currency: 'COP', status,
