@@ -10,7 +10,7 @@ import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapter
 import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
 import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
 import type { AcceptedOffer, FinancialResult, SignedOfferAcceptanceV1 } from '../backend/policy-claims-payments/src/domain/financial';
-import type { FinancialDependencies, FinancialStore, PaymentGateway, SignatureProvider } from '../backend/policy-claims-payments/src/application/ports/financial';
+import type { FinancialDependencies, FinancialStore, FinancialTransaction, PaymentGateway, SignatureProvider } from '../backend/policy-claims-payments/src/application/ports/financial';
 import { MockParametricEventProvider } from '../backend/policy-claims-payments/src/adapters/outbound/mock-parametric-provider';
 import { acceptedOffer, financialIntegrity, financialNow, flightEvent, providerEvent } from '../tests/financial-fixtures';
 
@@ -879,6 +879,95 @@ try {
     assert.equal(JSON.stringify(capture).includes(terms.clientId), false); assert.equal(JSON.stringify(capture).includes(terms.subjectToken), false);
     assert.equal(JSON.stringify(capture).includes(key), false, 'raw caller idempotency key is not historical business input');
   }
+  // Execute the advisor path against the same real runtime role, preserving the already checked owner path.
+  const advisorService=new PolicyFinance({...base,now:()=>new Date()});
+  const ownerActor={clientId:lifecycleOffer.payload.clientId,subjectToken:lifecycleOffer.payload.subjectToken};
+  const advisorActor={clientId:randomUUID(),subjectToken:randomUUID(),advisorReference:randomUUID()};
+  const leased=()=>({...advisorActor,authorizationExpiresAt:new Date(Date.now()+5000).toISOString()});
+  const approve=async(target:Awaited<ReturnType<typeof makeLifecyclePolicy>>,expiresAt=new Date(Date.now()+86400000).toISOString())=>{
+    const result=await advisorService.createAdvisorAuthorization({actor:ownerActor,advisor:{principal:advisorActor,reference:advisorActor.advisorReference,expiresAt:new Date(Date.now()+5000).toISOString()},
+      policyId:target.policy.policyId,action:'cancelled',replacementPolicyId:null,documentHash:target.policy.documentHash,expiresAt,idempotencyKey:randomUUID(),traceId:randomUUID()});
+    assert.equal(result.status,'ok',JSON.stringify(result));if(result.status!=='ok')throw Error('approval_fixture');return result.authorization;
+  };
+  const delegatedTarget=await makeLifecyclePolicy(),authorization=await approve(delegatedTarget);
+  const delegatedCommand={authorizationId:authorization.authorizationId,reason:'customer_request',idempotencyKey:randomUUID(),traceId:randomUUID()};
+  const externalBefore=await count('mock_gateway_operations');
+  const delegatedChanged=await advisorService.changeAdvisorLifecycle({...delegatedCommand,actor:leased()});assert.equal(delegatedChanged.status,'ok',JSON.stringify(delegatedChanged));
+  assert.equal((await advisorService.changeAdvisorLifecycle({...delegatedCommand,actor:leased()})).status,'ok');
+  assert.equal(await count('mock_gateway_operations'),externalBefore,'advisor lifecycle cannot charge or sign');
+  const executed=(await db.query('SELECT owner_id,advisor_id,change_id FROM policy.advisor_lifecycle_executions WHERE authorization_id=$1',[authorization.authorizationId])).rows;
+  assert.equal(executed.length,1);assert.equal(executed[0].owner_id,ownerActor.clientId);assert.equal(executed[0].advisor_id,advisorActor.clientId);
+  const advisorAudit=(await db.query("SELECT actor_reference FROM policy.audit_events WHERE correlation_id=$1 AND action='policy.lifecycle.changed'",[delegatedCommand.traceId])).rows[0];assert.equal(advisorAudit.actor_reference,advisorActor.clientId);
+  const delegatedNotice=(await db.query("SELECT payload FROM policy.outbox_events WHERE event_type='policy.lifecycle.notice' AND event_id=$1",[executed[0].change_id])).rows[0].payload;
+  assert.equal(delegatedNotice.clientId,ownerActor.clientId);assert.equal(validateNotice(delegatedNotice),true);
+  const delegatedCapture=(await captures(delegatedTarget.policy.policyId,'policy.lifecycle.changed'))[0];assert.equal(validateCapture(delegatedCapture),true);
+  assert.equal((delegatedCapture.inputs.authorization as {advisorClientId:string}).advisorClientId,advisorActor.clientId);
+  const revoked=await advisorService.revokeAdvisorAuthorization({actor:ownerActor,policyId:delegatedTarget.policy.policyId,authorizationId:authorization.authorizationId,traceId:randomUUID()});assert.equal(revoked.status,'ok');
+  assert.equal((await advisorService.changeAdvisorLifecycle({...delegatedCommand,actor:leased()})).status,'denied','revocation denies even protected replay');
+  const untouched=await makeLifecyclePolicy(),revocationFirst=await approve(untouched);
+  await advisorService.revokeAdvisorAuthorization({actor:ownerActor,policyId:untouched.policy.policyId,authorizationId:revocationFirst.authorizationId,traceId:randomUUID()});
+  assert.equal((await advisorService.changeAdvisorLifecycle({...delegatedCommand,authorizationId:revocationFirst.authorizationId,actor:leased()})).status,'denied');
+  assert.equal((await db.query('SELECT change_id FROM policy.policy_lifecycle_changes WHERE policy_id=$1',[untouched.policy.policyId])).rowCount,0);
+  for(const table of ['advisor_lifecycle_executions','audit_events','outbox_events']){
+    const target=await makeLifecyclePolicy(),approval=await approve(target),before=await counts(['policy_lifecycle_changes','advisor_lifecycle_executions','audit_events','outbox_events']);
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try{assert.equal((await advisorService.changeAdvisorLifecycle({...delegatedCommand,authorizationId:approval.authorizationId,idempotencyKey:randomUUID(),actor:leased()})).status,'unavailable');}
+    finally{await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`);}
+    assert.deepEqual(await counts(['policy_lifecycle_changes','advisor_lifecycle_executions','audit_events','outbox_events']),before);
+  }
+  const advisorRuntime=clientFor(runtime,config.ssl);await advisorRuntime.connect();
+  try{for(const table of ['advisor_authorizations','advisor_authorization_revocations','advisor_lifecycle_executions'])await assert.rejects(advisorRuntime.query(`DELETE FROM policy.${table}`),/privilege|denied/i);}
+  finally{await advisorRuntime.end();}
+  const decorateStore=(transform:(tx:FinancialTransaction)=>FinancialTransaction)=>new Proxy(store,{get(target,property){
+    if(property==='transaction')return <T>(work:(tx:FinancialTransaction)=>Promise<T>)=>target.transaction(tx=>work(transform(tx)));
+    const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
+  }});
+  const lifecycleTables=['policy_lifecycle_changes','advisor_lifecycle_executions','audit_events','outbox_events'];
+  // Freeze only the application clock, leaving the real database clock to enforce a lease that expires during the write.
+  for(const expiryKind of ['customer','professional'] as const){
+    const target=await makeLifecyclePolicy();
+    const approval=await approve(target,expiryKind==='customer'?new Date(Date.now()+700).toISOString():new Date(Date.now()+86400000).toISOString());
+    const frozen=new Date(),before=await counts(lifecycleTables);
+    const delayed=decorateStore(tx=>new Proxy(tx,{get(transaction,property){
+      const value=Reflect.get(transaction,property);
+      if(property==='saveLifecycle')return async(...args:unknown[])=>{await new Promise(resolve=>setTimeout(resolve,900));return Reflect.apply(value,transaction,args);};
+      return typeof value==='function'?value.bind(transaction):value;
+    }}));
+    const service=new PolicyFinance({...base,store:delayed,now:()=>frozen});
+    const actor={...advisorActor,authorizationExpiresAt:new Date(frozen.getTime()+(expiryKind==='professional'?700:5000)).toISOString()};
+    const result=await service.changeAdvisorLifecycle({...delegatedCommand,authorizationId:approval.authorizationId,idempotencyKey:randomUUID(),actor});
+    assert.equal(result.status,'unavailable',JSON.stringify({expiryKind,result}));
+    assert.deepEqual(await counts(lifecycleTables),before,'SQL expiry must roll back every lifecycle effect');
+  }
+  const gate=()=>{let release:()=>void=()=>{};const promise=new Promise<void>(resolve=>{release=resolve;});return{promise,release};};
+  for(const first of ['revoke','execute'] as const){
+    const target=await makeLifecyclePolicy(),approval=await approve(target),entered=gate(),release=gate();
+    const held=decorateStore(tx=>new Proxy(tx,{get(transaction,property){
+      const value=Reflect.get(transaction,property);
+      if(property===(first==='revoke'?'revokeAdvisorAuthorization':'saveLifecycle'))return async(...args:unknown[])=>{
+        const result=await Reflect.apply(value,transaction,args);entered.release();await release.promise;return result;
+      };
+      return typeof value==='function'?value.bind(transaction):value;
+    }}));
+    const heldService=new PolicyFinance({...base,store:held,now:()=>new Date()});
+    const revokeInput={actor:ownerActor,policyId:target.policy.policyId,authorizationId:approval.authorizationId,traceId:randomUUID()};
+    const executeInput={...delegatedCommand,actor:leased(),authorizationId:approval.authorizationId,idempotencyKey:randomUUID()};
+    const primary=first==='revoke'?heldService.revokeAdvisorAuthorization(revokeInput):heldService.changeAdvisorLifecycle(executeInput);
+    await Promise.race([entered.promise,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('SQL_gate_not_reached')),2000))]);
+    const secondary=first==='revoke'?advisorService.changeAdvisorLifecycle(executeInput):advisorService.revokeAdvisorAuthorization(revokeInput);
+    await new Promise(resolve=>setTimeout(resolve,30));release.release();
+    const [a,b]=await Promise.all([primary,secondary]);assert.equal(a.status,'ok',JSON.stringify(a));
+    if(first==='revoke'){
+      assert.notEqual(b.status,'ok'); // A serializable conflict may require caller retry before the opaque denial.
+      const retry=await advisorService.changeAdvisorLifecycle({...executeInput,actor:leased()});assert.equal(retry.status,'denied');
+      assert.equal((await db.query('SELECT change_id FROM policy.policy_lifecycle_changes WHERE policy_id=$1',[target.policy.policyId])).rowCount,0);
+    }else{
+      if(b.status!=='ok')assert.equal((await advisorService.revokeAdvisorAuthorization(revokeInput)).status,'ok');
+      assert.equal((await db.query('SELECT change_id FROM policy.advisor_lifecycle_executions WHERE authorization_id=$1',[approval.authorizationId])).rowCount,1);
+      assert.equal((await db.query('SELECT authorization_id FROM policy.advisor_authorization_revocations WHERE authorization_id=$1',[approval.authorizationId])).rowCount,1);
+    }
+  }
+  console.log(JSON.stringify({advisorLifecycleSQL:'passed',checks:['real_migrations_runtime','owner_and_executor_distinct','one_execution_on_retry','owner_notice_v1','no_provider_effects','revocation_denies_replay','revocation_before_execute_blocks','execution_audit_outbox_atomic_rollback','append_only_runtime','SQL_customer_and_professional_expiry_during_write','revocation_execution_race_both_orders']}));
   console.log(JSON.stringify({ financialSQL: 'passed', externalProviders: 'synthetic durable SQL gateway and deterministic signature/event protocol only',
     persistedCaptureActions: requiredActions, persistedCapturesValidated: persisted.length,
     rejectionAuditVisibilityUpperBoundsMs: auditTimingsMs, checks: ['fresh_migrations_and_replay', 'runtime_owned_grants', 'immutable_offer_import', 'owned_discovery', 'committed_owned_snapshot_reads_under_writer_contention', 'document_binding',

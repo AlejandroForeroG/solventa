@@ -72,5 +72,17 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "advisor_authorizations": [
+    "SELECT",
+    "INSERT"
+  ],
+  "advisor_authorization_revocations": [
+    "SELECT",
+    "INSERT"
+  ],
+  "advisor_lifecycle_executions": [
+    "SELECT",
+    "INSERT"
   ]
 }

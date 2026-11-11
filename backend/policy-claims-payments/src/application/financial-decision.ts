@@ -5,7 +5,8 @@ import type { Payment, StoredPolicy } from './ports/financial';
 
 export type FinancialAction = 'offer.accepted' | 'premium.requested' | 'premium.declined' | 'premium.confirmed'
   | 'policy.issued' | 'premium.refund_requested' | 'premium.refunded' | 'parametric.accepted' | 'indemnity.confirmed' | 'indemnity.declined'
-  | 'signature.challenge_created' | 'signature.challenge_failed' | 'signature.challenge_cancelled' | 'signature.challenge_verified' | 'policy.lifecycle.changed' | 'financial.denied';
+  | 'signature.challenge_created' | 'signature.challenge_failed' | 'signature.challenge_cancelled' | 'signature.challenge_verified' | 'policy.lifecycle.changed'
+  | 'policy.advisor.authorization.granted' | 'policy.advisor.authorization.revoked' | 'financial.denied';
 export type FinancialSource = { source: string; capturedAt: string; quality: 'synthetic_verified' | 'synthetic_result'; degraded: false;
   operation?: string; result?: string; reference?: string | null; referenceRecognized?: boolean; eventId?: string; occurredAt?: string };
 export type FinancialDecisionCapture = { schemaVersion: 1; contractVersion: 'v1'; correlationId: string;

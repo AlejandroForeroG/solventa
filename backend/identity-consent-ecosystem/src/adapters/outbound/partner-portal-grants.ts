@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { readPartnerQuota } from './partner-quotas';
 import type { PartnerPortalPermissions } from '../../application/api-access';
 
 export class SqlPartnerPortalGrants implements PartnerPortalPermissions {
@@ -24,7 +25,8 @@ export class SqlPartnerPortalGrants implements PartnerPortalPermissions {
       const credentials = result.rows.flatMap(r => r.credential_id === null ? [] : [{ id: r.credential_id, scopes: r.scopes,
         expiresAt: r.credential_expires_at.toISOString(), status: r.revoked_at ? 'revoked' as const
           : r.credential_expires_at.getTime() <= r.observed_at.getTime() ? 'expired' as const : 'active' as const }] );
-      return row ? { expiresAt: row.expires_at.toISOString(), partnerId: row.partner_id, code: row.code,
+      const quota = row ? await readPartnerQuota(db, row.partner_id) : undefined;
+      return row ? { quota, expiresAt: row.expires_at.toISOString(), partnerId: row.partner_id, code: row.code,
         credentials: credentials.slice(0, 20), hasMoreCredentials: credentials.length > 20 } : null;
     } finally { await db.end().catch(() => {}); }
   }

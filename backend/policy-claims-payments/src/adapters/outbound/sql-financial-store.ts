@@ -3,9 +3,26 @@ import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
 import { isLifecycleChange } from '../../domain/policy-lifecycle';
 import type { LifecycleChange } from '../../domain/policy-lifecycle';
+import { isAdvisorAuthorization } from '../../domain/advisor-authorization';
+import type { AdvisorAuthorization, AdvisorAuthorizationRecord, DelegatedLifecycleExecution } from '../../domain/advisor-authorization';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
 import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IndemnityCandidate, IndemnityNotice, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
+
+type AdvisorRow = { id: string; policy_id: string; owner_id: string; owner_subject: string; advisor_id: string; advisor_subject: string;
+  advisor_reference: string; payload: unknown; granted_at: Date; expires_at: Date; revoked_at: Date | null; change_id: string | null };
+const advisorSelect = `SELECT a.*,r.revoked_at,e.change_id FROM policy.advisor_authorizations a
+  LEFT JOIN policy.advisor_authorization_revocations r ON r.authorization_id=a.id
+  LEFT JOIN policy.advisor_lifecycle_executions e ON e.authorization_id=a.id`;
+function advisorRecord(row: AdvisorRow): AdvisorAuthorizationRecord {
+  const value = row.payload;
+  if (!isAdvisorAuthorization(value) || value.id !== row.id || value.policyId !== row.policy_id
+    || value.owner.clientId !== row.owner_id || value.owner.subjectToken !== row.owner_subject
+    || value.advisor.clientId !== row.advisor_id || value.advisor.subjectToken !== row.advisor_subject
+    || value.advisorReference !== row.advisor_reference || value.grantedAt !== row.granted_at.toISOString()
+    || value.expiresAt !== row.expires_at.toISOString()) throw new InvalidFinancialRecord();
+  return { authorization: value, revokedAt: row.revoked_at?.toISOString() ?? null, changeId: row.change_id };
+}
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
@@ -65,6 +82,39 @@ const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
 
 export class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
+  async advisorAuthorization(id: string, principal: FinancialActor, role: 'owner' | 'advisor') {
+    const column = role === 'owner' ? 'owner' : 'advisor';
+    const rows = await this.db.query<AdvisorRow>(advisorSelect + ` WHERE a.id=$1 AND a.${column}_id=$2 AND a.${column}_subject=$3`,
+      [id, principal.clientId, principal.subjectToken]);
+    return rows.rows[0] ? advisorRecord(rows.rows[0]) : null;
+  }
+  async advisorAuthorizationCommand(owner: FinancialActor, key: string) {
+    const row = (await this.db.query<AdvisorRow & { request_hash: string }>(advisorSelect
+      + ' WHERE a.owner_id=$1 AND a.owner_subject=$2 AND a.command_key=$3', [owner.clientId, owner.subjectToken, key])).rows[0];
+    return row ? { record: advisorRecord(row), requestHash: row.request_hash } : null;
+  }
+  async listAdvisorAuthorizations(principal: FinancialActor, role: 'owner' | 'advisor', policyId: string | null, limit: number, advisorReference?: string, after?: {grantedAt:string;id:string}) {
+    const column = role === 'owner' ? 'owner' : 'advisor';
+    const rows = (await this.db.query<AdvisorRow>(advisorSelect
+      + ` WHERE a.${column}_id=$1 AND a.${column}_subject=$2 AND ($3::UUID IS NULL OR a.policy_id=$3)
+          AND ($5::UUID IS NULL OR a.advisor_reference=$5)
+          AND ($6::TIMESTAMPTZ IS NULL OR (a.granted_at,a.id)<($6::TIMESTAMPTZ,$7::UUID))
+          ORDER BY a.granted_at DESC,a.id DESC LIMIT $4`, [principal.clientId, principal.subjectToken, policyId, limit, advisorReference ?? null, after?.grantedAt ?? null, after?.id ?? null])).rows;
+    return rows.map(advisorRecord);
+  }
+  async saveAdvisorAuthorization(value: AdvisorAuthorization, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string) {
+    await this.db.query(`INSERT INTO policy.advisor_authorizations
+      (id,policy_id,owner_id,owner_subject,advisor_id,advisor_subject,advisor_reference,command_key,request_hash,payload,granted_at,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [value.id, value.policyId, value.owner.clientId, value.owner.subjectToken, value.advisor.clientId, value.advisor.subjectToken,
+      value.advisorReference, key, requestHash, JSON.stringify(value), value.grantedAt, value.expiresAt]);
+    await this.audit('policy.advisor.authorization.granted', value.id, traceId, 'granted', value.owner.clientId, capture);
+  }
+  async revokeAdvisorAuthorization(value: AdvisorAuthorization, at: string, capture: FinancialDecisionCapture, traceId: string) {
+    await this.db.query('INSERT INTO policy.advisor_authorization_revocations(authorization_id,actor_id,revoked_at) VALUES($1,$2,$3)',
+      [value.id, value.owner.clientId, at]);
+    await this.audit('policy.advisor.authorization.revoked', value.id, traceId, 'revoked', value.owner.clientId, capture);
+  }
   async lifecycleCommand(actorId: string, key: string) {
     const row = (await this.db.query<{ policy_id: string; request_hash: string }>(
       'SELECT policy_id,request_hash FROM policy.policy_lifecycle_changes WHERE actor_id=$1 AND command_key=$2', [actorId, key])).rows[0];
@@ -73,21 +123,30 @@ export class SqlFinancialTransaction implements FinancialTransaction {
   async lifecycleReplacement(policyId: string): Promise<boolean> {
     return (await this.db.query('SELECT policy_id FROM policy.policy_lifecycle_changes WHERE replacement_policy_id=$1', [policyId])).rowCount === 1;
   }
-  async saveLifecycle(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string) {
+  async saveLifecycle(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string, execution?: DelegatedLifecycleExecution) {
     const result = await this.db.query(`WITH changed AS (
       INSERT INTO policy.policy_lifecycle_changes(policy_id,change_id,actor_id,command_key,request_hash,replacement_policy_id,payload,occurred_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING policy_id
+    ), delegated AS (
+      INSERT INTO policy.advisor_lifecycle_executions(change_id,authorization_id,owner_id,advisor_id,payload,occurred_at)
+      SELECT $2,a.id,$13,$3,$15,$8 FROM changed JOIN policy.advisor_authorizations a ON a.id=$14
+      WHERE a.policy_id=$1 AND a.owner_id=$13 AND a.advisor_id=$3 AND a.granted_at<=clock_timestamp()
+        AND a.expires_at>clock_timestamp() AND $16::TIMESTAMPTZ>clock_timestamp()
+        AND NOT EXISTS(SELECT 1 FROM policy.advisor_authorization_revocations r WHERE r.authorization_id=a.id)
+      RETURNING change_id
     ), audited AS (
       INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
-      SELECT $3::STRING,'policy.lifecycle.changed','policy_lifecycle',policy_id,$9,$10,now()+interval '90 days' FROM changed RETURNING resource_id
+      SELECT $3::STRING,'policy.lifecycle.changed','policy_lifecycle',policy_id,$9,$10,now()+interval '90 days' FROM changed
+      WHERE $14::UUID IS NULL OR EXISTS(SELECT 1 FROM delegated) RETURNING resource_id
     ), captured AS (
       INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
       SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.policy.lifecycle.changed',1,$11,$10 FROM audited RETURNING aggregate_id
     ) INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
       SELECT $2,'policy_lifecycle',aggregate_id,'policy.lifecycle.notice',1,$12,$10 FROM captured`,
     [change.policyId, change.changeId, actorId, key, requestHash, change.replacementPolicyId, JSON.stringify(change), change.at, change.action, traceId, JSON.stringify(capture),
-      JSON.stringify({ category: 'policy_lifecycle_changed', clientId: actorId, policyId: change.policyId, changeId: change.changeId,
-        action: change.action, changedAt: change.at, replacementPolicyId: change.replacementPolicyId, refund: change.refund })]);
+      JSON.stringify({ category: 'policy_lifecycle_changed', clientId: execution?.ownerClientId ?? actorId, policyId: change.policyId, changeId: change.changeId,
+        action: change.action, changedAt: change.at, replacementPolicyId: change.replacementPolicyId, refund: change.refund }),
+      execution?.ownerClientId ?? actorId, execution?.authorizationId ?? null, JSON.stringify(execution ?? {}), execution?.authorizationExpiresAt ?? null]);
     if (result.rowCount !== 1) throw Error('lifecycle_write_incomplete');
   }
   async createSignatureChallenge(challenge: SignatureChallenge): Promise<void> {

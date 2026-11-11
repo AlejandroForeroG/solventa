@@ -1,0 +1,171 @@
+{
+  "consumer": {
+    "name": "solventa-advisor-web"
+  },
+  "interactions": [
+    {
+      "description": "an authorized advisor execution with ready approval",
+      "providerStates": [
+        {
+          "name": "advisor approval ready"
+        }
+      ],
+      "request": {
+        "body": {
+          "reason": "customer_request"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "advisor-cancel-1"
+        },
+        "method": "POST",
+        "path": "/api/v1/advisor-authorizations/02000000-0000-4000-8000-000000000001/lifecycle"
+      },
+      "response": {
+        "body": {
+          "action": "cancelled",
+          "changeId": "02000000-0000-4000-8000-000000000005",
+          "changedAt": "2026-11-11T12:00:00.000Z",
+          "policyId": "01000000-0000-4000-8000-000000000003",
+          "replayed": false,
+          "status": "ok",
+          "traceId": "50000000-0000-4000-8000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.changeId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.changedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "an authorized advisor execution with revoked approval",
+      "providerStates": [
+        {
+          "name": "advisor approval revoked"
+        }
+      ],
+      "request": {
+        "body": {
+          "reason": "customer_request"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "advisor-cancel-1"
+        },
+        "method": "POST",
+        "path": "/api/v1/advisor-authorizations/02000000-0000-4000-8000-000000000001/lifecycle"
+      },
+      "response": {
+        "body": {
+          "error": "not_found",
+          "traceId": "50000000-0000-4000-8000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "an authorized advisor execution with unavailable approval",
+      "providerStates": [
+        {
+          "name": "advisor approval unavailable"
+        }
+      ],
+      "request": {
+        "body": {
+          "reason": "customer_request"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "advisor-cancel-1"
+        },
+        "method": "POST",
+        "path": "/api/v1/advisor-authorizations/02000000-0000-4000-8000-000000000001/lifecycle"
+      },
+      "response": {
+        "body": {
+          "error": "financial_unavailable",
+          "traceId": "50000000-0000-4000-8000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "solventa-web"
+  }
+}
