@@ -447,7 +447,7 @@ test('the native policy list authorizes the bearer token once, derives the owner
   assert.deepEqual(body.policies, [summary]);
   assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
   assert.deepEqual(calls[0].input, { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
-  assert.deepEqual(calls[1].input, { actor, traceId });
+  assert.deepEqual(calls[1].input, { actor, traceId, includeEnded: false });
 });
 
 test('the native policy list needs a bearer token: no credential, a cookie or a malformed header never reach authorization', async () => {

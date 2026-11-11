@@ -4,11 +4,11 @@ export type PolicyProduct = 'vida_hipotecario' | 'flight_delay' | 'weather_event
 export type PolicyCoverage = { kind: 'mortgage_life'; sumInsured: string }
   | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string }
   | { kind: 'weather_event'; stationId: string; parameter: 'precipitation_24h'; unit: 'mm'; threshold: number; payoutAmount: string };
-export type PolicySummary = { policyId: string; product: PolicyProduct; status: 'issued'; premium: string; currency: 'COP';
+export type PolicySummary = { contractStatus?: 'modified' | 'renewed' | 'cancelled'; policyId: string; product: PolicyProduct; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: PolicyCoverage };
 export const DOCUMENT_IDS = ['signed_policy', 'general_conditions', 'premium_receipt'] as const;
 export type PolicyDocumentId = typeof DOCUMENT_IDS[number];
-export type PolicyDetail = PolicySummary & { exclusions: { code: string; text: string }[]; conditionsVersion: string;
+export type PolicyDetail = PolicySummary & { lifecycle?: { action: 'modified' | 'renewed' | 'cancelled'; at: string; reason: string; replacementPolicyId: string | null }; exclusions: { code: string; text: string }[]; conditionsVersion: string;
   documents: { documentId: PolicyDocumentId; issuedAt: string }[];
   payments: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null }[] };
 export type PolicyListing = { policies: PolicySummary[]; hasMore: boolean };
@@ -38,7 +38,13 @@ function coverage(v: unknown): v is PolicyCoverage {
 }
 function summary(v: unknown): v is PolicySummary {
   return record(v) && uuid(v.policyId) && (v.product === 'vida_hipotecario' || v.product === 'flight_delay' || v.product === 'weather_event') && v.status === 'issued' && money(v.premium)
-    && v.currency === 'COP' && instant(v.effectiveFrom) && instant(v.effectiveUntil) && coverage(v.coverage);
+    && v.currency === 'COP' && instant(v.effectiveFrom) && instant(v.effectiveUntil) && coverage(v.coverage)
+    && (v.contractStatus === undefined || typeof v.contractStatus === 'string' && ['modified', 'renewed', 'cancelled'].includes(v.contractStatus));
+}
+export function validLifecycle(v: unknown): v is NonNullable<PolicyDetail['lifecycle']> {
+  return record(v) && typeof v.action === 'string' && ['modified', 'renewed', 'cancelled'].includes(v.action) && instant(v.at)
+    && typeof v.reason === 'string' && /^[a-z][a-z_]{2,63}$/.test(v.reason)
+    && (v.action === 'cancelled' ? v.replacementPolicyId === null : uuid(v.replacementPolicyId));
 }
 const exclusion = (v: unknown): v is PolicyDetail['exclusions'][number] => record(v) && typeof v.code === 'string' && typeof v.text === 'string';
 const documentEntry = (v: unknown): v is PolicyDetail['documents'][number] =>
@@ -47,7 +53,8 @@ const payment = (v: unknown): v is PolicyDetail['payments'][number] => record(v)
   && ['paid', 'pending', 'failed'].includes(String(v.status)) && (v.reference === null || typeof v.reference === 'string');
 function detail(v: unknown): v is PolicyDetail {
   return summary(v) && list((v as Record<string, unknown>).exclusions, exclusion) && typeof (v as Record<string, unknown>).conditionsVersion === 'string'
-    && list((v as Record<string, unknown>).documents, documentEntry) && list((v as Record<string, unknown>).payments, payment);
+    && list((v as Record<string, unknown>).documents, documentEntry) && list((v as Record<string, unknown>).payments, payment)
+    && ((v as Record<string, unknown>).lifecycle === undefined || validLifecycle((v as Record<string, unknown>).lifecycle));
 }
 
 async function read<T>(path: string, signal: AbortSignal, valid: (body: Record<string, unknown>) => T | null): Promise<PolicyOutcome<T>> {
@@ -66,6 +73,20 @@ export const listPolicies = (signal: AbortSignal) => read<PolicyListing>('/api/v
   body => (list(body.policies, summary) && body.policies.length <= 6 && typeof body.hasMore === 'boolean' ? { policies: body.policies, hasMore: body.hasMore } : null));
 export const readPolicyDetail = (policyId: string, signal: AbortSignal) =>
   read<PolicyDetail>(`/api/v1/policies/${encodeURIComponent(policyId)}/detail`, signal, body => (detail(body) ? body : null));
+
+export type LifecycleCommand = { action: 'modified' | 'renewed' | 'cancelled'; replacementPolicyId: string | null; documentHash: string; reason: string };
+export async function changePolicyLifecycle(policyId: string, command: LifecycleCommand, key: string): Promise<'confirmed' | 'unauthenticated' | 'conflict' | 'invalid' | 'uncertain'> {
+  try {
+    const response = await fetchWithSession(`/api/v1/policies/${encodeURIComponent(policyId)}/lifecycle`, { method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(command) });
+    if (response.status === 401) return 'unauthenticated';
+    const result: unknown = await response.json();
+    if (response.status === 200 && record(result) && result.policyId === policyId && uuid(result.traceId)
+      && validLifecycle(result.lifecycle) && result.lifecycle.action === command.action
+      && result.lifecycle.replacementPolicyId === (command.replacementPolicyId === null ? null : command.replacementPolicyId.toLowerCase())) return 'confirmed';
+    return response.status === 409 ? 'conflict' : response.status === 400 ? 'invalid' : 'uncertain';
+  } catch { return 'uncertain'; }
+}
 
 export async function downloadDocument(policyId: string, documentId: PolicyDocumentId): Promise<PolicyOutcome<PolicyFile>> {
   try {

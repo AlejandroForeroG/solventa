@@ -1,0 +1,82 @@
+{
+  "consumer": {
+    "name": "solventa-policy-lifecycle-web"
+  },
+  "interactions": [
+    {
+      "description": "an owner policy cancellation without automatic refund",
+      "providerStates": [
+        {
+          "name": "an owner with an active lifecycle policy"
+        }
+      ],
+      "request": {
+        "body": {
+          "action": "cancelled",
+          "documentHash": "75a3d40c87ce6f1791b02b3f60d60a7d0b5978a54a53e9cf737fe7070764b40a",
+          "reason": "customer_request",
+          "replacementPolicyId": null
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "idempotency-key": "lifecycle-cancellation-1"
+        },
+        "method": "POST",
+        "path": "/api/v1/policies/01000000-0000-4000-8000-000000000003/lifecycle"
+      },
+      "response": {
+        "body": {
+          "lifecycle": {
+            "action": "cancelled",
+            "at": "2026-10-16T02:01:00.000Z",
+            "reason": "customer_request",
+            "replacementPolicyId": null
+          },
+          "policyId": "01000000-0000-4000-8000-000000000003",
+          "traceId": "50000000-0000-4000-8000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.lifecycle.at": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "solventa-web"
+  }
+}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -771,13 +772,74 @@ try {
     await assert.rejects(auditRole.query("UPDATE policy.financial_contracts SET decision_capture='{}'"), error => (error as { code?: string }).code === '42501');
     assert.equal((await auditRole.query("SELECT has_schema_privilege(current_user,'policy','CREATE') AS allowed")).rows[0].allowed, false);
   } finally { await auditRole.end(); }
+  const lifecycleService = new PolicyFinance({ ...base, now: () => new Date('2026-10-16T02:02:00.000Z') });
+  const lifecycleOffer = await acceptedOffer();
+  const makeLifecyclePolicy = async () => {
+    const event = await acceptedOffer();
+    event.payload.clientId = lifecycleOffer.payload.clientId; event.payload.subjectToken = lifecycleOffer.payload.subjectToken;
+    event.signature = await financialIntegrity.digest(eventContent(event));
+    const imported = await importOffer(event);
+    return { event, policy: ok(await issue(finance, event, imported)).policy };
+  };
+  const cancelled = await makeLifecyclePolicy();
+  const commandFor = (policy: { policyId: string; documentHash: string }) => ({ actor: lifecycleOffer.payload, ...policy,
+    action: 'cancelled' as const, replacementPolicyId: null, reason: 'customer_request', idempotencyKey: randomUUID(), traceId: randomUUID() });
+  const cancelledCommand = commandFor(cancelled.policy);
+  const beforeCancel = (await db.query('SELECT p.id,p.status,f.document_hash FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id WHERE p.id=$1', [cancelled.policy.policyId])).rows;
+  const paymentBeforeCancel = (await db.query('SELECT id,status,provider_reference FROM policy.payments WHERE policy_id=$1', [cancelled.policy.policyId])).rows;
+  ok(await lifecycleService.changeLifecycle(cancelledCommand));
+  assert.equal(ok(await lifecycleService.changeLifecycle(cancelledCommand)).replayed, true);
+  assert.deepEqual((await db.query('SELECT p.id,p.status,f.document_hash FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id WHERE p.id=$1', [cancelled.policy.policyId])).rows, beforeCancel);
+  assert.deepEqual((await db.query('SELECT id,status,provider_reference FROM policy.payments WHERE policy_id=$1', [cancelled.policy.policyId])).rows, paymentBeforeCancel);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.policy_lifecycle_changes WHERE policy_id=$1', [cancelled.policy.policyId])).rows[0].n, 1);
+  const nativePolicies = await lifecycleService.listOwn({ actor: lifecycleOffer.payload, traceId: randomUUID(), includeEnded: false });
+  assert.equal(nativePolicies.status, 'ok'); if (nativePolicies.status === 'ok') assert.ok(!nativePolicies.policies.some(p => p.policyId === cancelled.policy.policyId));
+  const webHistory = await lifecycleService.listOwn({ actor: lifecycleOffer.payload, traceId: randomUUID() });
+  assert.equal(webHistory.status, 'ok'); if (webHistory.status === 'ok') assert.equal(webHistory.policies.find(p => p.policyId === cancelled.policy.policyId)?.contractStatus, 'cancelled');
+  const a = await makeLifecyclePolicy(), b = await makeLifecyclePolicy(), c = await makeLifecyclePolicy();
+  const modify = (source: typeof a) => ({ ...commandFor(source.policy), action: 'modified' as const, reason: 'coverage_change', replacementPolicyId: b.policy.policyId });
+  const rivals = await Promise.all([lifecycleService.changeLifecycle(modify(a)), lifecycleService.changeLifecycle(modify(c))]);
+  assert.equal(rivals.filter(r => r.status === 'ok').length, 1);
+  assert.equal(rivals.filter(r => r.status === 'denied' && r.httpStatus === 409).length, 1, JSON.stringify(rivals));
+  for (const table of ['audit_events', 'outbox_events']) {
+    const target = await makeLifecyclePolicy(), before = await counts(['policy_lifecycle_changes', 'audit_events', 'outbox_events']);
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { assert.equal((await lifecycleService.changeLifecycle(commandFor(target.policy))).status, 'unavailable'); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.deepEqual(await counts(['policy_lifecycle_changes', 'audit_events', 'outbox_events']), before, 'lifecycle, decision capture, audit and notice must roll back together');
+  }
+  const lifecycleRole = clientFor(runtime, config.ssl); await lifecycleRole.connect();
+  try {
+    await assert.rejects(lifecycleRole.query("UPDATE policy.policy_lifecycle_changes SET request_hash=repeat('a',64)"), error => (error as { code?: string }).code === '42501');
+    await assert.rejects(lifecycleRole.query('DELETE FROM policy.policy_lifecycle_changes'), error => (error as { code?: string }).code === '42501');
+  } finally { await lifecycleRole.end(); }
+  const endedFlight = await acceptedOffer('flight_delay'), endedFlightPolicy = ok(await issue(finance, endedFlight, await importOffer(endedFlight))).policy;
+  ok(await lifecycleService.changeLifecycle({ ...commandFor(endedFlightPolicy), actor: endedFlight.payload }));
+  assert.equal(endedFlight.payload.coverage.kind, 'flight_delay');
+  if (endedFlight.payload.coverage.kind !== 'flight_delay') throw Error('unexpected_coverage');
+  const postTerminationEvent = await flightEvent(endedFlightPolicy.policyId, endedFlight.payload.coverage.flightReference);
+  postTerminationEvent.occurredAt = '2026-10-16T02:02:00.000Z';
+  postTerminationEvent.signature = await financialIntegrity.digest(eventContent(postTerminationEvent));
+  await denied(traceId => lifecycleService.consumeParametricEvent(postTerminationEvent, traceId), 'event_not_covered');
+  const preTerminationEvent = await flightEvent(endedFlightPolicy.policyId, endedFlight.payload.coverage.flightReference);
+  preTerminationEvent.occurredAt = '2026-10-16T02:01:00.000Z';
+  preTerminationEvent.signature = await financialIntegrity.digest(eventContent(preTerminationEvent));
+  ok(await lifecycleService.consumeParametricEvent(preTerminationEvent, randomUUID()));
+  const noticeAjv = new Ajv({ allErrors: true }); addFormats(noticeAjv);
+  const validateNotice = noticeAjv.compile(JSON.parse(await readFile('packages/contracts/schemas/policy-lifecycle-notice.v1.json', 'utf8')));
+  const lifecycleNotices = (await db.query('SELECT event_id,payload FROM policy.outbox_events WHERE event_type=$1', ['policy.lifecycle.notice'])).rows;
+  assert.equal(lifecycleNotices.length, 3);
+  for (const notice of lifecycleNotices) {
+    assert.equal(validateNotice(notice.payload), true, JSON.stringify(validateNotice.errors));
+    assert.ok([lifecycleOffer.payload.clientId, endedFlight.payload.clientId].includes(notice.payload.clientId)); assert.equal(notice.event_id, notice.payload.changeId);
+  }
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
-  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type<>'policy.indemnity.notice'")).rows; // the customer notice is not a decision capture
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice')")).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'indemnity.declined', 'signature.challenge_created',
-    'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'financial.denied'];
+    'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'policy.lifecycle.changed', 'financial.denied'];
   const expectedPaymentStatus: Record<string, string> = { 'premium.requested': 'pending', 'premium.declined': 'declined', 'premium.confirmed': 'confirmed',
-    'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed', 'indemnity.declined': 'declined' };
+    'policy.issued': 'confirmed', 'premium.refund_requested': 'confirmed', 'premium.refunded': 'refunded', 'parametric.accepted': 'pending', 'indemnity.confirmed': 'confirmed', 'indemnity.declined': 'declined', 'policy.lifecycle.changed': 'confirmed' };
   for (const action of requiredActions) assert.ok(persisted.some(row => row.event_type === 'policy.' + action), 'missing persisted decision ' + action);
   for (const row of persisted) {
     assert.equal(validateCapture(row.payload), true, JSON.stringify(validateCapture.errors));
@@ -790,7 +852,7 @@ try {
       premium: terms.premium, currency: terms.currency, coverage: terms.coverage, effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil,
       expiresAt: terms.expiresAt, acceptedAt: terms.acceptedAt, ruleVersion: terms.ruleVersion });
     assert.equal(capture.inputs.documentHash, contract.document_hash); assert.equal(capture.inputs.termsHash, contract.terms_hash);
-    assert.equal(capture.rule.id, action); assert.equal(capture.rule.version, 'academic-financial-1');
+    assert.equal(capture.rule.id, action); assert.equal(capture.rule.version, action === 'policy.lifecycle.changed' ? 'academic-policy-lifecycle-1' : 'academic-financial-1');
     assert.match(String(capture.inputs.evaluatedAt), /^2026-10-16T02:/);
     if (action === 'offer.accepted') {
       assert.deepEqual(contract.decision_capture, capture, 'contract and outbox must retain the same application decision');
