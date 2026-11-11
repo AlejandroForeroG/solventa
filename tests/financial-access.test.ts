@@ -68,12 +68,33 @@ function withConsents() {
 test('financial operations are explicit web permissions; native users may only read their policies and partners none', async () => {
   const app = new ApiAccess({ find: async () => { throw Error('partner lookup must not occur'); } }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
   const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
-  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue']) {
+  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage']) {
     assert.equal((await app.webUser(identity, operation)).allowed, true);
     if (operation === 'policies:read') assert.equal((await app.mobileUser(identity, operation)).allowed, true);
     else assert.deepEqual(await app.mobileUser(identity, operation), { allowed: false, error: 'forbidden', status: 403 });
     assert.deepEqual(await app.partner({ issuer: 'https://synthetic.authkit.app', applicationId: 'client_synthetic', organizationId: 'org_synthetic', scopes: [operation] }, operation), { allowed: false, error: 'forbidden', status: 403 });
   }
+});
+
+test('policy lifecycle access verifies the live web session and Origin without reusing underwriting consent as a permission', async () => {
+  let active = true;
+  const application = new ApiAccess({ find: async () => null }, {
+    find: async () => active ? principal : null, open: async () => principal, revoke: async () => {},
+  });
+  const deps = {
+    authorize: (input: unknown) => authorizeApiAccess({ application, partner: null, web: {
+      allowedOrigins: ['https://web.example'],
+      authenticate: async () => ({ identity: { providerSubject: 'synthetic-user', sessionReference: 'synthetic-session', emailVerified: true } }),
+    } }, input),
+    verifyConsents: async (): Promise<ConsentDecision[]> => { assert.fail('managing an existing policy does not read risk signals'); },
+  };
+  const input = { ...request, operation: 'policies:manage' };
+  const allowed = await authorizeFinancialAccess(deps, input);
+  assert.equal(allowed.allowed, true);
+  if (allowed.allowed) assert.deepEqual(allowed.actor.operations, ['policies:manage']);
+  assert.deepEqual(await authorizeFinancialAccess(deps, { ...input, origin: 'https://foreign.example' }), { allowed: false, error: 'forbidden', status: 403 });
+  active = false;
+  assert.deepEqual(await authorizeFinancialAccess(deps, input), { allowed: false, error: 'unauthorized', status: 401 });
 });
 
 test('the combined RPC preserves actual Origin and current local session enforcement', async () => {

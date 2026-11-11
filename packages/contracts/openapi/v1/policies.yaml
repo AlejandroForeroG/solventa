@@ -2,15 +2,17 @@ openapi: 3.0.3
 info:
   title: Solventa API - Policies
   version: 1.0.0
-  description: Authenticated academic financial flow. Buying and issuing are web-only; the native app only reads its own issued policies. External data,
+  description: Authenticated academic financial flow. Buying and issuing are
+    web-only; the native app only reads its own issued policies. External data,
     payment and signature providers are explicitly mocked; Solventa
     authorization, owner transactions and idempotency remain real. The isolated
     production demo requires explicit FINANCIAL_PROVIDER_MODE=mock, a valid
-    environment-specific FINANCIAL_EVENT_KEY and separately provisioned production
-    bindings, queues and SQL. Missing or invalid configuration fails closed.
-    Synthetic results do not establish real payment settlement, legal external
-    signature or insurance coverage. Credentials, actor identifiers, approval and amounts cannot be
-    selected by clients. All responses are no-store and correlated.
+    environment-specific FINANCIAL_EVENT_KEY and separately provisioned
+    production bindings, queues and SQL. Missing or invalid configuration fails
+    closed. Synthetic results do not establish real payment settlement, legal
+    external signature or insurance coverage. Credentials, actor identifiers,
+    approval and amounts cannot be selected by clients. All responses are
+    no-store and correlated.
 servers:
   - url: /api/v1
 tags:
@@ -27,7 +29,9 @@ paths:
         coverage; hasMore reports that older ones exist. The reviewed document,
         its hash and payment data are not returned. The device keeps a protected
         copy for offline use and treats it as stale, never as the contractual
-        source.
+        source. Contracts ended by modification, renewal or cancellation are
+        excluded before applying the list limit. Web history uses
+        /policies/issued and retains them.
       tags:
         - Policies
       security:
@@ -180,11 +184,10 @@ paths:
         retries. A failed signature compensates a confirmed mock charge; an
         uncertain outcome is unavailable and must be reconciled, never blindly
         charged again. Mock issuance is not legal insurance or real money
-        movement.
-        A signature_failed response can occur during a concurrent refund;
-        read the owned policy and require status refunded before confirming
-        compensation. Retry an uncertain operation with its original key.
-        After document_mismatch, reread and review the document before
+        movement. A signature_failed response can occur during a concurrent
+        refund; read the owned policy and require status refunded before
+        confirming compensation. Retry an uncertain operation with its original
+        key. After document_mismatch, reread and review the document before
         submitting its current server-provided fingerprint.
   /policies/by-acceptance/{acceptanceId}/policy:
     get:
@@ -293,13 +296,13 @@ paths:
     get:
       operationId: getOwnPolicyDetail
       summary: Read the coverage, documents and premium payments of an issued policy
-      description: One integrity-checked read of an issued policy. Coverage comes
-        from the immutable accepted terms; exclusions come from the product
-        conditions identified by conditionsVersion and are not part of the signed
-        document. Documents list what can be downloaded with its issue date. The
-        payment list holds the policy's single premium charge. A policy that is
-        still in the purchase flow, missing or owned by another user returns the
-        same opaque 404.
+      description: One integrity-checked read of an issued policy. Coverage comes from
+        the immutable accepted terms; exclusions come from the product
+        conditions identified by conditionsVersion and are not part of the
+        signed document. Documents list what can be downloaded with its issue
+        date. The payment list holds the policy's single premium charge. A
+        policy that is still in the purchase flow, missing or owned by another
+        user returns the same opaque 404.
       tags:
         - Policies
       security:
@@ -350,9 +353,9 @@ paths:
       summary: Download one document of an issued policy as PDF
       description: The PDF is generated on demand from the integrity-checked policy,
         so repeated downloads of the same document are identical. The signed
-        policy and the premium receipt are synthetic demonstration documents, and
-        the general conditions carry the version in PolicyDetail.conditionsVersion.
-        The text is written in es-CO.
+        policy and the premium receipt are synthetic demonstration documents,
+        and the general conditions carry the version in
+        PolicyDetail.conditionsVersion. The text is written in es-CO.
       tags:
         - Policies
       security:
@@ -410,6 +413,98 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /policies/{policyId}/lifecycle:
+    post:
+      operationId: changeOwnPolicyLifecycle
+      summary: Modify, renew or cancel an owned issued policy
+      tags:
+        - Policies
+      description: Web owner only; no advisor delegation is implied. Modifications and
+        renewals link a separate owned policy already issued through its own
+        offer, confirmed premium and signature. Modification requires the old
+        policy not to have expired; renewal requires it to have expired and the
+        replacement to start no earlier than that expiry. Both policies must use
+        the same product. A replacement can be used once. Cancellation requires
+        null replacementPolicyId. The sealed historical document, payment and
+        issuance remain unchanged; no automatic refund is performed. The
+        command, decision capture, audit and versioned customer notice are
+        committed atomically. Retry an uncertain result using the same key and
+        identical payload.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: policyId
+          in: path
+          required: true
+          schema: &a1
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[!-~]{1,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - action
+                - replacementPolicyId
+                - documentHash
+                - reason
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - modified
+                    - renewed
+                    - cancelled
+                replacementPolicyId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                documentHash:
+                  type: string
+                  pattern: ^[0-9a-f]{64}$
+                reason:
+                  type: string
+                  pattern: ^[a-z][a-z_]{2,63}$
+      responses:
+        "200":
+          description: Committed owner lifecycle state, or an identical replay.
+          headers:
+            X-Trace-Id:
+              schema: *a1
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     WebSession:
@@ -424,7 +519,8 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: WorkOS AuthKit user access token of a registered native session. Never a refresh token, M2M token or web cookie.
+      description: WorkOS AuthKit user access token of a registered native session.
+        Never a refresh token, M2M token or web cookie.
   schemas:
     Error:
       type: object
@@ -546,6 +642,14 @@ components:
           format: date-time
         coverage:
           $ref: "#/components/schemas/PolicyCoverage"
+        contractStatus:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+          description: Present when the original contract has ended through an owner
+            lifecycle command. Historical issuance and payments remain intact.
     PolicyList:
       type: object
       additionalProperties: false
@@ -633,6 +737,8 @@ components:
         traceId:
           type: string
           format: uuid
+        lifecycle:
+          $ref: "#/components/schemas/LifecycleChange"
     PremiumPayment:
       type: object
       additionalProperties: false
@@ -689,8 +795,8 @@ components:
       type: object
       additionalProperties: false
       description: The premium charge. date is the last state change of the stored
-        payment. The reference is the synthetic receipt and is present only for a
-        paid charge.
+        payment. The reference is the synthetic receipt and is present only for
+        a paid charge.
       required:
         - date
         - amount
@@ -780,6 +886,8 @@ components:
         traceId:
           type: string
           format: uuid
+        lifecycle:
+          $ref: "#/components/schemas/LifecycleChange"
     IssueRequest:
       type: object
       additionalProperties: false
@@ -789,6 +897,58 @@ components:
         documentHash:
           type: string
           pattern: ^[0-9a-f]{64}$
+    LifecycleChange:
+      type: object
+      additionalProperties: false
+      required:
+        - changeId
+        - policyId
+        - action
+        - reason
+        - at
+        - replacementPolicyId
+        - sourceDocumentHash
+        - replacementDocumentHash
+        - refund
+        - ruleVersion
+        - documentHash
+      properties:
+        changeId: &a1
+          type: string
+          format: uuid
+        policyId: *a1
+        action:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+        reason:
+          type: string
+          pattern: ^[a-z][a-z_]{2,63}$
+        at:
+          type: string
+          format: date-time
+        replacementPolicyId:
+          type: string
+          format: uuid
+          nullable: true
+        sourceDocumentHash: &a2
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        replacementDocumentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          nullable: true
+        refund:
+          type: string
+          enum:
+            - not_automated
+        ruleVersion:
+          type: string
+          enum:
+            - academic-policy-lifecycle-1
+        documentHash: *a2
   responses:
     Invalid:
       description: Invalid JSON, media type, resource identifier, unsupported field,

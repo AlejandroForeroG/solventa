@@ -1,10 +1,11 @@
 import type { AcceptedOffer, FinancialActor, FinancialEnvironment, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
 import type { FinancialAction, FinancialDecisionCapture, FinancialEvidence, FinancialSource } from '../financial-decision';
 import type { ParametricEventProvider } from './parametric';
+import type { LifecycleChange } from '../../domain/policy-lifecycle';
 
 export type StoredPolicy = { id: string; clientId: string; subjectToken: string; status: PolicyStatus;
   offer: AcceptedOffer; termsHash: string; document: string; documentHash: string;
-  premium: string; currency: string; offerId: string; offerVersion: number; effectiveFrom: string; effectiveUntil: string; coverageSnapshot: unknown };
+  premium: string; currency: string; offerId: string; offerVersion: number; effectiveFrom: string; effectiveUntil: string; coverageSnapshot: unknown; lifecycle?: LifecycleChange };
 export type Payment = { id: string; policyId: string; operation: 'premium' | 'indemnity'; amount: string; currency: 'COP';
   key: string; hash: string; status: 'pending' | 'confirmed' | 'refunded' | 'declined'; providerReference: string | null;
   // Last state change of the stored payment; only the SQL adapter provides it.
@@ -34,6 +35,9 @@ export type IndemnityNotice = { paymentId: string; policyId: string; clientId: s
 export type PremiumStart ={ policy: StoredPolicy; payment: Payment; command: { key: string; requestHash: string } | null;
   traceId: string; capture: FinancialDecisionCapture };
 export interface FinancialTransaction {
+  lifecycleCommand?(actorId: string, key: string): Promise<{ policyId: string; requestHash: string } | null>;
+  lifecycleReplacement?(policyId: string): Promise<boolean>;
+  saveLifecycle?(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string): Promise<void>;
   policy(id: string, actor?: FinancialActor): Promise<PolicyRecord | null>;
   issuanceSnapshot(id: string, actor: FinancialActor, commandKey: string): Promise<{ record: PolicyRecord | null; command: Command | null }>;
   createSignatureChallenge(challenge: SignatureChallenge): Promise<void>;
@@ -56,7 +60,7 @@ export interface FinancialTransaction {
 export interface FinancialStore {
   readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null>;
   // Issued policies of one owner, newest validity first; the caller passes one more than it will show to detect truncation.
-  readOwnPolicies(actor: FinancialActor, limit: number): Promise<PolicyRecord[]>;
+  readOwnPolicies(actor: FinancialActor, limit: number, includeEnded?: boolean): Promise<PolicyRecord[]>;
   readAcceptedPolicy(acceptanceId: string, actor: FinancialActor): Promise<AcceptedPolicyLookup>;
   importAcceptance(policy: StoredPolicy, event: ImportedEvent, traceId: string, capture: FinancialDecisionCapture): Promise<AcceptanceImport>;
   transaction<T>(work: (transaction: FinancialTransaction) => Promise<T>): Promise<T>;

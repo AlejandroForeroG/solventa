@@ -26,6 +26,7 @@ import { providerName } from './pact-files';
 import { serve } from './serve';
 import { verificationPactWorld } from './identity-verification';
 import type { VerificationStage } from './identity-verification';
+import { lifecyclePactWorld } from './policy-lifecycle';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -249,6 +250,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
   'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),
+  'an owner with an active lifecycle policy': async () => ({ sessionCookie: 'lifecycle-owner', policy: binding(await lifecyclePactWorld(), { APP_ENV: 'dev' }) }),
   'a customer without permission to quote': () => ({ sessionCookie: 'forbidden-origin-cookie' }),
   'the idempotency key was used with another request': async parameters => ({
     sessionCookie: authorizedCookie,
