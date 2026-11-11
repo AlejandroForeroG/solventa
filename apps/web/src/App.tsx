@@ -1,3 +1,4 @@
+import { AdvisorPortal } from './advisor/AdvisorActions';
 import { PartnerPortal } from './partner-portal/PartnerPortal';
 import { AuditWorkspace } from './audit/AuditWorkspace';
 import { ClaimsInbox } from './claims/ClaimsInbox';
@@ -54,9 +55,10 @@ function Shell() {
   const isClaims = window.location.pathname === '/siniestros';
   const isProviders = window.location.pathname === '/prestadores';
   const isPolicies = window.location.pathname === '/polizas';
+  const isAdvisor = window.location.pathname === '/asesor';
   const isPartnerPortal = window.location.pathname === '/socios';
-  const isConsole = isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
-  const sectionTitle = isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
+  const isConsole = isAdvisor || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
+  const sectionTitle = isAdvisor ? 'advisor.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -92,13 +94,14 @@ function Shell() {
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/polizas">{t('policies.open')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/siniestros">{t('claims.open')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/prestadores">{t('assistance.title')}</a>}
+        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/asesor">{t('advisor.title')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/socios">{t('partnerPortal.title')}</a>}
         {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/auditoria">{t('audit.open')}</a>}
         {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
       </div>
     </header>
     {isConsole ? (session === 'authenticated' && !busy
-      ? isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(sectionTitle)}</h1>
         {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>

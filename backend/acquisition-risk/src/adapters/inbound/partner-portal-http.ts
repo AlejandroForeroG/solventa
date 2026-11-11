@@ -15,7 +15,7 @@ function portalGrant(v: unknown) {
       || !Array.isArray(c.scopes) || c.scopes.length > 32 || c.scopes.some(s => typeof s !== 'string' || !/^[a-z-]+:[a-z-]+$/.test(s))) return null;
     credentials.push({ id: c.id, scopes: c.scopes, expiresAt: c.expiresAt, status: c.status });
   }
-  return { partnerId: v.partnerId, code: v.code, expiresAt: v.expiresAt, credentials, hasMoreCredentials: v.hasMoreCredentials };
+  return { quota: v.quota, partnerId: v.partnerId, code: v.code, expiresAt: v.expiresAt, credentials, hasMoreCredentials: v.hasMoreCredentials };
 }
 export function portalQuery(params: URLSearchParams): PortalQuery | null {
   if (params.size !== 2 || params.getAll('from').length !== 1 || params.getAll('to').length !== 1) return null;
@@ -26,7 +26,7 @@ export function portalQuery(params: URLSearchParams): PortalQuery | null {
 }
 
 export function mountPartnerPortal(app: Hono<{ Bindings: AcquisitionEnv }>, deps: PortalHttpDependencies) {
-  app.all('/api/v1/partner-portal', async c => {
+  for (const path of ['/api/v1/partner-portal','/api/v2/partner-portal']) app.all(path, async c => {
     const supplied = c.req.header('x-trace-id');
     const traceId = uuid(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
     const reply = (body: object, status: 200 | 400 | 401 | 403 | 405 | 503) => c.json({ ...body, traceId }, status,
@@ -49,14 +49,27 @@ export function mountPartnerPortal(app: Hono<{ Bindings: AcquisitionEnv }>, deps
       if (!record(a) || a.kind !== 'user' || a.channel !== 'web' || !record(a.principal) || !uuid(a.principal.clientId) || !uuid(a.principal.subjectToken)
         || !Array.isArray(a.operations) || !a.operations.includes('partner-portal:read') || !grant || a.authorizationExpiresAt !== grant.expiresAt
         || !(Date.parse(grant.expiresAt) > Date.now()) || Date.parse(grant.expiresAt) > Date.now() + 5500) return reply({ error: 'access_unavailable' }, 503);
+      const modern = new URL(c.req.url).pathname === '/api/v2/partner-portal';
+      const quota = validQuota(grant.quota) ? grant.quota : null;
+      if (modern ? !quota : grant.quota !== undefined) return reply({ error: 'portal_unavailable' }, 503);
       const query = portalQuery(new URL(c.req.url).searchParams);
       if (!query) return reply({ error: 'invalid_request' }, 400);
       const activity = await deps.portal.read(grant.partnerId, query, grant.expiresAt);
       if (!(Date.parse(grant.expiresAt) > Date.now())) return reply({ error: 'access_unavailable' }, 503);
       return reply({ partner: { id: grant.partnerId, code: grant.code }, credentials: grant.credentials, hasMoreCredentials: grant.hasMoreCredentials,
-        quota: { configured: false }, catalog: [{ product: 'vida_hipotecario', operations: [{ method: 'POST', path: '/api/v1/quotes', scope: 'quotes:create' }, { method: 'POST', path: '/api/v1/partner/offers', scope: 'partner-offers:create' }] }],
+        quota: modern ? quota : { configured: false }, catalog: [{ product: 'vida_hipotecario', operations: [{ method: 'POST', path: '/api/v1/quotes', scope: 'quotes:create' }, { method: 'POST', path: '/api/v1/partner/offers', scope: 'partner-offers:create' }] }],
         versions: deps.versions, period: { ...query, timeZone: 'UTC' }, ...activity }, 200);
     } catch { return reply({ error: 'portal_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   });
+}
+
+function validQuota(v: unknown): v is {configured:true;limit:number;used:number;remaining:number;windowStart:string;resetsAt:string;trackingSince:string;updatedAt:string;timeZone:'UTC'} {
+  if (!record(v) || v.configured!==true || v.timeZone!=='UTC') return false;
+  if (![v.limit,v.used,v.remaining].every(x=>typeof x==='number'&&Number.isSafeInteger(x)&&x>=0) || typeof v.limit!=='number'||v.limit<1
+    ||typeof v.used!=='number'||v.remaining!==Math.max(0,v.limit-v.used)) return false;
+  if (!instant(v.windowStart)||!instant(v.resetsAt)||!instant(v.trackingSince)||!instant(v.updatedAt)) return false;
+  const at=Date.parse(v.updatedAt),start=Date.parse(v.windowStart),end=Date.parse(v.resetsAt);
+  return v.windowStart===new Date(start).toISOString().slice(0,10)+'T00:00:00.000Z' && end-start===86400000 && at>=start&&at<end
+    &&Date.parse(v.trackingSince)<=at && at<=Date.now()+5500 && at>Date.now()-5500;
 }

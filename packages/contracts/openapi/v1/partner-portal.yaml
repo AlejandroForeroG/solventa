@@ -20,7 +20,7 @@ paths:
         period; the list contains the 20 most recent facts in descending time/id/kind
         order. completed means a stored minimum quote; accepted/preliminary/declined
         describe underwriting decisions, not customer acceptance, payment or issuance.
-        Request failures are outside this ledger. Quotas are not configured. Versions
+        Request failures are outside this ledger. This legacy shape cannot represent configured quotas and returns 503 after quota activation; migrate to v2. Versions
         are the global registry; operation paths in the catalog define actual availability.
         The response contains registration references and metadata, never provider
         references, tokens, customer identities or secrets.

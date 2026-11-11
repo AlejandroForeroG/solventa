@@ -6,7 +6,7 @@ export type FinancialAccessDecision =
   | { allowed: true; actor: UserActor; consent?: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; error: 'invalid_request' | 'unauthorized' | 'forbidden' | 'access_unavailable' | 'consent_required'; status: 400 | 401 | 403 | 503 };
 
-const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage'];
+const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated'];
 const scopes = ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation'];
 
 // One RPC encloses Identity's own authentication and fresh consent checks; no remote fan-out is needed.

@@ -35,7 +35,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const page = state?.kind === 'ok' ? state.value : null;
   const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
   return <main className="audit-shell portal-shell">
-    <aside className="audit-nav" aria-label={t('title')}><p>{t('title')}</p><a href="/socios" aria-current="page">{t('overview')}</a><a href="/api/docs/?spec=v1/partner-portal">{t('documentation')}</a></aside>
+    <aside className="audit-nav" aria-label={t('title')}><p>{t('title')}</p><a href="/socios" aria-current="page">{t('overview')}</a><a href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></aside>
     <div className="audit-main">
       <div className="audit-heading"><h1>{t('title')}</h1></div>
       <form className="portal-period" onSubmit={event => { event.preventDefault(); setResult(null); setPeriod({ ...draft }); setRefresh(v => v + 1); }}>
@@ -65,7 +65,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
           {page.hasMoreCredentials && <p className="note">{t('credentialLimit')}</p>}
         </section>
         <section aria-labelledby="portal-catalog"><h2 id="portal-catalog">{t('catalog')}</h2><p>{t('mortgage')}</p><ul>{page.catalog.flatMap(p => p.operations).map(o => <li className="mono" key={o.path}>{o.method} {o.path} · {o.scope}</li>)}</ul></section>
-        <section aria-labelledby="portal-quota"><h2 id="portal-quota">{t('quota')}</h2><p>{t('notConfigured')}</p></section>
+        <section aria-labelledby="portal-quota"><h2 id="portal-quota">{t('quota')}</h2>{page.quota.configured ? <><dl className="portal-metrics">{(['limit','used','remaining'] as const).map(k=><div key={k}><dt>{t(k)}</dt><dd className="mono">{intl.formatNumber(page.quota.configured ? page.quota[k] : 0)}</dd></div>)}</dl><p className="note">{t('quotaHint')}</p><p>{t('resets')} {timestamp(page.quota.resetsAt)}</p><p className="note">{t('trackingSince')} {timestamp(page.quota.trackingSince)}</p><p className="note">{t('updated')} {timestamp(page.quota.updatedAt)}</p></> : <p>{t('notConfigured')}</p>}</section>
         <section aria-labelledby="portal-versions"><h2 id="portal-versions">{t('versions')}</h2><ul>{page.versions.map(v => <li key={v.id}><span className="mono">{v.id}</span> · {v.sunset ? `${t('sunset')} ${v.sunset}` : t('noSunset')}</li>)}</ul><p className="note">{t('versionHint')}</p></section>
       </>}
     </div>

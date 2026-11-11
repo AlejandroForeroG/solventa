@@ -59,6 +59,7 @@ jobs:
       - run: npm run test:partner-access:sql
       - run: npm run test:partner-authorizations:sql
       - run: npm run test:partner-portal:sql
+      - run: npm run test:partner-quota:sql
       - run: npm run test:quotes:sql
       - run: npm run test:consents:sql
       - run: npm run test:offers:sql

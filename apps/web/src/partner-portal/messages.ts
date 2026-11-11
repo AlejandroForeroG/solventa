@@ -1,4 +1,5 @@
 export const portalEs = {
+  'partnerPortal.limit':'Solicitudes por día UTC', 'partnerPortal.used':'Utilizadas hoy', 'partnerPortal.remaining':'Disponibles hoy', 'partnerPortal.resets':'Reinicio:', 'partnerPortal.trackingSince':'Política configurada desde:', 'partnerPortal.quotaHint':'Cuota diaria actual, compartida entre cotizaciones y ofertas. Cada solicitud admitida consume una unidad, incluidos reintentos.',
   'partnerPortal.appliedPeriod': 'Período consultado:',
   'partnerPortal.title': 'Portal de socios', 'partnerPortal.overview': 'Mi integración', 'partnerPortal.documentation': 'Documentación de API',
   'partnerPortal.from': 'Desde', 'partnerPortal.to': 'Hasta', 'partnerPortal.apply': 'Consultar', 'partnerPortal.periodHint': 'Hasta 31 días, fechas inclusivas en UTC.',
@@ -17,6 +18,7 @@ export const portalEs = {
   'partnerPortal.sunset': 'Retiro:', 'partnerPortal.versionHint': 'La disponibilidad depende de cada operación. Consulta su ruta versionada en la documentación.',
 };
 export const portalEn = {
+  'partnerPortal.limit':'Requests per UTC day', 'partnerPortal.used':'Used today', 'partnerPortal.remaining':'Remaining today', 'partnerPortal.resets':'Reset:', 'partnerPortal.trackingSince':'Policy configured since:', 'partnerPortal.quotaHint':'Current daily quota, shared by quotes and offers. Every admitted request consumes one unit, including retries.',
   'partnerPortal.appliedPeriod': 'Applied period:',
   'partnerPortal.title': 'Partner portal', 'partnerPortal.overview': 'My integration', 'partnerPortal.documentation': 'API documentation',
   'partnerPortal.from': 'From', 'partnerPortal.to': 'To', 'partnerPortal.apply': 'View', 'partnerPortal.periodHint': 'Up to 31 days, inclusive UTC dates.',
