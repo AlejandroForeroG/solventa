@@ -243,6 +243,8 @@ The [Bruno collection](../../../tools/bruno/solventa/README.md#native-connection
 
 ## Policy wallet
 
+A fresh owner sync excludes contracts ended by modification, renewal or cancellation before the native list limit. The web portal retains their historical documents and payments; the protected offline copy stays explicitly stale until a successful sync.
+
 The wallet is the section where a signed-in customer reads their own issued policies, also without connection. Code: `src/features/policy-wallet`; route `/wallet`, opened from **Mis pólizas** on the home screen.
 
 ### Journey

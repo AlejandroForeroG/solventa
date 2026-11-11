@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, type PolicyDocumentId, type PolicyFile, type PolicyOutcome, type PolicySummary } from './api';
 import './policies.css';
+import { LifecycleActions } from './LifecycleActions';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -29,11 +30,13 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<PolicyOutcome<T>>, on
   return { state, retry: () => { setState({ kind: 'loading' }); setAttempt(value => value + 1); } };
 }
 
-function policyState(policy: PolicySummary, now: number): 'active' | 'upcoming' | 'expired' {
+function policyState(policy: PolicySummary, now: number): 'active' | 'upcoming' | 'expired' | 'cancelled' | 'modified' | 'renewed' {
+  if (policy.contractStatus) return policy.contractStatus;
+  if ('lifecycle' in policy && policy.lifecycle) return (policy as PolicyDetail).lifecycle?.action ?? 'active';
   if (now < Date.parse(policy.effectiveFrom)) return 'upcoming';
   return now < Date.parse(policy.effectiveUntil) ? 'active' : 'expired';
 }
-const stateClass = { active: 'pill-ok', upcoming: 'pill-pending', expired: 'pill-status-expired' } as const;
+const stateClass = { active: 'pill-ok', upcoming: 'pill-pending', expired: 'pill-status-expired', cancelled: 'pill-status-expired', modified: 'pill-pending', renewed: 'pill-pending' } as const;
 
 function Failed({ kind, onRetry }: { kind: Failure; onRetry: () => void }) {
   const t = useTranslate();
@@ -182,6 +185,7 @@ function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: strin
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
       </div>
+      <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }

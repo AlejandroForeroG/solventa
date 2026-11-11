@@ -1,3 +1,6 @@
+import { denyResourceAccess } from '../backend/identity-consent-ecosystem/src/application/resource-access-denials';
+import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
+import type { SecurityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
@@ -447,7 +450,7 @@ test('the native policy list authorizes the bearer token once, derives the owner
   assert.deepEqual(body.policies, [summary]);
   assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
   assert.deepEqual(calls[0].input, { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
-  assert.deepEqual(calls[1].input, { actor, traceId });
+  assert.deepEqual(calls[1].input, { actor, traceId, includeEnded: false });
 });
 
 test('the native policy list needs a bearer token: no credential, a cookie or a malformed header never reach authorization', async () => {
@@ -572,4 +575,29 @@ test('the gateway delivers a policy PDF to the browser unchanged, with the versi
   const bytes = Buffer.from(await response.arrayBuffer());
   assert.ok(bytes.toString('latin1').startsWith('%PDF-1.4') && bytes.toString('latin1').endsWith('%%EOF\n'));
   assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyDocument']);
+});
+
+
+test('lifecycle not-found responses use the real minimal security denial contract and fail closed when its audit fails', async () => {
+  for (const failAudit of [false, true]) {
+    const decisions: SecurityDecision[] = [];
+    const security = new SecurityDecisions({ append: async decision => {
+      if (failAudit) throw new Error('synthetic_audit_unavailable');
+      decisions.push(decision);
+    } }, () => id);
+    const { finance } = setup();
+    finance.changeLifecycle = async () => ({ status: 'denied', error: 'not_found', httpStatus: 404, traceId });
+    const app = createPolicyHttp({ finance, authorizeFinancialAccess: async () => ({ allowed: true,
+      actor: { kind: 'user', channel: 'web', principal: actor, operations: ['policies:manage'] } }),
+      denyResourceAccess: input => denyResourceAccess(security, input) });
+    for (const action of ['cancelled', 'modified']) {
+      const body = { action, reason: 'customer_request', documentHash: 'a'.repeat(64), replacementPolicyId: action === 'modified' ? '20000000-0000-4000-8000-000000000001' : null };
+      const response = await app.request(request(`/policies/${id}/lifecycle`, JSON.stringify(body)), undefined, { APP_ENV: 'local' } as PolicyEnv);
+      assert.equal(response.status, failAudit ? 503 : 404);
+      assert.deepEqual(await response.json(), { error: failAudit ? 'access_unavailable' : 'not_found', traceId });
+    }
+    assert.equal(decisions.length, failAudit ? 0 : 2);
+    for (const decision of decisions) assert.deepEqual(decision, { schemaVersion: 1, decisionId: id, correlationId: traceId,
+      category: 'api_access', channel: 'web', operation: 'policies:manage', cause: 'forbidden' });
+  }
 });
