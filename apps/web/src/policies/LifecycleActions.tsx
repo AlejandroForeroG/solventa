@@ -48,25 +48,25 @@ export function LifecycleActions({ policy, onChanged, onSessionLost }: { policy:
     finally { setBusy(false); }
   }
   if (policy.lifecycle) return <section className="card policy-section" aria-labelledby="lifecycle-title">
-    <h2 id="lifecycle-title">{t('history')}</h2><p role="status">{intl.formatMessage({ id: `policies.state.${policy.lifecycle.action}` })}: {intl.formatDate(policy.lifecycle.at)}.</p>
+    <h2 id="lifecycle-title" className="h-card">{t('history')}</h2><p role="status">{intl.formatMessage({ id: `policies.state.${policy.lifecycle.action}` })}: {intl.formatDate(policy.lifecycle.at)}.</p>
     <p>{t('reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(policy.lifecycle.reason) : policy.lifecycle.reason}</p>{policy.lifecycle.replacementPolicyId && <p className="mono">{t('replacement')}: {policy.lifecycle.replacementPolicyId}</p>}
     <p>{t('recorded')}</p>
   </section>;
-  return <section className="card policy-section" aria-labelledby="lifecycle-title"><h2 id="lifecycle-title">{t('manage')}</h2>
-    <label>{t('operation')} <select value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action); setConfirmed(false); }}>
+  return <section className="card policy-section" aria-labelledby="lifecycle-title"><h2 id="lifecycle-title" className="h-card">{t('manage')}</h2>
+    <div className="field"><label htmlFor="lifecycle-operation">{t('operation')}</label><select id="lifecycle-operation" value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action); setConfirmed(false); }}>
       {actions.map(value => <option key={value} value={value}>{t(value)}</option>)}
-    </select></label>
+    </select></div>
     {!eligible && <p role="status">{t(action === 'renewed' ? 'renewAfterExpiry' : 'modifyBeforeExpiry')}</p>}
-    {action !== 'cancelled' && eligible && <><p>{t('prepare')}</p><a href="/cotizar">{t('quote')}</a>
+    {action !== 'cancelled' && eligible && <><p>{t('prepare')}</p><p><a href="/cotizar">{t('quote')}</a></p>
       {choiceState === 'loading' && <p role="status">{t('loading')}</p>}
       {choiceState === 'failed' && <p role="status">{t('choicesFailed')}</p>}
-      <label>{t('replacement')} <input list="replacement-policies" value={replacement} disabled={busy} onChange={event => { setReplacement(event.target.value.trim()); setConfirmed(false); }} placeholder="00000000-0000-4000-8000-000000000000" /></label>
+      <div className="field"><label htmlFor="lifecycle-replacement">{t('replacement')}</label><input id="lifecycle-replacement" className="mono-input" list="replacement-policies" value={replacement} disabled={busy} onChange={event => { setReplacement(event.target.value.trim()); setConfirmed(false); }} placeholder="00000000-0000-4000-8000-000000000000" /></div>
       <datalist id="replacement-policies">{choices.map(item => <option key={item.policyId} value={item.policyId} />)}</datalist>
       <p className="note">{t('replacementHint')}</p></>}
     <p>{t('noRefund')}</p>
-    <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /> {t('confirm')}</label>
+    <div className="check"><input id="lifecycle-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="lifecycle-confirm">{t('confirm')}</label></div>
     {error && <p role="alert">{t(error)}</p>}
-    <button type="button" className="btn btn-secondary" disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
-      onClick={() => void submit()}>{busy ? t('saving') : t(action)}</button>
+    <div className="actions"><button type="button" className="btn btn-secondary" disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
+      onClick={() => void submit()}>{busy ? t('saving') : t(action)}</button></div>
   </section>;
 }
