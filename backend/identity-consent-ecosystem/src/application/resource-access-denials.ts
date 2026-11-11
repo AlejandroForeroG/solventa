@@ -1,7 +1,7 @@
 import { canonicalSecurityId } from '../domain/security-decision';
 import type { SecurityDecisions } from './security-decisions';
 
-const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage'] as const;
+const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated'] as const;
 type Operation = typeof operations[number];
 const member = (value: unknown): value is Operation => typeof value === 'string' && operations.some(operation => operation === value);
 export type ResourceDenialResult = { recorded: true } | { recorded: false; error: 'invalid_request' | 'access_unavailable' };

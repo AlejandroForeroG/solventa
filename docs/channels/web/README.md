@@ -2,7 +2,7 @@
 
 ## Partner portal
 
-`/socios` reuses the console Design System; the approved prototype has no partner-specific screen. The server requires an explicit partner grant in addition to a verified session. The view shows the applied UTC period, snapshot time, complete-period counts, 20 recent channel facts, credential registration metadata, actual partner catalog, registered versions and unconfigured quota. It cancels stale reads and distinguishes empty, denied and unavailable states. See the [owning guide](../../modules/acquisition-risk/partner-portal.md) for semantics, administration and limits.
+`/socios` reuses the console Design System; the approved prototype has no partner-specific screen. The server requires an explicit partner grant in addition to a verified session. The view shows the applied UTC period, snapshot time, complete-period counts, 20 recent channel facts, credential registration metadata, actual partner catalog, registered versions and current configured daily quota. It cancels stale reads and distinguishes empty, denied and unavailable states. See the [owning guide](../../modules/acquisition-risk/partner-portal.md) for semantics, administration and limits.
 
 Code: `apps/web`. Run commands from the repository root.
 
@@ -130,3 +130,5 @@ The authenticated header opens `/polizas`, which loads `src/policies/PolicyPorta
 Responses are validated before rendering and requests are aborted on navigation. A 401 after a failed renewal clears the content and asks to sign in again. The tabs follow the ARIA tabs pattern with arrow keys. `src/policies/policies.test.tsx` covers the list, both coverages, downloads and their failure, the history, keyboard navigation, empty, retry, session loss, response validation, English copy and accessibility with axe. It does not run a real browser download or a visual comparison.
 
 The web test runner caps parallel workers at two to bound JSDOM memory and CPU use on developer machines and CI. This preserves assertions and timeouts; tests still run the complete selected suite.
+
+The policy detail includes explicit, document-bound advisor approvals and revocation. `/asesor` shows only approvals addressed to the current professionally enabled advisor; execution requires a separate confirmation. See [policy lifecycle](../../modules/policy-claims-payments/policy-lifecycle.md#explicit-advisor-authorization).

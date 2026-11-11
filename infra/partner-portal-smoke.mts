@@ -142,7 +142,7 @@ try {
   assert.equal(JSON.stringify(access).includes('credential_reference'),false); assert.equal(JSON.stringify(access).includes('private-credential'),false);
   check('credential_projection_caps_20_flags_more_excludes_raw_references_and_retains_all_three_real_states');
   const response={traceId:randomUUID(),partner:{id:a,code:'synthetic-a'},credentials:access.credentials,hasMoreCredentials:access.hasMoreCredentials,
-    quota:{configured:false},catalog:[{product:'vida_hipotecario',operations:[{method:'POST',path:'/api/v1/quotes',scope:'quotes:create'}]}],versions:[{id:'v1'}],period:{...query,timeZone:'UTC'},...result};
+    quota:access.quota,catalog:[{product:'vida_hipotecario',operations:[{method:'POST',path:'/api/v1/quotes',scope:'quotes:create'}]}],versions:[{id:'v1'}],period:{...query,timeZone:'UTC'},...result};
   assert.equal(isPortalData(response),true); check('real_SQL_JSON_timestamps_credentials_and_transactions_pass_web_consumer_validator');
   stage='unavailability';
   await db.query('ALTER TABLE acquisition.quotes RENAME TO quotes_unavailable_probe');
@@ -151,7 +151,7 @@ try {
     const app=new Hono(); mountPartnerPortal(app,{portal:new PartnerPortal(store),versions:[{id:'v1'}],authorize:async()=>{
       const fresh=await repo.find(principal,verified); return {allowed:true,actor:{kind:'user',channel:'web',principal,operations:['partner-portal:read'],authorizationExpiresAt:fresh.expiresAt,partnerPortal:fresh}};
     }});
-    const failed=await app.request('http://localhost:8787/api/v1/partner-portal?from=2026-11-10&to=2026-11-10',{}, {APP_ENV:'local'});
+    const failed=await app.request('http://localhost:8787/api/v2/partner-portal?from=2026-11-10&to=2026-11-10',{}, {APP_ENV:'local'});
     assert.equal(failed.status,503); const body=await failed.json(); assert.equal(body.error,'portal_unavailable'); assert.equal('totals' in body,false);
   } finally {await db.query('ALTER TABLE acquisition.quotes_unavailable_probe RENAME TO quotes');}
   check('real_SQL_unavailability_rejects_and_HTTP_returns_503_without_fabricated_zero_metrics');

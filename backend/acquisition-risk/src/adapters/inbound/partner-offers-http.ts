@@ -5,7 +5,7 @@ import { safeCode } from '../safe-code';
 import { canonicalTraceId } from '../trace-id';
 
 const MAX_BODY_BYTES = 4 * 1024;
-type Status = 200 | 201 | 400 | 401 | 403 | 405 | 409 | 500 | 503;
+type Status = 200 | 201 | 400 | 401 | 403 | 405 | 409 | 429 | 500 | 503;
 
 // Returns null as soon as the body is known to exceed the limit, without holding more than it allows.
 async function readJson(request: Request): Promise<unknown> {
@@ -51,7 +51,7 @@ export function mountPartnerOffers(app: Hono<{ Bindings: AcquisitionEnv }>, deps
         return reply({ ...result.offer }, result.status === 'created' ? 201 : 200);
       }
       if (result.status === 'denied') {
-        return reply({ error: result.error }, result.httpStatus, result.httpStatus === 401 ? { 'www-authenticate': 'Bearer realm="solventa"' } : {});
+        return reply({ error: result.error }, result.httpStatus, result.httpStatus === 401 ? { 'www-authenticate': 'Bearer realm="solventa"' } : result.httpStatus === 429 && result.retryAfter ? { 'retry-after': String(result.retryAfter) } : {});
       }
       if (result.status === 'invalid') return reply({ error: 'validation_error', errors: result.errors }, 400);
       if (result.status === 'idempotency_conflict') return reply({ error: 'idempotency_key_reused' }, 409);

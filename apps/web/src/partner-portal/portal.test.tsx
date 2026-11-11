@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { I18n } from '../i18n/I18n';
 import { PartnerPortal } from './PartnerPortal';
-import example from '../../../../packages/contracts/examples/partner-portal.json';
+import example from '../../../../packages/contracts/examples/partner-portal-v2.json';
 
 const lost = vi.fn();
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -17,10 +17,10 @@ it('renders actual full-period metrics, safe credentials, catalog, quota and reg
   const { container } = show();
   expect(await screen.findByText('synthetic-partner')).toBeVisible();
   expect(screen.getByText('Período consultado: 2026-11-01 – 2026-11-07 UTC')).toBeVisible();
-  expect(screen.getByText('Sin configurar')).toBeVisible();
+  expect(screen.getByText('Solicitudes por día UTC')).toBeVisible();
   expect(screen.getByText(example.credentials[0].id)).toBeVisible();
   expect(screen.getAllByText(/Sin fecha de retiro/)).toHaveLength(2);
-  expect(fetch).toHaveBeenCalledWith('/api/v1/partner-portal?from=2026-11-01&to=2026-11-07', expect.objectContaining({ method: 'GET', cache: 'no-store' }));
+  expect(fetch).toHaveBeenCalledWith('/api/v2/partner-portal?from=2026-11-01&to=2026-11-07', expect.objectContaining({ method: 'GET', cache: 'no-store' }));
   expect(await axe(container)).toHaveNoViolations();
 });
 it('keeps the applied period visible while draft dates are edited and uses new dates only after consultation', async () => {

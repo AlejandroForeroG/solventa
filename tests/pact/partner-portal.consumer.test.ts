@@ -1,7 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PactV3, MatchersV3 } from '@pact-foundation/pact';
-import { readPartnerPortal } from '../../apps/web/src/partner-portal/api';
+import { readLegacyPartnerPortal } from '../../apps/web/src/partner-portal/api';
 import example from '../../packages/contracts/examples/partner-portal.json';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
 
@@ -21,7 +21,7 @@ for (const mode of ['ready','empty','denied','unavailable'] as const) {
       const realFetch = globalThis.fetch;
       globalThis.fetch = (input, init) => realFetch(typeof input === 'string' && input.startsWith('/') ? server.url + input : input, init);
       try {
-        const result = await readPartnerPortal('2026-11-01', '2026-11-07', new AbortController().signal);
+        const result = await readLegacyPartnerPortal('2026-11-01', '2026-11-07', new AbortController().signal);
         assert.equal(result.kind, status === 200 ? 'ok' : mode === 'denied' ? 'forbidden' : 'unavailable');
       } finally { globalThis.fetch = realFetch; }
     });

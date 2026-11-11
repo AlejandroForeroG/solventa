@@ -1,8 +1,9 @@
 import { fetchWithSession } from '../session-fetch';
 
+export type DailyQuota = { configured: true; limit:number; used:number; remaining:number; windowStart:string; resetsAt:string; trackingSince:string; updatedAt:string; timeZone:'UTC' };
 export type PortalData = {
   traceId: string; partner: { id: string; code: string }; credentials: { id: string; scopes: string[]; expiresAt: string; status: 'active' | 'expired' | 'revoked' }[];
-  hasMoreCredentials: boolean; quota: { configured: false }; catalog: { product: 'vida_hipotecario'; operations: { method: 'POST'; path: string; scope: string }[] }[];
+  hasMoreCredentials: boolean; quota: { configured: false } | DailyQuota; catalog: { product: 'vida_hipotecario'; operations: { method: 'POST'; path: string; scope: string }[] }[];
   versions: { id: string; deprecatedAt?: string; sunset?: string }[]; period: { from: string; to: string; timeZone: 'UTC' }; updatedAt: string;
   totals: { completed: number; accepted: number; preliminary: number; declined: number };
   items: { id: string; reference: string; kind: 'quote' | 'offer_decision'; occurredAt: string; result: 'completed' | 'accepted' | 'preliminary' | 'declined'; ruleVersion: string }[]; hasMore: boolean;
@@ -19,7 +20,7 @@ const instant = (v: unknown): v is string => {
 };
 const integer = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 export function isPortalData(v: unknown): v is PortalData {
-  if (!record(v) || !uuid(v.traceId) || !record(v.partner) || !uuid(v.partner.id) || !text(v.partner.code) || !record(v.quota) || v.quota.configured !== false
+  if (!record(v) || !uuid(v.traceId) || !record(v.partner) || !uuid(v.partner.id) || !text(v.partner.code) || !record(v.quota) || (v.quota.configured !== false && !validQuota(v.quota))
     || !record(v.period) || !date(v.period.from) || !date(v.period.to) || v.period.timeZone !== 'UTC' || !instant(v.updatedAt)
     || !record(v.totals) || !['completed','accepted','preliminary','declined'].every(k => integer(v.totals && record(v.totals) ? v.totals[k] : null))
     || typeof v.hasMore !== 'boolean' || typeof v.hasMoreCredentials !== 'boolean') return false;
@@ -33,14 +34,25 @@ export function isPortalData(v: unknown): v is PortalData {
     && ((x.kind === 'quote' && x.result === 'completed') || (x.kind === 'offer_decision' && typeof x.result === 'string' && ['accepted','preliminary','declined'].includes(x.result))))) return false;
   return true;
 }
-export async function readPartnerPortal(from: string, to: string, signal: AbortSignal): Promise<PortalOutcome> {
+async function readPortal(version: 'v1'|'v2', from: string, to: string, signal: AbortSignal): Promise<PortalOutcome> {
   try {
-    const response = await fetchWithSession('/api/v1/partner-portal?' + new URLSearchParams({ from, to }), { method: 'GET', cache: 'no-store', signal, headers: { accept: 'application/json' } });
+    const response = await fetchWithSession(`/api/${version}/partner-portal?` + new URLSearchParams({ from, to }), { method: 'GET', cache: 'no-store', signal, headers: { accept: 'application/json' } });
     const body: unknown = await response.json();
     const traceId = record(body) && uuid(body.traceId) ? body.traceId : undefined;
     if (response.status === 401) return { kind: 'unauthenticated', traceId };
     if (response.status === 403) return { kind: 'forbidden', traceId };
     if (response.status === 400) return { kind: 'invalid', traceId };
-    return response.status === 200 && isPortalData(body) && body.period.from === from && body.period.to === to ? { kind: 'ok', value: body } : { kind: 'unavailable', traceId };
+    return response.status === 200 && isPortalData(body) && (version === 'v1' ? body.quota.configured === false : body.quota.configured === true) && body.period.from === from && body.period.to === to ? { kind: 'ok', value: body } : { kind: 'unavailable', traceId };
   } catch { return { kind: 'unavailable' }; }
 }
+
+function validQuota(v: Record<string,unknown>): v is DailyQuota {
+  if(v.configured!==true||v.timeZone!=='UTC'||!integer(v.limit)||v.limit<1||v.limit>1000000000||!integer(v.used)||!integer(v.remaining)
+    ||v.remaining!==Math.max(0,v.limit-v.used)||!instant(v.windowStart)||!instant(v.resetsAt)||!instant(v.trackingSince)||!instant(v.updatedAt)) return false;
+  const start=Date.parse(v.windowStart),end=Date.parse(v.resetsAt),at=Date.parse(v.updatedAt);
+  return v.windowStart===new Date(start).toISOString().slice(0,10)+'T00:00:00.000Z'&&end-start===86400000&&start<=at&&at<end&&Date.parse(v.trackingSince)<=at;
+}
+
+export const readPartnerPortal=(from:string,to:string,signal:AbortSignal)=>readPortal('v2',from,to,signal);
+// Compatibility consumer for the legacy projection; configured partners must migrate to v2.
+export const readLegacyPartnerPortal=(from:string,to:string,signal:AbortSignal)=>readPortal('v1',from,to,signal);

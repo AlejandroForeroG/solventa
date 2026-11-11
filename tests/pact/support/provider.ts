@@ -27,6 +27,7 @@ import { providerName } from './pact-files';
 import { serve } from './serve';
 import { verificationPactWorld } from './identity-verification';
 import type { VerificationStage } from './identity-verification';
+import { advisorPactWorld } from './advisor';
 import { lifecyclePactWorld } from './policy-lifecycle';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
@@ -230,6 +231,8 @@ function nativeAssistanceWorld(): Partial<World> {
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
+  ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal v2 ${mode}`, () => ({ acquisition: binding(portalApp(mode,true), { APP_ENV: 'dev' }) })])),
+  ...Object.fromEntries((['ready','revoked','unavailable'] as const).map(mode => [`advisor approval ${mode}`, async () => ({ sessionCookie:'advisor-session', policy:binding(await advisorPactWorld(mode),{APP_ENV:'dev'}) })])),
   'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
   'an auditor reconstructing the retained original mock contract': () => auditWorld(origin, 'recovered'),
   'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),

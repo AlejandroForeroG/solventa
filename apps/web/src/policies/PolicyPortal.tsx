@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, type PolicyDocumentId, type PolicyFile, type PolicyOutcome, type PolicySummary } from './api';
 import './policies.css';
+import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
@@ -186,6 +187,7 @@ function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: strin
         {tab === 'history' && <History policy={policy} />}
       </div>
       <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />
+      <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }
