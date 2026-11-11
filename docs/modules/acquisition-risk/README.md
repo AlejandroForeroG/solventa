@@ -268,6 +268,7 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 
 ## Documents
 
+- [Partner portal: access, credential metadata, channel facts and period metrics](partner-portal.md).
 - [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
 - [Partner offers](#partner-offers) and [partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).

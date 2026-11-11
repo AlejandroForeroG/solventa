@@ -1,5 +1,9 @@
 # Web
 
+## Partner portal
+
+`/socios` reuses the console Design System; the approved prototype has no partner-specific screen. The server requires an explicit partner grant in addition to a verified session. The view shows the applied UTC period, snapshot time, complete-period counts, 20 recent channel facts, credential registration metadata, actual partner catalog, registered versions and unconfigured quota. It cancels stale reads and distinguishes empty, denied and unavailable states. See the [owning guide](../../modules/acquisition-risk/partner-portal.md) for semantics, administration and limits.
+
 Code: `apps/web`. Run commands from the repository root.
 
 React, Vite and TypeScript. Start with `npm run dev:web`. The channel includes an anonymous calculator, session checking, logout, authenticated quotes, consent, the privacy dashboard and definitive offer acceptance through mock-backed policy issuance.
@@ -124,3 +128,5 @@ The authenticated header opens `/polizas`, which loads `src/policies/PolicyPorta
 - **History.** The premium payment with date, amount, status (paid, pending, failed) and the synthetic receipt reference.
 
 Responses are validated before rendering and requests are aborted on navigation. A 401 after a failed renewal clears the content and asks to sign in again. The tabs follow the ARIA tabs pattern with arrow keys. `src/policies/policies.test.tsx` covers the list, both coverages, downloads and their failure, the history, keyboard navigation, empty, retry, session loss, response validation, English copy and accessibility with axe. It does not run a real browser download or a visual comparison.
+
+The web test runner caps parallel workers at two to bound JSDOM memory and CPU use on developer machines and CI. This preserves assertions and timeouts; tests still run the complete selected suite.

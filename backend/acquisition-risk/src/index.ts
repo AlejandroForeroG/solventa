@@ -1,4 +1,7 @@
 /// <reference path="../worker-configuration.d.ts" />
+import { apiVersions } from '@solventa/contracts';
+import { PartnerPortal } from './application/partner-portal';
+import { SqlPartnerPortal } from './adapters/outbound/sql-partner-portal';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { AuditDecisions } from './application/audit-decisions';
 import { SqlAuditDecisions } from './adapters/outbound/sql-audit-decisions';
@@ -46,6 +49,7 @@ export default class extends WorkerEntrypoint<Env> {
     });
     const offers = createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     return createHttp({ quotes,
+      portal: { portal: new PartnerPortal(new SqlPartnerPortal(this.env.ACQUISITION_DB.connectionString)), authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), versions: apiVersions },
       partnerOffers: new PartnerOffers({ access: new IdentityPartnerOfferAccess(this.env.IDENTITY_SERVICE), quotes, offers, protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '') }),
       audit: { decisions: new AuditDecisions(new SqlAuditDecisions(this.env.ACQUISITION_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },

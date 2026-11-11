@@ -11,7 +11,7 @@ const eventId = '60000000-0000-4000-8000-000000000001';
 test('every financial operation produces an allowlisted minimal durable denial and valid alert projection', async () => {
   const decisions: SecurityDecision[] = [];
   const security = new SecurityDecisions({ append: async decision => { decisions.push(decision); } }, () => eventId);
-  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue']) {
+  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage']) {
     assert.deepEqual(await denyResourceAccess(security, { operation, traceId }), { recorded: true });
     const decision = decisions.at(-1)!;
     assert.deepEqual(decision, { schemaVersion: 1, decisionId: eventId, correlationId: traceId, category: 'api_access', channel: 'web', operation, cause: 'forbidden' });

@@ -1,3 +1,4 @@
+import { portalApp } from '../../support/partner-portal-fakes';
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
@@ -26,6 +27,7 @@ import { providerName } from './pact-files';
 import { serve } from './serve';
 import { verificationPactWorld } from './identity-verification';
 import type { VerificationStage } from './identity-verification';
+import { lifecyclePactWorld } from './policy-lifecycle';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -227,6 +229,7 @@ function nativeAssistanceWorld(): Partial<World> {
 
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
+  ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
   'an explicitly granted underwriting auditor': () => auditWorld(origin, 'granted'),
   'an auditor reconstructing the retained original mock contract': () => auditWorld(origin, 'recovered'),
   'an auditor reading an incomplete historical decision': () => auditWorld(origin, 'legacy'),
@@ -249,6 +252,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
   'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),
+  'an owner with an active lifecycle policy': async () => ({ sessionCookie: 'lifecycle-owner', policy: binding(await lifecyclePactWorld(), { APP_ENV: 'dev' }) }),
   'a customer without permission to quote': () => ({ sessionCookie: 'forbidden-origin-cookie' }),
   'the idempotency key was used with another request': async parameters => ({
     sessionCookie: authorizedCookie,

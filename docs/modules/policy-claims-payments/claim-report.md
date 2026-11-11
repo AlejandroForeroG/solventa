@@ -16,7 +16,7 @@ The draft declares the policy, the event type (`collision`, `theft`, `damage`, `
 
 - **Limits.** At most 10 files and 50 MiB in total; `image/jpeg`, `image/png`, `image/heic`, `video/mp4` and `video/quicktime`. These are provisional product values taken from the approved mobile prototype, and the app checks the same limits before sending.
 - **Policy.** It must be issued and belong to the caller; a policy still pending has no coverage, so a report against it answers `404 not_found` like a policy of someone else.
-- **Event time.** It must not be in the future (five minutes of clock tolerance) and must fall inside the policy's effective dates, otherwise the answer is `422 outside_coverage`.
+- **Event time.** It must not be in the future (five minutes of clock tolerance) and must fall inside the policy's effective dates, otherwise the answer is `422 outside_coverage`. A lifecycle change ends the source coverage at its recorded instant: simultaneous or later events are refused, while earlier events and identical historical draft replays remain valid. Draft creation shares the policy lock with lifecycle commands. Apply `0011_policy_lifecycle.sql` before publishing this query.
 - **Required evidence.** One verified file completes a report. The submitted claim records `evidence_required = 1`; analysts may require more later.
 - **Estimate.** The customer cannot value a claim, so the submitted claim has no `estimated_amount` and the inbox lists it as pending until an analyst sets one.
 

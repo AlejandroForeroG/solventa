@@ -144,7 +144,20 @@ try {
   const legacy = randomUUID();
   await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id) VALUES($1,$2,'parametric-once',$3,'approved',now(),$4)`, [legacy, policyId, 'f'.repeat(64), randomUUID()]);
   assert.ok(!(await inbox.list({}, reader())).items.some(item => item.claimId === legacy), 'the parametric flow keeps its claims and is not listed');
-  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'draft-not-listed', 'evidence-verification',
+  // Adapter fixture only: the financial smoke separately creates and validates the actual sealed lifecycle command.
+  const lifecycleAt = new Date(Date.now() - 1_800_000).toISOString();
+  await db.query(`INSERT INTO policy.policy_lifecycle_changes(policy_id,change_id,actor_id,command_key,request_hash,payload,occurred_at)
+    VALUES($1,$2,$3,$4,$5,'{}',$6)`, [policyId, randomUUID(), ownerA.clientId, 'a'.repeat(64), 'b'.repeat(64), lifecycleAt]);
+  const claimCount = Number((await db.query('SELECT count(*) AS n FROM policy.claims')).rows[0].n);
+  for (const occurredAt of [lifecycleAt, new Date(Date.parse(lifecycleAt) + 1).toISOString()]) {
+    const key = 'ended-' + randomUUID();
+    assert.equal((await store.createDraft({ owner: ownerA, report: input({ occurredAt }), idempotencyKey: key, requestHash: hash(key), traceId: randomUUID() })).status, 'outside_coverage');
+  }
+  assert.equal(Number((await db.query('SELECT count(*) AS n FROM policy.claims')).rows[0].n), claimCount);
+  const priorKey = 'prior-' + randomUUID();
+  assert.equal((await store.createDraft({ owner: ownerA, report: input({ occurredAt: new Date(Date.parse(lifecycleAt) - 1).toISOString() }), idempotencyKey: priorKey, requestHash: hash(priorKey), traceId: randomUUID() })).status, 'created');
+  assert.equal((await store.createDraft({ owner: ownerA, report: first, idempotencyKey: key, requestHash: hash('one'), traceId: randomUUID() })).status, 'replayed');
+  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'lifecycle-termination-boundary', 'historical-draft-replay', 'draft-not-listed', 'evidence-verification',
     'incomplete-submit', 'single-number', 'inbox-shows-unestimated', 'concurrent-identical-requests', 'concurrent-numbering', 'audit-rollback', 'runtime-privileges', 'constraints', 'legacy-insert'] }));
 } finally {
   if (db) await db.end();

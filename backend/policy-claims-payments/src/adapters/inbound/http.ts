@@ -16,7 +16,9 @@ export type PolicyHttpDependencies = {
   claims?: ClaimsHttpDependencies;
   claimReport?: ClaimReportHttpDependencies;
   finance: {
-    listOwn(input: { actor: FinancialActor; traceId: string }): Promise<PolicyListResult>;
+    changeLifecycle?(input: { actor: FinancialActor; policyId: string; action: import('../../domain/policy-lifecycle').LifecycleAction;
+      replacementPolicyId: string | null; documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult>;
+    listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
     detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult>;
     document(input: { actor: FinancialActor; policyId: string; documentId: PolicyDocumentKind; traceId: string }): Promise<PolicyDocumentResult>;
@@ -57,6 +59,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   // Web portal reads: static paths are registered before the :policyId routes.
   app.all('/api/v1/policies/issued', handler('policies:read', false, 'list'));
   app.all('/api/v1/policies/:policyId/detail', handler('policies:read', false, 'detail'));
+  app.all('/api/v1/policies/:policyId/lifecycle', handler('policies:manage', false, 'lifecycle'));
   app.all('/api/v1/policies/:policyId/documents/:documentId', handler('policies:read', false, 'document'));
   app.all('/api/v1/policies/:policyId', handler('policies:read'));
   app.all('/api/v1/policies/by-acceptance/:acceptanceId/policy', handler('policies:read', true));
@@ -93,13 +96,13 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         || !Array.isArray(actor.operations) || !actor.operations.includes('policies:read')
         || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)
         || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
-      const result = await deps.finance.listOwn({ actor: { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, traceId });
+      const result = await deps.finance.listOwn({ actor: { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, traceId, includeEnded: false });
       if (result.status === 'ok') return reply({ policies: result.policies, hasMore: result.hasMore }, 200);
       return reply({ error: result.error }, result.httpStatus);
     } catch { return reply({ error: 'financial_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   }
-  function handler(operation: 'policies:read' | 'policies:issue', byAcceptance = false, action: 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' | 'list' | 'detail' | 'document' = 'issue') {
+  function handler(operation: 'policies:read' | 'policies:issue' | 'policies:manage', byAcceptance = false, action: 'lifecycle' | 'legacyIssue' | 'issue' | 'charge' | 'challenge' | 'cancel' | 'list' | 'detail' | 'document' = 'issue') {
     return async (c: import('hono').Context<{ Bindings: PolicyEnv }>) => {
       const supplied = c.req.header('x-trace-id') ?? '';
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
@@ -166,7 +169,16 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         else {
           const body = await smallBody(c.req.raw);
           const idempotencyKey = c.req.header('idempotency-key') ?? '';
-          if (action === 'challenge') {
+          if (action === 'lifecycle') {
+            if (!record(body) || Object.keys(body).length !== 4 || typeof body.action !== 'string' || !['modified', 'renewed', 'cancelled'].includes(body.action)
+              || typeof body.documentHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.documentHash) || typeof body.reason !== 'string'
+              || !/^[a-z][a-z_]{2,63}$/.test(body.reason) || !(body.replacementPolicyId === null || typeof body.replacementPolicyId === 'string' && UUID.test(body.replacementPolicyId))
+              || !/^[\x21-\x7e]{1,128}$/.test(idempotencyKey)) return reply({ error: 'invalid_request' }, 400);
+            if (!deps.finance.changeLifecycle) return reply({ error: 'financial_unavailable' }, 503);
+            result = await deps.finance.changeLifecycle({ actor: principal, policyId, action: body.action as import('../../domain/policy-lifecycle').LifecycleAction,
+              replacementPolicyId: typeof body.replacementPolicyId === 'string' ? body.replacementPolicyId.toLowerCase() : null,
+              documentHash: body.documentHash, reason: body.reason, idempotencyKey, traceId });
+          } else if (action === 'challenge') {
             if (!record(body) || Object.keys(body).length !== 2 || typeof body.documentHash !== 'string'
               || !/^[0-9a-f]{64}$/.test(body.documentHash) || body.accepted !== true) return reply({ error: 'invalid_request' }, 400);
             result = await deps.finance.beginSignatureChallenge({ actor: principal, policyId, documentHash: body.documentHash, accepted: true, traceId });
