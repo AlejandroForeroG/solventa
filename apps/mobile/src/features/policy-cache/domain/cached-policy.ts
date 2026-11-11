@@ -1,8 +1,9 @@
-export type PolicyProduct = 'vida_hipotecario' | 'flight_delay';
+export type PolicyProduct = 'vida_hipotecario' | 'flight_delay' | 'weather_event';
 
 export type PolicyCoverage =
   | { kind: 'mortgage_life'; sumInsured: string }
-  | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string };
+  | { kind: 'flight_delay'; flightReference: string; thresholdMinutes: number; payoutAmount: string }
+  | { kind: 'weather_event'; stationId: string; parameter: 'precipitation_24h'; unit: 'mm'; threshold: number; payoutAmount: string };
 
 // The only policy fields that may rest on the device. The reviewed document, its hash, offer, payment and trace data stay on the server.
 export type CachedPolicy = {
