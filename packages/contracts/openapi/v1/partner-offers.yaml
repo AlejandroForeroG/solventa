@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Partner offers
+  version: 1.0.0
+  description: >
+    A distribution partner requests a profiled mortgage life offer for a customer who authorized it.
+    The partner presents its WorkOS Connect M2M token and the authorization id the customer created
+    (see partner-authorizations.yaml); it never names the customer. Identity resolves the customer behind
+    the authorization and verifies that customer's consent for the four risk-profiling scopes fresh on
+    every call, in one internal call. A partner token, an advisor role or a consent kept in a browser
+    never replaces that consent, and revoking either the authorization or the consent blocks the next
+    call, including a retry of an earlier order. The quote is saved for the customer and the offer follows
+    the same profiling, degradation and persistence as the customer's own web journey.
+    A source that did not answer is replaced by a stored copy or a conservative default and the offer is
+    preliminary: it states each signal's condition and confidence and cannot be contracted. The response
+    carries the price, its validity and the applicable explanation, never the customer's identifiers or
+    raw signal values. Offers are synthetic: no real provider, settlement or signature is involved.
+    The same Idempotency-Key with the same request returns the original offer; a key is scoped to the
+    partner and the authorization. Provider budget and latency objectives are those of the web offer.
+servers:
+  - url: /api/v1
+tags:
+  - name: Partner offers
+    description: Profiled offer requested by an authorized partner.
+paths:
+  /partner/offers:
+    post:
+      operationId: createPartnerOffer
+      summary: Request a profiled offer for a customer who authorized the partner
+      tags: [Partner offers]
+      description: >
+        Requires the partner-offers:create scope in both the token and Identity's local partner
+        registration. The body is limited to 4096 bytes. A browser session is not a partner credential.
+        Unknown, foreign, revoked and expired authorizations are indistinguishable (403 forbidden).
+      security:
+        - PartnerBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PartnerOfferRequest' }
+      responses:
+        '201':
+          description: Offer created.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartnerOffer' }
+        '200':
+          description: The Idempotency-Key was reused with the same request. Returns the original offer without creating another.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartnerOffer' }
+        '400':
+          description: Invalid or missing authorization id, key or quote fields. A customer identifier or unknown property in the body is rejected, never obeyed. Nothing is stored.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        '401':
+          description: Missing, invalid or expired partner token.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            WWW-Authenticate: { $ref: '#/components/headers/WwwAuthenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '403':
+          description: >
+            forbidden: the partner lacks the scope or does not hold a usable authorization.
+            consent_required: the customer has no current consent for the four scopes. Nothing is stored.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '409':
+          description: >
+            idempotency_key_reused: the key belongs to a different request.
+            declined: the underwriting rule rejected the customer with all signals available.
+            conflict: the quote expired or the offer cannot be completed.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '500':
+          description: Unexpected error. The write outcome may be uncertain; retry with the same Idempotency-Key and unchanged body.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '503':
+          description: >
+            access_unavailable: Identity could not verify the partner, authorization or consent in time, so nothing was priced.
+            financial_unavailable: a required dependency of the offer failed. Retry with the same Idempotency-Key.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+components:
+  securitySchemes:
+    PartnerBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS Connect M2M access token with the partner-offers:create scope.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key per order, 1 to 128 characters. Scoped to the partner and the authorization; the same key under another authorization is another order.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  headers:
+    TraceId:
+      description: Request correlation UUID, normalized to lowercase. Missing or invalid values are replaced.
+      schema: { type: string, format: uuid }
+    WwwAuthenticate:
+      description: Challenge for a missing or invalid partner token.
+      schema: { type: string, enum: ['Bearer realm="solventa"'] }
+  schemas:
+    PartnerOfferRequest:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, product, customer, credit]
+      properties:
+        authorizationId:
+          type: string
+          format: uuid
+          description: Authorization the customer created for this partner. It identifies no one by itself.
+        product: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/product' }
+        customer: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/customer' }
+        credit: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/credit' }
+    PartnerOffer:
+      type: object
+      additionalProperties: false
+      required: [offerId, quoteId, status, contractable, premium, currency, coverage, validity, signals, explanation, synthetic, traceId]
+      properties:
+        offerId: { type: string, format: uuid }
+        quoteId: { type: string, pattern: '^COT-[0-9]{4}-[0-9]{5}$' }
+        status:
+          type: string
+          enum: [preliminary, definitive]
+          description: preliminary when any signal was replaced.
+        contractable:
+          type: boolean
+          description: Always false for a preliminary offer.
+        premium: { type: string, pattern: '^[0-9]+\.[0-9]{4}$', description: "Decimal amount in COP." }
+        currency: { type: string, enum: [COP] }
+        coverage:
+          type: object
+          additionalProperties: false
+          required: [kind, sumInsured]
+          properties:
+            kind: { type: string, enum: [mortgage_life] }
+            sumInsured: { type: string, pattern: '^[0-9]+\.[0-9]{4}$' }
+        validity:
+          type: object
+          additionalProperties: false
+          required: [effectiveFrom, effectiveUntil, expiresAt]
+          properties:
+            effectiveFrom: { type: string, format: date-time }
+            effectiveUntil: { type: string, format: date-time }
+            expiresAt:
+              type: string
+              format: date-time
+              description: Last moment to act on the offer. Never later than the customer's consent or the authorization given to the partner.
+        signals:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items: { $ref: '#/components/schemas/Signal' }
+        explanation:
+          type: object
+          additionalProperties: false
+          required: [ratingVersion, underwritingVersion, baseRatePpm, adjustmentPpm]
+          properties:
+            ratingVersion: { type: string }
+            underwritingVersion: { type: string }
+            baseRatePpm: { type: integer, minimum: 0, description: "Base rate applied, in parts per million." }
+            adjustmentPpm: { type: integer, description: "Adjustment from the customer's signals, in parts per million." }
+        synthetic: { type: boolean, enum: [true] }
+        traceId: { type: string, format: uuid }
+    Signal:
+      type: object
+      additionalProperties: false
+      required: [scope, quality, degraded, confidence, capturedAt]
+      properties:
+        scope: { type: string, enum: [income_obligations_12m, payment_history_score, affiliation_regime, identity_validation] }
+        quality:
+          type: string
+          enum: [live, stored_copy, default]
+          description: Where the value came from. A default never came from the person.
+        degraded: { type: boolean }
+        confidence: { type: integer, minimum: 0, maximum: 100, description: "Percentage of trust by origin (live 100, stored copy 60, default 0)." }
+        capturedAt: { type: string, format: date-time }
+        failure:
+          type: string
+          enum: [timeout, unavailable, rate_limited, unauthorized, not_found, invalid_response]
+          description: Why the source was replaced. Present only when degraded.
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code]
+      properties:
+        field: { type: string }
+        code: { type: string }
+        params: { type: object, additionalProperties: { type: number } }
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [error, errors, traceId]
+      properties:
+        error: { type: string, enum: [validation_error] }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+        traceId: { type: string, format: uuid }
+    AccessError:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden, consent_required, access_unavailable, idempotency_key_reused, declined, conflict, financial_unavailable, internal_error, method_not_allowed]
+        traceId: { type: string, format: uuid }

@@ -1,0 +1,181 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Partner authorizations
+  version: 1.0.0
+  description: >
+    The authenticated web customer authorizes a named distribution partner to request one operation,
+    a profiled offer, on their behalf, for a bounded time, and can revoke it at any time. Only the sealed
+    session cookie decides who the customer is; no customer identifier is taken from the body or the path.
+    An authorization is not consent to use data: the customer's consent is verified separately on every
+    partner request (see consents.yaml and partner-offers.yaml). A partner token, a browser consent or an
+    advisor role never creates one. Each grant, and each first revocation, commits its audit and outbox
+    event with the change; a failed record leaves no change. Requests with an Authorization header are
+    rejected with 400. The body is limited to 4096 bytes.
+servers:
+  - url: /api/v1
+tags:
+  - name: Partner authorizations
+    description: A customer's own permission for one partner and one operation.
+paths:
+  /me/partner-authorizations:
+    get:
+      operationId: listPartnerAuthorizations
+      summary: List the customer's partner authorizations
+      tags: [Partner authorizations]
+      description: At most 50, newest first. Status is computed on every read.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: The customer's own authorizations only.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthorizationList' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createPartnerAuthorization
+      summary: Authorize a partner to request offers for the customer
+      tags: [Partner authorizations]
+      description: >
+        Each call creates a distinct authorization, valid for the requested days from the grant
+        (30 by default, at most 90). The partner receives the authorizationId from the customer,
+        outside Solventa. A write needs the same Origin as the actual request host.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorizationRequest' }
+      responses:
+        '201':
+          description: Authorization created.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Authorization' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /me/partner-authorizations/{authorizationId}/revoke:
+    post:
+      operationId: revokePartnerAuthorization
+      summary: Revoke a partner authorization
+      tags: [Partner authorizations]
+      description: >
+        Effective on the partner's next request. Revoking twice returns the same record. An expired
+        authorization cannot be revoked (409). A foreign or unknown id is an opaque 404.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Revoked, or already revoked.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Authorization' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Remote sealed HttpOnly session from the web login flow.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local-only sealed HttpOnly session for http://localhost:8787.
+  headers:
+    TraceId:
+      description: Request correlation UUID, normalized to lowercase. Missing or invalid values are replaced.
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: >
+        400 invalid_request: invalid body, an Authorization header or a malformed id.
+        401 unauthorized: missing, expired or revoked session. 403 forbidden: the session lacks the operation or the Origin is not allowed.
+        404 partner_not_found or not_found. 409 authorization_not_active. 503 access_unavailable.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    AuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [partnerCode]
+      properties:
+        partnerCode: { type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$' }
+        validityDays: { type: integer, minimum: 1, maximum: 90, default: 30 }
+    Authorization:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, partnerCode, operation, grantedAt, expiresAt, revokedAt, status, traceId]
+      properties:
+        authorizationId: { type: string, format: uuid }
+        partnerCode: { type: string }
+        operation: { type: string, enum: ['partner-offers:create'] }
+        grantedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [active, revoked, expired] }
+        traceId: { type: string, format: uuid }
+    AuthorizationList:
+      type: object
+      additionalProperties: false
+      required: [items, traceId]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/AuthorizationItem' }
+        traceId: { type: string, format: uuid }
+    AuthorizationItem:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, partnerCode, operation, grantedAt, expiresAt, revokedAt, status]
+      properties:
+        authorizationId: { type: string, format: uuid }
+        partnerCode: { type: string }
+        operation: { type: string, enum: ['partner-offers:create'] }
+        grantedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [active, revoked, expired] }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error: { type: string, enum: [invalid_request, unauthorized, forbidden, partner_not_found, not_found, authorization_not_active, access_unavailable] }
+        traceId: { type: string, format: uuid }
