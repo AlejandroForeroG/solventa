@@ -64,11 +64,6 @@
     "INSERT",
     "UPDATE"
   ],
-  "claim_number_counters": [
-    "SELECT",
-    "INSERT",
-    "UPDATE"
-  ],
   "policy_lifecycle_changes": [
     "SELECT",
     "INSERT"
