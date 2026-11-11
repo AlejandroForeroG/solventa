@@ -57,7 +57,7 @@ const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
     signedAt: row.signature_signed_at.toISOString(), timeSeal: row.signature_time_seal } };
 };
 
-class SqlFinancialTransaction implements FinancialTransaction {
+export class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
   async createSignatureChallenge(challenge: SignatureChallenge): Promise<void> {
     await this.db.query(`INSERT INTO policy.signature_challenges
