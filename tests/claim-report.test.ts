@@ -114,6 +114,30 @@ test('a valid report is normalized and every invalid field is named without echo
   assert.equal(parseReport(report({ evidence: [{ fileId: ids.file1, contentType: 'video/mp4', byteSize: MAX_EVIDENCE_BYTES, sha256: sha(photo) }] }), now).ok, true);
 });
 
+test('a location is accepted only with an explicit authorization, is rounded to six decimals and never echoed in an error', () => {
+  const ok = parseReport(report({ location: { authorized: true, latitude: 4.6969441234, longitude: -74.0441669 } }), now);
+  assert.ok(ok.ok);
+  assert.deepEqual((ok as { value: ReportInput }).value.location, { latitude: 4.696944, longitude: -74.044167 });
+  assert.equal((parseReport(report(), now) as { value: ReportInput }).value.location, null, 'a report without a location has none');
+  for (const location of [{ latitude: 4.69, longitude: -74.04 }, { authorized: false, latitude: 4.69, longitude: -74.04 }, { authorized: 'true', latitude: 4.69, longitude: -74.04 },
+    { authorized: true, latitude: 91, longitude: -74.04 }, { authorized: true, latitude: 4.69, longitude: -181 }, { authorized: true, latitude: '4.69', longitude: -74.04 },
+    { authorized: true, latitude: Number.NaN, longitude: -74.04 }, { authorized: true, latitude: 4.69, longitude: -74.04, accuracy: 5 }, { authorized: true, latitude: 4.69 }, null, [], 'Bogotá']) {
+    const result = parseReport(report({ location }), now);
+    assert.equal(result.ok, false, JSON.stringify(location));
+    if (!result.ok) { assert.deepEqual(result.fields, ['location']); assert.equal(JSON.stringify(result).includes('4.69'), false); }
+  }
+});
+
+test('the canonical report of a report without a location is the one it always had, and a location changes it', () => {
+  const base = parseReport(report(), now); assert.ok(base.ok);
+  const value = (base as { value: ReportInput }).value;
+  assert.equal(canonicalReport(value), JSON.stringify(['claim-report.v1', value.policyId, value.eventType, value.occurredAt, value.place, value.description,
+    [...value.evidence].sort((a, b) => a.fileId.localeCompare(b.fileId)).map(item => [item.fileId, item.contentType, item.byteSize, item.sha256])]));
+  const located = { ...value, location: { latitude: 4.696944, longitude: -74.044167 } };
+  assert.notEqual(canonicalReport(value), canonicalReport(located));
+  assert.notEqual(canonicalReport(located), canonicalReport({ ...located, location: { latitude: 4.696945, longitude: -74.044167 } }));
+});
+
 test('the canonical report ignores the order of the files and changes with any declared value', () => {
   const base = parseReport(report(), now); assert.ok(base.ok);
   const value = (base as { value: ReportInput }).value;

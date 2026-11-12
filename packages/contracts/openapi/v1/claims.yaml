@@ -404,6 +404,7 @@ components:
               - eventType
               - occurredAt
               - place
+              - location
               - description
               - evidence
               - idempotencyKey
@@ -445,6 +446,28 @@ components:
         sha256:
           type: string
           pattern: ^[0-9a-fA-F]{64}$
+    ClaimReportLocation:
+      type: object
+      additionalProperties: false
+      description: The position the customer chose to attach. It is accepted only with authorized true and is stored with the claim; it is never read back by this API.
+      required:
+        - authorized
+        - latitude
+        - longitude
+      properties:
+        authorized:
+          type: boolean
+          enum:
+            - true
+          description: The customer's explicit authorization. A report without a location omits the whole object.
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
     ClaimReportRequest:
       type: object
       additionalProperties: false
@@ -473,6 +496,8 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        location:
+          $ref: "#/components/schemas/ClaimReportLocation"
         description:
           type: string
           minLength: 40

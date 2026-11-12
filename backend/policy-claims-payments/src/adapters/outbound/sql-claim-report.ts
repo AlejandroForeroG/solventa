@@ -38,9 +38,11 @@ export class SqlClaimReport implements ClaimReportStore {
       if (existing) return existing.request_hash === requestHash ? { status: 'replayed', claim: await this.view(db, existing.id) } : { status: 'idempotency_conflict' };
       const occurred = Date.parse(report.occurredAt);
       if (occurred < policy.effective_from.getTime() || occurred > policy.effective_until.getTime()) return { status: 'outside_coverage' };
-      const claimId = (await db.query<{ id: string }>(`INSERT INTO policy.claims (policy_id, idempotency_key, request_hash, status, occurred_at, correlation_id, event_type, event_place, description)
-        VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8) RETURNING id`,
-      [report.policyId, idempotencyKey, requestHash, report.occurredAt, traceId, report.eventType, report.place, report.description])).rows[0].id;
+      const claimId = (await db.query<{ id: string }>(`INSERT INTO policy.claims (policy_id, idempotency_key, request_hash, status, occurred_at, correlation_id, event_type, event_place, description,
+          location_latitude, location_longitude, location_authorized_at)
+        VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8, $9, $10, CASE WHEN $9::DECIMAL IS NULL THEN NULL ELSE now() END) RETURNING id`,
+      [report.policyId, idempotencyKey, requestHash, report.occurredAt, traceId, report.eventType, report.place, report.description,
+        report.location?.latitude ?? null, report.location?.longitude ?? null])).rows[0].id;
       for (const item of report.evidence) {
         await db.query(`INSERT INTO policy.evidence_metadata (claim_id, object_key, content_type, byte_size, checksum_sha256, state, retention_until, correlation_id, client_file_id)
           VALUES ($1, $2, $3, $4, $5, 'pending', now() + INTERVAL '${EVIDENCE_RETENTION_DAYS} days', $6, $7)`,
