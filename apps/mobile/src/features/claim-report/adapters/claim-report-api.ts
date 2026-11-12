@@ -11,8 +11,9 @@ const JSON_DEADLINE_MS = 12_000;
 const UPLOAD_DEADLINE_MS = 120_000;
 
 export type UploadResult = { status: number; body: string };
-// The native layer streams the file from its path, so a video never has to fit in JavaScript memory.
-export type EvidenceUploader = (input: { url: string; uri: string; contentType: string; token: string }) => Promise<UploadResult>;
+// The native layer streams the file from its path, so a video never has to fit in JavaScript memory. The uploader must stop the transfer when the
+// signal aborts and settle only afterwards, so a retry never overlaps the attempt that timed out.
+export type EvidenceUploader = (input: { url: string; uri: string; contentType: string; token: string; signal: AbortSignal }) => Promise<UploadResult>;
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 function parse(body: string): Record<string, unknown> {
@@ -41,7 +42,7 @@ function failureFor(status: number, body: string): ClaimReportFailure {
   return new ClaimReportFailure('invalid_response');
 }
 
-export function createClaimReportApi(baseUrl: string, session: AuthenticatedSession, uploader: EvidenceUploader, request: typeof fetch = fetch): ClaimReportApi {
+export function createClaimReportApi(baseUrl: string, session: AuthenticatedSession, uploader: EvidenceUploader, request: typeof fetch = fetch, uploadDeadlineMs = UPLOAD_DEADLINE_MS): ClaimReportApi {
   validateBaseUrl(baseUrl);
   const json = <T>(path: string, init: { method: 'POST'; body?: string; headers?: Record<string, string> }, read: (data: Record<string, unknown>) => T): Promise<T> =>
     session.execute(async token => {
@@ -75,12 +76,13 @@ export function createClaimReportApi(baseUrl: string, session: AuthenticatedSess
     }),
 
     upload: (claimId: string, file: EvidenceItem): Promise<void> => session.execute(async token => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), uploadDeadlineMs);
       try {
-        const result = await Promise.race([
-          uploader({ url: `${baseUrl}/api/v1/claims/${claimId}/evidence/${file.id}`, uri: file.uri, contentType: file.contentType, token }),
-          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new ClaimReportFailure('unavailable')), UPLOAD_DEADLINE_MS); }),
-        ]);
+        // The deadline aborts the transfer and waits for it to stop before reporting the outage.
+        const result = await uploader({ url: `${baseUrl}/api/v1/claims/${claimId}/evidence/${file.id}`, uri: file.uri, contentType: file.contentType, token, signal: controller.signal })
+          .catch((error: unknown) => { throw controller.signal.aborted ? new ClaimReportFailure('unavailable') : error; });
+        if (controller.signal.aborted) throw new ClaimReportFailure('unavailable');
         if (result.status === 401) throw new AuthFailure('unauthorized');
         if (result.status === 403) throw new AuthFailure('forbidden');
         if (result.status !== 200) throw failureFor(result.status, result.body);

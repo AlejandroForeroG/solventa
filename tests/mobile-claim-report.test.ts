@@ -230,6 +230,18 @@ test('the draft is posted with the token, the retained key and no cookies, and o
   await assert.rejects(http(() => json({ claimId, evidence: [] }, 200, 'text/html')).createDraft(manifest, 'retry-key-0001'), (error: ClaimReportFailure) => error.code === 'invalid_response');
 });
 
+test('an upload that exceeds its deadline is cancelled and has stopped before the outage is reported', async () => {
+  const events: string[] = [];
+  const slow: EvidenceUploader = ({ signal }) => new Promise((_, reject) => {
+    signal.addEventListener('abort', () => setTimeout(() => { events.push('stopped'); reject(new Error('cancelled')); }, 5), { once: true });
+  });
+  const api = createClaimReportApi(baseUrl, session, slow, (async () => json({})) as typeof fetch, 20);
+  await assert.rejects(api.upload(claimId, photo('a')).finally(() => events.push('reported')), (error: ClaimReportFailure) => error.code === 'unavailable');
+  assert.deepEqual(events, ['stopped', 'reported']);
+  const late: EvidenceUploader = async ({ signal }) => { await new Promise(resolve => setTimeout(resolve, 40)); return signal.aborted ? { status: 200, body: JSON.stringify({ fileId, state: 'verified', traceId }) } : { status: 500, body: '' }; };
+  await assert.rejects(createClaimReportApi(baseUrl, session, late, (async () => json({})) as typeof fetch, 10).upload(claimId, { ...photo('a'), id: fileId }), (error: ClaimReportFailure) => error.code === 'unavailable');
+});
+
 test('every refusal of the contract becomes a distinct failure and an outage is never read as a contract error', async () => {
   const failure = (status: number, body: unknown) => http(() => json(body, status)).createDraft(manifest, 'retry-key-0001').then(() => 'ok', (error: ClaimReportFailure | AuthFailure) => error instanceof AuthFailure ? `auth:${error.kind}` : error.code);
   assert.equal(await failure(401, { error: 'unauthorized', traceId }), 'auth:unauthorized');
@@ -252,7 +264,10 @@ test('an evidence file is sent to its own address with its type, and a bad recei
   let sent: Parameters<EvidenceUploader>[0] | undefined;
   const item = { id: fileId, uri: 'file:///cache/a.jpg', contentType: 'image/jpeg' as const, byteSize: 10, kind: 'photo' as const };
   await http(() => json({}), async input => { sent = input; return { status: 200, body: JSON.stringify({ fileId, state: 'verified', traceId }) }; }).upload(claimId, item);
-  assert.deepEqual(sent, { url: `${baseUrl}/api/v1/claims/${claimId}/evidence/${fileId}`, uri: item.uri, contentType: 'image/jpeg', token: 'synthetic.jwt.token' });
+  assert.ok(sent);
+  const { signal, ...rest } = sent;
+  assert.equal(signal.aborted, false);
+  assert.deepEqual(rest, { url: `${baseUrl}/api/v1/claims/${claimId}/evidence/${fileId}`, uri: item.uri, contentType: 'image/jpeg', token: 'synthetic.jwt.token' });
   const result = (status: number, body: unknown) => http(() => json({}), async () => ({ status, body: JSON.stringify(body) })).upload(claimId, item).then(() => 'ok', (error: ClaimReportFailure | AuthFailure) => error instanceof AuthFailure ? `auth:${error.kind}` : error.code);
   assert.equal(await result(200, { fileId: 'other', state: 'verified' }), 'invalid_response');
   assert.equal(await result(200, { fileId, state: 'pending' }), 'invalid_response');
