@@ -45,6 +45,8 @@ Historical underwriting lookup: [Acquisition audit API and workspace](modules/ac
 Partner requests for a customer's offer: [Partner authorizations](modules/identity-consent-ecosystem/partner-authorizations.md) and [Acquisition partner offers](modules/acquisition-risk/README.md#partner-offers).
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
+Customer claim report with evidence: [Claim report](modules/policy-claims-payments/claim-report.md) and its [mobile journey](channels/mobile/README.md#claim-report).
+
 Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).
 
 Automatic indemnities for flight delay and heavy rainfall: [Parametric payouts](modules/policy-claims-payments/parametric-payouts.md).

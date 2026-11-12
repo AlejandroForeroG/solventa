@@ -30,6 +30,7 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "r2_buckets": [{ "binding": "CLAIM_EVIDENCE", "bucket_name": "solventa-local-claim-evidence" }],
   "triggers": { "crons": ["* * * * *"] },
   "env": {
     "dev": {
@@ -42,6 +43,7 @@
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
       "triggers": { "crons": ["* * * * *"] },
+      "r2_buckets": [{ "binding": "CLAIM_EVIDENCE", "bucket_name": "solventa-dev-claim-evidence" }],
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
@@ -76,6 +78,7 @@
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
       "triggers": { "crons": ["* * * * *"] },
+      "r2_buckets": [{ "binding": "CLAIM_EVIDENCE", "bucket_name": "solventa-staging-claim-evidence" }],
       "hyperdrive": [
         {
           "binding": "POLICY_DB",

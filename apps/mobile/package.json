@@ -13,6 +13,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "9.1.0",
     "@solventa/assets": "0.0.0",
     "@solventa/contracts": "0.0.0",
     "@workos-inc/node": "^11.0.0",
@@ -21,6 +22,7 @@
     "expo-crypto": "~57.0.3",
     "expo-dev-client": "~57.0.19",
     "expo-file-system": "~57.0.7",
+    "expo-image-picker": "~57.0.21",
     "expo-linking": "~57.0.12",
     "expo-local-authentication": "~57.0.3",
     "expo-localization": "~57.0.2",
@@ -31,6 +33,7 @@
     "expo-standard-web-crypto": "^57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "expo-video-thumbnails": "~57.0.2",
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",

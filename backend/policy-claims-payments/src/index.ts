@@ -5,6 +5,10 @@ import { databaseProbe } from './adapters/outbound/database-probe';
 import { createPolicyFinance } from './adapters/composition';
 import { ClaimInbox } from './application/claim-inbox';
 import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
+import { ClaimReport } from './application/claim-report';
+import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
+import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
+import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
 import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { object, UUID } from './domain/financial';
 
@@ -17,6 +21,7 @@ const RECONCILIATION_BATCH = 25;
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
+    const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const response = await createHttp({ finance,
       advisor: { finance, authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
@@ -26,6 +31,9 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
       claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
+      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {

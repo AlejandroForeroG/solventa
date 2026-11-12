@@ -29,6 +29,7 @@ const es = {
   coverages: { mortgage_life: 'Vida deudor hipotecario', sumInsured: 'Suma asegurada', flight_delay: 'Retraso de vuelo',
     threshold: 'Retraso mínimo', minutes: 'min', payout: 'Pago', flight: 'Vuelo', rainThreshold: 'Lluvia mínima en 24 h', station: 'Estación' },
   document: 'El documento de la póliza no se guarda en el teléfono: se consulta en línea.',
+  reportClaim: 'Reportar siniestro',
 };
 
 const en: typeof es = {
@@ -60,6 +61,7 @@ const en: typeof es = {
   coverages: { mortgage_life: 'Mortgage debtor life', sumInsured: 'Sum insured', flight_delay: 'Flight delay',
     threshold: 'Minimum delay', minutes: 'min', payout: 'Payout', flight: 'Flight', rainThreshold: 'Minimum rainfall in 24 h', station: 'Station' },
   document: 'The policy document is not saved on the phone: it is read online.',
+  reportClaim: 'Report a claim',
 };
 
 export const walletMessages: Record<WalletLocale, typeof es> = { 'es-CO': es, 'en-US': en };

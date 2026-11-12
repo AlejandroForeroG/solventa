@@ -8,6 +8,7 @@ import { messages } from '@/shared/i18n/messages';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
+import { isReportableProduct } from '../../claim-report/domain/report';
 import { createPolicyWallet } from '../adapters/create-policy-wallet';
 import { policyReference, validityAt, walletAccessFor, type WalletAccess, type WalletSnapshot } from '../domain/wallet';
 import { formatDate, formatDateTime, formatMoney } from './format';
@@ -157,6 +158,9 @@ function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; 
           <Row label={copy.coverages.station} value={coverage.stationId.slice(0, 8).toUpperCase()} />
         </>}
     <Text style={styles.caption}>{copy.document}</Text>
+    {/* A report needs the server, so a stored copy never offers it. */}
+    {state.source !== 'stored' && isReportableProduct(policy.product) && validityAt(policy, now) === 'active'
+      && <Action label={copy.reportClaim} onPress={() => router.push({ pathname: '/claim-report', params: { policyId: policy.policyId } })} />}
   </View>;
 }
 
