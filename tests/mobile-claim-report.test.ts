@@ -391,3 +391,16 @@ test('an abandoned report releases everything, and a thumbnail that arrives afte
   second.setDescription(description);
   assert.equal(server.drafts.size, 0, 'releasing an empty report changes nothing');
 });
+
+test('a file that arrives from the camera after the report was abandoned is released, and a report that is opened again accepts files', async () => {
+  const { files, disposed } = recordingFiles({ 'file:///cache/late.mp4': 'file:///cache/late-thumb.jpg' });
+  const flow = bareFlow(fakeServer().api, files);
+  await flow.dispose();
+  flow.add([video('late'), owned('file:///cache/late.jpg', 'image/jpeg')]);
+  await settle();
+  assert.deepEqual(disposed.sort(), ['file:///cache/late.jpg', 'file:///cache/late.mp4']);
+  assert.equal(flow.getSnapshot().draft.evidence.length, 0, 'nothing is admitted into an abandoned report');
+  flow.open();
+  flow.add([owned('file:///cache/again.jpg', 'image/jpeg')]);
+  assert.equal(flow.getSnapshot().draft.evidence.length, 1, 'the screen mounted again by React keeps working');
+});
