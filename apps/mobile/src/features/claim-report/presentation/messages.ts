@@ -15,7 +15,8 @@ type Copy = {
   permission: { camera: string; openSettings: string };
   rejected: Record<RejectedCandidate | 'failed', string>;
   issues: { eventType: { required: string }; occurredAt: { future: string; before_coverage: string; after_coverage: string };
-    description: { too_short: string; too_long: string }; place: { too_long: string }; evidence: { none: string; too_many: string; total_size: string } };
+    description: { too_short: string; too_long: string }; place: { too_long: string }; location: { reading: string }; evidence: { none: string; too_many: string; total_size: string } };
+  location: { label: string; purpose: string; reading: string; ready: string; denied: string; failed: string; on: string; off: string };
   review: { heading: string; next: (count: number) => string; policy: string; edit: string; files: (count: number, megabytes: string) => string; note: string; send: string };
   sending: { preparing: string; creating: string; uploading: (done: number, total: number) => string; submitting: string };
   failures: Record<Exclude<ClaimFailureCode, 'incomplete'>, string> & { incomplete: (missing: number) => string };
@@ -39,8 +40,11 @@ const es: Copy = {
     total_size: 'Los archivos no pueden superar 50 MB en total.', unreadable: 'No pudimos leer uno de los archivos.', failed: 'No pudimos abrir la cámara o la galería.' },
   issues: { eventType: { required: 'Elige el tipo de evento.' },
     occurredAt: { future: 'La fecha y la hora no pueden ser futuras.', before_coverage: 'El evento es anterior al inicio de tu póliza.', after_coverage: 'El evento es posterior al vencimiento de tu póliza.' },
-    description: { too_short: 'Cuéntanos qué pasó (mínimo 40 caracteres).', too_long: 'La descripción supera los 600 caracteres.' }, place: { too_long: 'El lugar supera los 120 caracteres.' },
+    description: { too_short: 'Cuéntanos qué pasó (mínimo 40 caracteres).', too_long: 'La descripción supera los 600 caracteres.' }, place: { too_long: 'El lugar supera los 120 caracteres.' }, location: { reading: 'Espera a que termine de obtenerse tu ubicación o desactívala.' },
     evidence: { none: 'Agrega al menos una foto o un video.', too_many: 'Un reporte admite como máximo 10 archivos.', total_size: 'Los archivos no pueden superar 50 MB en total.' } },
+  location: { label: 'Adjuntar mi ubicación', purpose: 'Si lo activas, usaremos tu ubicación actual solo para este reporte, para ayudar a ubicar el siniestro. Si no lo activas, no la usamos.',
+    reading: 'Obteniendo tu ubicación…', ready: 'Tu ubicación se adjuntará a este reporte.', denied: 'No tenemos permiso para usar tu ubicación. El reporte se enviará sin ella.',
+    failed: 'No pudimos obtener tu ubicación. El reporte se enviará sin ella.', on: 'Adjunta', off: 'No adjunta' },
   review: { heading: 'Revisa antes de enviar', next: count => `Revisar evidencia (${count})`, policy: 'Póliza', edit: 'Editar', files: (count, megabytes) => `${count} ${count === 1 ? 'archivo' : 'archivos'} · ${megabytes} MB`,
     note: 'Al enviar creamos un único caso. Si el envío se interrumpe, reintentar no genera un caso nuevo.', send: 'Enviar reporte' },
   sending: { preparing: 'Preparando los archivos…', creating: 'Creando el reporte…', uploading: (done, total) => `Enviando archivos (${done} de ${total})…`, submitting: 'Confirmando el reporte…' },
@@ -70,8 +74,11 @@ const en: Copy = {
     total_size: 'Files cannot exceed 50 MB in total.', unreadable: 'We could not read one of the files.', failed: 'We could not open the camera or the gallery.' },
   issues: { eventType: { required: 'Choose the type of event.' },
     occurredAt: { future: 'The date and time cannot be in the future.', before_coverage: 'The event is before your policy starts.', after_coverage: 'The event is after your policy ends.' },
-    description: { too_short: 'Tell us what happened (at least 40 characters).', too_long: 'The description is over 600 characters.' }, place: { too_long: 'The place is over 120 characters.' },
+    description: { too_short: 'Tell us what happened (at least 40 characters).', too_long: 'The description is over 600 characters.' }, place: { too_long: 'The place is over 120 characters.' }, location: { reading: 'Wait until your location is found, or turn it off.' },
     evidence: { none: 'Add at least one photo or video.', too_many: 'A report accepts at most 10 files.', total_size: 'Files cannot exceed 50 MB in total.' } },
+  location: { label: 'Attach my location', purpose: 'If you turn it on, we use your current location only for this report, to help place the incident. If you do not, we do not use it.',
+    reading: 'Getting your location…', ready: 'Your location will be attached to this report.', denied: 'We do not have permission to use your location. The report will be sent without it.',
+    failed: 'We could not get your location. The report will be sent without it.', on: 'Attached', off: 'Not attached' },
   review: { heading: 'Review before sending', next: count => `Review evidence (${count})`, policy: 'Policy', edit: 'Edit', files: (count, megabytes) => `${count} ${count === 1 ? 'file' : 'files'} · ${megabytes} MB`,
     note: 'Sending creates a single case. If the send is interrupted, trying again does not create a new case.', send: 'Send report' },
   sending: { preparing: 'Preparing the files…', creating: 'Creating the report…', uploading: (done, total) => `Sending files (${done} of ${total})…`, submitting: 'Confirming the report…' },
