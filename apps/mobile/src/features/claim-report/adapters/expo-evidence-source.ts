@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import type { EvidenceCandidate } from '../domain/report';
+import { isAppCopy } from './expo-evidence-files';
 import type { CaptureOutcome, EvidenceSource } from '../application/ports';
 
 const VIDEO_SECONDS = 30;
@@ -16,7 +17,7 @@ function sizeOf(uri: string, declared: number | undefined): number | null {
 
 function outcomeOf(result: ImagePicker.ImagePickerResult): CaptureOutcome {
   if (result.canceled) return { status: 'cancelled' };
-  const candidates: EvidenceCandidate[] = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null, byteSize: sizeOf(asset.uri, asset.fileSize) }));
+  const candidates: EvidenceCandidate[] = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null, byteSize: sizeOf(asset.uri, asset.fileSize), owned: isAppCopy(asset.uri) }));
   return { status: 'ok', candidates };
 }
 

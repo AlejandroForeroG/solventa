@@ -24,6 +24,13 @@ export interface ClaimReportApi {
 
 export interface FileDigest { sha256(uri: string): Promise<string> }
 
+export interface EvidenceFiles {
+  // A still image from a video, or null when it cannot be made. It never rejects.
+  thumbnail(uri: string): Promise<string | null>;
+  // Deletes copies the app created. It never rejects and never touches a file that is not an app copy.
+  dispose(uris: readonly string[]): Promise<void>;
+}
+
 export type CaptureOutcome =
   | { status: 'ok'; candidates: EvidenceCandidate[] }
   | { status: 'cancelled' }

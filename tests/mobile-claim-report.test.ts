@@ -5,7 +5,7 @@ import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/s
 import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { ActivePolicies } from '../apps/mobile/src/features/claim-report/application/active-policies';
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
-import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
+import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
 import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
 
 const baseUrl = 'https://dev.solventa.site';
@@ -89,10 +89,11 @@ function fakeServer() {
     evidence: (JSON.parse(stored.body) as { evidence: { fileId: string }[] }).evidence.map(file => ({ fileId: file.fileId, state: stored.verified.has(file.fileId) ? 'verified' : 'pending' })) });
   return { server, api };
 }
-const flowWith = (api: ClaimReportApi, digested: string[] = []) => {
+const noFiles: EvidenceFiles = { thumbnail: async () => null, dispose: async () => {} };
+const flowWith = (api: ClaimReportApi, digested: string[] = [], files: EvidenceFiles = noFiles) => {
   let counter = 0;
   const flow = new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `40000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`,
-    digest: { sha256: async uri => { digested.push(uri); return 'a'.repeat(64); } } });
+    digest: { sha256: async uri => { digested.push(uri); return 'a'.repeat(64); } }, files });
   flow.setEventType('collision'); flow.setOccurredAt(new Date('2026-11-10T15:00:00.000Z')); flow.setDescription(description);
   flow.add([{ uri: 'file:///cache/one.jpg', mimeType: 'image/jpeg', byteSize: 1000 }, { uri: 'file:///cache/two.mp4', mimeType: 'video/mp4', byteSize: 5000 }]);
   return flow;
@@ -303,4 +304,90 @@ test('the policy list says when older policies were not read, so the screen neve
   const failing = new ActivePolicies(async () => { throw new Error('offline'); }, () => true, () => now.getTime());
   await failing.refresh();
   assert.deepEqual(failing.getSnapshot(), { status: 'failed' });
+});
+
+// A report with nothing attached yet, so a test sees only the files it adds.
+const bareFlow = (api: ClaimReportApi, files: EvidenceFiles) => {
+  let counter = 0;
+  return new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `50000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, digest: { sha256: async () => 'a'.repeat(64) }, files });
+};
+const settle = () => new Promise(resolve => setImmediate(resolve));
+// Thumbnails answer through a table: a path, null for a failure or a thrown error. Every deletion is recorded.
+const recordingFiles = (thumbnails: Record<string, string | null | 'throws'> = {}) => {
+  const disposed: string[] = [];
+  const files: EvidenceFiles = {
+    thumbnail: async uri => { const made = thumbnails[uri]; if (made === 'throws') throw new Error('codec'); return made ?? null; },
+    dispose: async uris => { disposed.push(...uris); },
+  };
+  return { files, disposed };
+};
+const owned = (uri: string, mimeType: string, byteSize = 1000) => ({ uri, mimeType, byteSize, owned: true });
+const video = (id: string) => ({ ...owned(`file:///cache/${id}.mp4`, 'video/mp4', 5000), });
+
+test('a video is identified by a thumbnail made from it, and a failure to make one is a state of its own', async () => {
+  const { files } = recordingFiles({ 'file:///cache/ok.mp4': 'file:///cache/ok-thumb.jpg', 'file:///cache/none.mp4': null, 'file:///cache/boom.mp4': 'throws' });
+  const flow = bareFlow(fakeServer().api, files);
+  flow.add([video('ok'), video('none'), video('boom'), owned('file:///cache/photo.jpg', 'image/jpeg')]);
+  const evidence = () => flow.getSnapshot().draft.evidence;
+  assert.deepEqual(evidence().filter(item => item.kind === 'video').map(item => item.preview), [{ status: 'pending' }, { status: 'pending' }, { status: 'pending' }]);
+  await settle();
+  const previews = Object.fromEntries(evidence().map(item => [item.uri.split('/').pop(), item.preview]));
+  assert.deepEqual(previews['ok.mp4'], { status: 'ready', uri: 'file:///cache/ok-thumb.jpg' });
+  assert.deepEqual(previews['none.mp4'], { status: 'failed' });
+  assert.deepEqual(previews['boom.mp4'], { status: 'failed' });
+  assert.equal(previews['photo.jpg'], undefined, 'a photo is its own preview');
+  assert.equal(flow.review(), false, 'a preview never changes the rules of the report');
+});
+
+test('a removed, replaced or rejected file is released with its thumbnail, and a file the app does not own never is', async () => {
+  const { files, disposed } = recordingFiles({ 'file:///cache/one.mp4': 'file:///cache/one-thumb.jpg' });
+  const flow = bareFlow(fakeServer().api, files);
+  flow.add([video('one'), { uri: 'file:///gallery/original.jpg', mimeType: 'image/jpeg', byteSize: 1000 }, owned('file:///cache/doc.pdf', 'application/pdf')]);
+  await settle();
+  assert.deepEqual(disposed, ['file:///cache/doc.pdf'], 'a rejected copy is released at once');
+  const ids = Object.fromEntries(flow.getSnapshot().draft.evidence.map(item => [item.uri, item.id]));
+  flow.remove(ids['file:///gallery/original.jpg']);
+  await settle();
+  assert.deepEqual(disposed, ['file:///cache/doc.pdf'], 'a gallery original is only forgotten');
+  flow.remove(ids['file:///cache/one.mp4']);
+  await settle();
+  assert.deepEqual(disposed.slice(1).sort(), ['file:///cache/one-thumb.jpg', 'file:///cache/one.mp4']);
+  flow.add([owned('file:///cache/replacement.jpg', 'image/jpeg')]);
+  assert.equal(flow.getSnapshot().draft.evidence.length, 1, 'the replacement takes the place of what was removed');
+});
+
+test('the files stay for a retry after a failed send and are released once the report is filed', async () => {
+  const { server, api } = fakeServer();
+  const { files, disposed } = recordingFiles();
+  const flow = flowWith(api, [], files);
+  flow.add([owned('file:///cache/extra.jpg', 'image/jpeg')]);
+  server.failNext.push(new ClaimReportFailure('unavailable'));
+  await flow.send();
+  await settle();
+  assert.equal(flow.getSnapshot().phase.kind, 'failed');
+  assert.deepEqual(disposed, [], 'a retry still needs every file');
+  await flow.send();
+  await settle();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.deepEqual(disposed, ['file:///cache/extra.jpg'], 'only the copy the app made is deleted; the files of the fixture are not owned');
+});
+
+test('an abandoned report releases everything, and a thumbnail that arrives afterwards is deleted instead of shown', async () => {
+  let finish: (uri: string) => void = () => {};
+  const disposed: string[] = [];
+  const files: EvidenceFiles = { thumbnail: () => new Promise(resolve => { finish = resolve; }), dispose: async uris => { disposed.push(...uris); } };
+  const flow = bareFlow(fakeServer().api, files);
+  flow.add([video('late'), owned('file:///cache/kept.jpg', 'image/jpeg')]);
+  await flow.dispose();
+  assert.deepEqual(disposed.sort(), ['file:///cache/kept.jpg', 'file:///cache/late.mp4']);
+  assert.equal(flow.getSnapshot().draft.evidence.length, 0);
+  finish('file:///cache/late-thumb.jpg');
+  await settle();
+  assert.ok(disposed.includes('file:///cache/late-thumb.jpg'));
+  assert.equal(flow.getSnapshot().draft.evidence.length, 0, 'nothing is shown for a report that no longer exists');
+  const { server, api } = fakeServer();
+  const second = flowWith(api, [], files);
+  await second.dispose();
+  second.setDescription(description);
+  assert.equal(server.drafts.size, 0, 'releasing an empty report changes nothing');
 });
