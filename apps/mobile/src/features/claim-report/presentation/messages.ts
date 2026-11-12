@@ -11,7 +11,7 @@ type Copy = {
     counter: (used: number, max: number) => string; minimum: (min: number) => string };
   eventTypes: Record<EventType, string>;
   evidence: { heading: string; empty: string; takePhoto: string; recordVideo: string; choose: string; counts: (files: number, max: number, megabytes: string, maxMegabytes: number) => string;
-    photo: string; video: string; remove: (kind: string, position: number) => string };
+    photo: string; video: string; previewing: string; noPreview: string; remove: (kind: string, position: number) => string };
   permission: { camera: string; openSettings: string };
   rejected: Record<RejectedCandidate | 'failed', string>;
   issues: { eventType: { required: string }; occurredAt: { future: string; before_coverage: string; after_coverage: string };
@@ -32,7 +32,7 @@ const es: Copy = {
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Robo', damage: 'Daño', other: 'Otro' },
   evidence: { heading: 'Evidencia', empty: 'Agrega al menos una foto o un video.', takePhoto: 'Tomar foto', recordVideo: 'Grabar video', choose: 'Elegir de la galería',
-    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} archivos · ${megabytes} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video',
+    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} archivos · ${megabytes} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video', previewing: 'Preparando vista previa', noPreview: 'Sin vista previa',
     remove: (kind, position) => `Quitar ${kind} ${position}` },
   permission: { camera: 'Para tomar fotos o grabar video necesitamos el permiso de la cámara. Puedes adjuntar archivos de tu galería sin él.', openSettings: 'Abrir ajustes' },
   rejected: { file_type: 'Solo se aceptan fotos JPG, PNG o HEIC y videos MP4 o MOV.', empty: 'Uno de los archivos está vacío.', too_many: 'Un reporte admite como máximo 10 archivos.',
@@ -63,7 +63,7 @@ const en: Copy = {
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
   eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Other' },
   evidence: { heading: 'Evidence', empty: 'Add at least one photo or video.', takePhoto: 'Take a photo', recordVideo: 'Record a video', choose: 'Choose from gallery',
-    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} files · ${megabytes} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video',
+    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} files · ${megabytes} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video', previewing: 'Preparing preview', noPreview: 'No preview',
     remove: (kind, position) => `Remove ${kind} ${position}` },
   permission: { camera: 'To take photos or record video we need the camera permission. You can attach files from your gallery without it.', openSettings: 'Open settings' },
   rejected: { file_type: 'Only JPG, PNG or HEIC photos and MP4 or MOV videos are accepted.', empty: 'One of the files is empty.', too_many: 'A report accepts at most 10 files.',
