@@ -213,6 +213,8 @@ The public [historical API](../acquisition-risk/underwriting-audit.md) lives in 
 
 `assistance-providers:read` is available to authenticated web and native customers. Identity verifies the active session and the destination-bound Origin for the web POST. Partner scopes and the analyst grants do not authorize this customer lookup. Policy validates the one-query location authorization separately. See [assistance provider search](../policy-claims-payments/assistance-provider-search.md).
 
+`assistance-requests:create` and `assistance-requests:read` let the same customers request assistance on site and follow their own requests, from web and native. They confer nothing on partners or analysts. The owner of a request is the verified session; Identity decides only whether the operation is allowed, and Policy applies the ownership.
+
 ## Claims permissions
 
 `claims:read` and `claims:decide` are web-only operations of the same private `authorizeApiAccessV1` contract. A session alone, the audit permission, partner scopes and native users never confer them, and each operation needs its own grant: reading does not imply deciding. Today only `claims:read` has a consumer, the [claims inbox](../policy-claims-payments/claims-inbox.md); `claims:decide` is granted ahead of the claim file that will use it, and is not read by any route.

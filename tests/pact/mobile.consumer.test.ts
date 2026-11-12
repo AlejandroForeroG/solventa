@@ -146,3 +146,40 @@ test('mobile finds a simulated provider through the shared search contract', asy
     assert.deepEqual(await api.search(input), [provider]);
   });
 });
+
+const assistanceProvider = { id: 'demo-bog-workshop', kind: 'workshop', name: 'Taller de prueba Bogotá', city: 'Bogotá',
+  address: 'Calle de prueba 10', phone: '+570000000001', hours: 'Lun–vie 08:00–17:00' };
+const assistancePlace = { kind: 'address', address: 'Calle de prueba 10, Bogotá' } as const;
+const requestBody = { providerId: assistanceProvider.id, place: assistancePlace };
+// The identity, the reference and the date are the store's to choose: the contract fixes their shape, not their value.
+const storedRequest = {
+  id: MatchersV3.uuid('40000000-0000-4000-8000-000000000001'), reference: MatchersV3.regex('^ASI-[0-9A-HJKMNP-TV-Z]{8}$', 'ASI-22222221'), status: 'requested',
+  provider: assistanceProvider, place: assistancePlace,
+  createdAt: MatchersV3.regex('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$', '2026-11-12T22:30:00.000Z'),
+};
+const storedView = { id: '40000000-0000-4000-8000-000000000001', reference: 'ASI-22222221', status: 'requested', provider: assistanceProvider, place: assistancePlace, createdAt: '2026-11-12T22:30:00.000Z' };
+
+test('mobile requests assistance from a provider and gets the stored request through the shared contract', async () => {
+  pact.given('a native session that may request assistance').uponReceiving('mobile assistance request')
+    .withRequest({ method: 'POST', path: '/api/v1/assistance/requests',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token', 'Idempotency-Key': 'pact-request-key-0001' }, body: requestBody })
+    .willRespondWith({ status: 201, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, request: storedRequest, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    const api = createAssistanceApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+      (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
+    assert.deepEqual(await api.createRequest(requestBody, 'pact-request-key-0001'), storedView);
+  });
+});
+
+test('mobile reads its own assistance requests through the shared contract', async () => {
+  pact.given('a native session with a stored assistance request').uponReceiving('mobile own assistance requests')
+    .withRequest({ method: 'GET', path: '/api/v1/assistance/requests', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, requests: [storedRequest], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    const api = createAssistanceApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+      (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
+    assert.deepEqual(await api.listRequests(), [storedView]);
+  });
+});

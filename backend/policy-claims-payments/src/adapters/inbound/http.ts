@@ -8,11 +8,13 @@ import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
+import { mountAssistanceRequests, type AssistanceRequestsHttpDependencies } from './assistance-requests-http';
 import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
 
 export type PolicyHttpDependencies = {
   advisor?: AdvisorHttpDependencies;
   assistance?: AssistanceHttpDependencies;
+  assistanceRequests?: AssistanceRequestsHttpDependencies;
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
@@ -225,6 +227,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
   if (deps?.claims) mountClaims(app, deps.claims);
   if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
+  if (deps?.assistanceRequests) mountAssistanceRequests(app, deps.assistanceRequests);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
 }
