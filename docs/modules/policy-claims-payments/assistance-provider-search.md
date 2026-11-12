@@ -1,4 +1,4 @@
-# Assistance provider search
+# Assistance provider search and requests
 
 Policy serves a synthetic directory of workshops, experts and roadside assistance in Bogotá and Medellín. Provider names, addresses, phone placeholders and hours are synthetic. The catalog is bundled with the adapter, requires no migration, and performs no network I/O. The directory does not need a map SDK or API key.
 
@@ -11,3 +11,18 @@ Web and native use [POST /api/v1/assistance/providers/search](../../../packages/
 For coordinate search, the client explains the purpose before requesting foreground location. The request requires explicit authorization for that search and valid coordinates. Manual search requires no location permission. No location or manually entered place is saved, logged or sent to a third party. The read-only lookup changes no claim or financial state. The assistance request feature owns provider selection, confirmation, persistence, idempotency and status tracking once its contract is available.
 
 Run `npm run test:integrations` and `npm run test:pact` for authenticated web/native routing, the versioned catalog, consent input, normalized failure and empty results. Use the [web](../../channels/web/README.md#assistance-provider-search) and [mobile](../../channels/mobile/README.md#assistance-provider-search) guides for interactive checks.
+
+## Requesting assistance on site
+
+From a provider of the directory, the customer asks for assistance on site: [POST /api/v1/assistance/requests](../../../packages/contracts/openapi/v1/assistance-providers.yaml) creates the request, `GET /api/v1/assistance/requests` lists the customer's own (newest first, at most 20) and `GET /api/v1/assistance/requests/{requestId}` follows one. Web and native use the same contract and the same Policy handler. The gateway streams nothing here: the JSON body is at most 4096 bytes at the gateway and in Policy.
+
+- **Authorization.** Creating needs `assistance-requests:create` and reading needs `assistance-requests:read`, both granted by Identity to authenticated web and native customers. Web writes also need the matching Origin. The owner is always the verified session, never a field of the request.
+- **The request.** `{ providerId, place }`. The provider must exist in the validated directory; an unknown one is `404` and an unavailable directory is `503`, and neither stores anything. The place is either `{ kind: 'device', authorized: true, coordinates }`, accepted only with the explicit authorization and valid coordinates, or `{ kind: 'address', address }` of 2 to 160 characters without control characters, which the customer confirmed by sending it. Unknown fields are refused. Coordinates keep six decimals.
+- **What is stored.** A unique reference `ASI-XXXXXXXX` (Crockford base32, drawn again if a draw collides), the owner, a snapshot of the provider as it was at that moment, the place, the creation date and the state. The only state is `requested`: the provider is simulated and its answer is not, so the response says `simulated: true` and never presents the request as confirmed by a real provider.
+- **Retries.** `Idempotency-Key` (8 to 128 characters) is required. The same key with the same request returns the stored one with `200`; the same key with another request is `409 idempotency_conflict`; two simultaneous identical requests make one. The key belongs to its owner.
+- **Ownership.** A request of another customer is the same as one that does not exist (`404`), in the list and in the lookup. The runtime role can only select and insert, so a request is never changed or deleted.
+- **Failure.** If the store is unavailable nothing is acknowledged (`503`). The creation is audited as `assistance.request.create`; a read is not.
+
+Migration `0014_assistance_requests.sql` creates the table and its constraints (reference format, a device place needs its authorization time and coordinates, an address place has neither). The device coordinates are personal data: they are stored only with the request, are returned only to its owner, and are not written to logs or to the audit trail.
+
+`npm run test:integrations`, `npm run test:pact` and `npm run test:assistance-requests:sql` cover the contract, the Pact of the native client, the owner isolation, the idempotency and the constraints against a real disposable database. Not covered: the provider's real answer, which is simulated by design, and following a request through states beyond `requested`.

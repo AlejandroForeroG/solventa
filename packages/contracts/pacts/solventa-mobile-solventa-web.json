@@ -108,6 +108,100 @@
       }
     },
     {
+      "description": "mobile assistance request",
+      "providerStates": [
+        {
+          "name": "a native session that may request assistance"
+        }
+      ],
+      "request": {
+        "body": {
+          "place": {
+            "address": "Calle de prueba 10, Bogotá",
+            "kind": "address"
+          },
+          "providerId": "demo-bog-workshop"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pact-request-key-0001"
+        },
+        "method": "POST",
+        "path": "/api/v1/assistance/requests"
+      },
+      "response": {
+        "body": {
+          "request": {
+            "createdAt": "2026-11-12T22:30:00.000Z",
+            "id": "40000000-0000-4000-8000-000000000001",
+            "place": {
+              "address": "Calle de prueba 10, Bogotá",
+              "kind": "address"
+            },
+            "provider": {
+              "address": "Calle de prueba 10",
+              "city": "Bogotá",
+              "hours": "Lun–vie 08:00–17:00",
+              "id": "demo-bog-workshop",
+              "kind": "workshop",
+              "name": "Taller de prueba Bogotá",
+              "phone": "+570000000001"
+            },
+            "reference": "ASI-22222221",
+            "status": "requested"
+          },
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.request.createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
+            "$.request.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.request.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^ASI-[0-9A-HJKMNP-TV-Z]{8}$"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
       "description": "mobile configuration",
       "providerStates": [
         {
@@ -1615,6 +1709,93 @@
         },
         "matchingRules": {
           "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile own assistance requests",
+      "providerStates": [
+        {
+          "name": "a native session with a stored assistance request"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/assistance/requests"
+      },
+      "response": {
+        "body": {
+          "requests": [
+            {
+              "createdAt": "2026-11-12T22:30:00.000Z",
+              "id": "40000000-0000-4000-8000-000000000001",
+              "place": {
+                "address": "Calle de prueba 10, Bogotá",
+                "kind": "address"
+              },
+              "provider": {
+                "address": "Calle de prueba 10",
+                "city": "Bogotá",
+                "hours": "Lun–vie 08:00–17:00",
+                "id": "demo-bog-workshop",
+                "kind": "workshop",
+                "name": "Taller de prueba Bogotá",
+                "phone": "+570000000001"
+              },
+              "reference": "ASI-22222221",
+              "status": "requested"
+            }
+          ],
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.requests[0].createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
+            "$.requests[0].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.requests[0].reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^ASI-[0-9A-HJKMNP-TV-Z]{8}$"
+                }
+              ]
+            },
             "$.traceId": {
               "combine": "AND",
               "matchers": [

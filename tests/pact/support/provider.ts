@@ -2,6 +2,7 @@ import { portalApp } from '../../support/partner-portal-fakes';
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
+import { assistanceRequests, fakeAssistanceStore } from '../../support/assistance-request-fakes';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -228,6 +229,27 @@ function nativeAssistanceWorld(): Partial<World> {
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+// The native customer may request assistance and follow it. The store is in memory and its identities, references and dates are fixed, so each state starts from the same world.
+async function nativeAssistanceRequestsWorld(seed: boolean): Promise<Partial<World>> {
+  const requests = assistanceRequests(fakeAssistanceStore().store);
+  if (seed) {
+    const stored = await requests.create(financialActor, { providerId: 'demo-bog-workshop', place: { kind: 'address', address: 'Calle de prueba 10, Bogotá' } }, 'pact-seed-key-0001', financialActor.clientId);
+    if (stored.status !== 'created') throw new Error('The assistance request of the contract could not be seeded.');
+  }
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    assistanceRequests: {
+      authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+      requests,
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
@@ -251,6 +273,8 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with its installation binding': nativeWorld,
   'a native session with an issued policy': nativePolicyWorld,
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
+  'a native session that may request assistance': () => nativeAssistanceRequestsWorld(false),
+  'a native session with a stored assistance request': () => nativeAssistanceRequestsWorld(true),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
