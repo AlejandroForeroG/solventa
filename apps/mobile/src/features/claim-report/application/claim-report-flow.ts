@@ -21,6 +21,8 @@ export class ClaimReportFlow {
   private sending = false;
   // Changes when the files of the report are released, so that work started before it never touches what came after.
   private epoch = 0;
+  // True from the moment the report is abandoned until its screen opens it again: a file that arrives from the camera or the gallery meanwhile is released.
+  private closed = false;
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly deps: Dependencies) {
@@ -42,7 +44,7 @@ export class ClaimReportFlow {
   }
 
   add(candidates: readonly EvidenceCandidate[]) {
-    if (this.locked()) { void this.deps.files.dispose(candidates.filter(candidate => candidate.owned).map(candidate => candidate.uri)); return; }
+    if (this.closed || this.locked()) { void this.deps.files.dispose(candidates.filter(candidate => candidate.owned).map(candidate => candidate.uri)); return; }
     let evidence = this.snapshot.draft.evidence;
     const added: EvidenceItem[] = [];
     const rejected: RejectedCandidate[] = [];
@@ -56,9 +58,13 @@ export class ClaimReportFlow {
     for (const item of added) if (item.preview) void this.preview(item);
   }
 
+  // The screen shows the report. It also reopens a report that React closed and mounted again, which a development build does on purpose.
+  open() { this.closed = false; }
+
   // The report is abandoned: the screen is gone, the session ended or another account signed in. Nothing of it is kept.
   async dispose(): Promise<void> {
     const evidence = this.snapshot.draft.evidence;
+    this.closed = true;
     this.epoch++;
     this.attempt = null;
     if (evidence.length) this.emit({ ...this.snapshot, draft: { ...this.snapshot.draft, evidence: [] }, issues: [], rejected: [] });

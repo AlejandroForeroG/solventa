@@ -20,7 +20,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
   const [{ flow, source }] = useState(() => createClaimReport(session.baseUrl, session, policy));
   const state = useSyncExternalStore(flow.subscribe, flow.getSnapshot, flow.getSnapshot);
   // The report lives only while this screen does: leaving it, signing out or switching account releases the files the app copied for it.
-  useEffect(() => () => { void flow.dispose(); }, [flow]);
+  useEffect(() => { flow.open(); return () => { void flow.dispose(); }; }, [flow]);
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
   const [pickerFailed, setPickerFailed] = useState(false);
