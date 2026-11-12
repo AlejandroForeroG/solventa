@@ -15,8 +15,11 @@ export const LIMITS = {
 } as const;
 
 export type EvidenceKind = 'photo' | 'video';
-export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind };
-export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null };
+// A video is identified in the review by a still image made from it; making it can fail, and that is a state of its own, never a blank.
+export type Preview = { status: 'pending' } | { status: 'ready'; uri: string } | { status: 'failed' };
+// `owned` marks a copy the app created in its own cache. Only owned files are ever deleted: a gallery original never is.
+export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview };
+export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null; owned?: boolean };
 
 export type Draft = {
   policyId: string;
@@ -65,7 +68,8 @@ export function admit(evidence: readonly EvidenceItem[], candidate: EvidenceCand
   if (candidate.byteSize < 1) return { rejected: 'empty' };
   if (evidence.length >= LIMITS.files) return { rejected: 'too_many' };
   if (totalBytes(evidence) + candidate.byteSize > LIMITS.bytes) return { rejected: 'total_size' };
-  return { item: { id, uri: candidate.uri, contentType, byteSize: candidate.byteSize, kind: kindOf(contentType) } };
+  const kind = kindOf(contentType);
+  return { item: { id, uri: candidate.uri, contentType, byteSize: candidate.byteSize, kind, owned: candidate.owned === true, ...(kind === 'video' ? { preview: { status: 'pending' as const } } : {}) } };
 }
 
 export function validate(draft: Draft, window: PolicyWindow, now: Date): Issue[] {

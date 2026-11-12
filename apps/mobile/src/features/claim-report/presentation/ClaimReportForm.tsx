@@ -1,6 +1,6 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
@@ -19,6 +19,8 @@ const RETRYABLE = new Set(['unavailable', 'incomplete', 'invalid_response']);
 export function ClaimReportForm({ policy, copy, locale, session }: { policy: CachedPolicy; copy: ClaimReportCopy; locale: ClaimReportLocale; session: AuthenticatedSession & { baseUrl: string } }) {
   const [{ flow, source }] = useState(() => createClaimReport(session.baseUrl, session, policy));
   const state = useSyncExternalStore(flow.subscribe, flow.getSnapshot, flow.getSnapshot);
+  // The report lives only while this screen does: leaving it, signing out or switching account releases the files the app copied for it.
+  useEffect(() => () => { void flow.dispose(); }, [flow]);
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
   const [pickerFailed, setPickerFailed] = useState(false);
@@ -127,9 +129,17 @@ function Item({ item, copy, locale, position, onRemove }: { item: EvidenceItem; 
   const kind = item.kind === 'photo' ? copy.evidence.photo : copy.evidence.video;
   return <View style={ui.item}>
     <View style={ui.thumb} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {item.kind === 'photo' ? <Image source={{ uri: item.uri }} style={{ width: 56, height: 56 }} /> : <Text style={ui.thumbText}>{kind.toUpperCase()}</Text>}
+      {item.kind === 'photo' ? <Image source={{ uri: item.uri }} style={{ width: 56, height: 56 }} />
+        : item.preview?.status === 'ready' ? <Image source={{ uri: item.preview.uri }} style={{ width: 56, height: 56 }} />
+        : item.preview?.status === 'failed' ? <Text style={ui.thumbText}>{kind.toUpperCase()}</Text>
+        : <ActivityIndicator color="#0B6B5F" />}
     </View>
-    <View style={ui.grow}><Text style={ui.body}>{`${kind} ${position}`}</Text><Text style={ui.caption}>{`${megabytes(item.byteSize, locale)} MB`}</Text></View>
+    <View style={ui.grow}>
+      <Text style={ui.body}>{`${kind} ${position}`}</Text>
+      <Text style={ui.caption}>{`${megabytes(item.byteSize, locale)} MB`}</Text>
+      {item.preview?.status === 'failed' && <Text accessibilityRole="alert" style={ui.caption}>{copy.evidence.noPreview}</Text>}
+      {item.preview?.status === 'pending' && <Text accessibilityLiveRegion="polite" style={ui.caption}>{copy.evidence.previewing}</Text>}
+    </View>
     {onRemove && <Pressable accessibilityRole="button" accessibilityLabel={copy.evidence.remove(kind.toLowerCase(), position)} onPress={onRemove} style={ui.remove}><Text style={ui.removeText}>×</Text></Pressable>}
   </View>;
 }
