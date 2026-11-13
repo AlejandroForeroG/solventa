@@ -19,7 +19,7 @@ export type DraftCommand = {
 export type DraftField = Exclude<keyof DraftContent, 'policyId'>;
 export const DRAFT_FIELDS: readonly DraftField[] = ['eventType', 'occurredAt', 'place', 'description', 'evidence'];
 export const DRAFT_MERGE_POLICY = 'claim-draft.fields.v1';
-export const sameDraftContent = (a: DraftContent, b: DraftContent): boolean => a.policyId === b.policyId && DRAFT_FIELDS.every(field => JSON.stringify(a[field]) === JSON.stringify(b[field]));
+export const sameDraftContent = (a: DraftContent, b: DraftContent): boolean => a.policyId === b.policyId && DRAFT_FIELDS.every(field => sameField(field, a, b));
 export type DraftConflict = {
   conflictId: string; draftId: string; base: DraftVersion | null; server: DraftVersion;
   local: DraftContent; fields: DraftField[]; policy: typeof DRAFT_MERGE_POLICY;
@@ -31,8 +31,14 @@ export type DraftResult = { status: 'confirmed'; draft: DraftVersion; merged: bo
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const exact = (v: Record<string, unknown>, keys: readonly string[]) => Object.keys(v).every(k => keys.includes(k));
 const clean = (v: unknown, max: number): v is string => typeof v === 'string' && [...v].length <= max && !/[^\P{Cc}\n]/u.test(v);
-const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const evidenceKey = (e: DraftEvidence) => `${e.claimId}/${e.fileId}`;
+function sameField(field: DraftField, a: DraftContent, b: DraftContent): boolean {
+  if (field !== 'evidence') return a[field] === b[field];
+  // JSONB can reorder object properties. Evidence is an identity set, not a serialized object array.
+  if (a.evidence.length !== b.evidence.length) return false;
+  const keys = new Set(a.evidence.map(evidenceKey));
+  return b.evidence.every(ref => keys.has(evidenceKey(ref)));
+}
 
 // A saved draft may be incomplete. Only submission can validate a complete report and assign a case number.
 export function parseDraftContent(value: unknown): DraftContent | null {
@@ -72,8 +78,8 @@ export function mergeDraft(base: DraftContent, local: DraftContent, server: Draf
   const content: DraftContent = { ...server, evidence: [...server.evidence] };
   const conflicts: DraftField[] = [];
   for (const field of DRAFT_FIELDS) {
-    if (equal(local[field], base[field]) || equal(local[field], server[field])) continue;
-    if (equal(server[field], base[field])) {
+    if (sameField(field, local, base) || sameField(field, local, server)) continue;
+    if (sameField(field, server, base)) {
       switch (field) {
         case 'eventType': content.eventType = local.eventType; break;
         case 'occurredAt': content.occurredAt = local.occurredAt; break;

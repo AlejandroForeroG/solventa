@@ -6,6 +6,15 @@ import { canonicalDraftCommand, mergeDraft, parseDraftCommand, parseDraftContent
 const policyId = '10000000-0000-4000-8000-000000000001';
 const content = (): DraftContent => ({ policyId, eventType: null, occurredAt: null, place: '', description: '', evidence: [] });
 
+test('evidence identity ignores JSONB object-key order and reference-set order', () => {
+  const first = { claimId: randomUUID(), fileId: randomUUID() }, second = { claimId: randomUUID(), fileId: randomUUID() };
+  const local = { ...content(), evidence: [first, second] };
+  const persisted = { ...content(), evidence: [{ fileId: second.fileId, claimId: second.claimId }, { fileId: first.fileId, claimId: first.claimId }] };
+  assert.ok(sameDraftContent(local, persisted));
+  assert.deepEqual(mergeDraft(persisted, { ...local, description: 'Local note' }, { ...persisted, place: 'Server place' }).conflicts, []);
+  assert.equal(mergeDraft(persisted, local, persisted).content.description, '');
+});
+
 test('an incomplete draft is allowed but contractual and unknown data never enters it', () => {
   assert.deepEqual(parseDraftContent(content()), content());
   for (const extra of ['premium', 'payment', 'consent', 'owner', 'status']) assert.equal(parseDraftContent({ ...content(), [extra]: true }), null);
