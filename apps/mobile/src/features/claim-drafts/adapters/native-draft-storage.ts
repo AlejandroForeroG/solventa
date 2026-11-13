@@ -19,7 +19,15 @@ const custody: DraftCustody = {
   removeMeta: async () => { if (await SecureStore.isAvailableAsync()) await SecureStore.deleteItemAsync(key, options(key)); },
   readDiscard: async () => await SecureStore.isAvailableAsync() && await SecureStore.getItemAsync(discardKey, options(discardKey)) === '1',
   writeDiscard: async () => { if (await SecureStore.isAvailableAsync()) await SecureStore.setItemAsync(discardKey, '1', options(discardKey)); },
-  removeDiscard: async () => { if (await SecureStore.isAvailableAsync()) await SecureStore.deleteItemAsync(discardKey, options(discardKey)); },
+  removeDiscard: async () => {
+    if (!await SecureStore.isAvailableAsync()) return;
+    await SecureStore.deleteItemAsync(discardKey, options(discardKey));
+    // Some native deletes can refuse silently. Settle only after clear() verified key removal and ciphertext cleanup.
+    if (await SecureStore.getItemAsync(discardKey, options(discardKey)) === '1') {
+      await SecureStore.setItemAsync(discardKey, '0', options(discardKey));
+      if (await SecureStore.getItemAsync(discardKey, options(discardKey)) === '1') throw new DraftFailure('storage');
+    }
+  },
   async readBlob(id) { const file = new File(directory(), id); if (file.size > 262_172) throw new DraftFailure('storage'); return file.bytes(); },
   async writeBlob(id, bytes) {
     const dir = directory(); dir.create({ intermediates: true, idempotent: true });
