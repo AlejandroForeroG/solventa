@@ -149,16 +149,28 @@ export class SqlClaimReview implements ClaimReviewStore {
       }
       const replay = await this.replay(db, claimId, actor.clientId, key, command);
       if (replay) return replay;
-      if (command.action === 'take' ? view !== 'unassigned' : view !== 'assigned' || !reviewable(row.status)) return { status: 'conflict' };
+      let previousDeadline: string | undefined;
+      const allowedState = command.action === 'extend_requirement' ? row.status === 'pending_information' : reviewable(row.status);
+      if (command.action === 'take' ? view !== 'unassigned' : view !== 'assigned' || !allowedState) return { status: 'conflict' };
+      if (command.action === 'extend_requirement') {
+        const previous = (await db.query<{ deadline: Date }>(
+          "SELECT deadline FROM policy.claim_requirements WHERE claim_id=$1 AND id=$2 AND status='pending'", [claimId, command.requirementId])).rows[0];
+        if (!previous) return { status: 'conflict' };
+        const updated = await db.query(`UPDATE policy.claim_requirements SET deadline=$3
+          WHERE claim_id=$1 AND id=$2 AND status='pending' AND deadline <= clock_timestamp() AND $3::TIMESTAMPTZ > clock_timestamp()`,
+        [claimId, command.requirementId, command.deadline]);
+        if (updated.rowCount !== 1) return { status: 'conflict' };
+        previousDeadline = previous.deadline.toISOString();
+      }
       if (command.action === 'assign_expert') {
         if (!expert || expert.id !== command.expertId) return { status: 'invalid_request' };
         const existing = await db.query("SELECT 1 FROM policy.claim_review_actions WHERE claim_id=$1 AND action='assign_expert' LIMIT 1", [claimId]);
         if (existing.rowCount) return { status: 'conflict' };
       }
       if (command.action === 'request_information' && !(Date.parse(command.deadline) > Date.now())) return { status: 'invalid_request' };
-      const next = command.action === 'request_information' ? 'pending_information' : command.action === 'assign_expert' ? 'escalated' : 'in_review';
-      const reason = command.action === 'assign_expert' ? command.reason : null;
-      const actionId = await this.record(db, row, actor.clientId, actor.traceId, key, command, next, reason, expert);
+      const next = command.action === 'request_information' || command.action === 'extend_requirement' ? 'pending_information' : command.action === 'assign_expert' ? 'escalated' : 'in_review';
+      const reason = 'reason' in command ? command.reason : null;
+      const actionId = await this.record(db, row, actor.clientId, actor.traceId, key, command, next, reason, expert, previousDeadline);
       if (command.action === 'request_information') {
         await db.query(`INSERT INTO policy.claim_requirements (id,claim_id,details,deadline) VALUES ($1,$2,$3,$4)`,
           [actionId, claimId, command.details, command.deadline]);
@@ -243,11 +255,13 @@ export class SqlClaimReview implements ClaimReviewStore {
   }
 
   private async record(db: Client, row: CaseRow, actorId: string, traceId: string, key: string, command: { action: ReviewAction },
-    state: ClaimState, reason: string | null, expert?: Expert) {
+    state: ClaimState, reason: string | null, expert?: Expert, previousDeadline?: string) {
     const id = crypto.randomUUID();
     const payloadHash = sha256(command);
+    const deadline = 'deadline' in command ? command.deadline : undefined;
+    const requirementId = 'requirementId' in command ? command.requirementId : undefined;
     const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: traceId,
-      inputs: { claimId: row.id, actorId, action: command.action, priorState: row.status, assigneeId: row.assignee_id, payloadHash, expertId: expert?.id ?? null },
+      inputs: { claimId: row.id, actorId, action: command.action, priorState: row.status, assigneeId: row.assignee_id, payloadHash, deadline, previousDeadline, requirementId, expertId: expert?.id ?? null },
       sources: expert ? [{ source: 'synthetic-assistance-directory.v1', capturedAt: new Date().toISOString(), quality: 'simulated' }] : [],
       consent: { status: 'not_required' }, rule: { id: 'claim-review-action', version: '1' }, outcome: state };
     await db.query(`INSERT INTO policy.claim_review_actions

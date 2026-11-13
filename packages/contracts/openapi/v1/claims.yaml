@@ -581,7 +581,7 @@ paths:
         - LocalWebSession: []
       operationId: reviewClaimCase
       summary: Take a case, assign an expert or request information
-      description: Requires claims:decide. An analyst cannot take their own claim or displace an assignee. Requests are addressed to the policyholder and require a future deadline. A replay returns the original outcome.
+      description: Requires claims:decide. An analyst cannot take their own claim or displace an assignee. Requests address the policyholder. The assigned analyst can extend an expired pending requirement to a future deadline with a reason. An exact replay returns the original outcome.
       parameters:
         - $ref: ./common.yaml#/components/parameters/TraceId
         - name: claimId
@@ -1405,6 +1405,7 @@ components:
                   - respond
                   - approve
                   - reject
+                  - extend_requirement
               at: *a2
               state:
                 $ref: "#/components/schemas/ClaimState"
@@ -1449,6 +1450,7 @@ components:
                   - respond
                   - approve
                   - reject
+                  - extend_requirement
               at: *a2
           maxItems: 25
         traceId: *a1
@@ -1534,7 +1536,7 @@ components:
             expertId:
               type: string
               pattern: ^demo-[a-z0-9-]{1,48}$
-            reason: &a1
+            reason: &a3
               type: string
               minLength: 10
               maxLength: 1000
@@ -1549,7 +1551,29 @@ components:
               type: string
               enum:
                 - request_information
-            details: *a1
+            details: *a3
+            deadline:
+              type: string
+              format: date-time
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+            - requirementId
+            - reason
+            - deadline
+          properties:
+            action:
+              type: string
+              enum:
+                - extend_requirement
+            requirementId:
+              type: string
+              format: uuid
+            reason:
+              type: string
+              minLength: 10
+              maxLength: 1000
             deadline:
               type: string
               format: date-time
