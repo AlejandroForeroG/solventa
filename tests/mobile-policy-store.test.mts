@@ -59,7 +59,7 @@ test('the value is stored under its own device-only key and the device authentic
   await assert.rejects(adapter.protectedPolicyCache.read(owner), failure('locked'));
   await adapter.protectedPolicyCache.unlock();
   assert.equal((await adapter.protectedPolicyCache.read(owner))?.policies.length, 1);
-  assert.deepEqual(prompts, [{ promptMessage: 'Desbloquea para ver tus pólizas', biometricsSecurityLevel: 'strong', disableDeviceFallback: false }]);
+  assert.deepEqual(prompts, [{ promptMessage: 'Desbloquea para ver tus datos guardados', biometricsSecurityLevel: 'strong', disableDeviceFallback: false }]);
   for (const call of calls) {
     assert.ok(call.key.startsWith('solventa.policies.'), 'the cache never touches the credential records');
     assert.equal(call.options.keychainService, call.key);
