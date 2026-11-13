@@ -29,6 +29,7 @@ import { verificationPactWorld } from './identity-verification';
 import type { VerificationStage } from './identity-verification';
 import { advisorPactWorld } from './advisor';
 import { lifecyclePactWorld } from './policy-lifecycle';
+import { draftPactWorld } from './claim-drafts';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -250,6 +251,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   ])),
   'a native session with its installation binding': nativeWorld,
   'a native session with an issued policy': nativePolicyWorld,
+  ...Object.fromEntries((['ready', 'conflict', 'resolved', 'unavailable'] as const).map(mode => [`native claim drafts ${mode}`, () => ({ policy: draftPactWorld(mode) })])),
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),

@@ -42,6 +42,14 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Offline claim drafts
+
+Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
+
+This screen prepares an editable report; it does not file a claim or persist new camera/gallery binaries. Existing references remain usable offline; selecting new received references needs the server. Continue report is available for a confirmed draft while online: it rereads the owned server draft and policy, restores event data/notes and opens the existing [claim reporting](#claim-report) form. The customer still attaches files, reviews and submits; saved references remain in the editable draft and are not automatically copied into an upload declaration. No offline confirmation authorizes finance, contracts or consent. See [editable claim drafts](../../modules/policy-claims-payments/claim-drafts.md) for merge policy, API, limits, custody, data and errors.
+
+Install SDK-compatible dependencies and rebuild the native app after adding `expo-network`; Expo Go/web cannot validate protected draft storage. Run `npm run test:claim-drafts`, the real SQL suite, mobile lint/types, Pact and `npm run check`. Native acceptance requires airplane-mode save, force-close/reopen, restored connection/owner session and a single confirmed server effect, plus retries, concurrent changes, manual choice persistence, background lock and account clearing. Automated custody doubles and SQL tests are not native evidence.
+
 ## Assistance provider search
 
 Open Nearby providers from Home or Claims. The customer can search manually by city or address at any time. Use my location requests the operating system's foreground permission for a single search. If Android pauses the app for the permission dialog, the screen waits for session revalidation before reading coordinates and querying the directory. The pending search is discarded when the account changes, session revalidation fails or the screen closes. Permission denial, a location timeout and an unavailable directory preserve the manual field. The signed-in native client uses the [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md). A matching backend revision and a development build that includes `expo-location` are required for an Android or iOS test. Exercise permission grant, denial, manual fallback and an empty result using a synthetic catalog location. A web export does not validate the native prompt.
@@ -317,6 +325,7 @@ Design and rules are in the [architecture guide](architecture.md#protected-local
 - `protectedPolicyCache` (`src/features/policy-cache/adapters/secure-policy-store.ts`) offers `unlock()`, `lock()`, `save(owner, policies)`, `read(owner)` and `clear()`. `save` accepts the policy summaries the API returns and keeps only the allowed fields; `read` returns `{ syncedAt, policies }` or `null` and fails with `locked` until `unlock()` succeeds.
 - `unlock()` runs the system authentication prompt (`expo-local-authentication`, strong biometrics or the device code). The wallet unlocks when it opens and locks when it closes or the app is backgrounded.
 - `Authentication` clears the cache on logout, denied credentials, environment change and account change. A new screen does not need to do that.
+- `protectedDraftStorage` implements the larger encrypted-file design for editable claim drafts. The same authentication clearing port locks and clears both stores, attempts both removals even if one fails, and propagates a failure so logout recovery stays guarded. See [claim draft custody](../../modules/policy-claims-payments/claim-drafts.md#mobile-custody-and-delivery).
 
 ### What you can and cannot do
 
@@ -337,7 +346,7 @@ That prompt is enforced by the application, not by the cryptographic key. The cr
 
 ### Larger or new data
 
-The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. For more data, keep a random key in SecureStore and encrypt a file in private storage with it, binding the file to the installation UUID and owner. That needs an encryption library chosen against the Expo SDK 57 documentation, a new development build and its own tests, and it keeps the same rules: minimum data, device authentication before reading, owner and installation binding, clearing with the session.
+The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. Editable claim drafts use SDK 57 `expo-crypto` AES-GCM, a small SecureStore key/pointer and an immutable encrypted private file bound to the installation UUID, API environment and owner. New data types must keep their own minimum schema, limits, native validation and tests, plus device authentication before reading and clearing with the session. Do not enlarge the policy snapshot to store drafts.
 
 ### Verification
 
