@@ -22,7 +22,7 @@ beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
 afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
 
 describe('assistance directory route in the application', () => {
-  it('shows contact details and hours without a provider selection control', async () => {
+  it('shows contact details and hours, and offers the request without a provider selection control', async () => {
     window.history.replaceState(null, '', '/prestadores');
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
       if (input === '/auth/session') return json({ authenticated: true });
@@ -41,7 +41,8 @@ describe('assistance directory route in the application', () => {
     expect(result.getByText(/Contacto de prueba.*\+570000000001/)).toBeVisible();
     expect(result.getByText(/Horario.*08:00–17:00/)).toBeVisible();
     expect(result.queryByRole('checkbox')).toBeNull();
-    expect(result.queryByRole('button')).toBeNull();
+    // The only action is the request itself; nothing to tick or choose among providers.
+    expect(result.getAllByRole('button').map(button => button.textContent)).toEqual(['Solicitar asistencia']);
   });
 });
 

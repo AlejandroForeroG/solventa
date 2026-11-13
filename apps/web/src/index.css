@@ -203,3 +203,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .assistance-search .btn { margin-top: 12px; }
 .assistance-result { margin-top: 16px; }
 .assistance-result p { margin: 6px 0; }
+.assistance-result .btn { margin-top: 12px; margin-right: 8px; }
+.assistance-reference { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.04em; }
+.assistance-own { margin-top: 12px; padding-top: 12px; border-top: 1px solid #cbe5e0; }
+.assistance-own p { margin: 4px 0; }

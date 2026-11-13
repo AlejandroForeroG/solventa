@@ -5,8 +5,8 @@ import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/s
 import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { ActivePolicies } from '../apps/mobile/src/features/claim-report/application/active-policies';
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
-import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
-import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
+import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type LocationReading, type LocationSource, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
+import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem, type Manifest } from '../apps/mobile/src/features/claim-report/domain/report';
 
 const baseUrl = 'https://dev.solventa.site';
 const policyId = '20000000-0000-4000-8000-000000000001';
@@ -14,7 +14,7 @@ const now = new Date('2026-11-10T18:00:00.000Z');
 const window = { from: new Date('2026-11-10T05:00:00.000Z'), until: new Date('2027-11-10T05:00:00.000Z') };
 const description = 'Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.';
 const photo = (id: string, size = 2_000_000): EvidenceItem => ({ id, uri: `file:///cache/${id}.jpg`, contentType: 'image/jpeg', byteSize: size, kind: 'photo' });
-const draft = (change: Partial<Draft> = {}): Draft => ({ policyId, eventType: 'collision', occurredAt: new Date('2026-11-10T15:00:00.000Z'), place: '', description, evidence: [photo('a')], ...change });
+const draft = (change: Partial<Draft> = {}): Draft => ({ policyId, eventType: 'collision', occurredAt: new Date('2026-11-10T15:00:00.000Z'), place: '', location: { state: 'off' }, description, evidence: [photo('a')], ...change });
 
 test('picked files are normalized, and every limit is enforced before anything is sent', () => {
   assert.equal(contentTypeOf({ uri: 'file:///a.jpg', mimeType: 'image/jpg', byteSize: 1 }), 'image/jpeg');
@@ -90,10 +90,11 @@ function fakeServer() {
   return { server, api };
 }
 const noFiles: EvidenceFiles = { thumbnail: async () => null, dispose: async () => {} };
-const flowWith = (api: ClaimReportApi, digested: string[] = [], files: EvidenceFiles = noFiles) => {
+const noLocation: LocationSource = { read: async () => ({ status: 'failed' }) };
+const flowWith = (api: ClaimReportApi, digested: string[] = [], files: EvidenceFiles = noFiles, location: LocationSource = noLocation) => {
   let counter = 0;
   const flow = new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `40000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`,
-    digest: { sha256: async uri => { digested.push(uri); return 'a'.repeat(64); } }, files });
+    digest: { sha256: async uri => { digested.push(uri); return 'a'.repeat(64); } }, files, location });
   flow.setEventType('collision'); flow.setOccurredAt(new Date('2026-11-10T15:00:00.000Z')); flow.setDescription(description);
   flow.add([{ uri: 'file:///cache/one.jpg', mimeType: 'image/jpeg', byteSize: 1000 }, { uri: 'file:///cache/two.mp4', mimeType: 'video/mp4', byteSize: 5000 }]);
   return flow;
@@ -307,9 +308,9 @@ test('the policy list says when older policies were not read, so the screen neve
 });
 
 // A report with nothing attached yet, so a test sees only the files it adds.
-const bareFlow = (api: ClaimReportApi, files: EvidenceFiles) => {
+const bareFlow = (api: ClaimReportApi, files: EvidenceFiles, location: LocationSource = noLocation) => {
   let counter = 0;
-  return new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `50000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, digest: { sha256: async () => 'a'.repeat(64) }, files });
+  return new ClaimReportFlow({ policyId, window, api, now: () => now, newId: () => `50000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, digest: { sha256: async () => 'a'.repeat(64) }, files, location });
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 // Thumbnails answer through a table: a path, null for a failure or a thrown error. Every deletion is recorded.
@@ -403,4 +404,87 @@ test('a file that arrives from the camera after the report was abandoned is rele
   flow.open();
   flow.add([owned('file:///cache/again.jpg', 'image/jpeg')]);
   assert.equal(flow.getSnapshot().draft.evidence.length, 1, 'the screen mounted again by React keeps working');
+});
+
+// The position answers through a promise the test settles by hand, so it can arrive after the customer changed their mind.
+const manualLocation = () => {
+  const requests: { signal: AbortSignal; answer: (reading: LocationReading) => void }[] = [];
+  const source: LocationSource = { read: signal => new Promise(resolve => { requests.push({ signal, answer: resolve }); }) };
+  return { source, requests };
+};
+const manifests = (api: ClaimReportApi) => {
+  const seen: Manifest[] = [];
+  const original = api.createDraft.bind(api);
+  api.createDraft = async (manifest, key) => { seen.push(manifest); return original(manifest, key); };
+  return seen;
+};
+
+test('the position is read only when the customer turns it on, is rounded, and is declared only when it was obtained', async () => {
+  const { server, api } = fakeServer();
+  const seen = manifests(api);
+  const { source, requests } = manualLocation();
+  const flow = flowWith(api, [], noFiles, source);
+  assert.equal(requests.length, 0, 'nothing is read before the customer asks');
+  flow.setLocationAttached(true);
+  assert.deepEqual(flow.getSnapshot().draft.location, { state: 'reading' });
+  assert.deepEqual(flow.getSnapshot().issues, []);
+  assert.equal(flow.review(), false, 'a report waits for the position it was asked to carry');
+  assert.deepEqual(flow.getSnapshot().issues, [{ field: 'location', code: 'reading' }]);
+  await flow.send();
+  assert.equal(server.drafts.size, 0, 'and is not sent while the position is being read');
+  requests[0].answer({ status: 'ok', latitude: 4.6969441234, longitude: -74.0441669 });
+  await settle();
+  assert.deepEqual(flow.getSnapshot().draft.location, { state: 'ready', latitude: 4.696944, longitude: -74.044167 });
+  assert.equal(flow.review(), true);
+  await flow.send();
+  assert.deepEqual(seen[0].location, { authorized: true, latitude: 4.696944, longitude: -74.044167 });
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+});
+
+test('turning the position off discards it, a refusal or a failure sends the report without it, and a late answer changes nothing', async () => {
+  const { api } = fakeServer();
+  const seen = manifests(api);
+  const { source, requests } = manualLocation();
+  const flow = flowWith(api, [], noFiles, source);
+  flow.setLocationAttached(true);
+  flow.setLocationAttached(false);
+  assert.equal(requests[0].signal.aborted, true, 'turning it off cancels the reading');
+  requests[0].answer({ status: 'ok', latitude: 4.7, longitude: -74.0 });
+  await settle();
+  assert.deepEqual(flow.getSnapshot().draft.location, { state: 'off' }, 'a late answer is ignored');
+  for (const status of ['denied', 'failed'] as const) {
+    flow.setLocationAttached(true);
+    requests[requests.length - 1].answer({ status });
+    await settle();
+    assert.deepEqual(flow.getSnapshot().draft.location, { state: status });
+    assert.equal(flow.review(), true, 'a refused or failed position does not stop the report');
+  }
+  await flow.send();
+  assert.equal(seen[0].location, undefined, 'the report went without a location the customer did not give');
+  const second = flowWith(fakeServer().api, [], noFiles, { read: async () => { throw new Error('gps'); } });
+  second.setLocationAttached(true);
+  await settle();
+  assert.deepEqual(second.getSnapshot().draft.location, { state: 'failed' }, 'a reading that throws is a failure, never a crash');
+});
+
+test('a position read after a failed send is a new declaration, and an abandoned report neither keeps nor reads one', async () => {
+  const { server, api } = fakeServer();
+  const seen = manifests(api);
+  const { source, requests } = manualLocation();
+  const flow = flowWith(api, [], noFiles, source);
+  server.failNext.push(new ClaimReportFailure('unavailable'));
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'failed');
+  flow.setLocationAttached(true);
+  requests[0].answer({ status: 'ok', latitude: 4.7, longitude: -74.1 });
+  await settle();
+  await flow.send();
+  assert.equal(flow.getSnapshot().phase.kind, 'submitted');
+  assert.equal(new Set(server.keys).size, 2, 'the changed declaration carries a new key');
+  assert.deepEqual(seen.map(manifest => manifest.location?.latitude), [undefined, 4.7]);
+  const abandoned = bareFlow(fakeServer().api, noFiles, source);
+  abandoned.setLocationAttached(true);
+  await abandoned.dispose();
+  assert.equal(requests[requests.length - 1].signal.aborted, true);
+  assert.deepEqual(abandoned.getSnapshot().draft.location, { state: 'off' });
 });

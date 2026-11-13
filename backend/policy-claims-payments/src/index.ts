@@ -9,7 +9,10 @@ import { ClaimReport } from './application/claim-report';
 import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
 import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
 import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
-import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { AssistanceRequests } from './application/assistance-requests';
+import { SqlAssistanceRequests } from './adapters/outbound/sql-assistance-requests';
+import { newAssistanceReference } from './adapters/outbound/random-assistance-reference';
+import { findSyntheticProvider, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -30,6 +33,8 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
+      assistanceRequests: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input),
+        requests: new AssistanceRequests(new SqlAssistanceRequests(this.env.POLICY_DB.connectionString), { find: id => findSyntheticProvider(id) }, new Sha256ReportDigest(), newAssistanceReference) },
       claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
