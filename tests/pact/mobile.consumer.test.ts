@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
 import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
+import { createClaimReportApi, type EvidenceUploader } from '../../apps/mobile/src/features/claim-report/adapters/claim-report-api';
+import { claimIds, evidenceBytes, evidenceFile, idempotencyKey, manifest } from './support/claim-report-contract';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
 import type { VerificationCommand } from '../../apps/mobile/src/features/identity-verification/application/ports';
@@ -144,5 +146,48 @@ test('mobile finds a simulated provider through the shared search contract', asy
     const api = createAssistanceApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
       (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
     assert.deepEqual(await api.search(input), [provider]);
+  });
+});
+
+const reportSession = { execute: <T>(operation: (token: string) => Promise<T>) => operation('synthetic.jwt.token') };
+const reportApi = (serverUrl: string, uploader: EvidenceUploader = async () => ({ status: 500, body: '' })) =>
+  createClaimReportApi(baseUrl, reportSession, uploader, (url, options) => fetch(`${serverUrl}${new URL(String(url)).pathname}`, options));
+
+test('mobile declares a claim report and gets the draft through the shared contract', async () => {
+  pact.given('a native session that may report a claim').uponReceiving('mobile claim report draft')
+    .withRequest({ method: 'POST', path: '/api/v1/claims',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token', 'Idempotency-Key': idempotencyKey }, body: manifest })
+    .willRespondWith({ status: 201, headers: { 'Content-Type': 'application/json' },
+      body: { claimId: MatchersV3.uuid(claimIds.claim), state: 'draft', evidence: [{ fileId: claimIds.file, state: 'pending' }], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    assert.deepEqual(await reportApi(server.url).createDraft(manifest, idempotencyKey), { claimId: claimIds.claim, evidence: [{ fileId: claimIds.file, state: 'pending' }] });
+  });
+});
+
+test('mobile uploads the file of a draft and gets it verified through the shared contract', async () => {
+  pact.given('a native session with a draft claim report').uponReceiving('mobile claim report evidence')
+    .withRequestBinaryFile({ method: 'PUT', path: `/api/v1/claims/${claimIds.claim}/evidence/${claimIds.file}`,
+      headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } }, 'image/jpeg', evidenceFile)
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { fileId: claimIds.file, state: 'verified', traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    // The native layer streams the file from its path; this stand-in sends the same bytes with the same headers over HTTP.
+    const uploader: EvidenceUploader = async ({ url, contentType, token }) => {
+      const response = await fetch(`${server.url}${new URL(url).pathname}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, Accept: 'application/json' }, body: evidenceBytes });
+      return { status: response.status, body: await response.text() };
+    };
+    await reportApi(server.url, uploader).upload(claimIds.claim, { id: claimIds.file, uri: 'file:///cache/evidence.jpg', contentType: 'image/jpeg', byteSize: evidenceBytes.length, kind: 'photo' });
+  });
+});
+
+test('mobile submits a claim report whose files were received and gets its single case number', async () => {
+  pact.given('a native session with a claim report whose evidence was received').uponReceiving('mobile claim report submission')
+    .withRequest({ method: 'POST', path: `/api/v1/claims/${claimIds.claim}/submit`, headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { claimId: claimIds.claim, claimNumber: MatchersV3.regex('^SIN-[0-9]{4}-[0-9]{5}$', 'SIN-2026-00001'), state: 'unassigned',
+        submittedAt: MatchersV3.regex('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$', '2026-11-11T00:00:00.000Z'), traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    const receipt = await reportApi(server.url).submit(claimIds.claim);
+    assert.deepEqual(receipt, { claimId: claimIds.claim, claimNumber: 'SIN-2026-00001', submittedAt: '2026-11-11T00:00:00.000Z' });
   });
 });

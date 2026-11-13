@@ -108,6 +108,198 @@
       }
     },
     {
+      "description": "mobile claim report draft",
+      "providerStates": [
+        {
+          "name": "a native session that may report a claim"
+        }
+      ],
+      "request": {
+        "body": {
+          "description": "Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.",
+          "eventType": "collision",
+          "evidence": [
+            {
+              "byteSize": 84,
+              "contentType": "image/jpeg",
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "sha256": "cc2c18329a97018fc7a848827738391cc54e8f42b30018690bfd8fa45bcbebf4"
+            }
+          ],
+          "location": {
+            "authorized": true,
+            "latitude": 4.696944,
+            "longitude": -74.044167
+          },
+          "occurredAt": "2026-11-10T15:00:00.000Z",
+          "place": "Autopista Norte con Calle 116",
+          "policyId": "91000000-0000-4000-8000-000000000020"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pact-report-key-0001"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "evidence": [
+            {
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "state": "pending"
+            }
+          ],
+          "state": "draft",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "mobile claim report evidence",
+      "providerStates": [
+        {
+          "name": "a native session with a draft claim report"
+        }
+      ],
+      "request": {
+        "body": "/9j/4AAQSkZJRgABAQAAAQABAABzb2x2ZW50YSBzeW50aGV0aWMgZXZpZGVuY2UgZm9yIHRoZSBjbGFpbSByZXBvcnQgY29udHJhY3QgMDAwMf/Z",
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "image/jpeg"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "contentType",
+                  "value": "image/jpeg"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/evidence/91000000-0000-4000-8000-0000000000e1"
+      },
+      "response": {
+        "body": {
+          "fileId": "91000000-0000-4000-8000-0000000000e1",
+          "state": "verified",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim report submission",
+      "providerStates": [
+        {
+          "name": "a native session with a claim report whose evidence was received"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/submit"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "claimNumber": "SIN-2026-00001",
+          "state": "unassigned",
+          "submittedAt": "2026-11-11T00:00:00.000Z",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimNumber": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SIN-[0-9]{4}-[0-9]{5}$"
+                }
+              ]
+            },
+            "$.submittedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile configuration",
       "providerStates": [
         {
