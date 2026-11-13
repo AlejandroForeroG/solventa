@@ -12,14 +12,55 @@ function world() {
   const draftId = randomUUID(), content = { ...emptyDraft(randomUUID()), description: 'Synthetic local note' };
   const calls: DraftCommand[] = [];
   let remote: DraftVersion[] = [];
+  let listing = async (): Promise<DraftVersion[]> => remote;
   let response: (command: DraftCommand) => Promise<SyncReply> = async command => ({ status: 'confirmed', merged: false,
     draft: { draftId, content: command.content, revision: 1, updatedAt: '2026-11-12T12:00:00.000Z' } });
-  const api: DraftApi = { list: async () => remote, get: async () => { throw Error('unused'); }, evidence: async () => [],
+  const api: DraftApi = { list: () => listing(), get: async () => { throw Error('unused'); }, evidence: async () => [],
     sync: async (_, command, queuedOwner) => { assert.deepEqual(queuedOwner, owner); calls.push(structuredClone(command)); return response(command); } };
   const restart = () => new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', custody.port), api, newId: randomUUID, now: () => 123 });
-  return { custody, owner, draftId, content, calls, restart, remote: (next: DraftVersion[]) => { remote = next; }, respond: (next: typeof response) => { response = next; } };
+  return { custody, owner, draftId, content, calls, restart, remote: (next: DraftVersion[]) => { remote = next; },
+    listWith: (next: typeof listing) => { listing = next; }, respond: (next: typeof response) => { response = next; } };
 }
 const entries = (engine: DraftSync) => { const snapshot = engine.getSnapshot(); assert.equal(snapshot.status, 'ready'); if (snapshot.status !== 'ready') throw Error('not ready'); return snapshot.entries; };
+
+test('a list captured before acknowledgement cannot replace the newer durable confirmation', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); await engine.sync(w.owner);
+  const previous = structuredClone(entries(engine)[0].confirmed!);
+  let deliver!: (versions: DraftVersion[]) => void;
+  w.listWith(() => new Promise(resolve => { deliver = resolve; }));
+  const refreshing = engine.refresh(w.owner);
+  const content = { ...w.content, description: 'Newly confirmed customer note' };
+  await engine.save(w.draftId, content, 1);
+  w.respond(async command => ({ status: 'confirmed', merged: false,
+    draft: { ...previous, revision: 2, content: command.content } }));
+  await engine.sync(w.owner);
+  assert.equal(entries(engine)[0].confirmed?.revision, 2);
+  deliver([previous]); await refreshing;
+  assert.equal(entries(engine)[0].confirmed?.revision, 2);
+  assert.deepEqual(entries(engine)[0].content, content);
+  engine.lock(); const restarted = w.restart(); await restarted.open(w.owner);
+  assert.equal(entries(restarted)[0].confirmed?.revision, 2);
+  assert.deepEqual(entries(restarted)[0].content, content);
+});
+
+test('out-of-order lists preserve the newest revision and do not replace an equal immutable version', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); await engine.sync(w.owner);
+  const first = structuredClone(entries(engine)[0].confirmed!);
+  let deliver!: (versions: DraftVersion[]) => void;
+  w.listWith(() => new Promise(resolve => { deliver = resolve; }));
+  const oldList = engine.refresh(w.owner);
+  const newest = { ...first, revision: 3, content: { ...w.content, place: 'Latest remote place' } };
+  w.listWith(async () => [newest]); await engine.refresh(w.owner);
+  deliver([{ ...first, revision: 2 }]); await oldList;
+  assert.equal(entries(engine)[0].confirmed?.revision, 3);
+  assert.deepEqual(entries(engine)[0].content, newest.content);
+  w.listWith(async () => [{ ...newest, content: first.content }]); await engine.refresh(w.owner);
+  engine.lock(); const restarted = w.restart(); await restarted.open(w.owner);
+  assert.equal(entries(restarted)[0].confirmed?.revision, 3);
+  assert.deepEqual(entries(restarted)[0].content, newest.content);
+});
 
 test('an editor retains its original base when refresh receives a newer remote revision', async () => {
   const w = world(), engine = w.restart(); await engine.open(w.owner);

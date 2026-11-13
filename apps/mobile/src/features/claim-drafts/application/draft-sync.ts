@@ -108,6 +108,7 @@ export class DraftSync {
         for (const draft of remote) {
           const old = entries.find(e => e.draftId === draft.draftId);
           if (old?.command || old?.status === 'conflict' || this.editing.has(this.editKey(owner, draft.draftId))) continue;
+          if (old?.confirmed && draft.revision <= old.confirmed.revision) continue;
           const next: DraftEntry = { draftId: draft.draftId, content: draft.content, confirmed: draft, command: null, status: 'confirmed', attempted: false, savedAt: this.deps.now() };
           if (old) entries[entries.indexOf(old)] = next; else if (entries.length < 20) entries.push(next);
         }
