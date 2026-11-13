@@ -19,5 +19,52 @@
   "unavailable": {
     "error": "directory_unavailable",
     "traceId": "11111111-1111-4111-8111-111111111111"
+  },
+  "request": {
+    "device": {
+      "providerId": "demo-bog-workshop",
+      "place": {
+        "kind": "device",
+        "authorized": true,
+        "coordinates": {
+          "latitude": 4.648,
+          "longitude": -74.098
+        }
+      }
+    },
+    "address": {
+      "providerId": "demo-bog-workshop",
+      "place": {
+        "kind": "address",
+        "address": "Calle de prueba 10, Bogotá"
+      }
+    },
+    "created": {
+      "simulated": true,
+      "request": {
+        "id": "11111111-1111-4111-8111-1111111111a1",
+        "reference": "ASI-7K2M9QXD",
+        "status": "requested",
+        "provider": {
+          "id": "demo-bog-workshop",
+          "kind": "workshop",
+          "name": "Taller de prueba Bogotá",
+          "city": "Bogotá",
+          "address": "Calle de prueba 10",
+          "phone": "+570000000001",
+          "hours": "Lun–vie 08:00–17:00"
+        },
+        "place": {
+          "kind": "address",
+          "address": "Calle de prueba 10, Bogotá"
+        },
+        "createdAt": "2026-11-12T22:30:00.000Z"
+      },
+      "traceId": "11111111-1111-4111-8111-111111111111"
+    },
+    "conflict": {
+      "error": "idempotency_conflict",
+      "traceId": "11111111-1111-4111-8111-111111111111"
+    }
   }
 }

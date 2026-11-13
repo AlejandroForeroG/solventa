@@ -110,6 +110,8 @@ All protected responses are validated before rendering. Requests are aborted and
 
 The authenticated header opens `/prestadores`. Enter a city or directory fixture address to see matches, sample contacts and hours. This web screen does not request device location. The [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md) supplies the same directory to both channels and distinguishes an empty result from a failure.
 
+The customer can request assistance from a provider of the results. **Solicitar asistencia** opens a review with the provider and the address that was searched; nothing is sent until **Confirmar solicitud**. The page then shows the stored reference and state, noting that the provider is simulated, and **Mis solicitudes** lists the customer's own requests. A failed or uncertain send is told as such and is retried with the same idempotency key, so it never creates a second request; a lost session leaves through the usual sign-in path. See [requesting assistance](../../modules/policy-claims-payments/assistance-provider-search.md#requesting-assistance-on-site).
+
 ## Claims inbox
 
 `/siniestros` loads `src/claims/ClaimsInbox.tsx` after the existing session check, with the same console shell and navigation as the audit workspace; the authenticated header links to it, and the link is not an authorization signal. An anonymous visitor gets sign-in and an ordinary client gets the forbidden state. The [claims inbox guide](../../modules/policy-claims-payments/claims-inbox.md) defines the API, ordering and limits.

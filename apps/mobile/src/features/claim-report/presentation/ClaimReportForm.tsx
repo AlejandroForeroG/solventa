@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
 
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { policyReference } from '../../policy-wallet/domain/wallet';
@@ -60,6 +60,17 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
           style={[ui.field, issues.some(issue => issue.field === 'place') && ui.invalid]} maxLength={LIMITS.place + 20} editable={!busy} />
       </Group>
 
+      <Group label={copy.location.label} issues={issues} field="location" copy={copy}>
+        <View style={ui.row}>
+          <Text style={[ui.body, ui.grow]}>{copy.location.purpose}</Text>
+          <Switch accessibilityLabel={copy.location.label} value={draft.location.state === 'reading' || draft.location.state === 'ready'} disabled={busy}
+            onValueChange={attached => flow.setLocationAttached(attached)} />
+        </View>
+        {draft.location.state === 'reading' && <View style={ui.row}><ActivityIndicator color="#0B6B5F" /><Text accessibilityLiveRegion="polite" style={ui.caption}>{copy.location.reading}</Text></View>}
+        {draft.location.state === 'ready' && <Text accessibilityLiveRegion="polite" style={ui.caption}>{copy.location.ready}</Text>}
+        {(draft.location.state === 'denied' || draft.location.state === 'failed') && <Text accessibilityRole="alert" style={ui.error}>{copy.location[draft.location.state]}</Text>}
+      </Group>
+
       <Group label={copy.fields.description} issues={issues} field="description" copy={copy}>
         <TextInput accessibilityLabel={copy.fields.description} placeholder={copy.fields.descriptionHint} placeholderTextColor="#8A9A94" value={draft.description}
           onChangeText={text => flow.setDescription(text)} multiline style={[ui.field, ui.multiline, issues.some(issue => issue.field === 'description') && ui.invalid]} editable={!busy} />
@@ -90,6 +101,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
         <Summary label={copy.fields.eventType} value={draft.eventType ? copy.eventTypes[draft.eventType] : ''} />
         <Summary label={copy.fields.occurredAt} value={draft.occurredAt.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })} />
         {draft.place.trim() !== '' && <Summary label={copy.fields.place} value={draft.place.trim()} />}
+        <Summary label={copy.location.label} value={draft.location.state === 'ready' ? copy.location.on : copy.location.off} />
         <Text style={ui.label}>{copy.fields.description}</Text>
         <Text style={ui.body}>{draft.description.trim()}</Text>
         <Action label={copy.review.edit} secondary disabled={busy} onPress={goBack} />
