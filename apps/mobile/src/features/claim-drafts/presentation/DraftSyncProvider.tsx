@@ -16,8 +16,7 @@ export function DraftSyncProvider({ children }: PropsWithChildren) {
   const session = useAuthenticatedSession();
   const [sync] = useState(() => new DraftSync({ storage: protectedDraftStorage, api: createDraftApi(session.baseUrl, session), newId: randomUUID, now: Date.now }));
   const owner = useRef<DraftOwner | null>(null);
-  const authentication = useRef(auth);
-  authentication.current = auth;
+  const authentication = useRef({ status: auth.status, failure: auth.failure, retry: auth.retry });
   const pumping = useRef(false);
   const pump = useCallback(async (mayUnlock: boolean) => {
     const principal = owner.current;
@@ -42,11 +41,12 @@ export function DraftSyncProvider({ children }: PropsWithChildren) {
   }, [sync]);
 
   useEffect(() => {
+    authentication.current = { status: auth.status, failure: auth.failure, retry: auth.retry };
     owner.current = auth.status === 'authenticated' && auth.principal ? auth.principal : null;
     if (owner.current) void pump(true).catch(() => undefined);
     else if (!(auth.status === 'blocked' && auth.failure === 'unavailable')
       && !REVALIDATING.has(auth.status)) sync.lock();
-  }, [auth.status, auth.failure, auth.principal, pump, sync]);
+  }, [auth.status, auth.failure, auth.principal, auth.retry, pump, sync]);
   useEffect(() => {
     const listener = Network.addNetworkStateListener(state => {
       if (state.isConnected !== false && state.isInternetReachable !== false) void pump(true).catch(() => undefined);
