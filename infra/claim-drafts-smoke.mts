@@ -133,6 +133,28 @@ try {
   const refreshedSave = (await store.get(actor, refreshId))!;
   assert.equal(refreshedSave.content.place, 'Refreshed remote place', 'A refresh must not rebase an open editor and silently undo another field');
   assert.equal(refreshedSave.content.description, 'Note from the already open editor');
+  const delayedId = randomUUID(), delayedCustody = draftCustody();
+  let releaseList!: () => void, listCaptured!: () => void;
+  const heldList = new Promise<void>(resolve => { releaseList = resolve; });
+  const capturedList = new Promise<void>(resolve => { listCaptured = resolve; });
+  const delayedApi: typeof api = { ...api, list: async owner => {
+    const versions = await api.list(owner); listCaptured(); await heldList; return versions;
+  } };
+  const createDelayedMobile = () => new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', delayedCustody.port),
+    api: delayedApi, newId: randomUUID, now: Date.now });
+  let delayedMobile = createDelayedMobile(); await delayedMobile.open(actor);
+  await delayedMobile.save(delayedId, content, 0); await delayedMobile.sync(actor);
+  const delayedRefresh = delayedMobile.refresh(actor); await capturedList;
+  const acknowledgedContent = { ...content, description: 'Customer note acknowledged after the list was captured' };
+  await delayedMobile.save(delayedId, acknowledgedContent, 1); await delayedMobile.sync(actor);
+  releaseList(); await delayedRefresh;
+  delayedMobile.lock(); delayedMobile = createDelayedMobile(); await delayedMobile.open(actor);
+  const delayedSnapshot = delayedMobile.getSnapshot(); if (delayedSnapshot.status !== 'ready') throw Error('mobile unavailable');
+  const retained = delayedSnapshot.entries.find(e => e.draftId === delayedId)!;
+  assert.equal(retained.confirmed?.revision, 2);
+  assert.deepEqual(retained.content, acknowledgedContent);
+  assert.equal((await store.get(actor, delayedId))?.revision, 2);
+  assert.equal((await db.query('SELECT * FROM policy.claim_draft_revisions WHERE draft_id=$1', [delayedId])).rowCount, 2);
   const reports = new SqlClaimReport(runtime.toString()), fileId = randomUUID();
   const report = await reports.createDraft({ owner: actor, idempotencyKey: randomUUID(), requestHash: 'd'.repeat(64), traceId: randomUUID(), report: {
     policyId, eventType: 'other', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Synthetic location',
@@ -177,7 +199,7 @@ try {
     await assert.rejects(native.query("UPDATE policy.claim_draft_revisions SET revision=999 WHERE draft_id=$1", [id]));
     await assert.rejects(native.query("UPDATE policy.claim_draft_commands SET request_hash=$1", ['b'.repeat(64)]));
   } finally { await native.end(); }
-  console.log(JSON.stringify({ suite: 'claim-drafts-sql', result: 'passed', cases: ['fresh migration/replay', 'concurrent duplicate', 'payload conflict', 'owner isolation', 'three-way merge', 'manual conflict', 'second concurrency', 'choice replay after restart', 'invalid/expired evidence', 'audit rollback', 'withdrawn access', 'minimum grants', 'mobile encrypted queue restart/response loss/single SQL effect', 'mobile conflict/server choice', 'decision capture'] }));
+  console.log(JSON.stringify({ suite: 'claim-drafts-sql', result: 'passed', cases: ['fresh migration/replay', 'concurrent duplicate', 'payload conflict', 'owner isolation', 'three-way merge', 'manual conflict', 'second concurrency', 'choice replay after restart', 'invalid/expired evidence', 'audit rollback', 'withdrawn access', 'minimum grants', 'mobile encrypted queue restart/response loss/single SQL effect', 'mobile conflict/server choice', 'mobile stale-list after acknowledgement', 'decision capture'] }));
 } finally {
   if (db) await db.end();
   if (created) await admin.query(`DROP DATABASE ${name} CASCADE`);
