@@ -212,5 +212,11 @@
     "state": "escalated",
     "replayed": false,
     "traceId": "a0000000-0000-4000-8000-0000000000c1"
+  },
+  "extendRequirementRequest": {
+    "action": "extend_requirement",
+    "requirementId": "11111111-1111-4111-8111-111111111114",
+    "reason": "The policyholder needs time to obtain the evidence.",
+    "deadline": "2026-11-20T20:00:00.000Z"
   }
 }

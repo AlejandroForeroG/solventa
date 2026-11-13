@@ -238,10 +238,23 @@ try {
   const prepare = await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID());
   assert.equal(prepare.status, 'pending');
   assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, { ...responseFile, byteSize: 101 }, randomUUID()), { status: 'conflict' });
+  const extend = { action: 'extend_requirement', requirementId: requirement, reason: 'The owner needs additional time to respond.',
+    deadline: new Date(Date.now()+7200000).toISOString() };
+  assert.deepEqual(await review.review(id, analystLease(), extend, 'extend-deadline'), { status: 'conflict' });
+  await db.query("UPDATE policy.claim_requirements SET deadline=now()-INTERVAL '1 minute' WHERE id=$1", [requirement]);
+  assert.deepEqual(await review.respond(id, requirement, caseCustomer, { text: 'Late response', evidenceIds: [] }, 'late-response', randomUUID()), { status: 'conflict' });
+  assert.deepEqual(await review.review(id, otherAnalyst, extend, 'extend-deadline'), { status: 'not_found' });
+  const extended = await review.review(id, analystLease(), extend, 'extend-deadline');
+  assert.equal(extended.status, 'ok');
+  assert.deepEqual(await review.review(id, analystLease(), extend, 'extend-deadline'), { ...extended, replayed: true });
+  const reopened = await review.detail(id, caseOwner, randomUUID());
+  assert.equal(reopened?.requirements[0].deadline, extend.deadline);
+  assert.equal(reopened?.notices.filter(notice => notice.action === 'extend_requirement').length, 1);
   const response = { text: 'Synthetic information attached.', evidenceIds: [responseFile.fileId] };
   assert.deepEqual(await review.respond(id, requirement, { clientId: randomUUID(), subjectToken: randomUUID() }, response, 'response-external', randomUUID()), { status: 'not_found' });
   assert.deepEqual(await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID()), { status: 'invalid_evidence' });
   assert.equal(await operations.verifyFile(id, requirement, caseCustomer, responseFile.fileId, randomUUID()), true);
+  assert.equal((await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID())).status, 'verified');
   assert.equal((await review.detail(id, caseAnalyst(), randomUUID()))?.evidence.length, 1, 'the file is hidden before submission');
   const received = await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID());
   assert.equal(received.status, 'ok');
@@ -266,7 +279,7 @@ try {
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.state, 'rejected');
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.filter(notice => notice.action === 'reject').length, 1);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);

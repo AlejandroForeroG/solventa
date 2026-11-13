@@ -64,9 +64,24 @@ export function caseCommand(claimId: string, path: string, body: object, key: st
     body: JSON.stringify(body) }, (value): value is { state: ClaimState } =>
     record(value) && state(value.state) && (uuid(value.actionId) || uuid(value.decisionId)) && typeof value.replayed === 'boolean');
 }
-export async function sendRequirementFile(claimId: string, requirementId: string, fileId: string, file: File) {
-  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()));
+async function sha256Bytes(input: BufferSource) {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', input));
+}
+
+export async function prepareRequirementFile(requirementId: string, file: File) {
+  const bytes = await sha256Bytes(await file.arrayBuffer());
   const sha256 = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  // Scope the stable ID to this requirement and metadata so a reselected file can reuse its reservation.
+  const idBytes = await sha256Bytes(new TextEncoder().encode(JSON.stringify([requirementId, file.type, file.size, sha256])));
+  idBytes[6] = (idBytes[6] & 15) | 128;
+  idBytes[8] = (idBytes[8] & 63) | 128;
+  const hex = Array.from(idBytes.subarray(0, 16), byte => byte.toString(16).padStart(2, '0')).join('');
+  const id = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+  return { id, sha256, file };
+}
+
+export async function sendRequirementFile(claimId: string, requirementId: string, fileId: string, file: File, checksum?: string) {
+  const sha256 = checksum ?? (await prepareRequirementFile(requirementId, file)).sha256;
   return request('/' + claimId + '/requirements/' + requirementId + '/files/' + fileId,
     { method: 'PUT', headers: { 'content-type': file.type, 'x-content-sha256': sha256 }, body: file },
     (value): value is { fileId: string; state: 'verified' } => record(value) && value.fileId === fileId && value.state === 'verified');

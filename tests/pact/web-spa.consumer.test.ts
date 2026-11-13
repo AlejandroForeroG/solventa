@@ -1,5 +1,5 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
-import { caseCommand, getCase, getExperts, getOwnedCases, sendRequirementFile } from '../../apps/web/src/claims/case-api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile } from '../../apps/web/src/claims/case-api';
 import { listClaims } from '../../apps/web/src/claims/api';
 import claimsExamples from '../../packages/contracts/examples/claims.json';
 import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
@@ -596,11 +596,15 @@ describe('SPA claim case', () => {
   });
 
   test('uploads evidence using a stable file id and a content checksum', async () => {
-    const fileId = claimsExamples.actionReceipt.actionId;
     const evidencePath = fileURLToPath(new URL('../../packages/assets/brand/solventa-icon-green.png', import.meta.url));
     const evidenceBytes = readFileSync(evidencePath);
     const sha256 = createHash('sha256').update(evidenceBytes).digest('hex');
     const file = new File([new Uint8Array(evidenceBytes)], 'evidence.png', { type: 'image/png' });
+    const prepared = await prepareRequirementFile(requirementId, file);
+    const reselection = await prepareRequirementFile(requirementId, new File([new Uint8Array(evidenceBytes)], 'selected-again.png', { type: 'image/png' }));
+    assert.equal(reselection.id, prepared.id);
+    assert.notEqual((await prepareRequirementFile(claimId, file)).id, prepared.id);
+    const fileId = prepared.id;
     pact.given(state).uponReceiving('a claim requirement file')
       .withRequestBinaryFile({ method: 'PUT', path: casePath + '/requirements/' + requirementId + '/files/' + fileId,
         headers: { Origin: 'https://solventa.dev', 'X-Content-SHA256': sha256 } }, 'image/png', evidencePath)

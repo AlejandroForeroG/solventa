@@ -5,6 +5,7 @@ import type { ClaimState } from './claims';
 export type ReviewCommand =
   | { action: 'take' }
   | { action: 'assign_expert'; expertId: string; reason: string }
+  | { action: 'extend_requirement'; requirementId: string; reason: string; deadline: string }
   | { action: 'request_information'; details: string; deadline: string };
 export type RequirementResponse = { text: string; evidenceIds: string[] };
 export type RequirementFile = { fileId: string; contentType: EvidenceContentType; byteSize: number; sha256: string };
@@ -23,11 +24,15 @@ export function parseReview(value: unknown): ReviewCommand | null {
   if (value.action === 'assign_expert' && keys === 'action,expertId,reason'
     && typeof value.expertId === 'string' && /^demo-[a-z0-9-]{1,48}$/.test(value.expertId) && text(value.reason, 10, 1000))
     return { action: value.action, expertId: value.expertId, reason: value.reason.trim() };
-  if (value.action !== 'request_information' || keys !== 'action,deadline,details' || !text(value.details, 10, 1000)
-    || typeof value.deadline !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.deadline)) return null;
+  if (typeof value.deadline !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.deadline)) return null;
   const deadline = new Date(value.deadline);
   if (!Number.isFinite(deadline.getTime()) || deadline.toISOString() !== value.deadline) return null;
-  return { action: value.action, details: value.details.trim(), deadline: value.deadline };
+  if (value.action === 'request_information' && keys === 'action,deadline,details' && text(value.details, 10, 1000))
+    return { action: value.action, details: value.details.trim(), deadline: value.deadline };
+  if (value.action === 'extend_requirement' && keys === 'action,deadline,reason,requirementId'
+    && isUuid(value.requirementId) && text(value.reason, 10, 1000))
+    return { action: value.action, requirementId: value.requirementId.toLowerCase(), reason: value.reason.trim(), deadline: value.deadline };
+  return null;
 }
 
 export function parseRequirementResponse(value: unknown): RequirementResponse | null {

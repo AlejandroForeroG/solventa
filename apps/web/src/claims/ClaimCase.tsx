@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { caseCommand, getCase, getExperts, getOwnedCases, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
 import '../audit/audit.css';
 import './claims.css';
 
 type ViewTab = 'overview' | 'documents' | 'tasks' | 'history';
-type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information';
+type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information' | 'extend_requirement';
 type CaseProps = { claimId: string; audience: CaseAudience; onSessionLost(): void };
 
 function useClaimLabels() {
@@ -156,17 +156,20 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   const decision = action === 'approve' || action === 'reject';
   const blocked = claim.evidence.length < Math.max(1, claim.requiredEvidence);
   const reviewable = claim.state === 'in_review' || claim.state === 'escalated';
-  if (!reviewable && claim.access !== 'unassigned') return null;
+  const expiredRequirement = claim.state === 'pending_information' && claim.requirements.find(item => item.status === 'pending' && Date.parse(item.deadline) <= Date.now());
+  if (!reviewable && !expiredRequirement && claim.access !== 'unassigned') return null;
   const assignedExpert = claim.history.some(item => item.expert);
-  const options: AnalystAction[] = assignedExpert ? ['approve', 'reject', 'request_information'] : ['approve', 'reject', 'request_information', 'assign_expert'];
+  const options: AnalystAction[] = expiredRequirement ? ['extend_requirement'] : assignedExpert ? ['approve', 'reject', 'request_information'] : ['approve', 'reject', 'request_information', 'assign_expert'];
   async function submit(chosen: AnalystAction | 'take') {
     if (locked.current) return;
     const date = new Date(deadline + '-05:00');
-    if (chosen === 'request_information' && (!(date.getTime() > Date.now()) || reason.trim().length < 10)) { setError('invalid'); return; }
+    if ((chosen === 'request_information' || chosen === 'extend_requirement') && (!(date.getTime() > Date.now()) || reason.trim().length < 10)) { setError('invalid'); return; }
+    if (chosen === 'extend_requirement' && !expiredRequirement) { setError('conflict'); return; }
     const path = chosen === 'approve' || chosen === 'reject' ? 'decisions' : 'review';
     const payload = chosen === 'take' ? { action: chosen } : chosen === 'assign_expert' ? { action: chosen, expertId, reason }
       : chosen === 'request_information' ? { action: chosen, details: reason, deadline: date.toISOString() }
-        : { action: chosen, reason, evidenceIds: selected };
+        : chosen === 'extend_requirement' && expiredRequirement ? { action: chosen, requirementId: expiredRequirement.id, reason, deadline: date.toISOString() }
+          : { action: chosen, reason, evidenceIds: selected };
     const serialized = JSON.stringify(payload);
     if (pending.current?.payload !== serialized) pending.current = { payload: serialized, key: crypto.randomUUID() };
     locked.current = true; setBusy(true); setError('');
@@ -199,7 +202,7 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
         </select>
         {directoryError && <button className="btn btn-secondary" type="button" onClick={() => { setDirectoryError(false); setDirectoryRevision(n => n + 1); }}>{t('retry')}</button>}
       </label>}
-      {action === 'request_information' && <>
+      {(action === 'request_information' || action === 'extend_requirement') && <>
         <p>{t('recipient')} · {t('owner')}</p><label>{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
       </>}
       <button className="btn btn-primary" type="submit" disabled={busy || (decision && selected.length === 0)}>{t('confirmAction')}</button>
@@ -212,7 +215,7 @@ const fileTypes = ['image/jpeg', 'image/png', 'image/heic', 'video/mp4', 'video/
 function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: ActionProps & { requirementId: string }) {
   const t = useClaimLabels();
   const [answer, setAnswer] = useState('');
-  const [files, setFiles] = useState<{ id: string; file: File }[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef<{ payload: string; key: string } | undefined>(undefined);
@@ -222,12 +225,14 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
     if (locked.current || !valid) return;
     locked.current = true; setBusy(true); setError('');
     try {
-      for (const { id, file } of files) {
-        const result = await sendRequirementFile(claimId, requirementId, id, file);
+      const prepared = await Promise.all(files.map(file => prepareRequirementFile(requirementId, file)));
+      if (new Set(prepared.map(file => file.id)).size !== prepared.length) { setError('invalid'); return; }
+      for (const { id, sha256, file } of prepared) {
+        const result = await sendRequirementFile(claimId, requirementId, id, file, sha256);
         if (result.kind === 'unauthenticated') { onSessionLost(); return; }
         if (result.kind !== 'ok') { setError(result.kind); return; }
       }
-      const body = { text: answer, evidenceIds: files.map(file => file.id) };
+      const body = { text: answer, evidenceIds: prepared.map(file => file.id) };
       const payload = JSON.stringify(body);
       if (pending.current?.payload !== payload) pending.current = { payload, key: crypto.randomUUID() };
       const result = await caseCommand(claimId, 'requirements/' + requirementId + '/response', body, pending.current.key);
@@ -244,9 +249,9 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
       const selected = Array.from(event.target.files ?? []);
       if (selected.length > 3 || selected.some(file => !fileTypes.includes(file.type) || file.size === 0)
         || selected.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) { setError('invalid'); event.target.value = ''; return; }
-      setError(''); setFiles(selected.map(file => ({ id: crypto.randomUUID(), file })));
+      setError(''); setFiles(selected);
     }} /></label>
-    {files.length > 0 && <ul className="case-list">{files.map(({ id, file }) => <li key={id}>{file.name}</li>)}</ul>}
+    {files.length > 0 && <ul className="case-list">{files.map(file => <li key={file.name + ':' + file.lastModified + ':' + file.size}>{file.name}</li>)}</ul>}
     <button className="btn btn-primary" type="submit" disabled={busy || !valid}>{t('sendResponse')}</button>
     {error && <p role="alert" className="claims-error">{t('caseError.' + error)}</p>}
   </form>;
