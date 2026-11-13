@@ -49,7 +49,7 @@ try {
   const inbox = new ClaimInbox(new SqlClaimInbox(runtime.toString()), { now: () => new Date() });
   const reader = () => ({ clientId: randomUUID(), traceId: randomUUID(), expiresAt: new Date(Date.now() + 5000).toISOString() });
   const hash = (seed: string) => seed.padEnd(64, '0').slice(0, 64);
-  const input = (change: Partial<ReportInput> = {}): ReportInput => ({ policyId, eventType: 'collision', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Autopista Norte con Calle 116',
+  const input = (change: Partial<ReportInput> = {}): ReportInput => ({ policyId, eventType: 'collision', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Autopista Norte con Calle 116', location: null,
     description: 'Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.',
     evidence: [{ fileId: randomUUID(), contentType: 'image/jpeg', byteSize: 2048, sha256: 'c'.repeat(64) }, { fileId: randomUUID(), contentType: 'video/mp4', byteSize: 4096, sha256: 'd'.repeat(64) }], ...change });
   const draft = async (report = input(), key = 'key-' + randomUUID(), who = ownerA) => {
@@ -109,6 +109,16 @@ try {
   assert.deepEqual(both.map(result => result.status).sort(), ['created', 'replayed'], 'two simultaneous identical requests make one draft');
   assert.equal(Number((await db.query('SELECT count(*) AS n FROM policy.claims WHERE idempotency_key=$1', [racingKey])).rows[0].n), 1);
 
+  const located = await draft(input({ location: { latitude: 4.696944, longitude: -74.044167 } }));
+  const stored = (await db.query('SELECT location_latitude::STRING AS lat, location_longitude::STRING AS lon, location_authorized_at IS NOT NULL AS authorized FROM policy.claims WHERE id=$1', [located.claimId])).rows[0];
+  assert.deepEqual([stored.lat, stored.lon, stored.authorized], ['4.696944', '-74.044167', true], 'an authorized location is stored with the claim and the moment it was recorded');
+  const plain = (await db.query('SELECT location_latitude, location_longitude, location_authorized_at FROM policy.claims WHERE id=$1', [claimId])).rows[0];
+  assert.deepEqual([plain.location_latitude, plain.location_longitude, plain.location_authorized_at], [null, null, null], 'a report without a location stores none');
+  for (const change of ['location_latitude = 91', 'location_longitude = -181', 'location_latitude = NULL', 'location_authorized_at = NULL']) {
+    await assert.rejects(db.query(`UPDATE policy.claims SET ${change} WHERE id=$1`, [located.claimId]), /violat|constraint|check/i, change);
+  }
+  await assert.rejects(db.query('UPDATE policy.claims SET location_latitude = 4 WHERE id=$1', [claimId]), /violat|constraint|check/i, 'a half-set location is refused');
+
   const batch = [];
   for (let index = 0; index < 5; index++) { const item = await draft(); await receiveAll(item.claimId, item.report); batch.push(item); }
   const results = await Promise.all(batch.map(item => store.submit(ownerA, item.claimId, randomUUID())));
@@ -144,7 +154,20 @@ try {
   const legacy = randomUUID();
   await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id) VALUES($1,$2,'parametric-once',$3,'approved',now(),$4)`, [legacy, policyId, 'f'.repeat(64), randomUUID()]);
   assert.ok(!(await inbox.list({}, reader())).items.some(item => item.claimId === legacy), 'the parametric flow keeps its claims and is not listed');
-  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'draft-not-listed', 'evidence-verification',
+  // Adapter fixture only: the financial smoke separately creates and validates the actual sealed lifecycle command.
+  const lifecycleAt = new Date(Date.now() - 1_800_000).toISOString();
+  await db.query(`INSERT INTO policy.policy_lifecycle_changes(policy_id,change_id,actor_id,command_key,request_hash,payload,occurred_at)
+    VALUES($1,$2,$3,$4,$5,'{}',$6)`, [policyId, randomUUID(), ownerA.clientId, 'a'.repeat(64), 'b'.repeat(64), lifecycleAt]);
+  const claimCount = Number((await db.query('SELECT count(*) AS n FROM policy.claims')).rows[0].n);
+  for (const occurredAt of [lifecycleAt, new Date(Date.parse(lifecycleAt) + 1).toISOString()]) {
+    const key = 'ended-' + randomUUID();
+    assert.equal((await store.createDraft({ owner: ownerA, report: input({ occurredAt }), idempotencyKey: key, requestHash: hash(key), traceId: randomUUID() })).status, 'outside_coverage');
+  }
+  assert.equal(Number((await db.query('SELECT count(*) AS n FROM policy.claims')).rows[0].n), claimCount);
+  const priorKey = 'prior-' + randomUUID();
+  assert.equal((await store.createDraft({ owner: ownerA, report: input({ occurredAt: new Date(Date.parse(lifecycleAt) - 1).toISOString() }), idempotencyKey: priorKey, requestHash: hash(priorKey), traceId: randomUUID() })).status, 'created');
+  assert.equal((await store.createDraft({ owner: ownerA, report: first, idempotencyKey: key, requestHash: hash('one'), traceId: randomUUID() })).status, 'replayed');
+  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'lifecycle-termination-boundary', 'historical-draft-replay', 'draft-not-listed', 'evidence-verification',
     'incomplete-submit', 'single-number', 'inbox-shows-unestimated', 'concurrent-identical-requests', 'concurrent-numbering', 'audit-rollback', 'runtime-privileges', 'constraints', 'legacy-insert'] }));
 } finally {
   if (db) await db.end();

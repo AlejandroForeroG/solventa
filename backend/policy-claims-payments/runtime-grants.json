@@ -87,5 +87,9 @@
   "advisor_lifecycle_executions": [
     "SELECT",
     "INSERT"
+  ],
+  "assistance_requests": [
+    "SELECT",
+    "INSERT"
   ]
 }
