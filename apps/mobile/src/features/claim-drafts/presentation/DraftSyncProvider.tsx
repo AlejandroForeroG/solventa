@@ -16,14 +16,21 @@ export function DraftSyncProvider({ children }: PropsWithChildren) {
   const session = useAuthenticatedSession();
   const [sync] = useState(() => new DraftSync({ storage: protectedDraftStorage, api: createDraftApi(session.baseUrl, session), newId: randomUUID, now: Date.now }));
   const owner = useRef<DraftOwner | null>(null);
+  const authentication = useRef(auth);
+  authentication.current = auth;
   const pumping = useRef(false);
   const pump = useCallback(async (mayUnlock: boolean) => {
     const principal = owner.current;
-    if (!principal || AppState.currentState !== 'active' || pumping.current) return;
+    if (AppState.currentState !== 'active' || pumping.current) return;
     pumping.current = true;
     try {
       const network = await Network.getNetworkStateAsync();
       if (network.isConnected === false || network.isInternetReachable === false) return;
+      if (!principal) {
+        const latest = authentication.current;
+        if (latest.status === 'blocked' && latest.failure === 'unavailable' && await protectedDraftStorage.hasPending()) await latest.retry();
+        return;
+      }
       if (!owner.current || !sameOwner(owner.current, principal) || AppState.currentState !== 'active') return;
       if (sync.getSnapshot().status !== 'ready') {
         if (!mayUnlock || !await protectedDraftStorage.hasPending()) return;

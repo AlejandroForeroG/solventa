@@ -11,7 +11,7 @@ const createElement = (type: unknown, props: Record<string, unknown> | null, ...
 mock.module('react', { defaultExport: { createElement, Fragment: 'fragment' }, namedExports: {
   useState(initial: unknown) { const index = cursor++; if (!(index in hooks)) hooks[index] = typeof initial === 'function' ? initial() : initial;
     return [hooks[index], (next: unknown) => { hooks[index] = typeof next === 'function' ? next(hooks[index]) : next; changed = true; }]; },
-  useCallback: (callback: unknown) => callback, useEffect() {}, useRef: (current: unknown) => ({ current }),
+  useCallback: (callback: unknown) => callback, useEffect() {}, useRef: (current: unknown) => { const index = cursor++; hooks[index] ??= { current }; return hooks[index]; },
 } });
 mock.module('react-native', { namedExports: { ActivityIndicator: 'ActivityIndicator', Platform: { OS: 'android' }, Pressable: 'Pressable', Text: 'Text', TextInput: 'TextInput', View: 'View' } });
 mock.module('expo-router', { namedExports: { router: { back() {}, push() {} }, useFocusEffect() {} } });
@@ -74,7 +74,7 @@ test('saving an open editor keeps its content revision after a remote refresh', 
   const original = { draftId, content, confirmed: { draftId, revision: 1, content, updatedAt: '2026-11-12T12:00:00Z' }, command: null, status: 'confirmed', attempted: false, savedAt: 123 };
   hooks = []; auth = { status: 'authenticated', principal: who }; snapshot = { status: 'ready', owner: who, entries: [original] };
   let saved: unknown[] | undefined;
-  sync = { save: async (...args: unknown[]) => { saved = args; }, sync: async () => {} };
+  sync = { save: async (...args: unknown[]) => { saved = args; }, sync: async () => {}, pauseForEditing: () => () => {} };
   const node = workspace(render())!;
   hooks = [];
   const renderWorkspace = () => { cursor = 0; return (node.type as (props: unknown) => Node)(node.props); };
