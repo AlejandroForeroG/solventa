@@ -103,7 +103,7 @@ try {
     return response;
   });
   const createMobile = () => new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', nativeCustody.port), api, newId: randomUUID, now: Date.now });
-  const mobileId = randomUUID(); let mobile = createMobile(); await mobile.open(actor); await mobile.save(mobileId, content); mobile.lock();
+  const mobileId = randomUUID(); let mobile = createMobile(); await mobile.open(actor); await mobile.save(mobileId, content, 0); mobile.lock();
   mobile = createMobile(); await mobile.open(actor); await mobile.sync(actor);
   let snapshot = mobile.getSnapshot(); assert.equal(snapshot.status, 'ready');
   if (snapshot.status !== 'ready') throw Error('mobile unavailable');
@@ -115,13 +115,24 @@ try {
   assert.equal((await db.query('SELECT * FROM policy.claim_draft_revisions WHERE draft_id=$1', [mobileId])).rowCount, 1);
   assert.equal((await db.query('SELECT * FROM policy.claim_draft_commands WHERE draft_id=$1 AND command_id=$2', [mobileId, retainedCommand!.commandId])).rowCount, 1);
   const current = confirmed(await sync(mobileId, { commandId: randomUUID(), baseRevision: 1, content: { ...content, description: 'Remote competing edit' } }));
-  await mobile.save(mobileId, { ...content, description: 'Offline competing edit' }); await mobile.sync(actor);
+  await mobile.save(mobileId, { ...content, description: 'Offline competing edit' }, 1); await mobile.sync(actor);
   snapshot = mobile.getSnapshot(); if (snapshot.status !== 'ready') throw Error('mobile unavailable');
   assert.equal(snapshot.entries[0].status, 'conflict'); assert.equal((await store.get(actor, mobileId))?.revision, current.revision);
   await mobile.resolve(mobileId, 'server'); mobile.lock(); mobile = createMobile(); await mobile.open(actor); await mobile.sync(actor);
   snapshot = mobile.getSnapshot(); if (snapshot.status !== 'ready') throw Error('mobile unavailable');
   assert.equal(snapshot.entries[0].status, 'confirmed'); assert.equal(snapshot.entries[0].content.description, 'Remote competing edit');
   assert.equal((await store.get(actor, mobileId))?.revision, current.revision, 'keeping the server creates no artificial data revision');
+  const refreshId = randomUUID();
+  const refreshQueue = new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', draftCustody().port), api, newId: randomUUID, now: Date.now });
+  await refreshQueue.open(actor); await refreshQueue.save(refreshId, content, 0); await refreshQueue.sync(actor);
+  const openedDraft = (await store.get(actor, refreshId))!;
+  confirmed(await sync(refreshId, { commandId: randomUUID(), baseRevision: openedDraft.revision, content: { ...content, place: 'Refreshed remote place' } }));
+  await refreshQueue.refresh(actor);
+  await refreshQueue.save(refreshId, { ...openedDraft.content, description: 'Note from the already open editor' }, openedDraft.revision);
+  await refreshQueue.sync(actor);
+  const refreshedSave = (await store.get(actor, refreshId))!;
+  assert.equal(refreshedSave.content.place, 'Refreshed remote place', 'A refresh must not rebase an open editor and silently undo another field');
+  assert.equal(refreshedSave.content.description, 'Note from the already open editor');
   const reports = new SqlClaimReport(runtime.toString()), fileId = randomUUID();
   const report = await reports.createDraft({ owner: actor, idempotencyKey: randomUUID(), requestHash: 'd'.repeat(64), traceId: randomUUID(), report: {
     policyId, eventType: 'other', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Synthetic location',
