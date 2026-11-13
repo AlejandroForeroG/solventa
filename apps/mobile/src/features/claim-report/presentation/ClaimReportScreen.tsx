@@ -10,6 +10,11 @@ import { policyReference, validityAt } from '../../policy-wallet/domain/wallet';
 import { ActivePolicies } from '../application/active-policies';
 import { isReportableProduct } from '../domain/report';
 import { ClaimReportForm } from './ClaimReportForm';
+import { createDraftApi } from '../../claim-drafts/adapters/draft-api';
+import { draftMessages } from '../../claim-drafts/presentation/messages';
+import { uuid, type DraftContent } from '../../claim-drafts/domain/draft';
+import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
+import type { AuthenticatedSession } from '../../policy-wallet/application/ports';
 import { claimReportMessages, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
 
@@ -17,7 +22,7 @@ import { Action, Page, ui } from './ui';
 // back in an authenticated session, so the report waits hidden through them; any other state means the session is really gone.
 const REVALIDATING = new Set(['loading', 'authorizing', 'locked', 'biometricPrompt']);
 
-export function ClaimReportScreen({ policyId }: { policyId?: string }) {
+export function ClaimReportScreen({ policyId, draftId }: { policyId?: string; draftId?: string }) {
   const auth = useAuthentication();
   const locale: ClaimReportLocale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   const copy = claimReportMessages[locale];
@@ -30,10 +35,10 @@ export function ClaimReportScreen({ policyId }: { policyId?: string }) {
   if (owner === undefined) {
     return <Page title={copy.title}><Text style={ui.body}>{copy.policy.signedOut}</Text><Action label={copy.back} secondary onPress={() => router.back()} /></Page>;
   }
-  return <Authenticated key={`${owner}:${locale}`} copy={copy} locale={locale} requested={policyId} hidden={current === undefined} />;
+  return <Authenticated key={`${owner}:${locale}:${draftId ?? ''}`} copy={copy} locale={locale} requested={policyId} draftId={draftId} hidden={current === undefined} />;
 }
 
-function Authenticated({ copy, locale, requested, hidden }: { copy: ClaimReportCopy; locale: ClaimReportLocale; requested?: string; hidden: boolean }) {
+function Authenticated({ copy, locale, requested, hidden, draftId }: { copy: ClaimReportCopy; locale: ClaimReportLocale; requested?: string; hidden: boolean; draftId?: string }) {
   const currentSession = useAuthenticatedSession();
   const [session] = useState(currentSession);
   const [policies] = useState(() => new ActivePolicies(() => createPoliciesApi(session.baseUrl, session).list(), (policy, now) => isReportableProduct(policy.product) && validityAt(policy, now) === 'active', Date.now));
@@ -47,7 +52,8 @@ function Authenticated({ copy, locale, requested, hidden }: { copy: ClaimReportC
       <Action label={copy.retry} onPress={() => void policies.refresh()} /><Action label={copy.back} secondary onPress={() => router.back()} /></Page>;
     const options = load.policies;
     const policy = chosen ? options.find(item => item.policyId === chosen) : options.length === 1 ? options[0] : undefined;
-    if (policy) return <ClaimReportForm key={policy.policyId} policy={policy} copy={copy} locale={locale} session={session} />;
+    if (policy) return draftId ? <PreparedReport key={`${policy.policyId}:${draftId}`} policy={policy} draftId={draftId} copy={copy} locale={locale} session={session} />
+      : <ClaimReportForm key={policy.policyId} policy={policy} copy={copy} locale={locale} session={session} />;
     return <Page title={copy.policy.heading} subtitle={copy.title}>
       {chosen && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.unknown}</Text>}
       {options.length === 0 && <Text style={ui.body}>{copy.policy.none}</Text>}
@@ -70,3 +76,27 @@ function Authenticated({ copy, locale, requested, hidden }: { copy: ClaimReportC
 }
 
 const styles = StyleSheet.create({ visible: { flex: 1 }, hidden: { display: 'none' } });
+
+function PreparedReport({ policy, draftId, copy, locale, session }: { policy: CachedPolicy; draftId: string; copy: ClaimReportCopy;
+  locale: ClaimReportLocale; session: AuthenticatedSession & { baseUrl: string } }) {
+  const [state, setState] = useState<{ status: 'loading' | 'failed' } | { status: 'ready'; content: DraftContent }>({ status: 'loading' });
+  const [attempt, retry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!uuid(draftId)) throw new Error('invalid_draft');
+      return createDraftApi(session.baseUrl, session).get(draftId);
+    };
+    void load().then(draft => {
+      if (active) setState(draft.content.policyId === policy.policyId ? { status: 'ready', content: draft.content } : { status: 'failed' });
+    }, () => { if (active) setState({ status: 'failed' }); });
+    return () => { active = false; };
+  }, [draftId, policy.policyId, session, attempt]);
+  if (state.status !== 'ready') return <Page title={copy.title}>
+    {state.status === 'loading' ? <ActivityIndicator accessibilityLabel={copy.policy.loading} /> : <>
+      <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.failed}</Text><Action label={copy.retry} onPress={() => { setState({ status: 'loading' }); retry(n => n + 1); }} />
+    </>}
+    <Action secondary label={copy.back} onPress={() => router.back()} />
+  </Page>;
+  return <ClaimReportForm policy={policy} copy={copy} locale={locale} session={session} initial={state.content} preparationNotice={draftMessages[locale].resumeNotice} />;
+}

@@ -108,6 +108,434 @@
       }
     },
     {
+      "description": "mobile claim draft sync conflict",
+      "providerStates": [
+        {
+          "name": "native claim drafts conflict"
+        }
+      ],
+      "request": {
+        "body": {
+          "baseRevision": 1,
+          "commandId": "30000000-0000-4000-8000-000000000012",
+          "content": {
+            "description": "Synthetic offline note",
+            "eventType": "other",
+            "evidence": [],
+            "occurredAt": null,
+            "place": "",
+            "policyId": "30000000-0000-4000-8000-000000000011"
+          }
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "PUT",
+        "path": "/api/v1/claim-drafts/30000000-0000-4000-8000-000000000010"
+      },
+      "response": {
+        "body": {
+          "conflict": {
+            "base": {
+              "content": {
+                "description": "Synthetic original note",
+                "eventType": "other",
+                "evidence": [],
+                "occurredAt": null,
+                "place": "",
+                "policyId": "30000000-0000-4000-8000-000000000011"
+              },
+              "draftId": "30000000-0000-4000-8000-000000000010",
+              "revision": 1,
+              "updatedAt": "2026-11-12T15:00:00.000Z"
+            },
+            "conflictId": "30000000-0000-4000-8000-000000000012",
+            "draftId": "30000000-0000-4000-8000-000000000010",
+            "fields": [
+              "description"
+            ],
+            "local": {
+              "description": "Synthetic offline note",
+              "eventType": "other",
+              "evidence": [],
+              "occurredAt": null,
+              "place": "",
+              "policyId": "30000000-0000-4000-8000-000000000011"
+            },
+            "policy": "claim-draft.fields.v1",
+            "server": {
+              "content": {
+                "description": "Synthetic server note",
+                "eventType": "other",
+                "evidence": [],
+                "occurredAt": null,
+                "place": "",
+                "policyId": "30000000-0000-4000-8000-000000000011"
+              },
+              "draftId": "30000000-0000-4000-8000-000000000010",
+              "revision": 2,
+              "updatedAt": "2026-11-12T15:00:00.000Z"
+            }
+          },
+          "status": "conflict",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "mobile claim draft sync ready",
+      "providerStates": [
+        {
+          "name": "native claim drafts ready"
+        }
+      ],
+      "request": {
+        "body": {
+          "baseRevision": 1,
+          "commandId": "30000000-0000-4000-8000-000000000012",
+          "content": {
+            "description": "Synthetic offline note",
+            "eventType": "other",
+            "evidence": [],
+            "occurredAt": null,
+            "place": "",
+            "policyId": "30000000-0000-4000-8000-000000000011"
+          }
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "PUT",
+        "path": "/api/v1/claim-drafts/30000000-0000-4000-8000-000000000010"
+      },
+      "response": {
+        "body": {
+          "draft": {
+            "content": {
+              "description": "Synthetic offline note",
+              "eventType": "other",
+              "evidence": [],
+              "occurredAt": null,
+              "place": "",
+              "policyId": "30000000-0000-4000-8000-000000000011"
+            },
+            "draftId": "30000000-0000-4000-8000-000000000010",
+            "revision": 2,
+            "updatedAt": "2026-11-12T15:00:00.000Z"
+          },
+          "merged": false,
+          "status": "confirmed",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim draft sync resolved",
+      "providerStates": [
+        {
+          "name": "native claim drafts resolved"
+        }
+      ],
+      "request": {
+        "body": {
+          "baseRevision": 2,
+          "commandId": "30000000-0000-4000-8000-000000000013",
+          "content": {
+            "description": "Synthetic offline note",
+            "eventType": "other",
+            "evidence": [],
+            "occurredAt": null,
+            "place": "",
+            "policyId": "30000000-0000-4000-8000-000000000011"
+          },
+          "resolution": {
+            "conflictId": "30000000-0000-4000-8000-000000000012",
+            "keep": "local"
+          }
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "PUT",
+        "path": "/api/v1/claim-drafts/30000000-0000-4000-8000-000000000010"
+      },
+      "response": {
+        "body": {
+          "draft": {
+            "content": {
+              "description": "Synthetic offline note",
+              "eventType": "other",
+              "evidence": [],
+              "occurredAt": null,
+              "place": "",
+              "policyId": "30000000-0000-4000-8000-000000000011"
+            },
+            "draftId": "30000000-0000-4000-8000-000000000010",
+            "revision": 2,
+            "updatedAt": "2026-11-12T15:00:00.000Z"
+          },
+          "merged": false,
+          "status": "confirmed",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim draft sync unavailable",
+      "providerStates": [
+        {
+          "name": "native claim drafts unavailable"
+        }
+      ],
+      "request": {
+        "body": {
+          "baseRevision": 1,
+          "commandId": "30000000-0000-4000-8000-000000000012",
+          "content": {
+            "description": "Synthetic offline note",
+            "eventType": "other",
+            "evidence": [],
+            "occurredAt": null,
+            "place": "",
+            "policyId": "30000000-0000-4000-8000-000000000011"
+          }
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "PUT",
+        "path": "/api/v1/claim-drafts/30000000-0000-4000-8000-000000000010"
+      },
+      "response": {
+        "body": {
+          "error": "service_unavailable",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
+      }
+    },
+    {
+      "description": "mobile claim drafts evidence",
+      "providerStates": [
+        {
+          "name": "native claim drafts ready"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claim-drafts/evidence",
+        "query": {
+          "policyId": [
+            "30000000-0000-4000-8000-000000000011"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "evidence": [],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim drafts get",
+      "providerStates": [
+        {
+          "name": "native claim drafts ready"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claim-drafts/30000000-0000-4000-8000-000000000010"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "description": "Synthetic original note",
+            "eventType": "other",
+            "evidence": [],
+            "occurredAt": null,
+            "place": "",
+            "policyId": "30000000-0000-4000-8000-000000000011"
+          },
+          "draftId": "30000000-0000-4000-8000-000000000010",
+          "revision": 1,
+          "traceId": "00000000-0000-4000-8000-000000000002",
+          "updatedAt": "2026-11-12T15:00:00.000Z"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim drafts list",
+      "providerStates": [
+        {
+          "name": "native claim drafts ready"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claim-drafts"
+      },
+      "response": {
+        "body": {
+          "drafts": [
+            {
+              "content": {
+                "description": "Synthetic original note",
+                "eventType": "other",
+                "evidence": [],
+                "occurredAt": null,
+                "place": "",
+                "policyId": "30000000-0000-4000-8000-000000000011"
+              },
+              "draftId": "30000000-0000-4000-8000-000000000010",
+              "revision": 1,
+              "updatedAt": "2026-11-12T15:00:00.000Z"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile configuration",
       "providerStates": [
         {

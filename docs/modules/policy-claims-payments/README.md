@@ -6,6 +6,8 @@ Explicitly granted web analysts can list open claims through the [claims inbox](
 
 The [assistance provider search](assistance-provider-search.md) guide describes the shared lookup rules and the versioned synthetic directory.
 
+The [editable claim drafts](claim-drafts.md) guide covers offline preparation, automatic synchronization, revision conflicts, durable customer choices and their SQL/HTTP boundaries. These drafts do not file claims or replace the upload declaration.
+
 The [parametric payouts](parametric-payouts.md) guide describes the flight-delay and heavy-rainfall indemnities, the simulated provider contract, the customer notice and the recovery of pending payments.
 
 The [policy lifecycle](policy-lifecycle.md) guide covers owner web modification, renewal and cancellation, sealed history, replacement eligibility and the versioned customer notice.

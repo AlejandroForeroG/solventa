@@ -17,8 +17,17 @@ import { Action, Page, ui } from './ui';
 const megabytes = (bytes: number, locale: ClaimReportLocale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 1_048_576);
 const RETRYABLE = new Set(['unavailable', 'incomplete', 'invalid_response']);
 
-export function ClaimReportForm({ policy, copy, locale, session }: { policy: CachedPolicy; copy: ClaimReportCopy; locale: ClaimReportLocale; session: AuthenticatedSession & { baseUrl: string } }) {
-  const [{ flow, source }] = useState(() => createClaimReport(session.baseUrl, session, policy));
+export function ClaimReportForm({ policy, copy, locale, session, initial, preparationNotice }: { policy: CachedPolicy; copy: ClaimReportCopy; locale: ClaimReportLocale; session: AuthenticatedSession & { baseUrl: string };
+  initial?: { eventType: 'collision' | 'theft' | 'damage' | 'other' | null; occurredAt: string | null; place: string; description: string }; preparationNotice?: string }) {
+  const [{ flow, source }] = useState(() => {
+    const created = createClaimReport(session.baseUrl, session, policy);
+    if (initial) {
+      if (initial.eventType) created.flow.setEventType(initial.eventType);
+      if (initial.occurredAt) created.flow.setOccurredAt(new Date(initial.occurredAt));
+      created.flow.setPlace(initial.place); created.flow.setDescription(initial.description);
+    }
+    return created;
+  });
   const state = useSyncExternalStore(flow.subscribe, flow.getSnapshot, flow.getSnapshot);
   // The report lives only while this screen does: leaving it, signing out or switching account releases the files the app copied for it.
   useEffect(() => { flow.open(); return () => { void flow.dispose(); }; }, [flow]);
@@ -55,6 +64,7 @@ export function ClaimReportForm({ policy, copy, locale, session }: { policy: Cac
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
   const report = <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
+    {preparationNotice && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
         <View style={ui.chips}>

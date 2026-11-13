@@ -5,6 +5,10 @@ import { createSessionApi } from '../../apps/mobile/src/features/authentication/
 import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
+import { createDraftApi } from '../../apps/mobile/src/features/claim-drafts/adapters/draft-api';
+import { DraftFailure } from '../../apps/mobile/src/features/claim-drafts/domain/draft';
+import draftExamples from '../../packages/contracts/examples/claim-drafts.json';
+import { draftCommand, draftConflict, draftVersion } from './support/claim-drafts';
 import type { VerificationCommand } from '../../apps/mobile/src/features/identity-verification/application/ports';
 import examples from '../../packages/contracts/examples/identity-verifications.json';
 import { assertMatchesCommitted, pactOutputDir, providerName } from './support/pact-files';
@@ -21,6 +25,42 @@ const baseUrl = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const configuration = { clientId: 'client_01M47F52THNNZZZ4WSGACX8KA4', redirectUri: 'solventa://auth/callback',
   authorizationEndpoint: 'https://api.workos.com/user_management/authorize', tokenEndpoint: 'https://api.workos.com/user_management/authenticate' };
 const principal = { clientId: id, subjectToken: traceId };
+
+const draftClient = (server: { url: string }) => createDraftApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+  (url, options) => { const parsed = new URL(String(url)); return fetch(`${server.url}${parsed.pathname}${parsed.search}`, options); });
+for (const operation of ['list', 'get', 'evidence'] as const) {
+  test(`mobile claim draft ${operation} follows the owned draft contract`, async () => {
+    const path = '/api/v1/claim-drafts' + (operation === 'get' ? `/${draftExamples.draftId}` : operation === 'evidence' ? '/evidence' : '');
+    const body = operation === 'get' ? draftVersion : operation === 'list' ? { drafts: [draftVersion] } : { evidence: [] };
+    pact.given('native claim drafts ready').uponReceiving(`mobile claim drafts ${operation}`)
+      .withRequest({ method: 'GET', path, ...(operation === 'evidence' ? { query: { policyId: draftCommand.content.policyId } } : {}),
+        headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+      .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { ...body, traceId: MatchersV3.uuid(traceId) } });
+    await pact.executeTest(async server => {
+      const api = draftClient(server);
+      assert.deepEqual(operation === 'list' ? await api.list(draftExamples.owner) : operation === 'get' ? await api.get(draftExamples.draftId) : await api.evidence(draftCommand.content.policyId),
+        operation === 'list' ? [draftVersion] : operation === 'get' ? draftVersion : []);
+    });
+  });
+}
+for (const mode of ['ready', 'conflict', 'resolved', 'unavailable'] as const) {
+  test(`mobile claim draft synchronization in ${mode} state uses the real adapter`, async () => {
+    const command = mode === 'resolved' ? { ...draftCommand, commandId: '30000000-0000-4000-8000-000000000013', baseRevision: 2,
+      resolution: { conflictId: draftCommand.commandId, keep: 'local' as const } } : draftCommand;
+    const body = mode === 'conflict' ? { status: 'conflict', conflict: draftConflict }
+      : mode === 'unavailable' ? { error: 'service_unavailable' } : { status: 'confirmed', merged: false, draft: { ...draftVersion, revision: 2, content: command.content } };
+    pact.given(`native claim drafts ${mode}`).uponReceiving(`mobile claim draft sync ${mode}`)
+      .withRequest({ method: 'PUT', path: `/api/v1/claim-drafts/${draftExamples.draftId}`, body: command,
+        headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token', 'Content-Type': 'application/json' } })
+      .willRespondWith({ status: mode === 'conflict' ? 409 : mode === 'unavailable' ? 503 : 200,
+        headers: { 'Content-Type': 'application/json' }, body: { ...body, traceId: MatchersV3.uuid(traceId) } });
+    await pact.executeTest(async server => {
+      const result = draftClient(server).sync(draftExamples.draftId, command, draftExamples.owner);
+      if (mode === 'unavailable') await assert.rejects(result, (error: unknown) => error instanceof DraftFailure && error.kind === 'unavailable');
+      else assert.deepEqual(await result, body);
+    });
+  });
+}
 
 for (const stage of ['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as const) {
   test(`mobile resumes native verification in ${stage} state`, async () => {
