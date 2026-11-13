@@ -26,6 +26,8 @@ Migration `0015_claim_drafts.sql` adds current drafts, immutable revision snapsh
 
 ## Mobile custody and delivery
 
+The migration catalog includes the unchanged preceding `0013_claim_report_location.sql` and `0014_assistance_requests.sql` versions so that a fresh environment applies them before `0015_claim_drafts.sql`. This preserves compatibility with subsequent deliveries of their consumers; editable draft APIs do not depend on those consumers. See the [data guide](data.md) for schema and runtime permissions.
+
 The [mobile channel guide](../../channels/mobile/README.md#offline-claim-drafts) describes entry points and native setup. The queue stores the minimum draft fields, confirmed base, command, result, conflict and pending choice. Immutable AES-GCM encrypted files live in the app's private document directory; a small SecureStore key/pointer binds the installation, API environment and both owner coordinates. The encrypted generation and pointer are verified by reading back before the UI acknowledges a save. A failed write preserves the last durable generation. Plaintext storage is never a fallback. Up to 20 entries and 256 KiB of plaintext are supported.
 
 Editing the same unsent draft updates its pending snapshot while retaining the action ID and base. The editor pins the revision associated with the content it opened; a subsequent list refresh cannot rebase that content onto a newer server revision. Saving queues the pinned base so the server can merge or report a conflict. Once transmission may have begun, its ID/body are immutable until reconciled. An explicit pending conflict choice is also immutable before its first transmission; a later edit cannot silently replace that saved decision.
