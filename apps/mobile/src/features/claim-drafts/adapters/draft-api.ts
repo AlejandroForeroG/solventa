@@ -2,11 +2,11 @@ import { AuthFailure } from '../../authentication/domain/session';
 import { validateBaseUrl } from '../../authentication/adapters/solventa-session';
 import type { AuthenticatedSession } from '../../policy-wallet/application/ports';
 import type { DraftApi } from '../application/ports';
-import { DraftFailure, object, replyOf, uuid, versionOf, type DraftCommand } from '../domain/draft';
+import { DraftFailure, object, replyOf, uuid, versionOf, type DraftCommand, type DraftOwner } from '../domain/draft';
 
 export function createDraftApi(baseUrl: string, session: AuthenticatedSession, request: typeof fetch = fetch): DraftApi {
   validateBaseUrl(baseUrl);
-  const call = (path: string, command?: DraftCommand): Promise<unknown> => session.execute(async token => {
+  const call = (path: string, command?: DraftCommand, owner?: DraftOwner): Promise<unknown> => session.execute(async token => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
@@ -34,7 +34,7 @@ export function createDraftApi(baseUrl: string, session: AuthenticatedSession, r
       if (error instanceof AuthFailure || error instanceof DraftFailure) throw error;
       throw new DraftFailure(error instanceof SyntaxError ? 'invalid_response' : 'unavailable');
     } finally { clearTimeout(timer); }
-  });
+  }, owner);
   return {
     async evidence(policyId) {
       if (!uuid(policyId)) throw new DraftFailure('rejected');
@@ -47,8 +47,9 @@ export function createDraftApi(baseUrl: string, session: AuthenticatedSession, r
         return { claimId: ref.claimId, fileId: ref.fileId, contentType: ref.contentType, createdAt: ref.createdAt };
       });
     },
-    async list() {
-      const raw = await call('');
+    async list(owner) {
+      if (!owner || !uuid(owner.clientId) || !uuid(owner.subjectToken)) throw new DraftFailure('unauthorized');
+      const raw = await call('', undefined, owner);
       if (!object(raw) || !Array.isArray(raw.drafts) || raw.drafts.length > 20) throw new DraftFailure('invalid_response');
       const drafts = raw.drafts.map(versionOf);
       if (new Set(drafts.map(d => d.draftId)).size !== drafts.length) throw new DraftFailure('invalid_response');
@@ -60,9 +61,10 @@ export function createDraftApi(baseUrl: string, session: AuthenticatedSession, r
       if (draft.draftId !== draftId) throw new DraftFailure('invalid_response');
       return draft;
     },
-    async sync(draftId, command) {
+    async sync(draftId, command, owner) {
       if (!uuid(draftId)) throw new DraftFailure('rejected');
-      const reply = replyOf(await call(`/${draftId}`, command));
+      if (!owner || !uuid(owner.clientId) || !uuid(owner.subjectToken)) throw new DraftFailure('unauthorized');
+      const reply = replyOf(await call(`/${draftId}`, command, owner));
       if (reply.status === 'confirmed') {
         if (reply.draft.draftId !== draftId || reply.draft.content.policyId !== command.content.policyId || reply.draft.revision < command.baseRevision) throw new DraftFailure('invalid_response');
       } else if (reply.conflict.draftId !== draftId || reply.conflict.conflictId !== command.commandId || reply.conflict.local.policyId !== command.content.policyId

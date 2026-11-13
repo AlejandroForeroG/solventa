@@ -86,7 +86,7 @@ export class DraftSync {
   async refresh(owner: DraftOwner): Promise<void> {
     const epoch = this.generation;
     try {
-      const remote = await this.deps.api.list();
+      const remote = await this.deps.api.list(owner);
       await this.serial(async () => {
         if (epoch !== this.generation || this.snapshot.status !== 'ready' || !sameOwner(owner, this.snapshot.owner)) return;
         const entries = [...this.snapshot.entries];
@@ -119,7 +119,7 @@ export class DraftSync {
         });
         if (!sending?.command || epoch !== this.generation) continue;
         try {
-          const result = await this.deps.api.sync(id, sending.command);
+          const result = await this.deps.api.sync(id, sending.command, owner);
           await this.serial(async () => {
             if (epoch !== this.generation || this.snapshot.status !== 'ready') return;
             const entry: DraftEntry = result.status === 'confirmed'
