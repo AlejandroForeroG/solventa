@@ -99,7 +99,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
         onPress={() => router.push({ pathname: '/claim-report', params: { policyId: entry.content.policyId, draftId: entry.draftId } })} />}
       {entry.status === 'conflict' && entry.conflict ? <Conflict entry={entry} copy={copy} locale={locale}
         choose={keep => void act(() => sync.resolve(entry.draftId, keep))} />
-        : entry.command && entry.attempted && !(entry.status === 'failed' && entry.failure === 'rejected') ? <>
+        : entry.command && (entry.attempted || entry.command.resolution) && !(entry.status === 'failed' && entry.failure === 'rejected') ? <>
           <Text style={ui.caption}>{copy.immutable}</Text>
           {entry.status !== 'sending' && <Action label={copy.retry} onPress={() => void act(() => sync.retry(entry.draftId))} />}
         </> : <Action secondary label={copy.edit} onPress={() => edit({ id: entry.draftId, content: entry.content })} />}

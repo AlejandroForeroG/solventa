@@ -33,7 +33,9 @@ test('an explicit permanent refusal permits a corrected new intent while uncerta
 
 test('offline edits survive restart and a lost acknowledgement retries the exact immutable command', async () => {
   const w = world(); let engine = w.restart(); await engine.open(w.owner);
-  await engine.save(w.draftId, w.content); await engine.save(w.draftId, { ...w.content, place: 'Saved offline' });
+  await engine.save(w.draftId, w.content); const unsentId = entries(engine)[0].command?.commandId;
+  await engine.save(w.draftId, { ...w.content, place: 'Saved offline' });
+  assert.equal(entries(engine)[0].command?.commandId, unsentId, 'editing an unsent draft retains its pending action identity');
   assert.equal(w.calls.length, 0); engine.lock(); engine = w.restart(); await engine.open(w.owner);
   w.respond(async () => { throw new DraftFailure('unavailable'); });
   await engine.sync(w.owner); assert.equal(entries(engine)[0].status, 'failed');
@@ -53,6 +55,7 @@ test('an explicit conflict choice survives restart and an uncertain response wit
   await engine.sync(w.owner); const conflict = entries(engine)[0].conflict;
   engine.lock(); engine = w.restart(); await engine.open(w.owner); assert.deepEqual(entries(engine)[0].conflict, conflict);
   await engine.resolve(w.draftId, 'server'); const choice = entries(engine)[0].command;
+  await assert.rejects(engine.save(w.draftId, w.content), 'an offline pending choice cannot be replaced before server validation');
   engine.lock(); engine = w.restart(); await engine.open(w.owner); assert.deepEqual(entries(engine)[0].command, choice);
   w.respond(async () => { throw new DraftFailure('unavailable'); }); await engine.sync(w.owner);
   await engine.retry(w.draftId); await engine.sync(w.owner);
