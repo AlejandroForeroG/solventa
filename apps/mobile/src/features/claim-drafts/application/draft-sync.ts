@@ -48,12 +48,12 @@ export class DraftSync {
       const existing = entries.find(e => e.draftId === draftId);
       // Once a request may have reached the server its immutable key/body must be retried before further editing.
       const refused = existing?.status === 'failed' && existing.failure === 'rejected';
-      if (existing && (existing.status === 'sending' || existing.status === 'conflict' || (existing.command && existing.attempted && !refused))) throw new DraftFailure('rejected');
+      if (existing && (existing.status === 'sending' || existing.status === 'conflict' || (existing.command && (existing.attempted || existing.command.resolution) && !refused))) throw new DraftFailure('rejected');
       if (!existing && entries.length >= 20) throw new DraftFailure('limit');
       const content = contentOf(source);
       if (existing && existing.content.policyId !== content.policyId) throw new DraftFailure('rejected');
       const entry: DraftEntry = { draftId, content, confirmed: existing?.confirmed ?? null,
-        command: { commandId: this.deps.newId(), baseRevision: existing?.confirmed?.revision ?? 0, content },
+        command: { commandId: existing?.command && !existing.attempted ? existing.command.commandId : this.deps.newId(), baseRevision: existing?.confirmed?.revision ?? 0, content },
         status: 'pending', attempted: false, savedAt: this.deps.now() };
       await this.persist(owner, [...entries.filter(e => e.draftId !== draftId), entry]);
     });
