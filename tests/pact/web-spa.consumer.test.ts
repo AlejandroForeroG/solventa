@@ -3,6 +3,9 @@ import { caseCommand, getCase, getExperts, getOwnedCases, sendRequirementFile } 
 import { listClaims } from '../../apps/web/src/claims/api';
 import claimsExamples from '../../packages/contracts/examples/claims.json';
 import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
@@ -594,11 +597,13 @@ describe('SPA claim case', () => {
 
   test('uploads evidence using a stable file id and a content checksum', async () => {
     const fileId = claimsExamples.actionReceipt.actionId;
-    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+    const evidencePath = fileURLToPath(new URL('../../packages/assets/brand/solventa-icon-green.png', import.meta.url));
+    const evidenceBytes = readFileSync(evidencePath);
+    const sha256 = createHash('sha256').update(evidenceBytes).digest('hex');
+    const file = new File([new Uint8Array(evidenceBytes)], 'evidence.png', { type: 'image/png' });
     pact.given(state).uponReceiving('a claim requirement file')
-      .withRequest({ method: 'PUT', path: casePath + '/requirements/' + requirementId + '/files/' + fileId,
-        headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '4', Origin: 'https://solventa.dev',
-          'X-Content-SHA256': '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08' } })
+      .withRequestBinaryFile({ method: 'PUT', path: casePath + '/requirements/' + requirementId + '/files/' + fileId,
+        headers: { Origin: 'https://solventa.dev', 'X-Content-SHA256': sha256 } }, 'image/png', evidencePath)
       .willRespondWith({ status: 200, headers: jsonResponse, body: { fileId, state: 'verified', traceId } });
     await pact.executeTest(server => withServer(server.url, async () => assert.equal((await sendRequirementFile(claimId, requirementId, fileId, file)).kind, 'ok'), 'https://solventa.dev'));
   });
