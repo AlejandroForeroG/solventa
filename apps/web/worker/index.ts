@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { apiVersions } from '@solventa/contracts';
+import { apiVersions, assistanceSearchPath } from '@solventa/contracts';
 import { gateApiVersion, withHeaders } from './api-versions';
 import { isApiDocsPath, serveApiDocs } from './api-docs';
 import { withSecurityHeaders } from './security-headers';
@@ -8,7 +8,14 @@ import { fetchService } from './service-fetch';
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 const offersPath = /^\/api\/v1\/offers(\/|$)/;
+const partnerOffersPath = /^\/api\/v1\/partner\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
+const claimsPath = /^\/api\/v1\/claims(\/|$)/;
+const claimDraftsPath = /^\/api\/v1\/claim-drafts(\/|$)/;
+const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
+// One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
+const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
+const EVIDENCE_DEADLINE_MS = 120_000;
 
 function unavailable(request: Request, headers: Record<string, string>, error: string): Response {
   const supplied = request.headers.get('x-trace-id') ?? '';
@@ -24,9 +31,23 @@ async function forwardToAcquisition(request: Request, env: WebEnv, headers: Reco
   catch { return unavailable(request, headers, 'service_unavailable'); }
 }
 
-async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+async function forwardToPolicy(request: Request, env: WebEnv, headers: Record<string, string>, error = 'financial_unavailable'): Promise<Response> {
   try { return await fetchService(request, env.POLICY); }
-  catch { return unavailable(request, headers, 'financial_unavailable'); }
+  catch { return unavailable(request, headers, error); }
+}
+
+// An evidence file streams to Policy without buffering it in the gateway, so a video never competes for Worker memory and a slow mobile link
+// is not cut by the five-second budget of the small JSON routes. Policy still authenticates before reading a byte.
+async function forwardEvidence(request: Request, env: WebEnv, headers: Record<string, string>): Promise<Response> {
+  const length = request.headers.get('content-length');
+  if (!length || !/^\d+$/.test(length) || Number(length) < 1 || Number(length) > MAX_EVIDENCE_BYTES) {
+    await request.body?.cancel().catch(() => {});
+    const supplied = request.headers.get('x-trace-id') ?? '';
+    const traceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
+    return Response.json({ error: 'invalid_request', fields: ['body'], traceId }, { status: 400, headers: { ...headers, 'x-trace-id': traceId } });
+  }
+  try { return await env.POLICY.fetch(new Request(request, { signal: AbortSignal.timeout(EVIDENCE_DEADLINE_MS) })); }
+  catch { return unavailable(request, headers, 'service_unavailable'); }
 }
 
 async function route(request: Request, env: WebEnv): Promise<Response> {
@@ -38,12 +59,14 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
-      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile)(\/|$)/.test(path)) {
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile|me\/partner-authorizations)(\/|$)/.test(path)) {
         try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
         catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
       }
-      const response = isQuotesPath(path) || offersPath.test(path) ? await forwardToAcquisition(request, env, headers)
-        : policiesPath.test(path) ? await forwardToPolicy(request, env, headers)
+      const response = /^\/api\/v[12]\/partner-portal$/.test(path) || isQuotesPath(path) || offersPath.test(path) || partnerOffersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
+        : policiesPath.test(path) || /^\/api\/v1\/advisor-authorizations(\/|$)/.test(path) ? await forwardToPolicy(request, env, headers)
+        : claimEvidencePath.test(path) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
+        : claimsPath.test(path) || claimDraftsPath.test(path) || path === assistanceSearchPath ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }

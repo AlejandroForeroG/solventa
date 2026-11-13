@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
+import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
+import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
+import claimsExamples from '../../../packages/contracts/examples/claims.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -17,6 +20,105 @@ function serve(session: number) {
 
 beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
 afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
+
+describe('assistance directory route in the application', () => {
+  it('shows contact details and hours without a provider selection control', async () => {
+    window.history.replaceState(null, '', '/prestadores');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: true });
+      if (input !== '/api/v1/assistance/providers/search') return json({ error: 'not_found' }, 404);
+      return json({ ...assistanceExamples.empty, providers: [{
+        id: 'demo-workshop', kind: 'workshop', name: 'Taller de prueba Bogotá', address: 'Calle de prueba 10',
+        city: 'Bogotá', phone: '+570000000001', hours: 'Lun–vie 08:00–17:00',
+      }] });
+    });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole('textbox', { name: 'Ciudad o dirección' }), 'Bogotá');
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    const result = within(await screen.findByRole('article'));
+    expect(result.getByRole('heading', { name: 'Taller de prueba Bogotá' })).toBeVisible();
+    expect(result.getByText(/Contacto de prueba.*\+570000000001/)).toBeVisible();
+    expect(result.getByText(/Horario.*08:00–17:00/)).toBeVisible();
+    expect(result.queryByRole('checkbox')).toBeNull();
+    expect(result.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('audit route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the audit route', async () => {
+    window.history.replaceState(null, '', '/auditoria'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Auditoría' });
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('unmounts protected content immediately while logout is pending or fails', async () => {
+    window.history.replaceState(null, '', '/auditoria');
+    let failLogout: () => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/logout') return new Promise((_resolve, reject) => { failLogout = () => reject(new Error('synthetic outage')); });
+      return json(auditExamples.page);
+    });
+    render(<App />); const user = userEvent.setup();
+    await screen.findByRole('button', { name: auditExamples.detail.decision.decisionId });
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    await act(async () => failLogout());
+    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+  });
+});
+
+describe('claims inbox route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the claims route', async () => {
+    window.history.replaceState(null, '', '/siniestros'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Siniestros' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('shows the inbox to a signed-in user, links both consoles and unmounts it while logout is pending', async () => {
+    window.history.replaceState(null, '', '/siniestros');
+    let failLogout: () => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input);
+      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/logout') return new Promise((_resolve, reject) => { failLogout = () => reject(new Error('synthetic outage')); });
+      return json(claimsExamples.page);
+    });
+    render(<App />); const user = userEvent.setup();
+    expect(await screen.findByRole('table', { name: 'Bandeja de siniestros' })).toBeVisible();
+    expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
+    expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
+    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('table')).toBeNull();
+    await act(async () => failLogout());
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+  });
+});
+
+describe('my policies route in the application', () => {
+  const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
+    effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+  it('requires sign-in and does not render the public calculator on the policies route', async () => {
+    window.history.replaceState(null, '', '/polizas'); serve(401); render(<App />);
+    await screen.findByRole('heading', { name: 'Mis pólizas' });
+    expect(await screen.findAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('lists the policies of a signed-in user and links the section from the header', async () => {
+    window.history.replaceState(null, '', '/polizas');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true })
+      : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' }));
+    render(<App />);
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Vida hipotecario/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('href', '/polizas');
+  });
+});
 
 describe('privacy dashboard in the application', () => {
   it.each([

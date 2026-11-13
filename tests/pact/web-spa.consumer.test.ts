@@ -1,3 +1,7 @@
+import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
+import { listClaims } from '../../apps/web/src/claims/api';
+import claimsExamples from '../../packages/contracts/examples/claims.json';
+import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
@@ -453,5 +457,103 @@ describe('SPA definitive offer and policy issuance', () => {
       const outcome = await withServer(server.url, () => beginSignatureChallenge({ policyId, documentHash }));
       assert.ok(outcome.kind === 'ok' && outcome.value.challengeId === challengeId);
     });
+  });
+});
+
+
+describe('SPA historical underwriting audit', () => {
+  test('lists historical decisions for an explicitly granted auditor', async () => {
+    pact.given('an explicitly granted underwriting auditor').uponReceiving('a historical underwriting list')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like(auditExamples.page) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await listAuditDecisions(new URLSearchParams(), new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.items[0].decisionId, auditExamples.detail.decision.decisionId);
+    }));
+  });
+  test('reads the retained rule, inputs, sources and consent', async () => {
+    pact.given('an explicitly granted underwriting auditor').uponReceiving('a historical underwriting reconstruction')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + auditExamples.detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(auditExamples.detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(auditExamples.detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.reconstruction.status, 'reconstructed');
+    }));
+  });
+  test('preserves recovered input provenance across the SPA and gateway contract', async () => {
+    const detail = auditExamples.recoveredDetail;
+    pact.given('an auditor reconstructing the retained original mock contract').uponReceiving('a recovered historical underwriting reconstruction with provenance')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok');
+      if (result.kind === 'ok') {
+        assert.equal(result.value.reconstruction.status, 'reconstructed');
+        assert.equal(result.value.inputEvidence?.length, 4);
+        assert.ok(result.value.inputEvidence?.every(e => e.kind === 'historical_mock' && e.reference === 'legacy-mock-risk-1'));
+      }
+    }));
+  });
+  test('shows historical gaps without synthesized facts', async () => {
+    const { identityVerified: _identity, ...inputs } = auditExamples.detail.decision.inputs;
+    const detail = { ...auditExamples.detail, decision: { ...auditExamples.detail.decision, inputs, reconstruction: { status: 'incomplete_capture', missing: ['inputs.identityVerified'] } } };
+    pact.given('an auditor reading an incomplete historical decision').uponReceiving('an incomplete historical underwriting reconstruction')
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions/' + detail.decision.decisionId, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(detail) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await getAuditDecision(detail.decision.decisionId, new AbortController().signal);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.deepEqual(result.value.reconstruction.missing, ['inputs.identityVerified']);
+    }));
+  });
+  for (const [state, status, error, expected] of [
+    ['a customer without underwriting audit permission', 403, 'forbidden', 'forbidden'],
+    ['the underwriting audit store is unavailable', 503, 'audit_unavailable', 'unavailable']
+  ] as const) test('does not expose underwriting data: ' + expected, async () => {
+    pact.given(state).uponReceiving('an underwriting audit request resulting in ' + expected)
+      .withRequest({ method: 'GET', path: '/api/v1/underwriting-decisions', headers: { accept: 'application/json' } })
+      .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await listAuditDecisions(new URLSearchParams(), new AbortController().signal)).kind, expected)));
+  });
+});
+
+describe('SPA claims inbox', () => {
+  const list = (query = new URLSearchParams()) => listClaims(query, new AbortController().signal);
+  test('lists open claims for an explicitly granted analyst', async () => {
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like({ ...claimsExamples.page, next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await list();
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.items[0].claimNumber, claimsExamples.page.items[0].claimNumber);
+    }));
+  });
+  test('applies the overdue and state filters on the server', async () => {
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list of overdue claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', query: { overdue: 'true' }, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ ...claimsExamples.page, items: [claimsExamples.page.items[0]], next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list(new URLSearchParams('overdue=true'))).kind, 'ok')));
+    pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list of unassigned claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', query: { state: 'unassigned' }, headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ ...claimsExamples.page, items: [claimsExamples.page.items[2]], next: null }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list(new URLSearchParams('state=unassigned'))).kind, 'ok')));
+  });
+  test('shows an empty queue', async () => {
+    pact.given('an explicitly granted claims analyst with no open claims').uponReceiving('a claims inbox list with no open claims')
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(claimsExamples.emptyPage) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await list();
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.deepEqual(result.value.items, []);
+    }));
+  });
+  for (const [state, status, error, expected] of [
+    ['a customer without claims permission', 403, 'forbidden', 'forbidden'],
+    ['the claims inbox store is unavailable', 503, 'service_unavailable', 'unavailable']
+  ] as const) test('does not expose claims: ' + expected, async () => {
+    pact.given(state).uponReceiving('a claims inbox request resulting in ' + expected)
+      .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
+      .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list()).kind, expected)));
   });
 });

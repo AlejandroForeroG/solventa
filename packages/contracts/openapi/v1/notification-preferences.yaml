@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Solventa native notification preferences
+  version: 1.0.0
+  description: Identity-owned category/channel choices for the authenticated mobile customer. An enabled push choice is not proof of operating-system permission or message delivery.
+servers:
+  - url: /api/v1
+tags:
+  - name: Notification preferences
+    description: Customer-owned native notification choices.
+paths:
+  /mobile/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      tags: [Notification preferences]
+      summary: Read the customer's current category/channel choices
+      security: [{ MobileBearer: [] }]
+      responses:
+        '200':
+          description: Stored choices or all-disabled defaults at version zero.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferencesEnvelope' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/Method' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      operationId: saveNotificationPreferences
+      tags: [Notification preferences]
+      summary: Replace the customer's category/channel choices
+      description: The full matrix and expected version are required. The same Idempotency-Key and payload replay the committed response. Another payload with the same key or a stale version conflicts. Choice, command, audit and outbox commit in one Identity transaction. Push permission is evaluated on each device, outside this resource.
+      security: [{ MobileBearer: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9._:-]{1,128}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, preferences]
+              properties:
+                expectedVersion: { type: integer, minimum: 0 }
+                preferences: { $ref: '#/components/schemas/Matrix' }
+      responses:
+        '200':
+          description: Committed choice or identical replay.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferencesEnvelope' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/Method' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    MobileBearer: { type: http, scheme: bearer }
+  headers:
+    TraceId: { description: Correlation UUID., schema: { type: string, format: uuid } }
+    NoStore: { description: Protected responses are not cached., schema: { type: string, enum: [no-store] } }
+    NoSniff: { description: Prevents content sniffing., schema: { type: string, enum: [nosniff] } }
+  schemas:
+    Channels:
+      type: object
+      additionalProperties: false
+      required: [push, email, sms]
+      properties:
+        push: { type: boolean }
+        email: { type: boolean }
+        sms: { type: boolean }
+    Matrix:
+      type: object
+      additionalProperties: false
+      required: [policy, payments, claims, commercial]
+      properties:
+        policy: { $ref: '#/components/schemas/Channels' }
+        payments: { $ref: '#/components/schemas/Channels' }
+        claims: { $ref: '#/components/schemas/Channels' }
+        commercial: { $ref: '#/components/schemas/Channels' }
+    Preferences:
+      type: object
+      additionalProperties: false
+      required: [version, preferences]
+      properties:
+        version: { type: integer, minimum: 0 }
+        preferences: { $ref: '#/components/schemas/Matrix' }
+    PreferencesEnvelope:
+      type: object
+      required: [preferences, traceId]
+      properties:
+        preferences: { $ref: '#/components/schemas/Preferences' }
+        traceId: { type: string, format: uuid }
+    Error:
+      type: object
+      required: [error, traceId]
+      properties:
+        error: { type: string, enum: [invalid_request, unauthorized, forbidden, method_not_allowed, conflict, access_unavailable] }
+        traceId: { type: string, format: uuid }
+  responses:
+    Invalid: { description: 'Invalid body, headers or query.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: Invalid or expired mobile session., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Operation is not permitted., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Method: { description: Unsupported method., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Stale version or key reused for different input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unavailable: { description: 'Authentication, persistence or required audit is unavailable; an uncertain write should be reconciled with the same key or a fresh read.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

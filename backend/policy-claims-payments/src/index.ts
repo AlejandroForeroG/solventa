@@ -3,6 +3,15 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createHttp } from './adapters/inbound/http';
 import { databaseProbe } from './adapters/outbound/database-probe';
 import { createPolicyFinance } from './adapters/composition';
+import { ClaimInbox } from './application/claim-inbox';
+import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
+import { ClaimReport } from './application/claim-report';
+import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
+import { ClaimDrafts } from './application/claim-drafts';
+import { SqlClaimDrafts } from './adapters/outbound/sql-claim-drafts';
+import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
+import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
+import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -14,9 +23,22 @@ const RECONCILIATION_BATCH = 25;
 export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
-    const response = await createHttp({ finance: createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }),
+    const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
+    const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
+    const response = await createHttp({ finance,
+      claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      advisor: { finance, authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+        approve: input => this.env.IDENTITY_SERVICE.authorizeAdvisorApprovalV1(input),
+        deny: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input) },
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
-      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input)
+      denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
+      assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
+      claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
+      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined, new Sha256ReportDigest(), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {
       const placement = request.headers.get('cf-placement') ?? '';
@@ -31,6 +53,10 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
   async acceptOfferV1(input: unknown) {
     const traceId = object(input) && typeof input.correlationId === 'string' && UUID.test(input.correlationId) ? input.correlationId : crypto.randomUUID();
     return createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }).acceptOffer(input, traceId);
+  }
+  // Private Service Binding RPC for the parametric provider; there is deliberately no public route for provider events.
+  async receiveParametricEventV1(input: unknown) {
+    return createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) }).receiveParametricEvent(input, crypto.randomUUID());
   }
   async queue(batch: MessageBatch<unknown>): Promise<void> {
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
@@ -51,9 +77,13 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
   }
   async scheduled(): Promise<void> {
     // The grace period lets an in-flight customer request finish before recovery competes for the same policy.
-    const outcomes = await createPolicyFinance(this.env).reconcileIssuances(new Date(Date.now() - RECONCILIATION_GRACE_MS), RECONCILIATION_BATCH);
-    for (const { traceId, outcome, error } of outcomes) {
+    const finance = createPolicyFinance(this.env);
+    const staleBefore = new Date(Date.now() - RECONCILIATION_GRACE_MS);
+    for (const { traceId, outcome, error } of await finance.reconcileIssuances(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'financial_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
+    }
+    for (const { traceId, outcome, error } of await finance.reconcileIndemnities(staleBefore, RECONCILIATION_BATCH)) {
+      console.log(JSON.stringify({ event: 'indemnity_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
     }
   }
   liveness() { return { service: 'policy-claims-payments', environment: this.env.APP_ENV }; }

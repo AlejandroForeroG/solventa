@@ -3,6 +3,8 @@ import { mountAuthentication } from './authentication-http';
 import type { AuthenticationCollaborators } from './authentication-http';
 import { mountApiAccess } from './api-access-http';
 import { mountConsents } from './consents-http';
+import { mountPartnerAuthorizations } from './partner-authorizations-http';
+import type { PartnerAuthorizations } from '../../application/partner-authorizations';
 import type { Consents } from '../../application/consents';
 import type { AuthorizeApiAccess } from './api-access-http';
 import { mountMobileAuthentication } from './mobile-authentication-http';
@@ -13,8 +15,10 @@ import type { SecurityDecisions } from '../../application/security-decisions';
 import type { IdentityVerifications } from '../../application/identity-verifications';
 import { mountIdentityVerifications } from './identity-verifications-http';
 import type { VerificationAccess } from './identity-verifications-http';
+import type { NotificationPreferences } from '../../application/notification-preferences';
+import { mountNotificationPreferences } from './notification-preferences-http';
 
-export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null; devices?: RegisteredDevices; security?: Pick<SecurityDecisions, 'deny'>; verifications?: IdentityVerifications; verificationAccess?: VerificationAccess }) {
+export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authentication: AuthenticationCollaborators; consents?: Consents; mobile?: MobileAuthenticationDependencies | null; devices?: RegisteredDevices; security?: Pick<SecurityDecisions, 'deny'>; verifications?: IdentityVerifications; verificationAccess?: VerificationAccess; notificationPreferences?: NotificationPreferences; partnerAuthorizations?: PartnerAuthorizations }) {
   const app = new Hono<{ Bindings: IdentityEnv }>();
   app.get('/health', (c) => c.json({ service: 'identity-consent-ecosystem', status: 'alive' }));
   mountAuthentication(app, deps.authentication, deps.security);
@@ -22,7 +26,9 @@ export function createHttp(deps: { authorizeApiAccess: AuthorizeApiAccess; authe
   mountMobileAuthentication(app, deps.mobile ?? null, deps.authorizeApiAccess, deps.security);
   mountRegisteredDevices(app, deps.mobile ?? null, deps.devices, deps.security);
   mountIdentityVerifications(app, { mobile: deps.mobile ?? null, application: deps.verifications, authorize: deps.verificationAccess, security: deps.security });
+  mountNotificationPreferences(app, { mobile: deps.mobile ?? null, application: deps.notificationPreferences, authorize: deps.verificationAccess, security: deps.security });
   if (deps.consents) mountConsents(app, { authorizeApiAccess: deps.authorizeApiAccess, consents: deps.consents });
+  if (deps.partnerAuthorizations) mountPartnerAuthorizations(app, { authorizeApiAccess: deps.authorizeApiAccess, authorizations: deps.partnerAuthorizations });
   app.onError((_, c) => c.json({ error: 'service_unavailable' }, 503));
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;

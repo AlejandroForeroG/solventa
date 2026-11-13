@@ -1,25 +1,46 @@
 import { Client } from 'pg';
 import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { InvalidFinancialRecord, isAcceptedOffer } from '../../domain/financial';
+import { isLifecycleChange } from '../../domain/policy-lifecycle';
+import type { LifecycleChange } from '../../domain/policy-lifecycle';
+import { isAdvisorAuthorization } from '../../domain/advisor-authorization';
+import type { AdvisorAuthorization, AdvisorAuthorizationRecord, DelegatedLifecycleExecution } from '../../domain/advisor-authorization';
 import type { FinancialDecisionCapture } from '../../application/financial-decision';
 import type { FinancialActor, FinancialErrorCode, PolicyStatus, PolicyView } from '../../domain/financial';
-import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
+import type { AcceptanceImport, AcceptedPolicyLookup, Command, FinancialStore, FinancialTransaction, ImportedEvent, Inbox, IndemnityCandidate, IndemnityNotice, IssuanceCandidate, IssuanceCommit, Payment, PolicyRecord, PremiumStart, Signature, SignatureChallenge, StoredPolicy } from '../../application/ports/financial';
+
+type AdvisorRow = { id: string; policy_id: string; owner_id: string; owner_subject: string; advisor_id: string; advisor_subject: string;
+  advisor_reference: string; payload: unknown; granted_at: Date; expires_at: Date; revoked_at: Date | null; change_id: string | null };
+const advisorSelect = `SELECT a.*,r.revoked_at,e.change_id FROM policy.advisor_authorizations a
+  LEFT JOIN policy.advisor_authorization_revocations r ON r.authorization_id=a.id
+  LEFT JOIN policy.advisor_lifecycle_executions e ON e.authorization_id=a.id`;
+function advisorRecord(row: AdvisorRow): AdvisorAuthorizationRecord {
+  const value = row.payload;
+  if (!isAdvisorAuthorization(value) || value.id !== row.id || value.policyId !== row.policy_id
+    || value.owner.clientId !== row.owner_id || value.owner.subjectToken !== row.owner_subject
+    || value.advisor.clientId !== row.advisor_id || value.advisor.subjectToken !== row.advisor_subject
+    || value.advisorReference !== row.advisor_reference || Date.parse(value.grantedAt) !== row.granted_at.getTime()
+    || Date.parse(value.expiresAt) !== row.expires_at.getTime()) throw new InvalidFinancialRecord();
+  return { authorization: value, revokedAt: row.revoked_at?.toISOString() ?? null, changeId: row.change_id };
+}
 
 type PolicyRow = { id: string; subject_token: string; status: PolicyStatus; premium: string; currency: string;
   offer_id: string; offer_version: string; effective_from: Date; effective_until: Date; client_id: string;
-  terms: unknown; terms_hash: string; document: string; document_hash: string; coverage_snapshot: unknown };
+  terms: unknown; terms_hash: string; document: string; document_hash: string; coverage_snapshot: unknown; lifecycle_payload?: unknown };
 const policyFrom = (row: PolicyRow): StoredPolicy => {
+  if (row.lifecycle_payload != null && !isLifecycleChange(row.lifecycle_payload)) throw new InvalidFinancialRecord();
   if (!isAcceptedOffer(row.terms) || !['pending', 'charged', 'issued', 'refunding', 'refunded'].includes(row.status)) throw new InvalidFinancialRecord();
   return { id: row.id, clientId: row.client_id, subjectToken: row.subject_token, status: row.status, offer: row.terms,
     termsHash: row.terms_hash, document: row.document, documentHash: row.document_hash, premium: row.premium,
-    currency: row.currency, offerId: row.offer_id, offerVersion: Number(row.offer_version), effectiveFrom: row.effective_from.toISOString(), effectiveUntil: row.effective_until.toISOString(), coverageSnapshot: row.coverage_snapshot };
+    currency: row.currency, offerId: row.offer_id, offerVersion: Number(row.offer_version), effectiveFrom: row.effective_from.toISOString(), effectiveUntil: row.effective_until.toISOString(), coverageSnapshot: row.coverage_snapshot,
+    ...(isLifecycleChange(row.lifecycle_payload) ? { lifecycle: row.lifecycle_payload } : {}) };
 };
 type PaymentRow = { payment_id: string | null; payment_policy_id: string | null; payment_operation: Payment['operation'] | null; payment_amount: string | null;
   payment_currency: 'COP' | null; payment_key: string | null; payment_hash: string | null; payment_status: Payment['status'] | null; payment_reference: string | null;
-  intent_id: string | null; intent_operation: string | null; intent_key: string | null; intent_hash: string | null; orphan: boolean };
+  payment_updated_at: Date | null; intent_id: string | null; intent_operation: string | null; intent_key: string | null; intent_hash: string | null; orphan: boolean };
 const paymentColumns = (intent: string, payment: string, policyId: string) => `${payment}.id AS payment_id,${payment}.policy_id AS payment_policy_id,
   ${payment}.operation AS payment_operation,${payment}.amount::STRING AS payment_amount,${payment}.currency AS payment_currency,
-  ${payment}.idempotency_key AS payment_key,${payment}.request_hash AS payment_hash,${payment}.status AS payment_status,${payment}.provider_reference AS payment_reference,
+  ${payment}.idempotency_key AS payment_key,${payment}.request_hash AS payment_hash,${payment}.status AS payment_status,${payment}.provider_reference AS payment_reference,${payment}.updated_at AS payment_updated_at,
   ${intent}.payment_id AS intent_id,${intent}.operation AS intent_operation,${intent}.payment_key AS intent_key,${intent}.request_hash AS intent_hash,
   (${intent}.payment_id IS NULL AND EXISTS(SELECT 1 FROM policy.payments other
     LEFT JOIN policy.financial_payment_intents unbound ON unbound.payment_id=other.id
@@ -32,17 +53,19 @@ const paymentFrom = (row: PaymentRow, policyId: string, operation: Payment['oper
     || typeof row.payment_key !== 'string' || typeof row.payment_hash !== 'string' || row.payment_key !== row.intent_key || row.payment_hash !== row.intent_hash
     || !row.payment_status || !['pending', 'confirmed', 'refunded', 'declined'].includes(row.payment_status)) throw new InvalidFinancialRecord();
   return { id: row.payment_id, policyId: row.payment_policy_id, operation: row.payment_operation, amount: row.payment_amount, currency: row.payment_currency,
-    key: row.payment_key, hash: row.payment_hash, status: row.payment_status, providerReference: row.payment_reference };
+    key: row.payment_key, hash: row.payment_hash, status: row.payment_status, providerReference: row.payment_reference,
+    ...(row.payment_updated_at ? { updatedAt: row.payment_updated_at.toISOString() } : {}) };
 };
 type RecordRow = PolicyRow & PaymentRow & { signature_policy_id: string | null; signature_document_hash: string | null;
   signature_receipt: string | null; signature_signed_at: Date | null; signature_time_seal: string | null };
 // The (policy_id, operation) intent key and the policy_id signature key keep this join to one row per policy.
 const selectRecord = (extraColumns = '', extraJoins = '') => `SELECT p.id,p.subject_token,p.status,p.premium::STRING AS premium,p.currency,p.offer_id,p.offer_version::STRING AS offer_version,
-  p.effective_from,p.effective_until,p.coverage_snapshot,f.client_id,f.terms,f.terms_hash,f.document,f.document_hash,
+  p.effective_from,p.effective_until,p.coverage_snapshot,f.client_id,f.terms,f.terms_hash,f.document,f.document_hash,lc.payload AS lifecycle_payload,
   ${paymentColumns('i', 'pay', 'p.id')},
   s.policy_id AS signature_policy_id,s.document_hash AS signature_document_hash,s.receipt AS signature_receipt,
   s.signed_at AS signature_signed_at,s.time_seal AS signature_time_seal ${extraColumns}
   FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id
+  LEFT JOIN policy.policy_lifecycle_changes lc ON lc.policy_id=p.id
   LEFT JOIN policy.financial_payment_intents i ON i.policy_id=p.id AND i.operation='premium'
   LEFT JOIN policy.payments pay ON pay.id=i.payment_id
   LEFT JOIN policy.policy_signatures s ON s.policy_id=p.id ${extraJoins}`;
@@ -57,8 +80,75 @@ const recordFrom = (rows: RecordRow[]): PolicyRecord | null => {
     signedAt: row.signature_signed_at.toISOString(), timeSeal: row.signature_time_seal } };
 };
 
-class SqlFinancialTransaction implements FinancialTransaction {
+export class SqlFinancialTransaction implements FinancialTransaction {
   constructor(private readonly db: Client) {}
+  async advisorAuthorization(id: string, principal: FinancialActor, role: 'owner' | 'advisor') {
+    const column = role === 'owner' ? 'owner' : 'advisor';
+    const rows = await this.db.query<AdvisorRow>(advisorSelect + ` WHERE a.id=$1 AND a.${column}_id=$2 AND a.${column}_subject=$3`,
+      [id, principal.clientId, principal.subjectToken]);
+    return rows.rows[0] ? advisorRecord(rows.rows[0]) : null;
+  }
+  async advisorAuthorizationCommand(owner: FinancialActor, key: string) {
+    const row = (await this.db.query<AdvisorRow & { request_hash: string }>(advisorSelect
+      + ' WHERE a.owner_id=$1 AND a.owner_subject=$2 AND a.command_key=$3', [owner.clientId, owner.subjectToken, key])).rows[0];
+    return row ? { record: advisorRecord(row), requestHash: row.request_hash } : null;
+  }
+  async listAdvisorAuthorizations(principal: FinancialActor, role: 'owner' | 'advisor', policyId: string | null, limit: number, advisorReference?: string, after?: {grantedAt:string;id:string}) {
+    const column = role === 'owner' ? 'owner' : 'advisor';
+    const rows = (await this.db.query<AdvisorRow>(advisorSelect
+      + ` WHERE a.${column}_id=$1 AND a.${column}_subject=$2 AND ($3::UUID IS NULL OR a.policy_id=$3)
+          AND ($5::UUID IS NULL OR a.advisor_reference=$5)
+          AND ($6::TIMESTAMPTZ IS NULL OR (a.granted_at,a.id)<($6::TIMESTAMPTZ,$7::UUID))
+          ORDER BY a.granted_at DESC,a.id DESC LIMIT $4`, [principal.clientId, principal.subjectToken, policyId, limit, advisorReference ?? null, after?.grantedAt ?? null, after?.id ?? null])).rows;
+    return rows.map(advisorRecord);
+  }
+  async saveAdvisorAuthorization(value: AdvisorAuthorization, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string) {
+    await this.db.query(`INSERT INTO policy.advisor_authorizations
+      (id,policy_id,owner_id,owner_subject,advisor_id,advisor_subject,advisor_reference,command_key,request_hash,payload,granted_at,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [value.id, value.policyId, value.owner.clientId, value.owner.subjectToken, value.advisor.clientId, value.advisor.subjectToken,
+      value.advisorReference, key, requestHash, JSON.stringify(value), value.grantedAt, value.expiresAt]);
+    await this.audit('policy.advisor.authorization.granted', value.id, traceId, 'granted', value.owner.clientId, capture);
+  }
+  async revokeAdvisorAuthorization(value: AdvisorAuthorization, at: string, capture: FinancialDecisionCapture, traceId: string) {
+    await this.db.query('INSERT INTO policy.advisor_authorization_revocations(authorization_id,actor_id,revoked_at) VALUES($1,$2,$3)',
+      [value.id, value.owner.clientId, at]);
+    await this.audit('policy.advisor.authorization.revoked', value.id, traceId, 'revoked', value.owner.clientId, capture);
+  }
+  async lifecycleCommand(actorId: string, key: string) {
+    const row = (await this.db.query<{ policy_id: string; request_hash: string }>(
+      'SELECT policy_id,request_hash FROM policy.policy_lifecycle_changes WHERE actor_id=$1 AND command_key=$2', [actorId, key])).rows[0];
+    return row ? { policyId: row.policy_id, requestHash: row.request_hash } : null;
+  }
+  async lifecycleReplacement(policyId: string): Promise<boolean> {
+    return (await this.db.query('SELECT policy_id FROM policy.policy_lifecycle_changes WHERE replacement_policy_id=$1', [policyId])).rowCount === 1;
+  }
+  async saveLifecycle(change: LifecycleChange, actorId: string, key: string, requestHash: string, capture: FinancialDecisionCapture, traceId: string, execution?: DelegatedLifecycleExecution) {
+    const result = await this.db.query(`WITH changed AS (
+      INSERT INTO policy.policy_lifecycle_changes(policy_id,change_id,actor_id,command_key,request_hash,replacement_policy_id,payload,occurred_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING policy_id
+    ), delegated AS (
+      INSERT INTO policy.advisor_lifecycle_executions(change_id,authorization_id,owner_id,advisor_id,payload,occurred_at)
+      SELECT $2,a.id,$13,$3,$15,$8 FROM changed JOIN policy.advisor_authorizations a ON a.id=$14
+      WHERE a.policy_id=$1 AND a.owner_id=$13 AND a.advisor_id=$3 AND a.granted_at<=clock_timestamp()
+        AND a.expires_at>clock_timestamp() AND $16::TIMESTAMPTZ>clock_timestamp()
+        AND NOT EXISTS(SELECT 1 FROM policy.advisor_authorization_revocations r WHERE r.authorization_id=a.id)
+      RETURNING change_id
+    ), audited AS (
+      INSERT INTO policy.audit_events(actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+      SELECT $3::STRING,'policy.lifecycle.changed','policy_lifecycle',policy_id,$9,$10,now()+interval '90 days' FROM changed
+      WHERE $14::UUID IS NULL OR EXISTS(SELECT 1 FROM delegated) RETURNING resource_id
+    ), captured AS (
+      INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+      SELECT gen_random_uuid(),'financial_decision',resource_id,'policy.policy.lifecycle.changed',1,$11,$10 FROM audited RETURNING aggregate_id
+    ) INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+      SELECT $2,'policy_lifecycle',aggregate_id,'policy.lifecycle.notice',1,$12,$10 FROM captured`,
+    [change.policyId, change.changeId, actorId, key, requestHash, change.replacementPolicyId, JSON.stringify(change), change.at, change.action, traceId, JSON.stringify(capture),
+      JSON.stringify({ category: 'policy_lifecycle_changed', clientId: execution?.ownerClientId ?? actorId, policyId: change.policyId, changeId: change.changeId,
+        action: change.action, changedAt: change.at, replacementPolicyId: change.replacementPolicyId, refund: change.refund }),
+      execution?.ownerClientId ?? actorId, execution?.authorizationId ?? null, JSON.stringify(execution ?? {}), execution?.authorizationExpiresAt ?? null]);
+    if (result.rowCount !== 1) throw Error('lifecycle_write_incomplete');
+  }
   async createSignatureChallenge(challenge: SignatureChallenge): Promise<void> {
     await this.db.query(`INSERT INTO policy.signature_challenges
       (id,policy_id,client_id,subject_token,document_hash,code_hash,expires_at,attempts,status)
@@ -218,6 +308,13 @@ class SqlFinancialTransaction implements FinancialTransaction {
       SELECT gen_random_uuid(),'financial_decision',$2,$6,1,$7,correlation_id FROM audited`,
     [action, resourceId, outcome, traceId, actorReference, 'policy.' + action, JSON.stringify(capture)]);
   }
+  // The payment id is the notice's event id, so a payment can be announced at most once; the primary key rejects a duplicate.
+  async announceIndemnity(notice: IndemnityNotice, traceId: string): Promise<void> {
+    const payload = { category: 'parametric_payment_confirmed', clientId: notice.clientId, policyId: notice.policyId,
+      paymentId: notice.paymentId, coverageKind: notice.coverageKind, confirmedAt: notice.confirmedAt };
+    await this.db.query(`INSERT INTO policy.outbox_events(event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
+      VALUES($1,'policy',$2,'policy.indemnity.notice',1,$3,$4)`, [notice.paymentId, notice.policyId, JSON.stringify(payload), traceId]);
+  }
 }
 
 export class SqlFinancialStore implements FinancialStore {
@@ -244,6 +341,15 @@ export class SqlFinancialStore implements FinancialStore {
   readPolicy(id: string, actor: FinancialActor): Promise<PolicyRecord | null> {
     return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
       + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
+  }
+  readOwnPolicies(actor: FinancialActor, limit: number, includeEnded = true): Promise<PolicyRecord[]> {
+    return this.connection(async db => (await db.query<RecordRow>(selectRecord()
+      + " WHERE f.client_id=$1 AND p.subject_token=$2 AND p.status='issued' AND ($4 OR lc.policy_id IS NULL) ORDER BY p.effective_until DESC,p.id LIMIT $3",
+    [actor.clientId, actor.subjectToken, limit, includeEnded])).rows.map(row => {
+      const record = recordFrom([row]);
+      if (!record) throw new InvalidFinancialRecord();
+      return record;
+    }));
   }
   readAcceptedPolicy(id: string, actor: FinancialActor): Promise<AcceptedPolicyLookup> {
     return this.connection(async db => {
@@ -320,6 +426,27 @@ export class SqlFinancialStore implements FinancialStore {
       ) SELECT c.id,c.client_id,c.subject_token,c.idempotency_key FROM candidates c JOIN refreshed r ON r.id=c.id
         ORDER BY c.last_changed,c.id,c.command_created_at DESC,c.idempotency_key`, [staleBefore.toISOString(), limit])).rows;
       return rows.map(row => ({ policyId: row.id, actor: { clientId: row.client_id, subjectToken: row.subject_token }, commandKey: row.idempotency_key }));
+    });
+  }
+  pendingIndemnities(staleBefore: Date, limit: number): Promise<IndemnityCandidate[]> {
+    return this.connection(async db => {
+      // Refreshing the payment's activity rotates bounded batches while a provider stays unknown; it changes no financial state.
+      // The evidence is the capture written when the event was accepted; a pending payment always has one, written in the same transaction.
+      const rows = (await db.query<{ policy_id: string; event_id: string; event_type: string; occurred_at: Date; event: IndemnityCandidate['event']; sources: IndemnityCandidate['sources'] }>(`WITH candidates AS (
+        SELECT pay.id AS payment_id,pay.policy_id,ie.event_id,ie.event_type,c.occurred_at,pay.updated_at AS last_changed,
+          oe.payload->'inputs'->'event' AS event,oe.payload->'sources' AS sources
+        FROM policy.payments pay
+        JOIN policy.indemnities i ON i.id=pay.indemnity_id JOIN policy.claims c ON c.id=i.claim_id
+        JOIN policy.inbox_events ie ON ie.policy_id=pay.policy_id AND ie.consumer='policy.parametric.v1'
+        JOIN policy.outbox_events oe ON oe.aggregate_id=pay.policy_id AND oe.event_type='policy.parametric.accepted'
+        WHERE pay.operation='indemnity' AND pay.status='pending' AND pay.updated_at<$1
+        ORDER BY pay.updated_at,pay.id LIMIT $2
+      ), refreshed AS (
+        UPDATE policy.payments p SET updated_at=now() FROM candidates c WHERE p.id=c.payment_id RETURNING p.id
+      ) SELECT c.policy_id,c.event_id,c.event_type,c.occurred_at,c.event,c.sources FROM candidates c JOIN refreshed r ON r.id=c.payment_id
+        ORDER BY c.last_changed,c.payment_id`, [staleBefore.toISOString(), limit])).rows;
+      return rows.map(row => ({ policyId: row.policy_id, eventId: row.event_id, eventType: row.event_type, occurredAt: row.occurred_at.toISOString(),
+        event: row.event, sources: row.sources }));
     });
   }
   async rejection(id: string, traceId: string, cause: FinancialErrorCode, capture: FinancialDecisionCapture): Promise<void> {

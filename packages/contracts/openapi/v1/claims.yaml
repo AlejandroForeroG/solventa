@@ -1,0 +1,697 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Claims inbox
+  version: 1.0.0
+  description: Operational inbox of open claims for explicitly granted web analysts. A session alone is
+    insufficient. Partners and native clients are excluded. Identity verifies an active, expiring, revocable
+    claims:read grant on each request; the Policy owner records each successful read in its own SQL transaction
+    before releasing data. Responses and errors are no-store. The inbox lists claims of every client; this is an
+    operational permission, not customer ownership access. It carries no insured name, document or contact data,
+    because the policy model holds none. Unknown, duplicate and empty query parameters are rejected. Ages use
+    calendar days in America/Bogota. This specification also defines the claim components that the claim detail
+    and decision contracts reference. The same specification defines the customer's claim report from the native app,
+    which is a separate, owner-scoped flow made of a draft with its evidence manifest, one upload per file and a submission
+    that assigns the case number. Reporting needs the native user's access token and confers no inbox permission.
+servers:
+  - url: /api/v1
+tags:
+  - name: Claims inbox
+    description: Open claims ordered by attention priority.
+  - name: Claim report
+    description: The customer's own report of a claim, with its evidence.
+paths:
+  /claims:
+    get:
+      tags:
+        - Claims inbox
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: listClaims
+      summary: List at most twenty open claims
+      description: Ordered by priority (high first), openedAt ascending, estimatedAmount descending (a claim without an estimate last) and claimId.
+        Pass next as before, preserving filters. No total count. A missing cursor produces an empty page.
+        Approved and paid claims are not open and are not listed. The collection read is durably audited without
+        persisting search values.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: state
+          in: query
+          required: false
+          description: Only claims in this state. Approved and paid are accepted but always return an empty page.
+          schema:
+            $ref: "#/components/schemas/ClaimState"
+        - name: overdue
+          in: query
+          required: false
+          description: Only claims whose age is at or beyond the overdue threshold. Only true is accepted.
+          schema:
+            type: boolean
+            enum:
+              - true
+        - name: query
+          in: query
+          required: false
+          description: Exact claim number or policy UUID.
+          schema:
+            type: string
+            pattern: ^(?:SIN-[0-9]{4}-[0-9]{5}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$
+        - name: before
+          in: query
+          required: false
+          description: Opaque keyset cursor from the prior page.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Page of open claims.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimPage"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      tags:
+        - Claim report
+      security:
+        - MobileBearer: []
+      operationId: createClaimReport
+      summary: Start a claim report as a draft with its evidence manifest
+      description: Creates a draft that the inbox does not list, or returns the same draft for a repeated request. The policy must be issued and belong to
+        the caller, and the event must fall inside its coverage dates; a policy that is not issued yet has no coverage and looks missing. The request declares each file by a client-chosen id, content type, size and SHA-256;
+        at most 10 files and 50 MiB in total. A repeated Idempotency-Key with the same body returns the same draft; with a different body it conflicts.
+        Only field names are reported on a validation failure, never values.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._-]{8,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimReportRequest"
+      responses:
+        "201":
+          description: Draft created.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimReportDraft"
+        "200":
+          description: The same draft for a repeated request.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimReportDraft"
+        "400":
+          $ref: "#/components/responses/ReportError"
+        "401":
+          $ref: "#/components/responses/ReportError"
+        "403":
+          $ref: "#/components/responses/ReportError"
+        "404":
+          $ref: "#/components/responses/ReportError"
+        "409":
+          $ref: "#/components/responses/ReportError"
+        "415":
+          $ref: "#/components/responses/ReportError"
+        "422":
+          $ref: "#/components/responses/ReportError"
+        "503":
+          $ref: "#/components/responses/ReportError"
+  /claims/{claimId}/evidence/{fileId}:
+    put:
+      tags:
+        - Claim report
+      security:
+        - MobileBearer: []
+      operationId: uploadClaimEvidence
+      summary: Upload one declared evidence file
+      description: The body is the file itself. Its content type and length must equal the manifest, and the server verifies the declared SHA-256 while
+        receiving it; a mismatch stores nothing. A file already received is acknowledged again, so a lost answer can be repeated safely. Only a draft
+        accepts a new file. A claim of another customer is reported as not found. Where the evidence bucket is not provisioned the route answers 503
+        and acknowledges nothing.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/heic:
+            schema:
+              type: string
+              format: binary
+          video/mp4:
+            schema:
+              type: string
+              format: binary
+          video/quicktime:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The file is received and verified.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceReceipt"
+        "400":
+          $ref: "#/components/responses/ReportError"
+        "401":
+          $ref: "#/components/responses/ReportError"
+        "403":
+          $ref: "#/components/responses/ReportError"
+        "404":
+          $ref: "#/components/responses/ReportError"
+        "405":
+          $ref: "#/components/responses/ReportError"
+        "409":
+          $ref: "#/components/responses/ReportError"
+        "415":
+          $ref: "#/components/responses/ReportError"
+        "422":
+          $ref: "#/components/responses/ReportError"
+        "503":
+          $ref: "#/components/responses/ReportError"
+  /claims/{claimId}/submit:
+    post:
+      tags:
+        - Claim report
+      security:
+        - MobileBearer: []
+      operationId: submitClaimReport
+      summary: Submit a draft once every declared file is received
+      description: Assigns the single case number and opens the claim for the operations inbox, or answers which files are still missing without claiming
+        the report was received. Repeating it returns the same number. The request has no body.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The report is submitted.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimReportReceipt"
+        "401":
+          $ref: "#/components/responses/ReportError"
+        "403":
+          $ref: "#/components/responses/ReportError"
+        "404":
+          $ref: "#/components/responses/ReportError"
+        "405":
+          $ref: "#/components/responses/ReportError"
+        "409":
+          $ref: "#/components/responses/ReportError"
+        "503":
+          $ref: "#/components/responses/ReportError"
+components:
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS AuthKit user access token of a registered native session, for the customer's own report.
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Existing sealed HttpOnly WorkOS web session plus an active Identity-owned claims:read grant.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local development cookie only; still requires an active claims:read grant.
+  headers:
+    NoStore:
+      schema:
+        type: string
+        enum:
+          - no-store
+    TraceId:
+      schema:
+        type: string
+        format: uuid
+  responses:
+    ReportError:
+      description: A refusal of the report flow. Nothing is acknowledged; evidence_incomplete lists the files still missing.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ReportError"
+    Invalid:
+      description: Invalid, unknown, duplicate or empty query parameter. No claim data is returned.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Absent, invalid, expired or revoked session.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Unauthorized Origin, or no active grant for the operation.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MethodNotAllowed:
+      description: Unsupported method; Allow lists GET and POST.
+      headers:
+        Allow:
+          schema:
+            type: string
+            enum:
+              - GET, POST
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Unavailable authorization, SQL or durable audit. No claim data is returned.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    ReportError:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - method_not_allowed
+            - not_found
+            - idempotency_conflict
+            - claim_not_draft
+            - evidence_incomplete
+            - outside_coverage
+            - unsupported_media_type
+            - checksum_mismatch
+            - evidence_unavailable
+            - access_unavailable
+            - service_unavailable
+        fields:
+          type: array
+          description: Names of the invalid fields, never their values.
+          items:
+            type: string
+            enum:
+              - policyId
+              - eventType
+              - occurredAt
+              - place
+              - description
+              - evidence
+              - idempotencyKey
+              - body
+        missing:
+          type: array
+          description: Declared files not yet received, for evidence_incomplete.
+          items:
+            type: string
+            format: uuid
+        traceId:
+          type: string
+          format: uuid
+    EvidenceDeclaration:
+      type: object
+      additionalProperties: false
+      required:
+        - fileId
+        - contentType
+        - byteSize
+        - sha256
+      properties:
+        fileId:
+          type: string
+          format: uuid
+          description: Chosen by the client, unique within the report.
+        contentType:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/heic
+            - video/mp4
+            - video/quicktime
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 52428800
+        sha256:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
+    ClaimReportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - policyId
+        - eventType
+        - occurredAt
+        - description
+        - evidence
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum:
+            - collision
+            - theft
+            - damage
+            - other
+        occurredAt:
+          type: string
+          format: date-time
+          description: Canonical UTC timestamp with milliseconds, not in the future and inside the policy dates.
+        place:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          minLength: 40
+          maxLength: 600
+        evidence:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: Together at most 52428800 bytes. The limits are provisional product values.
+          items:
+            $ref: "#/components/schemas/EvidenceDeclaration"
+    ClaimReportDraft:
+      type: object
+      additionalProperties: false
+      required:
+        - claimId
+        - state
+        - evidence
+        - traceId
+      properties:
+        claimId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          description: draft until submitted, then the claim's current state.
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - fileId
+              - state
+            properties:
+              fileId:
+                type: string
+                format: uuid
+              state:
+                type: string
+                enum:
+                  - pending
+                  - verified
+        traceId:
+          type: string
+          format: uuid
+    EvidenceReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - fileId
+        - state
+        - traceId
+      properties:
+        fileId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - verified
+        traceId:
+          type: string
+          format: uuid
+    ClaimReportReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - claimId
+        - claimNumber
+        - state
+        - submittedAt
+        - traceId
+      properties:
+        claimId:
+          type: string
+          format: uuid
+        claimNumber:
+          type: string
+          pattern: ^SIN-[0-9]{4}-[0-9]{5}$
+        state:
+          type: string
+          enum:
+            - unassigned
+        submittedAt:
+          type: string
+          format: date-time
+        traceId:
+          type: string
+          format: uuid
+    ClaimState:
+      type: string
+      description: Lifecycle state. approved and paid are already written by the parametric payment flow and keep
+        their meaning; paid is only written by that flow, never by an analyst action.
+      enum:
+        - unassigned
+        - in_review
+        - pending_information
+        - escalated
+        - approved
+        - rejected
+        - paid
+    ClaimPriority:
+      type: string
+      description: Derived from age and state, never supplied by a caller. high is 5 or more days, or escalated;
+        medium is 2 to 4 days; low is under 2 days. These thresholds are provisional.
+      enum:
+        - high
+        - medium
+        - low
+    ClaimEvidenceSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - provided
+        - required
+        - status
+      properties:
+        provided:
+          type: integer
+          minimum: 0
+        required:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+            - complete
+            - incomplete
+            - in_review
+    ClaimSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - claimId
+        - claimNumber
+        - policyId
+        - state
+        - priority
+        - openedAt
+        - ageDays
+        - overdue
+        - estimatedAmount
+        - currency
+        - evidence
+        - assigneeId
+      properties:
+        claimId:
+          type: string
+          format: uuid
+        claimNumber:
+          type: string
+          pattern: ^SIN-[0-9]{4}-[0-9]{5}$
+        policyId:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/ClaimState"
+        priority:
+          $ref: "#/components/schemas/ClaimPriority"
+        openedAt:
+          type: string
+          format: date-time
+        ageDays:
+          type: integer
+          minimum: 0
+        overdue:
+          type: boolean
+        estimatedAmount:
+          type: string
+          pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+          nullable: true
+          description: Null until an analyst estimates the claim, as for a claim reported by the customer.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        evidence:
+          $ref: "#/components/schemas/ClaimEvidenceSummary"
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+    ClaimPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - next
+        - traceId
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ClaimSummary"
+        next:
+          type: string
+          format: uuid
+          nullable: true
+        traceId:
+          type: string
+          format: uuid
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - method_not_allowed
+            - access_unavailable
+            - audit_unavailable
+            - service_unavailable
+        traceId:
+          type: string
+          format: uuid

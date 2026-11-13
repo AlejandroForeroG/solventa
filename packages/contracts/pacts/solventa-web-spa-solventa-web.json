@@ -187,6 +187,338 @@
       }
     },
     {
+      "description": "a claims inbox list",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 9,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "currency": "COP",
+              "estimatedAmount": "148000000.0000",
+              "evidence": {
+                "provided": 4,
+                "required": 5,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-01T14:00:00.000Z",
+              "overdue": true,
+              "policyId": "a0000000-0000-4000-8000-0000000000a1",
+              "priority": "high",
+              "state": "in_review"
+            },
+            {
+              "ageDays": 2,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000002",
+              "claimNumber": "SIN-2026-01207",
+              "currency": "COP",
+              "estimatedAmount": "305000000.0000",
+              "evidence": {
+                "provided": 5,
+                "required": 5,
+                "status": "in_review"
+              },
+              "openedAt": "2026-09-08T09:30:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a2",
+              "priority": "high",
+              "state": "escalated"
+            },
+            {
+              "ageDays": 1,
+              "assigneeId": null,
+              "claimId": "a0000000-0000-4000-8000-000000000003",
+              "claimNumber": "SIN-2026-01211",
+              "currency": "COP",
+              "estimatedAmount": "58200000.0000",
+              "evidence": {
+                "provided": 1,
+                "required": 4,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-09T16:45:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a3",
+              "priority": "low",
+              "state": "unassigned"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list of overdue claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims",
+        "query": {
+          "overdue": [
+            "true"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 9,
+              "assigneeId": "a0000000-0000-4000-8000-0000000000b1",
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "currency": "COP",
+              "estimatedAmount": "148000000.0000",
+              "evidence": {
+                "provided": 4,
+                "required": 5,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-01T14:00:00.000Z",
+              "overdue": true,
+              "policyId": "a0000000-0000-4000-8000-0000000000a1",
+              "priority": "high",
+              "state": "in_review"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list of unassigned claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims",
+        "query": {
+          "state": [
+            "unassigned"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "ageDays": 1,
+              "assigneeId": null,
+              "claimId": "a0000000-0000-4000-8000-000000000003",
+              "claimNumber": "SIN-2026-01211",
+              "currency": "COP",
+              "estimatedAmount": "58200000.0000",
+              "evidence": {
+                "provided": 1,
+                "required": 4,
+                "status": "incomplete"
+              },
+              "openedAt": "2026-09-09T16:45:00.000Z",
+              "overdue": false,
+              "policyId": "a0000000-0000-4000-8000-0000000000a3",
+              "priority": "low",
+              "state": "unassigned"
+            }
+          ],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox list with no open claims",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst with no open claims"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "items": [],
+          "next": null,
+          "traceId": "a0000000-0000-4000-8000-0000000000c2"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a claims inbox request resulting in forbidden",
+      "providerStates": [
+        {
+          "name": "a customer without claims permission"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "error": "forbidden",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
+      "description": "a claims inbox request resulting in unavailable",
+      "providerStates": [
+        {
+          "name": "the claims inbox store is unavailable"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "error": "service_unavailable",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
+      }
+    },
+    {
       "description": "a consent authorization",
       "providerStates": [
         {
@@ -756,6 +1088,178 @@
           }
         },
         "status": 403
+      }
+    },
+    {
+      "description": "a historical underwriting list",
+      "providerStates": [
+        {
+          "name": "an explicitly granted underwriting auditor"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "contractVersion": "v1",
+              "correlationId": "90000000-0000-4000-8000-000000000005",
+              "decidedAt": "2026-10-16T10:00:00.000Z",
+              "decisionId": "90000000-0000-4000-8000-000000000001",
+              "outcome": "accepted",
+              "product": "vida_hipotecario",
+              "quoteId": "COT-2026-00001",
+              "ruleVersion": "academic-mortgage-1"
+            }
+          ],
+          "next": null,
+          "traceId": "90000000-0000-4000-8000-000000000005"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a historical underwriting reconstruction",
+      "providerStates": [
+        {
+          "name": "an explicitly granted underwriting auditor"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions/90000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "decision": {
+            "consent": {
+              "id": "CNS-2026-00001",
+              "status": "verified",
+              "version": 1
+            },
+            "contractVersion": "v1",
+            "correlationId": "90000000-0000-4000-8000-000000000005",
+            "decidedAt": "2026-10-16T10:00:00.000Z",
+            "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [],
+            "inputs": {
+              "adjustmentPpm": 900000,
+              "affiliationActive": true,
+              "ageYears": 35,
+              "amount": 320000000,
+              "baseRatePpm": 270,
+              "baseRuleVersion": "provisional-1",
+              "debtRatioPpm": 250000,
+              "identityVerified": true,
+              "monthlyIncomeCop": 8000000,
+              "monthlyObligationsCop": 2000000,
+              "paymentScore": 780,
+              "termMonths": 180
+            },
+            "model": {
+              "status": "not_used"
+            },
+            "outcome": "accepted",
+            "product": "vida_hipotecario",
+            "quoteId": "COT-2026-00001",
+            "reconstruction": {
+              "calculatedPremium": "77760.0000",
+              "checks": {
+                "affiliationActive": true,
+                "amountWithinLimit": true,
+                "debtRatioWithinLimit": true,
+                "discountApplied": true,
+                "identityVerified": true,
+                "paymentScoreSufficient": true
+              },
+              "missing": [],
+              "status": "reconstructed"
+            },
+            "revisions": [
+              {
+                "currency": "COP",
+                "expiresAt": "2026-10-17T10:00:00.000Z",
+                "offerId": "90000000-0000-4000-8000-000000000002",
+                "premium": "77760.0000",
+                "validFrom": "2026-10-16T10:00:00.000Z",
+                "version": 1
+              }
+            ],
+            "rule": {
+              "id": "mortgage-underwriting",
+              "version": "academic-mortgage-1"
+            },
+            "ruleVersion": "academic-mortgage-1",
+            "sources": [
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:income_obligations_12m"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:payment_history_score"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:affiliation_regime"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:identity_validation"
+              }
+            ]
+          },
+          "traceId": "90000000-0000-4000-8000-000000000005"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       }
     },
     {
@@ -1366,6 +1870,153 @@
           }
         },
         "status": 403
+      }
+    },
+    {
+      "description": "a recovered historical underwriting reconstruction with provenance",
+      "providerStates": [
+        {
+          "name": "an auditor reconstructing the retained original mock contract"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions/90000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "decision": {
+            "consent": {
+              "id": "CNS-2026-00001",
+              "status": "verified",
+              "version": 1
+            },
+            "contractVersion": "v1",
+            "correlationId": "90000000-0000-4000-8000-000000000005",
+            "decidedAt": "2026-10-16T10:00:00.000Z",
+            "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [
+              {
+                "field": "inputs.monthlyIncomeCop",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.monthlyObligationsCop",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.identityVerified",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              },
+              {
+                "field": "inputs.affiliationActive",
+                "kind": "historical_mock",
+                "reference": "legacy-mock-risk-1",
+                "version": "689304a8458ee32e112fd52497488c7ce1170c73"
+              }
+            ],
+            "inputs": {
+              "adjustmentPpm": 900000,
+              "affiliationActive": true,
+              "ageYears": 35,
+              "amount": 320000000,
+              "baseRatePpm": 270,
+              "baseRuleVersion": "provisional-1",
+              "debtRatioPpm": 225000,
+              "identityVerified": true,
+              "monthlyIncomeCop": 8000000,
+              "monthlyObligationsCop": 1800000,
+              "paymentScore": 780,
+              "termMonths": 180
+            },
+            "model": {
+              "status": "not_used"
+            },
+            "outcome": "accepted",
+            "product": "vida_hipotecario",
+            "quoteId": "COT-2026-00001",
+            "reconstruction": {
+              "calculatedPremium": "77760.0000",
+              "checks": {
+                "affiliationActive": true,
+                "amountWithinLimit": true,
+                "debtRatioWithinLimit": true,
+                "discountApplied": true,
+                "identityVerified": true,
+                "paymentScoreSufficient": true
+              },
+              "missing": [],
+              "status": "reconstructed"
+            },
+            "revisions": [
+              {
+                "currency": "COP",
+                "expiresAt": "2026-10-17T10:00:00.000Z",
+                "offerId": "90000000-0000-4000-8000-000000000002",
+                "premium": "77760.0000",
+                "validFrom": "2026-10-16T10:00:00.000Z",
+                "version": 1
+              }
+            ],
+            "rule": {
+              "id": "mortgage-underwriting",
+              "version": "academic-mortgage-1"
+            },
+            "ruleVersion": "academic-mortgage-1",
+            "sources": [
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:income_obligations_12m"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:payment_history_score"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:affiliation_regime"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:identity_validation"
+              }
+            ]
+          },
+          "traceId": "90000000-0000-4000-8000-000000000005"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       }
     },
     {
@@ -2146,6 +2797,120 @@
       }
     },
     {
+      "description": "an incomplete historical underwriting reconstruction",
+      "providerStates": [
+        {
+          "name": "an auditor reading an incomplete historical decision"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions/90000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "decision": {
+            "consent": {
+              "id": "CNS-2026-00001",
+              "status": "verified",
+              "version": 1
+            },
+            "contractVersion": "v1",
+            "correlationId": "90000000-0000-4000-8000-000000000005",
+            "decidedAt": "2026-10-16T10:00:00.000Z",
+            "decisionId": "90000000-0000-4000-8000-000000000001",
+            "inputEvidence": [],
+            "inputs": {
+              "adjustmentPpm": 900000,
+              "affiliationActive": true,
+              "ageYears": 35,
+              "amount": 320000000,
+              "baseRatePpm": 270,
+              "baseRuleVersion": "provisional-1",
+              "debtRatioPpm": 250000,
+              "monthlyIncomeCop": 8000000,
+              "monthlyObligationsCop": 2000000,
+              "paymentScore": 780,
+              "termMonths": 180
+            },
+            "model": {
+              "status": "not_used"
+            },
+            "outcome": "accepted",
+            "product": "vida_hipotecario",
+            "quoteId": "COT-2026-00001",
+            "reconstruction": {
+              "missing": [
+                "inputs.identityVerified"
+              ],
+              "status": "incomplete_capture"
+            },
+            "revisions": [
+              {
+                "currency": "COP",
+                "expiresAt": "2026-10-17T10:00:00.000Z",
+                "offerId": "90000000-0000-4000-8000-000000000002",
+                "premium": "77760.0000",
+                "validFrom": "2026-10-16T10:00:00.000Z",
+                "version": 1
+              }
+            ],
+            "rule": {
+              "id": "mortgage-underwriting",
+              "version": "academic-mortgage-1"
+            },
+            "ruleVersion": "academic-mortgage-1",
+            "sources": [
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:income_obligations_12m"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:payment_history_score"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:affiliation_regime"
+              },
+              {
+                "capturedAt": "2026-10-16T10:00:00.000Z",
+                "degraded": false,
+                "quality": "mock",
+                "source": "mock:identity_validation"
+              }
+            ]
+          },
+          "traceId": "90000000-0000-4000-8000-000000000005"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "an issuance of the reviewed document",
       "providerStates": [
         {
@@ -2426,6 +3191,82 @@
           }
         },
         "status": 202
+      }
+    },
+    {
+      "description": "an underwriting audit request resulting in forbidden",
+      "providerStates": [
+        {
+          "name": "a customer without underwriting audit permission"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions"
+      },
+      "response": {
+        "body": {
+          "error": "forbidden",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
+      "description": "an underwriting audit request resulting in unavailable",
+      "providerStates": [
+        {
+          "name": "the underwriting audit store is unavailable"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/underwriting-decisions"
+      },
+      "response": {
+        "body": {
+          "error": "audit_unavailable",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
       }
     },
     {

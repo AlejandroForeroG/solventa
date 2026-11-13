@@ -1,5 +1,10 @@
 /// <reference path="../worker-configuration.d.ts" />
+import { apiVersions } from '@solventa/contracts';
+import { PartnerPortal } from './application/partner-portal';
+import { SqlPartnerPortal } from './adapters/outbound/sql-partner-portal';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { AuditDecisions } from './application/audit-decisions';
+import { SqlAuditDecisions } from './adapters/outbound/sql-audit-decisions';
 import { createHttp } from './adapters/inbound/http';
 import { CreateQuote } from './application/create-quote';
 import { EstimateQuote } from './application/estimate-quote';
@@ -13,6 +18,8 @@ import { FinancialEventDelivery } from './adapters/outbound/financial-event-deli
 import type { PolicyImportService } from './adapters/outbound/financial-event-delivery';
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
 import { signalProviderFor } from './adapters/outbound/signal-providers';
+import { PartnerOffers } from './application/partner-offers';
+import { IdentityPartnerOfferAccess } from './adapters/outbound/identity-partner-offer-access';
 
 type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string; POLICY_SERVICE?: PolicyImportService };
 
@@ -40,7 +47,13 @@ export default class extends WorkerEntrypoint<Env> {
       clock: { now: () => new Date() },
       protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '')
     });
-    return createHttp({ quotes, estimates: new EstimateQuote(), offers: { offers: createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) }), authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
+    const offers = createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
+    return createHttp({ quotes,
+      portal: { portal: new PartnerPortal(new SqlPartnerPortal(this.env.ACQUISITION_DB.connectionString)), authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), versions: apiVersions },
+      partnerOffers: new PartnerOffers({ access: new IdentityPartnerOfferAccess(this.env.IDENTITY_SERVICE), quotes, offers, protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '') }),
+      audit: { decisions: new AuditDecisions(new SqlAuditDecisions(this.env.ACQUISITION_DB.connectionString), { now: () => new Date() }),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      estimates: new EstimateQuote(), offers: { offers, authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       // Queue publication keeps its independent lease and minute-cron recovery.
       acceptanceCommitted: (eventId, event) => {

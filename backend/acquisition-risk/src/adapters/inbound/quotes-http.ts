@@ -55,7 +55,7 @@ export function quotesHandler(quotes: CreateQuote, channel: 'partner' | 'web') {
   return async (c: Context) => {
     const traceId = canonicalTraceId(c.req.header('x-trace-id')) ?? crypto.randomUUID();
     const text = MESSAGES[c.req.header('accept-language')?.toLowerCase().startsWith('en') ? 'en-US' : 'es-CO'];
-    const reply = (body: Record<string, unknown>, status: 200 | 201 | 400 | 401 | 403 | 409 | 500 | 503, extra: Record<string, string> = {}) =>
+    const reply = (body: Record<string, unknown>, status: 200 | 201 | 400 | 401 | 403 | 409 | 429 | 500 | 503, extra: Record<string, string> = {}) =>
       c.json({ ...body, traceId }, status, { 'x-trace-id': traceId, 'cache-control': 'no-store', ...extra });
     try {
       // A browser session and a partner token never mix: a web request carrying Authorization is malformed.
@@ -68,7 +68,7 @@ export function quotesHandler(quotes: CreateQuote, channel: 'partner' | 'web') {
       const result = await quotes.execute({ credential: credentialFrom(c, channel), idempotencyKey: c.req.header('idempotency-key') ?? null, body: malformed ? undefined : body, traceId });
       if (result.status === 'denied') {
         const challenge: Record<string, string> = result.httpStatus === 401 && channel === 'partner' ? { 'www-authenticate': 'Bearer realm="solventa"' } : {};
-        return reply({ error: result.error }, result.httpStatus, challenge);
+        return reply({ error: result.error }, result.httpStatus, { ...challenge, ...(result.httpStatus === 429 && result.retryAfter ? { 'retry-after': String(result.retryAfter) } : {}) });
       }
       if (result.status === 'invalid') return reply({ error: 'validation_error', message: text.validation, errors: result.errors }, 400);
       if (result.status === 'idempotency_conflict') return reply({ error: 'idempotency_key_reused', message: text.reused }, 409);

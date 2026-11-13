@@ -1,3 +1,6 @@
+import { denyResourceAccess } from '../backend/identity-consent-ecosystem/src/application/resource-access-denials';
+import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
+import type { SecurityDecision } from '../backend/identity-consent-ecosystem/src/domain/security-decision';
 import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
@@ -5,7 +8,8 @@ import { DependencyTimings } from '../backend/acquisition-risk/src/application/d
 import { mountOffers, type OffersHttpDependencies } from '../backend/acquisition-risk/src/adapters/inbound/offers-http';
 import { createHttp as createPolicyHttp, type PolicyHttpDependencies } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 import type { OfferTerms } from '../backend/acquisition-risk/src/domain/offer';
-import type { PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
+import type { PolicySummary, PolicyView } from '../backend/policy-claims-payments/src/domain/financial';
+import type { PolicyDetail } from '../backend/policy-claims-payments/src/domain/policy-portal';
 import gateway from '../apps/web/worker/index';
 import { readFileSync } from 'node:fs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -32,6 +36,14 @@ const actor = { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: 
 const consent = { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-01T00:00:00.000Z' };
 const terms: OfferTerms = { ...actor, offerId: id, offerVersion: 1, quoteId: 'COT-2026-00001', product: 'vida_hipotecario', premium: '77760.0000', currency: 'COP', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' }, effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', expiresAt: '2026-10-15T00:15:00.000Z', ruleVersion: 'academic-mortgage-1', synthetic: true, status: 'definitive' };
 const policy: PolicyView = { policyId: id, offerId: id, offerVersion: 1, status: 'pending', premium: '77760.0000', currency: 'COP', effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, document: '{"synthetic":true}', documentHash: 'a'.repeat(64), synthetic: true, providerMode: 'mock' };
+const summary: PolicySummary = { policyId: id, product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
+  effectiveFrom: terms.effectiveFrom, effectiveUntil: terms.effectiveUntil, coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+const detail: PolicyDetail = { ...summary, exclusions: [{ code: '7.1', text: 'Actos intencionales del asegurado.' }], conditionsVersion: 'academic-conditions-1',
+  documents: [{ documentId: 'signed_policy', issuedAt: '2026-10-15T00:02:00.000Z' }, { documentId: 'premium_receipt', issuedAt: '2026-10-15T00:01:30.000Z' }],
+  payments: [{ date: '2026-10-15T00:01:30.000Z', amount: '77760.0000', currency: 'COP', status: 'paid', reference: 'MOCK-' + id }] };
+const nativeUser = { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: actor, operations: ['policies:read'] } };
+const listRequest = (headers: Record<string, string> = { authorization: 'Bearer synthetic-token', 'x-trace-id': traceId }, method = 'GET') =>
+  new Request('https://web.example/api/v1/policies', { method, headers });
 const acceptance = { acceptanceId: id, offerId: id, eventId: id, acceptedAt: '2026-10-15T00:01:00.000Z', status: 'pending_issuance' as const, synthetic: true as const };
 const unexpected = async (): Promise<never> => { throw new Error('unexpected_provider_call'); };
 const request = (path: string, body: string | undefined = '{}', headers: Record<string, string> = {}, method = 'POST', version = 'v1') => new Request(`https://web.example/api/${version}` + path, { method, ...(body !== undefined && method !== 'GET' ? { body } : {}), headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic-sealed', origin: 'https://web.example', 'idempotency-key': 'synthetic-operation-1', 'x-trace-id': traceId, ...headers } });
@@ -54,7 +66,11 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const app = new Hono<{ Bindings: AcquisitionEnv }>();
   mountOffers(app, { offers, authorizeFinancialAccess, denyResourceAccess });
   const finance: PolicyHttpDependencies['finance'] = {
+    listOwn: async input => { calls.push({ operation: 'policyList', input }); return { status: 'ok', policies: [summary], hasMore: false }; },
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
+    detail: async input => { calls.push({ operation: 'policyDetail', input }); return { status: 'ok', detail }; },
+    document: async input => { calls.push({ operation: 'policyDocument', input });
+      return { status: 'ok', file: { fileName: 'signed-policy-10000000.pdf', title: 'Póliza', lines: ['Número de póliza: ' + id] } }; },
     getByAcceptance: async input => { calls.push({ operation: 'policyGetByAcceptance', input }); return { status: 'ok', replayed: false, policy }; },
     beginSignatureChallenge: async input => { calls.push({ operation: 'challenge', input }); return { status: 'ok', replayed: false, policy,
       challenge: { challengeId: id, expiresAt: '2026-10-15T00:05:00.000Z', demoCode: '123456' } }; },
@@ -422,4 +438,166 @@ test('profiling waits for a failed security denial audit and records the final u
   const profiles = lines.map(line => JSON.parse(line)).filter(line => line.event === 'mortgage_offer_profiled');
   assert.equal(profiles.length, 1);
   assert.equal(profiles[0].result, 'unavailable');
+});
+
+test('the native policy list authorizes the bearer token once, derives the owner on the server and returns the contract shape', async () => {
+  const { calls, run } = setup(nativeUser);
+  const response = await run(listRequest(), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  const body = await contractual(response, 'policies', 'PolicyList');
+  assert.deepEqual(body.policies, [summary]);
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
+  assert.deepEqual(calls[0].input, { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
+  assert.deepEqual(calls[1].input, { actor, traceId, includeEnded: false });
+});
+
+test('the native policy list needs a bearer token: no credential, a cookie or a malformed header never reach authorization', async () => {
+  for (const headers of [{}, { cookie: '__Host-solventa-session=synthetic-sealed' }, { authorization: 'Basic abc' }, { authorization: 'Bearer ' }]) {
+    const { calls, run } = setup(nativeUser);
+    const response = await run(listRequest(headers), true);
+    assert.equal(response.status, 401);
+    assert.deepEqual(calls, []);
+  }
+  const { calls, run } = setup(nativeUser);
+  const response = await run(listRequest({ authorization: 'Bearer synthetic-token' }, 'POST'), true);
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('allow'), 'GET');
+  assert.deepEqual(calls, []);
+});
+
+test('the native policy list stops on denial, technical failure or an actor that is not a native user with this permission', async () => {
+  for (const [decision, status, error] of [
+    [{ allowed: false, status: 401, error: 'unauthorized' }, 401, 'unauthorized'],
+    [{ allowed: false, status: 403, error: 'forbidden' }, 403, 'forbidden'],
+    [{ allowed: false, status: 503, error: 'access_unavailable' }, 503, 'access_unavailable'],
+    [{ allowed: false, status: 403, error: 'consent_required' }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, channel: 'web' } }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, operations: ['quotes:create'] } }, 503, 'access_unavailable'],
+    [{ allowed: true, actor: { ...nativeUser.actor, principal: { clientId: 'foreign', subjectToken: 'foreign' } } }, 503, 'access_unavailable'],
+    ['not an object', 503, 'access_unavailable'],
+  ] as const) {
+    const { calls, run } = setup(decision);
+    const response = await run(listRequest(), true);
+    assert.equal(response.status, status);
+    assert.equal(((await response.json()) as { error: string }).error, error);
+    assert.deepEqual(calls.map(call => call.operation), ['authorize']);
+  }
+});
+
+test('the native policy list reports a failed integrity check or a technical failure with its canonical code only', async () => {
+  for (const result of [{ status: 'denied', error: 'integrity_violation', httpStatus: 409, traceId }, { status: 'unavailable', error: 'financial_unavailable', httpStatus: 503, traceId }] as const) {
+    const { finance } = setup(nativeUser);
+    const app = createPolicyHttp({ authorizeFinancialAccess: async () => nativeUser, denyResourceAccess: async () => ({ recorded: true }), finance: { ...finance, listOwn: async () => result } });
+    const response = await app.fetch(listRequest(), { APP_ENV: 'local' } as never);
+    assert.equal(response.status, result.httpStatus);
+    assert.deepEqual(await response.json(), { error: result.error, traceId });
+  }
+});
+
+const portalRequest = (path: string, headers: Record<string, string> = {}, method = 'GET') => request(path, undefined, headers, method);
+
+test('the web portal list authorizes the session once and derives the owner on the server', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest('/policies/issued'), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const body = await contractual(response, 'policies', 'PolicyList');
+  assert.deepEqual(body.policies, [summary]);
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
+  assert.deepEqual(calls[0].input, { kind: 'web', operation: 'policies:read', traceId, method: 'GET', requestOrigin: 'https://web.example', cookie: 'synthetic-sealed', origin: 'https://web.example' });
+  assert.deepEqual(calls[1].input, { actor, traceId });
+});
+
+test('the policy detail returns the contract shape from one owner-scoped read', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest(`/policies/${id}/detail`), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await contractual(response, 'policies', 'PolicyDetail'), { ...detail, traceId });
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyDetail']);
+  assert.deepEqual(calls[1].input, { actor, policyId: id, traceId });
+});
+
+test('a policy document is delivered as a no-store PDF attachment for the owner only', async () => {
+  const { calls, run } = setup();
+  const response = await run(portalRequest(`/policies/${id}/documents/signed_policy`), true);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="signed-policy-10000000.pdf"');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  assert.ok(Buffer.from(await response.arrayBuffer()).toString('latin1').startsWith('%PDF-1.4'));
+  assert.deepEqual(calls[1].input, { actor, policyId: id, documentId: 'signed_policy', traceId });
+});
+
+test('portal reads reject bad identifiers, partner credentials and other methods before any business read', async () => {
+  for (const [path, headers, method, status] of [
+    [`/policies/${id}/documents/passport`, {}, 'GET', 400], ['/policies/not-a-uuid/detail', {}, 'GET', 400],
+    [`/policies/${id}/detail`, { authorization: 'Bearer synthetic-token' }, 'GET', 400], [`/policies/${id}/detail`, {}, 'POST', 405],
+  ] as const) {
+    const { calls, run } = setup();
+    const response = await run(portalRequest(path, headers, method), true);
+    assert.equal(response.status, status, path);
+    assert.ok(!calls.some(call => ['policyDetail', 'policyDocument', 'policyList'].includes(call.operation)), path);
+  }
+});
+
+test('a policy that is still being purchased is an opaque 404 without a security denial, a foreign one is audited', async () => {
+  for (const [error, denials] of [['policy_pending', 0], ['not_found', 1]] as const) {
+    const { calls, run, finance } = setup();
+    finance.detail = async () => ({ status: 'denied', error, httpStatus: 404, traceId });
+    finance.document = async () => ({ status: 'denied', error, httpStatus: 404, traceId });
+    for (const path of [`/policies/${id}/detail`, `/policies/${id}/documents/signed_policy`]) {
+      const response = await run(portalRequest(path), true);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: 'not_found', traceId });
+    }
+    assert.equal(calls.filter(call => call.operation === 'securityDenial').length, denials * 2);
+  }
+  const { run, finance } = setup(undefined, new Error('audit_down'));
+  finance.detail = async () => ({ status: 'denied', error: 'not_found', httpStatus: 404, traceId });
+  assert.equal((await run(portalRequest(`/policies/${id}/detail`), true)).status, 503);
+});
+
+test('the gateway delivers a policy PDF to the browser unchanged, with the version and security headers and no caching', async () => {
+  const { calls, run } = setup();
+  const env = { APP_ENV: 'local', POLICY: { fetch: (req: Request) => run(req, true) } } as never;
+  const response = await gateway.fetch(portalRequest(`/policies/${id}/documents/signed_policy`), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="signed-policy-10000000.pdf"');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-trace-id'), traceId);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assert.ok(bytes.toString('latin1').startsWith('%PDF-1.4') && bytes.toString('latin1').endsWith('%%EOF\n'));
+  assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyDocument']);
+});
+
+
+test('lifecycle not-found responses use the real minimal security denial contract and fail closed when its audit fails', async () => {
+  for (const failAudit of [false, true]) {
+    const decisions: SecurityDecision[] = [];
+    const security = new SecurityDecisions({ append: async decision => {
+      if (failAudit) throw new Error('synthetic_audit_unavailable');
+      decisions.push(decision);
+    } }, () => id);
+    const { finance } = setup();
+    finance.changeLifecycle = async () => ({ status: 'denied', error: 'not_found', httpStatus: 404, traceId });
+    const app = createPolicyHttp({ finance, authorizeFinancialAccess: async () => ({ allowed: true,
+      actor: { kind: 'user', channel: 'web', principal: actor, operations: ['policies:manage'] } }),
+      denyResourceAccess: input => denyResourceAccess(security, input) });
+    for (const action of ['cancelled', 'modified']) {
+      const body = { action, reason: 'customer_request', documentHash: 'a'.repeat(64), replacementPolicyId: action === 'modified' ? '20000000-0000-4000-8000-000000000001' : null };
+      const response = await app.request(request(`/policies/${id}/lifecycle`, JSON.stringify(body)), undefined, { APP_ENV: 'local' } as PolicyEnv);
+      assert.equal(response.status, failAudit ? 503 : 404);
+      assert.deepEqual(await response.json(), { error: failAudit ? 'access_unavailable' : 'not_found', traceId });
+    }
+    assert.equal(decisions.length, failAudit ? 0 : 2);
+    for (const decision of decisions) assert.deepEqual(decision, { schemaVersion: 1, decisionId: id, correlationId: traceId,
+      category: 'api_access', channel: 'web', operation: 'policies:manage', cause: 'forbidden' });
+  }
 });

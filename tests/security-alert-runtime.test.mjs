@@ -76,8 +76,15 @@ const aliases = {
   }`,
   'sql-consents': `export class SqlConsents { async forSubject() { return []; } async forSubjectScopes() { return new Map(); } }`,
   'sql-identity-verifications': `export class SqlIdentityVerifications { async execute() { throw Error('unexpected_verification_access'); } }`,
+  'sql-notification-preferences': `export class SqlNotificationPreferences { async read() { throw Error('unexpected_notification_preference_access'); } async save() { throw Error('unexpected_notification_preference_access'); } }`,
+  'underwriting-audit-grants': `export class SqlUnderwritingAuditGrants { async find() { throw Error('unexpected_audit_permission_lookup'); } }`,
+  'policy-advisor-grants': `export class SqlPolicyAdvisorGrants { async find() { throw Error('unexpected_advisor_access'); } async eligible() { throw Error('unexpected_advisor_eligibility'); } }`,
+  'partner-quotas': `export class SqlPartnerQuotas { async admit() { throw Error('unexpected_quota_admission'); } }`,
+  'partner-portal-grants': `export class SqlPartnerPortalGrants { async find() { throw Error('unexpected_partner_portal_lookup'); } }`,
+  'claims-access-grants': `export class SqlClaimsAccessGrants { async find() { throw Error('unexpected_claims_permission_lookup'); } }`,
   'identity-sessions': `export class SqlIdentitySessions { async find() { return null; } }`,
   'partner-access': `export class SqlPartnerAccess { async find() { return null; } }`,
+  'sql-partner-authorizations': `export class SqlPartnerAuthorizations { async find() { throw Error('unexpected_partner_authorization_lookup'); } }`,
   'registered-devices': `export class SqlRegisteredDevices { async execute() { throw Error('unexpected_device_access'); } }`,
   'database-probe': `export async function databaseProbe() { throw Error('unexpected_database_probe'); }`,
   'workos-authentication': `export class WorkosAuthentication { async authenticate() { throw Error('unexpected_provider_access'); } }`,
@@ -108,7 +115,7 @@ test('workerd executes real Identity security composition with explicit local SQ
     entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false,
     format: 'esm', platform: 'neutral', external: ['cloudflare:*', 'node:*'],
     plugins: [{ name: 'explicit-local-owner-and-provider-collaborators', setup(builder) {
-      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|identity-sessions|partner-access|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
+      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|sql-notification-preferences|underwriting-audit-grants|claims-access-grants|partner-portal-grants|policy-advisor-grants|partner-quotas|identity-sessions|partner-access|sql-partner-authorizations|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
         { path: args.path.split('/').at(-1), namespace: 'composition-collaborator' }
       ));
       builder.onLoad({ filter: /.*/, namespace: 'composition-collaborator' }, args => ({ contents: aliases[args.path], loader: 'js' }));

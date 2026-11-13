@@ -42,7 +42,7 @@ test('both catalogs translate every visible state, failure and native credential
   }
   compare(messages.es, messages.en);
   const failures: FailureKind[] = ['unavailable', 'unauthorized', 'forbidden', 'invalid_callback', 'invalid_response',
-    'cancelled', 'native_required', 'biometric_locked', 'biometric_unavailable', 'biometric_failed', 'logout_unconfirmed'];
+    'cancelled', 'native_required', 'biometric_locked', 'biometric_unavailable', 'biometric_failed', 'logout_unconfirmed', 'discard_incomplete'];
   assert.deepEqual(Object.keys(messages.es.failures).sort(), failures.sort());
   assert.match(messages.es.securePrompt, /Confirma tu identidad/);
   assert.match(messages.en.securePrompt, /Confirm your identity/);
