@@ -9,6 +9,7 @@ import { DraftSync } from '../application/draft-sync';
 import { sameOwner, type DraftOwner } from '../domain/draft';
 
 const Context = createContext<DraftSync | null>(null);
+const REVALIDATING = new Set(['loading', 'locked', 'biometricPrompt', 'authorizing']);
 
 export function DraftSyncProvider({ children }: PropsWithChildren) {
   const auth = useAuthentication();
@@ -23,6 +24,7 @@ export function DraftSyncProvider({ children }: PropsWithChildren) {
     try {
       const network = await Network.getNetworkStateAsync();
       if (network.isConnected === false || network.isInternetReachable === false) return;
+      if (!owner.current || !sameOwner(owner.current, principal) || AppState.currentState !== 'active') return;
       if (sync.getSnapshot().status !== 'ready') {
         if (!mayUnlock || !await protectedDraftStorage.hasPending()) return;
         await sync.open(principal);
@@ -36,7 +38,7 @@ export function DraftSyncProvider({ children }: PropsWithChildren) {
     owner.current = auth.status === 'authenticated' && auth.principal ? auth.principal : null;
     if (owner.current) void pump(true).catch(() => undefined);
     else if (!(auth.status === 'blocked' && auth.failure === 'unavailable')
-      && !(sync.getSnapshot().status === 'loading' && ['loading', 'locked', 'biometricPrompt'].includes(auth.status))) sync.lock();
+      && !REVALIDATING.has(auth.status)) sync.lock();
   }, [auth.status, auth.failure, auth.principal, pump, sync]);
   useEffect(() => {
     const listener = Network.addNetworkStateListener(state => {

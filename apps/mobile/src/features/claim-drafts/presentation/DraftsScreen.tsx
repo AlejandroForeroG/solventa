@@ -2,7 +2,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { randomUUID } from 'expo-crypto';
 import * as Network from 'expo-network';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { messages } from '../../../shared/i18n/messages';
 import { useAppMessages } from '../../../shared/i18n/use-app-messages';
@@ -12,17 +12,35 @@ import { walletAccessFor, policyReference } from '../../policy-wallet/domain/wal
 import { useNow } from '../../policy-wallet/presentation/use-now';
 import { createDraftApi } from '../adapters/draft-api';
 import { openDraftWorkspace } from '../adapters/open-draft-workspace';
-import { DraftFailure, emptyDraft, sameOwner, uuid, type DraftContent, type DraftEntry, type DraftFailureKind } from '../domain/draft';
+import { DraftFailure, emptyDraft, sameOwner, uuid, type DraftContent, type DraftEntry, type DraftFailureKind, type DraftOwner } from '../domain/draft';
 import { useDraftSync } from './DraftSyncProvider';
 import { draftMessages, type DraftCopy } from './messages';
+
+const REVALIDATING = new Set(['loading', 'locked', 'biometricPrompt', 'authorizing']);
 
 export function DraftsScreen({ policyId }: { policyId?: string }) {
   const auth = useAuthentication();
   const access = walletAccessFor(auth);
+  const { snapshot } = useDraftSync();
+  const [workspace, setWorkspace] = useState<{ opened: boolean; owner: DraftOwner | null; epoch: number }>(() => ({
+    opened: !!access, owner: access?.mode === 'online' ? access.owner : null, epoch: 0,
+  }));
+  const owner = access?.mode === 'online' ? access.owner : snapshot.status === 'ready' ? snapshot.owner : null;
+  if (access && (!workspace.opened || (owner && (!workspace.owner || !sameOwner(owner, workspace.owner))))) {
+    setWorkspace({ opened: true, owner: owner ?? workspace.owner,
+      epoch: workspace.epoch + (owner && workspace.owner && !sameOwner(owner, workspace.owner) ? 1 : 0) });
+  } else if (!access && workspace.opened && !REVALIDATING.has(auth.status)) setWorkspace({ ...workspace, opened: false });
   const locale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   const copy = draftMessages[locale];
-  if (!access) return <Page title={copy.title}><Text style={ui.body}>{copy.signedOut}</Text><Action secondary label={copy.back} onPress={() => router.back()} /></Page>;
-  return <Workspace requestedPolicy={uuid(policyId) ? policyId : undefined} copy={copy} locale={locale} />;
+  if (!access && !workspace.opened) return <Page title={copy.title}><Text style={ui.body}>{copy.signedOut}</Text><Action secondary label={copy.back} onPress={() => router.back()} /></Page>;
+  // A system device prompt revalidates Authentication. Retain the editor hidden through it, without cancelling its own opening.
+  // A different owner changes the key and drops every unsaved field; permanent denial/sign-out unmounts the workspace.
+  return <>
+    {!access && <Page title={copy.title}><ActivityIndicator accessibilityLabel={copy.loading} /></Page>}
+    <View style={access ? { flex: 1 } : { display: 'none' }}>
+      <Workspace key={workspace.epoch} requestedPolicy={uuid(policyId) ? policyId : undefined} copy={copy} locale={locale} />
+    </View>
+  </>;
 }
 
 function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string; copy: DraftCopy; locale: 'es-CO' | 'en-US' }) {
