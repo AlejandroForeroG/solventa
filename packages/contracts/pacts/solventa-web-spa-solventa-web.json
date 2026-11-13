@@ -194,11 +194,24 @@
         }
       ],
       "request": {
+        "body": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFQ0lEQVR4nO1ba2hcVRA+am2yczaJaa2K4hsfIL5BfCARW18ggo9FGnNnNond5M7cjU0VFbQsYn9IQUVF/4kPJCr4+CFWqFgqplLBomAtRkURafFJfNZHTCpnNy1pzGbvPffcvbs2H8yvC+fMN3POnDkz5yq1gAUsoB7ouI0O6/C7O2eKHuo/ssXvPWk+gaJ3Lvh0/kzRkj/TfFOl3GLViNA+nqUZ14HQ28D4nWac1EJ7nAvThGb8EAK60xg0bd5KMy0HwS2JkK1pDNypJX9FOsQHe44AoRdTIb6//JMRvL6u5LNB/tKK9VMnXxZgHG8Tb2l9yAvdqBn/TJv0f41AdydOHoQKZsmlTXZOAwhtTpS8ZhzWQlNpE60qjDuTIy/emtQJ1jQAfZWk5/c0uoDQpgPT85JQENRNRR5/dJoV6iYib04lEO9ah+RpddN4Xuhbk4o7Iw8B9Tf0UWeEaTcIvQOCdyzt62tzRl4zLdeCfztS8i8t+GTWz9+w9xo7l2QLKw+ffV2eT1ShACoJtA55x5l82hH591qCnhNVMwEEX3ZE/jU1nMuoZgIwXe0oII2oUtci1WwAoc2xyTO94JS8GatQOFQljYz0HR036puiSBzybeKdqhkDYHwemMZA8KcZY38PjB8D40ZgLJk6hNOaoJZ8d7w9j6/aekoH3grNtCG6A/B3LfSMKZQ6MADdb28AfEMViy1R5yxXhplecRN3cAuId5W1AUDocbs9jxttlmJmAI8xS9oF+Vn6mO1zVHQDMD5s4fk/TOywI09jrsnPMMI4iEfRDCB4q4217RIt+jwp8vtvC3osdFCGcscl8iSrI5HnvuM10xeWhKaA8VMt9H652RLaSfRm6HsCCO2IZuHwy6y9iCdrwS/tPInPzU6pswFdooW2Oo1TOmLJC5jWhiFvlNdMX1su43uqDlzKLTbtt5DjjCilDppf0+FcBoQ+i6DcdlUqHRyCvN2yZ1xXS2kIes8OW57PMvq1nKV0kL88SkJiGpNVlZP8ebZdIxC8q6aye3Vmejfkiv05W+xd5nYrME6aI9QcbfsGKBZbMowDmuk3C/JTUYOrFnwq/Pi4PtSgwLQ24nKdBMFPNOM2EPzFaslXxhmOQr6sq9BI6JXF9EPorBVMWaxc0bEkE9nz3pqo5KcNsD3SXIG3IvTgWd/rMjexRMkzTYBgrw35bJDPRZ0PGO+NNEnLAJ0AjKMJkd+dEbzOhnxmkC60iTMg9FD02XK5Q4zlnBVLK/txzLwBsiHfKt5FJqpbzSv0hIpTtADGl+IVT4wRcb26vUfb6GCyQFvyVltgLrQN5U8BpgdNJzbCxOPm2h2nUqyFLgOhX+NtO1xpO3/VV2Hm3AfGR8uVnUpiYi4to+WCB+N9EOA1NkWT2QF5ugoUJ+ZMtA/3L1HNhlY/f3Fsz1cMsEE1G4DpnJkF0jhiTg7VNCh1LQKmVU48X/H+0071a/Xzx+rAu1kLFc3lJa6UC7NMD5gTwlSbtNAup69GYsagfcgEeAEwvuVKucSFcVtnodChXACYVpXf6KZNKrznPzKdZyfks6YM1UzkTaZpUyKvBtPubiLP77Ap2VeFZjwjbVLhBT8wD7iVSwBTPn1ioWSr+TlDHYiPJIFxdEnxlnaVBMBHbGjyQpuWcS6rkkI2oNPTJlld8PW6PMeBtH6HqS5TIPhI3X6eAtM/bJwfJHaVr9j1Bvh4JTB+kxZx0xg1FZ1E93stmNTSvNOZ7tYmvswrrTV8Nst4U8P9K9jhd3e2DfadNvvnxrhiusnlTI6oNW2OC1iA+v/iX8eNq6qqjBa5AAAAAElFTkSuQmCC",
         "headers": {
-          "Content-Length": "4",
-          "Content-Type": "image/jpeg",
+          "Content-Type": "image/png",
           "Origin": "https://solventa.dev",
-          "X-Content-SHA256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+          "X-Content-SHA256": "0e5328d0bcb1e607d4f8c869a0c79822f6ebb5badfa9d3141202795bbab09e7c"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "contentType",
+                  "value": "image/png"
+                }
+              ]
+            }
+          }
         },
         "method": "PUT",
         "path": "/api/v1/claims/a0000000-0000-4000-8000-000000000001/requirements/11111111-1111-4111-8111-111111111114/files/a0000000-0000-4000-8000-0000000000e1"

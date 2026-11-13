@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { parseRequirementFile } from '../../../backend/policy-claims-payments/src/domain/claim-review';
 import { createHttp } from '../../../backend/policy-claims-payments/src/adapters/inbound/http';
 import { ClaimInbox } from '../../../backend/policy-claims-payments/src/application/claim-inbox';
 import type { OpenClaimRecord } from '../../../backend/policy-claims-payments/src/domain/claims';
@@ -42,9 +44,12 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
         evidence: async () => null,
         review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
         respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),
-        receive: async (_id, _requirement, _owner, declaration) => {
-          return declaration && typeof declaration === 'object' && 'fileId' in declaration
-            && declaration.fileId === examples.actionReceipt.actionId ? 'verified' : 'invalid_request';
+        receive: async (_id, _requirement, _owner, declaration, body) => {
+          const file = parseRequirementFile(declaration);
+          if (!file || !body || file.fileId !== examples.actionReceipt.actionId) return 'invalid_request';
+          const bytes = await new Response(body).arrayBuffer();
+          return file.byteSize === bytes.byteLength && createHash('sha256').update(new Uint8Array(bytes)).digest('hex') === file.sha256
+            ? 'verified' : 'checksum_mismatch';
         }
       },
       authorize: input => authorizeApiAccess(authorization, input) } });
