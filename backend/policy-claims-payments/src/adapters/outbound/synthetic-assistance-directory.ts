@@ -77,3 +77,7 @@ export function searchSyntheticAssistance(
   const matches = findAssistanceProviders(search, providers);
   return matches ? { status: 'ok', simulated: true, providers: matches } : { status: 'invalid_input' };
 }
+
+export function listSyntheticExperts() {
+  return syntheticAssistanceDirectory.providers.filter(provider => provider.kind === 'expert').map(({ id, name }) => ({ id, name }));
+}

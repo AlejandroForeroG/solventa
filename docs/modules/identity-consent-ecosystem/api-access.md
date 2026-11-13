@@ -217,7 +217,9 @@ The public [historical API](../acquisition-risk/underwriting-audit.md) lives in 
 
 ## Claims permissions
 
-`claims:read` and `claims:decide` are web-only operations of the same private `authorizeApiAccessV1` contract. A session alone, the audit permission, partner scopes and native users never confer them, and each operation needs its own grant: reading does not imply deciding. Today only `claims:read` has a consumer, the [claims inbox](../policy-claims-payments/claims-inbox.md); `claims:decide` is granted ahead of the claim file that will use it, and is not read by any route.
+`claims:read` and `claims:decide` are web-only operations of the same private `authorizeApiAccessV1` contract. A session alone, the audit permission, partner scopes and native users never confer them, and each operation needs its own grant: reading does not imply deciding. The [claims inbox](../policy-claims-payments/claims-inbox.md) consumes `claims:read`; the assigned-case approval/rejection route consumes `claims:decide`.
+
+The web-only `claims:respond` operation authenticates the customer without an analyst grant. Policy independently checks ownership by the authenticated subject before listing cases, displaying evidence, or accepting a requirement response. It confers no read or decision permission on the analyst workspace.
 
 Identity migration `0012_claims_access_grants.sql` adds an owner-local ledger shaped like the audit grants, with an `operation` column limited to those two values. A grant binds an existing active client to an expiration no more than 90 days after grant time and keeps an operator reference; revocation preserves the row; the runtime role has SELECT only. Authorization verifies the grant, active client and exact WorkOS provider subject/session together, and returns `authorizationExpiresAt`, bounded by the session, the grant and a five-second lease. A revocation is observed by the next request; an in-flight lease is bounded, not a distributed atomic transaction.
 

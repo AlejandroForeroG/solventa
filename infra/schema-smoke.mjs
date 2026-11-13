@@ -23,7 +23,7 @@ try {
   fresh = clientFor(url, config.ssl);
   await fresh.connect();
   const catalog = await migrationCatalog();
-  const awaiting = { identity: ['0011_notification_preferences.sql', '0012_claims_access_grants.sql', '0013_partner_authorizations.sql', '0014_partner_portal_grants.sql', '0015_policy_advisors.sql', '0016_partner_quotas.sql'], policy: ['0009_claims_inbox.sql', '0010_claim_report.sql', '0011_policy_lifecycle.sql', '0012_advisor_authorizations.sql', '0013_claim_report_location.sql', '0014_assistance_requests.sql', '0015_claim_drafts.sql'] };
+  const awaiting = { identity: ['0011_notification_preferences.sql', '0012_claims_access_grants.sql', '0013_partner_authorizations.sql', '0014_partner_portal_grants.sql', '0015_policy_advisors.sql', '0016_partner_quotas.sql'], policy: ['0009_claims_inbox.sql', '0010_claim_report.sql', '0011_policy_lifecycle.sql', '0012_advisor_authorizations.sql', '0013_claim_report_location.sql', '0014_assistance_requests.sql', '0015_claim_drafts.sql', '0016_claim_decisions.sql'] };
   for (const owner of owners) {
     console.log(JSON.stringify({ freshSchema: owner.schema, status: 'migrating' }));
     await fresh.query(`CREATE SCHEMA ${owner.schema}`);
@@ -38,7 +38,7 @@ try {
   }
   const plan = await readMigrationPlan(fresh, catalog);
   assert.deepEqual(plan.flatMap(owner => owner.pending.map(version => `${owner.owner}/${version}`)),
-    ['identity/0011_notification_preferences.sql', 'identity/0012_claims_access_grants.sql', 'identity/0013_partner_authorizations.sql', 'identity/0014_partner_portal_grants.sql', 'identity/0015_policy_advisors.sql', 'identity/0016_partner_quotas.sql', 'policy/0009_claims_inbox.sql', 'policy/0010_claim_report.sql', 'policy/0011_policy_lifecycle.sql', 'policy/0012_advisor_authorizations.sql', 'policy/0013_claim_report_location.sql', 'policy/0014_assistance_requests.sql', 'policy/0015_claim_drafts.sql']);
+    ['identity/0011_notification_preferences.sql', 'identity/0012_claims_access_grants.sql', 'identity/0013_partner_authorizations.sql', 'identity/0014_partner_portal_grants.sql', 'identity/0015_policy_advisors.sql', 'identity/0016_partner_quotas.sql', 'policy/0009_claims_inbox.sql', 'policy/0010_claim_report.sql', 'policy/0011_policy_lifecycle.sql', 'policy/0012_advisor_authorizations.sql', 'policy/0013_claim_report_location.sql', 'policy/0014_assistance_requests.sql', 'policy/0015_claim_drafts.sql', 'policy/0016_claim_decisions.sql']);
   await applyPendingMigrations(fresh, 'local', catalog);
   const ledgers = async () => {
     const snapshots = [];

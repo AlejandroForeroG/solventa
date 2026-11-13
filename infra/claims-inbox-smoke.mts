@@ -5,6 +5,11 @@ import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlClaimInbox } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-inbox';
 import { ClaimInbox } from '../backend/policy-claims-payments/src/application/claim-inbox';
 import { InvalidClaimRecord, priorityOf, type ClaimPriority } from '../backend/policy-claims-payments/src/domain/claims';
+import { SqlClaimDecisions } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-decisions';
+import { ClaimReview } from '../backend/policy-claims-payments/src/application/claim-review';
+import { SqlClaimReview } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-review';
+import { ClaimDecisions } from '../backend/policy-claims-payments/src/application/claim-decisions';
+import Ajv from 'ajv';
 
 // Real disposable SQL with the real Policy runtime grants and migrations; nothing remote is touched.
 const config = await settings('local');
@@ -50,8 +55,8 @@ try {
     [id, policyId, 'key-' + id, 'b'.repeat(64), claim.status, randomUUID(), createdAt, number, claim.amount, claim.required ?? 0, claim.assignee ?? null]);
     return { id, number };
   };
-  const evidence = async (claimId: string, state: 'uploaded' | 'verified') => db!.query(`INSERT INTO policy.evidence_metadata (claim_id,object_key,content_type,byte_size,checksum_sha256,state,retention_until,correlation_id,verified_at)
-    VALUES ($1,$2,'application/pdf',100,$3,$4,now()+interval '1 year',$5,${state === 'verified' ? 'now()' : 'NULL'})`, [claimId, 'synthetic/' + randomUUID(), 'c'.repeat(64), state, randomUUID()]);
+  const evidence = async (claimId: string, state: 'uploaded' | 'verified') => db!.query<{ id: string }>(`INSERT INTO policy.evidence_metadata (claim_id,object_key,content_type,byte_size,checksum_sha256,state,retention_until,correlation_id,verified_at)
+    VALUES ($1,$2,'application/pdf',100,$3,$4,now()+interval '1 year',$5,${state === 'verified' ? 'now()' : 'NULL'}) RETURNING id`, [claimId, 'synthetic/' + randomUUID(), 'c'.repeat(64), state, randomUUID()]);
 
   // The parametric flow keeps writing claims with its original column list; the new columns must not disturb it.
   const legacy = randomUUID();
@@ -147,10 +152,121 @@ try {
   await assert.rejects(seed({ status: 'in_review', days: 1, amount: '1.0000', number: high1.number }), /claims_claim_number_key|duplicate/i);
   await assert.rejects(seed({ status: 'in_review', days: 1, amount: '-1.0000' }), /estimated_amount/);
 
+  const analyst = randomUUID();
+  const decisionClaim = await seed({ status: 'in_review', days: 0, amount: '100.0000', required: 1, assignee: analyst });
+  const proof = (await evidence(decisionClaim.id, 'verified')).rows[0].id;
+  const decisions = new ClaimDecisions(new SqlClaimDecisions(runtime.toString()), { now: () => new Date() });
+  const decisionActor = (clientId = analyst) => ({ clientId, traceId: randomUUID(), expiresAt: new Date(Date.now() + 5000).toISOString() });
+  const decisionInput = { action: 'approve' as const, reason: 'Verified the synthetic supporting document.', evidenceIds: [proof] };
+  const approved = await decisions.decide(decisionClaim.id, decisionInput, decisionActor(), 'synthetic-decision-key');
+  assert.equal(approved.status, 'ok');
+  assert.equal((await db.query('SELECT status FROM policy.claims WHERE id=$1', [decisionClaim.id])).rows[0].status, 'approved');
+  const capture = (await db.query('SELECT decision_capture FROM policy.claim_decisions WHERE claim_id=$1', [decisionClaim.id])).rows[0].decision_capture;
+  const validCapture = new Ajv({ strict: false }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
+  assert.equal(validCapture(capture), true, JSON.stringify(validCapture.errors));
+  assert.equal(capture.inputs.evidence[0].id, proof);
+  assert.match(capture.inputs.reasonSha256, /^[0-9a-f]{64}$/);
+  assert.equal(capture.inputs.reason, undefined);
+  assert.equal(capture.rule.version, '1');
+  const replay = await decisions.decide(decisionClaim.id, decisionInput, decisionActor(), 'synthetic-decision-key');
+  assert.equal(replay.status, 'ok');
+  if (replay.status === 'ok' && approved.status === 'ok') { assert.equal(replay.decisionId, approved.decisionId); assert.equal(replay.replayed, true); }
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.claim_decisions WHERE claim_id=$1', [decisionClaim.id])).rows[0].n, 1);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='claim.decided'", [decisionClaim.id])).rows[0].n, 1);
+  assert.deepEqual(await decisions.decide(decisionClaim.id, { ...decisionInput, reason: 'A changed supporting reason.' }, decisionActor(), 'synthetic-decision-key'), { status: 'conflict' });
+  const foreignClaim = await seed({ status: 'in_review', days: 0, amount: '101.0000', required: 1, assignee: analyst });
+  const foreignProof = (await evidence(foreignClaim.id, 'verified')).rows[0].id;
+  assert.deepEqual(await decisions.decide(foreignClaim.id, { ...decisionInput, evidenceIds: [foreignProof] }, decisionActor(randomUUID()), 'foreign-key'), { status: 'not_found' });
+  assert.equal((await db.query('SELECT status FROM policy.claims WHERE id=$1', [foreignClaim.id])).rows[0].status, 'in_review');
+  const rollbackClaim = await seed({ status: 'in_review', days: 0, amount: '102.0000', required: 1, assignee: analyst });
+  const rollbackProof = (await evidence(rollbackClaim.id, 'verified')).rows[0].id;
+  await db.query('REVOKE INSERT ON policy.outbox_events FROM solventa_local_policy');
+  try { await assert.rejects(decisions.decide(rollbackClaim.id, { ...decisionInput, evidenceIds: [rollbackProof] }, decisionActor(), 'rollback-key'), /permission|privilege/i); }
+  finally { await db.query('GRANT INSERT ON policy.outbox_events TO solventa_local_policy'); }
+  assert.equal((await db.query('SELECT status FROM policy.claims WHERE id=$1', [rollbackClaim.id])).rows[0].status, 'in_review');
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.claim_decisions WHERE claim_id=$1', [rollbackClaim.id])).rows[0].n, 0);
+  const racingClaim = await seed({ status: 'in_review', days: 0, amount: '103.0000', required: 1, assignee: analyst });
+  const racingProof = (await evidence(racingClaim.id, 'verified')).rows[0].id;
+  const racingInput = { ...decisionInput, evidenceIds: [racingProof] };
+  const racing = await Promise.all([decisions.decide(racingClaim.id, racingInput, decisionActor(), 'shared-race-key'),
+    decisions.decide(racingClaim.id, racingInput, decisionActor(), 'shared-race-key')]);
+  assert.ok(racing.every(result => result.status === 'ok'));
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.claim_decisions WHERE claim_id=$1', [racingClaim.id])).rows[0].n, 1);
+
   await seed({ status: 'in_review', days: 1, amount: null, number: null });
   await assert.rejects(inbox.list({ state: 'in_review' }, reader()), InvalidClaimRecord);
+  const ownerSubject = randomUUID();
+  await db.query("UPDATE policy.policies SET subject_token=$2 WHERE id=$1", [policyId, ownerSubject]);
+  const caseCustomer = { clientId: randomUUID(), subjectToken: ownerSubject };
+  const caseReviewer = { clientId: randomUUID(), subjectToken: randomUUID() };
+  const analystLease = () => ({ ...caseReviewer, traceId: randomUUID(), expiresAt: new Date(Date.now()+5000).toISOString() });
+  const caseOwner = { kind: 'customer' as const, actor: caseCustomer };
+  const caseAnalyst = () => ({ kind: 'analyst' as const, actor: analystLease() });
+  const testClaim = await seed({ status: 'unassigned', days: 0, amount: null, required: 1 });
+  await db.query("UPDATE policy.claims SET submitted_at=now(), event_type='other', description='Synthetic document report for local evaluation.' WHERE id=$1", [testClaim.id]);
+  const original = (await evidence(testClaim.id, 'verified')).rows[0].id;
+  const operations = new SqlClaimReview(runtime.toString());
+  const sampleExpert = { id: 'demo-bog-expert', name: 'Synthetic expert' };
+  const review = new ClaimReview(operations, undefined, () => [sampleExpert]);
+  const id = testClaim.id;
+  const listed = await review.owned(caseCustomer, randomUUID());
+  assert.deepEqual(listed, [{ claimId: id, claimNumber: testClaim.number, state: 'unassigned' }]);
+  assert.deepEqual(await review.owned({ clientId: randomUUID(), subjectToken: randomUUID() }, randomUUID()), []);
+  const initial = await review.detail(id, caseAnalyst(), randomUUID());
+  assert.equal(initial?.description, null);
+  assert.deepEqual(initial?.evidence, []);
+  const otherAnalyst = { ...analystLease(), clientId: randomUUID() };
+  const ownAnalyst = { ...analystLease(), ...caseCustomer };
+  assert.deepEqual(await review.review(id, ownAnalyst, { action: 'take' }, 'own-case'), { status: 'not_found' });
+  assert.equal((await review.review(id, analystLease(), { action: 'take' }, 'take-case')).status, 'ok');
+  assert.deepEqual(await review.review(id, otherAnalyst, { action: 'take' }, 'another-take'), { status: 'not_found' });
+  assert.deepEqual(await review.detail(id, { kind: 'analyst', actor: otherAnalyst }, randomUUID()), null);
+  assert.equal((await review.evidence(id, original, caseAnalyst(), randomUUID()))?.id, original);
+
+  const requestMore = { action: 'request_information', details: 'Provide the incident location and a supporting receipt.',
+    deadline: new Date(Date.now()+3600000).toISOString() };
+  const required = await review.review(id, analystLease(), requestMore, 'request-info');
+  assert.equal(required.status, 'ok');
+  if (required.status !== 'ok') throw Error('requirement_not_created');
+  const requirement = required.actionId;
+  assert.equal(required.state, 'pending_information');
+  assert.deepEqual(await review.review(id, analystLease(), { ...requestMore, details: 'A different requested document' }, 'request-info'), { status: 'conflict' });
+  assert.deepEqual(await review.review(id, analystLease(), requestMore, 'request-info'), { ...required, replayed: true });
+  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.requirements[0].id, requirement);
+  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.some(notice => notice.action === 'request_information'), true);
+  const responseFile = { fileId: randomUUID(), byteSize: 100, contentType: 'image/jpeg' as const, sha256: 'b'.repeat(64) };
+  const prepare = await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID());
+  assert.equal(prepare.status, 'pending');
+  assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, { ...responseFile, byteSize: 101 }, randomUUID()), { status: 'conflict' });
+  const response = { text: 'Synthetic information attached.', evidenceIds: [responseFile.fileId] };
+  assert.deepEqual(await review.respond(id, requirement, { clientId: randomUUID(), subjectToken: randomUUID() }, response, 'response-external', randomUUID()), { status: 'not_found' });
+  assert.deepEqual(await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID()), { status: 'invalid_evidence' });
+  assert.equal(await operations.verifyFile(id, requirement, caseCustomer, responseFile.fileId, randomUUID()), true);
+  assert.equal((await review.detail(id, caseAnalyst(), randomUUID()))?.evidence.length, 1, 'the file is hidden before submission');
+  const received = await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID());
+  assert.equal(received.status, 'ok');
+  assert.deepEqual(await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID()), { ...received, replayed: true });
+  const afterResponse = await review.detail(id, caseAnalyst(), randomUUID());
+  assert.equal(afterResponse?.state, 'in_review');
+  assert.equal(afterResponse.requirements[0].status, 'received');
+  assert.equal(afterResponse.requirements[0].responseText, response.text);
+  assert.equal(afterResponse.requirements[0].evidenceIds.length, 1);
+  assert.equal(afterResponse.evidence.length, 2);
+  assert.equal(afterResponse.notices.filter(notice => notice.action === 'respond').length, 1);
+
+  const assign = await review.review(id, analystLease(), { action: 'assign_expert', expertId: sampleExpert.id, reason: 'Synthetic case needs an expert.' }, 'assign-expert');
+  assert.equal(assign.status, 'ok');
+  const escalatedCase = await review.detail(id, caseAnalyst(), randomUUID());
+  assert.equal(escalatedCase?.state, 'escalated');
+  assert.deepEqual(escalatedCase.history[0].expert, sampleExpert);
+  assert.equal((await db.query("SELECT count(*)::INT4 AS n FROM policy.claim_notices WHERE claim_id=$1 AND audience='expert'", [id])).rows[0].n, 1);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.indemnities WHERE claim_id=$1', [id])).rows[0].n, 0);
+  const verdict = await decisions.decide(id, { action: 'reject', reason: 'Synthetic decision after evaluation.', evidenceIds: [original] }, analystLease(), 'final-decision');
+  assert.equal(verdict.status, 'ok');
+  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.state, 'rejected');
+  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.filter(notice => notice.action === 'reject').length, 1);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'fail-closed-on-incomplete-open-claim', 'unestimated-claim-last'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);
