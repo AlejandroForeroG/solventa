@@ -3,6 +3,10 @@ import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
 import { assistanceRequests, fakeAssistanceStore } from '../../support/assistance-request-fakes';
+import { memoryEvidence, memoryStore as memoryClaimStore, type Stream } from '../../support/claim-report-fakes';
+import { ClaimReport } from '../../../backend/policy-claims-payments/src/application/claim-report';
+import { claimIds, evidenceBytes, idempotencyKey, manifest, providerNow } from './claim-report-contract';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -250,6 +254,33 @@ async function nativeAssistanceRequestsWorld(seed: boolean): Promise<Partial<Wor
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+// The native customer reports a claim on an issued policy of their own. Stores are in memory with fixed identities, so each state starts from the same world.
+async function nativeClaimReportWorld(stage: 'empty' | 'draft' | 'received'): Promise<Partial<World>> {
+  const policies = new Map([[claimIds.policy, { subject: financialActor.subjectToken, issued: true, from: Date.parse('2026-01-01T00:00:00.000Z'), until: Date.parse('2027-01-01T00:00:00.000Z') }]]);
+  const memory = memoryClaimStore(policies, providerNow);
+  const report = new ClaimReport<Stream>(memory.store, memoryEvidence().evidence, { sha256Hex: async text => createHash('sha256').update(text).digest('hex') }, { now: () => providerNow });
+  if (stage !== 'empty') {
+    const draft = await report.create(financialActor, manifest, idempotencyKey, financialActor.clientId);
+    if (draft.status !== 'created') throw new Error('The claim report of the contract could not be seeded.');
+  }
+  if (stage === 'received') {
+    const stored = await report.receive(financialActor, claimIds.claim, claimIds.file, { contentType: 'image/jpeg', length: evidenceBytes.length, body: new Response(evidenceBytes).body }, financialActor.clientId);
+    if (stored.status !== 'stored') throw new Error('The evidence of the contract could not be seeded.');
+  }
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    claimReport: {
+      report,
+      authorize: async input => input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
@@ -275,6 +306,9 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
   'a native session that may request assistance': () => nativeAssistanceRequestsWorld(false),
   'a native session with a stored assistance request': () => nativeAssistanceRequestsWorld(true),
+  'a native session that may report a claim': () => nativeClaimReportWorld('empty'),
+  'a native session with a draft claim report': () => nativeClaimReportWorld('draft'),
+  'a native session with a claim report whose evidence was received': () => nativeClaimReportWorld('received'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
