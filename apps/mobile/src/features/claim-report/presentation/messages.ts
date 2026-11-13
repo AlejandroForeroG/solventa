@@ -12,6 +12,8 @@ type Copy = {
   eventTypes: Record<EventType, string>;
   evidence: { heading: string; empty: string; takePhoto: string; recordVideo: string; choose: string; counts: (files: number, max: number, megabytes: string, maxMegabytes: number) => string;
     photo: string; video: string; previewing: string; noPreview: string; remove: (kind: string, position: number) => string };
+  document: { scan: string; choose: string; item: string; heading: string; instructions: string; preview: string; enlarge: string; fit: string; attach: string;
+    cameraDenied: string; fileType: string; pickerFailed: string; previewFailed: string };
   permission: { camera: string; openSettings: string };
   rejected: Record<RejectedCandidate | 'failed', string>;
   issues: { eventType: { required: string }; occurredAt: { future: string; before_coverage: string; after_coverage: string };
@@ -31,16 +33,22 @@ const es: Copy = {
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Robo', damage: 'Daño', other: 'Otro' },
-  evidence: { heading: 'Evidencia', empty: 'Agrega al menos una foto o un video.', takePhoto: 'Tomar foto', recordVideo: 'Grabar video', choose: 'Elegir de la galería',
+  evidence: { heading: 'Evidencia', empty: 'Agrega al menos una foto, un video o un documento.', takePhoto: 'Tomar foto', recordVideo: 'Grabar video', choose: 'Elegir de la galería',
     counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} archivos · ${megabytes} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video', previewing: 'Preparando vista previa', noPreview: 'Sin vista previa',
     remove: (kind, position) => `Quitar ${kind} ${position}` },
+  document: { scan: 'Escanear documento', choose: 'Elegir archivo de documento', item: 'Documento', heading: 'Revisar documento',
+    instructions: 'Comprueba que el texto se lea, que el documento esté derecho y que se vean los bordes.', preview: 'Vista previa del documento',
+    enlarge: 'Ampliar vista previa', fit: 'Ver documento completo', attach: 'Adjuntar documento',
+    cameraDenied: 'Permite el acceso a la cámara para escanear el documento o elige un archivo existente.',
+    fileType: 'El documento debe ser una imagen JPG, PNG o HEIC.', pickerFailed: 'No pudimos abrir la cámara o el selector de archivos. Intenta de nuevo.',
+    previewFailed: 'No pudimos mostrar el documento. Cancela y toma otra foto o elige otro archivo.' },
   permission: { camera: 'Para tomar fotos o grabar video necesitamos el permiso de la cámara. Puedes adjuntar archivos de tu galería sin él.', openSettings: 'Abrir ajustes' },
   rejected: { file_type: 'Solo se aceptan fotos JPG, PNG o HEIC y videos MP4 o MOV.', empty: 'Uno de los archivos está vacío.', too_many: 'Un reporte admite como máximo 10 archivos.',
     total_size: 'Los archivos no pueden superar 50 MB en total.', unreadable: 'No pudimos leer uno de los archivos.', failed: 'No pudimos abrir la cámara o la galería.' },
   issues: { eventType: { required: 'Elige el tipo de evento.' },
     occurredAt: { future: 'La fecha y la hora no pueden ser futuras.', before_coverage: 'El evento es anterior al inicio de tu póliza.', after_coverage: 'El evento es posterior al vencimiento de tu póliza.' },
     description: { too_short: 'Cuéntanos qué pasó (mínimo 40 caracteres).', too_long: 'La descripción supera los 600 caracteres.' }, place: { too_long: 'El lugar supera los 120 caracteres.' },
-    evidence: { none: 'Agrega al menos una foto o un video.', too_many: 'Un reporte admite como máximo 10 archivos.', total_size: 'Los archivos no pueden superar 50 MB en total.' } },
+    evidence: { none: 'Agrega al menos una foto, un video o un documento.', too_many: 'Un reporte admite como máximo 10 archivos.', total_size: 'Los archivos no pueden superar 50 MB en total.' } },
   review: { heading: 'Revisa antes de enviar', next: count => `Revisar evidencia (${count})`, policy: 'Póliza', edit: 'Editar', files: (count, megabytes) => `${count} ${count === 1 ? 'archivo' : 'archivos'} · ${megabytes} MB`,
     note: 'Al enviar creamos un único caso. Si el envío se interrumpe, reintentar no genera un caso nuevo.', send: 'Enviar reporte' },
   sending: { preparing: 'Preparando los archivos…', creating: 'Creando el reporte…', uploading: (done, total) => `Enviando archivos (${done} de ${total})…`, submitting: 'Confirmando el reporte…' },
@@ -62,16 +70,22 @@ const en: Copy = {
   fields: { eventType: 'Type of event', occurredAt: 'When it happened', date: 'Date', time: 'Time', place: 'Place (optional)', placeHint: 'Address or landmark',
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
   eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Other' },
-  evidence: { heading: 'Evidence', empty: 'Add at least one photo or video.', takePhoto: 'Take a photo', recordVideo: 'Record a video', choose: 'Choose from gallery',
+  evidence: { heading: 'Evidence', empty: 'Add at least one photo, video or document.', takePhoto: 'Take a photo', recordVideo: 'Record a video', choose: 'Choose from gallery',
     counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} files · ${megabytes} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video', previewing: 'Preparing preview', noPreview: 'No preview',
     remove: (kind, position) => `Remove ${kind} ${position}` },
+  document: { scan: 'Scan a document', choose: 'Choose a document file', item: 'Document', heading: 'Review document',
+    instructions: 'Check that the text is readable, the document is upright and all edges are visible.', preview: 'Document preview',
+    enlarge: 'Enlarge preview', fit: 'View full document', attach: 'Attach document',
+    cameraDenied: 'Allow camera access to scan the document, or choose an existing file.',
+    fileType: 'The document must be a JPG, PNG or HEIC image.', pickerFailed: 'We could not open the camera or file picker. Try again.',
+    previewFailed: 'We could not display the document. Cancel and take another photo or choose another file.' },
   permission: { camera: 'To take photos or record video we need the camera permission. You can attach files from your gallery without it.', openSettings: 'Open settings' },
   rejected: { file_type: 'Only JPG, PNG or HEIC photos and MP4 or MOV videos are accepted.', empty: 'One of the files is empty.', too_many: 'A report accepts at most 10 files.',
     total_size: 'Files cannot exceed 50 MB in total.', unreadable: 'We could not read one of the files.', failed: 'We could not open the camera or the gallery.' },
   issues: { eventType: { required: 'Choose the type of event.' },
     occurredAt: { future: 'The date and time cannot be in the future.', before_coverage: 'The event is before your policy starts.', after_coverage: 'The event is after your policy ends.' },
     description: { too_short: 'Tell us what happened (at least 40 characters).', too_long: 'The description is over 600 characters.' }, place: { too_long: 'The place is over 120 characters.' },
-    evidence: { none: 'Add at least one photo or video.', too_many: 'A report accepts at most 10 files.', total_size: 'Files cannot exceed 50 MB in total.' } },
+    evidence: { none: 'Add at least one photo, video or document.', too_many: 'A report accepts at most 10 files.', total_size: 'Files cannot exceed 50 MB in total.' } },
   review: { heading: 'Review before sending', next: count => `Review evidence (${count})`, policy: 'Policy', edit: 'Edit', files: (count, megabytes) => `${count} ${count === 1 ? 'file' : 'files'} · ${megabytes} MB`,
     note: 'Sending creates a single case. If the send is interrupted, trying again does not create a new case.', send: 'Send report' },
   sending: { preparing: 'Preparing the files…', creating: 'Creating the report…', uploading: (done, total) => `Sending files (${done} of ${total})…`, submitting: 'Confirming the report…' },
