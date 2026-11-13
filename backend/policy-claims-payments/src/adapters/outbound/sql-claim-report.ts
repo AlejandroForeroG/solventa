@@ -30,17 +30,23 @@ export class SqlClaimReport implements ClaimReportStore {
 
   async createDraft({ owner, report, idempotencyKey, requestHash, traceId }: Parameters<ClaimReportStore['createDraft']>[0]): Promise<DraftOutcome> {
     return this.run<DraftOutcome>(async db => {
-      const policy = (await db.query<{ effective_from: Date; effective_until: Date }>(
-        "SELECT effective_from, effective_until FROM policy.policies WHERE id = $1 AND subject_token = $2 AND status = 'issued'", [report.policyId, owner.subjectToken])).rows[0];
+      // Share the lifecycle policy lock so a concurrent termination and draft observe a serial order.
+      const policy = (await db.query<{ effective_from: Date; effective_until: Date; lifecycle_at: Date | null }>(
+        `SELECT p.effective_from,p.effective_until,lc.occurred_at AS lifecycle_at FROM policy.policies p
+         LEFT JOIN policy.policy_lifecycle_changes lc ON lc.policy_id=p.id
+         WHERE p.id=$1 AND p.subject_token=$2 AND p.status='issued' FOR UPDATE OF p`, [report.policyId, owner.subjectToken])).rows[0];
       if (!policy) return { status: 'policy_not_found' };
       const existing = (await db.query<{ id: string; request_hash: string }>(
         'SELECT id, request_hash FROM policy.claims WHERE policy_id = $1 AND idempotency_key = $2', [report.policyId, idempotencyKey])).rows[0];
       if (existing) return existing.request_hash === requestHash ? { status: 'replayed', claim: await this.view(db, existing.id) } : { status: 'idempotency_conflict' };
       const occurred = Date.parse(report.occurredAt);
-      if (occurred < policy.effective_from.getTime() || occurred > policy.effective_until.getTime()) return { status: 'outside_coverage' };
-      const claimId = (await db.query<{ id: string }>(`INSERT INTO policy.claims (policy_id, idempotency_key, request_hash, status, occurred_at, correlation_id, event_type, event_place, description)
-        VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8) RETURNING id`,
-      [report.policyId, idempotencyKey, requestHash, report.occurredAt, traceId, report.eventType, report.place, report.description])).rows[0].id;
+      if (occurred < policy.effective_from.getTime() || occurred > policy.effective_until.getTime()
+        || policy.lifecycle_at && occurred >= policy.lifecycle_at.getTime()) return { status: 'outside_coverage' };
+      const claimId = (await db.query<{ id: string }>(`INSERT INTO policy.claims (policy_id, idempotency_key, request_hash, status, occurred_at, correlation_id, event_type, event_place, description,
+          location_latitude, location_longitude, location_authorized_at)
+        VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8, $9, $10, CASE WHEN $9::DECIMAL IS NULL THEN NULL ELSE now() END) RETURNING id`,
+      [report.policyId, idempotencyKey, requestHash, report.occurredAt, traceId, report.eventType, report.place, report.description,
+        report.location?.latitude ?? null, report.location?.longitude ?? null])).rows[0].id;
       for (const item of report.evidence) {
         await db.query(`INSERT INTO policy.evidence_metadata (claim_id, object_key, content_type, byte_size, checksum_sha256, state, retention_until, correlation_id, client_file_id)
           VALUES ($1, $2, $3, $4, $5, 'pending', now() + INTERVAL '${EVIDENCE_RETENTION_DAYS} days', $6, $7)`,

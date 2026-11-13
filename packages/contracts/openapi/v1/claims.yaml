@@ -93,7 +93,7 @@ paths:
       operationId: createClaimReport
       summary: Start a claim report as a draft with its evidence manifest
       description: Creates a draft that the inbox does not list, or returns the same draft for a repeated request. The policy must be issued and belong to
-        the caller, and the event must fall inside its coverage dates; a policy that is not issued yet has no coverage and looks missing. The request declares each file by a client-chosen id, content type, size and SHA-256;
+        the caller, and the event must fall inside its coverage dates and precede any recorded lifecycle termination; simultaneous or later events answer outside_coverage. An identical historical draft replay remains valid. A policy that is not issued yet has no coverage and looks missing. The request declares each file by a client-chosen id, content type, size and SHA-256;
         at most 10 files and 50 MiB in total. A repeated Idempotency-Key with the same body returns the same draft; with a different body it conflicts.
         Only field names are reported on a validation failure, never values.
       parameters:
@@ -404,6 +404,7 @@ components:
               - eventType
               - occurredAt
               - place
+              - location
               - description
               - evidence
               - idempotencyKey
@@ -445,6 +446,28 @@ components:
         sha256:
           type: string
           pattern: ^[0-9a-fA-F]{64}$
+    ClaimReportLocation:
+      type: object
+      additionalProperties: false
+      description: The position the customer chose to attach. It is accepted only with authorized true and is stored with the claim; it is never read back by this API.
+      required:
+        - authorized
+        - latitude
+        - longitude
+      properties:
+        authorized:
+          type: boolean
+          enum:
+            - true
+          description: The customer's explicit authorization. A report without a location omits the whole object.
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
     ClaimReportRequest:
       type: object
       additionalProperties: false
@@ -473,6 +496,8 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        location:
+          $ref: "#/components/schemas/ClaimReportLocation"
         description:
           type: string
           minLength: 40
