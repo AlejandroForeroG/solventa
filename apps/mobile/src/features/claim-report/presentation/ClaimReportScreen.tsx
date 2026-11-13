@@ -13,7 +13,7 @@ import { ClaimReportForm } from './ClaimReportForm';
 import { claimReportMessages, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
 
-// The camera and the gallery are system activities, so the app goes to the background and locks while the customer picks a file. These states end
+// The camera and system pickers can background and lock the app while the customer selects evidence. These states end
 // back in an authenticated session, so the report waits hidden through them; any other state means the session is really gone.
 const REVALIDATING = new Set(['loading', 'authorizing', 'locked', 'biometricPrompt']);
 

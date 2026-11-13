@@ -5,7 +5,7 @@ import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/s
 import { createClaimReportApi, type EvidenceUploader } from '../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { ActivePolicies } from '../apps/mobile/src/features/claim-report/application/active-policies';
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
-import { ClaimReportFailure, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
+import { ClaimReportFailure, type CaptureOutcome, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
 import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
 
 const baseUrl = 'https://dev.solventa.site';
@@ -323,6 +323,79 @@ const recordingFiles = (thumbnails: Record<string, string | null | 'throws'> = {
 };
 const owned = (uri: string, mimeType: string, byteSize = 1000) => ({ uri, mimeType, byteSize, owned: true });
 const video = (id: string) => ({ ...owned(`file:///cache/${id}.mp4`, 'video/mp4', 5000), });
+
+test('camera denial leaves the existing file option available, and only confirmation includes the document in the submitted claim', async () => {
+  const { server, api } = fakeServer();
+  const { files, disposed } = recordingFiles();
+  const flow = flowWith(api, [], files);
+  await flow.pickDocument(async () => ({ status: 'permission', permission: 'camera', canAskAgain: false }));
+  assert.deepEqual(flow.getSnapshot().document, { kind: 'permission', canAskAgain: false });
+
+  const candidate = owned('file:///cache/receipt.png', 'image/png');
+  await flow.pickDocument(async () => ({ status: 'ok', candidates: [candidate] }));
+  const pending = flow.getSnapshot().document;
+  assert.equal(pending.kind, 'review');
+  assert.equal(flow.getSnapshot().draft.evidence.length, 2);
+  assert.equal(flow.review(), false);
+  await flow.send();
+  assert.equal(server.drafts.size, 0);
+
+  flow.attachDocument();
+  flow.attachDocument();
+  assert.equal(flow.getSnapshot().draft.evidence.length, 3);
+  assert.equal(flow.review(), true);
+  await flow.send();
+  const [claim] = server.drafts.values();
+  const file = { fileId: pending.item.id, contentType: 'image/png', byteSize: candidate.byteSize, sha256: 'a'.repeat(64) };
+  assert.deepEqual(JSON.parse(claim.body).evidence[2], file);
+  assert.equal(JSON.parse(claim.body).policyId, policyId);
+  assert.equal(claim.verified.has(file.fileId), true);
+  assert.equal(server.uploads.filter(id => id === file.fileId).length, 1);
+  assert.deepEqual(flow.getSnapshot().phase, { kind: 'submitted', claimNumber: 'SIN-2026-00001', submittedAt: now.toISOString(), files: 3, bytes: 7000 });
+  assert.deepEqual(disposed, [candidate.uri]);
+});
+
+test('document review rejects unsupported or oversized files and releases discarded copies', async () => {
+  const { files, disposed } = recordingFiles();
+  const flow = bareFlow(fakeServer().api, files);
+  const pdf = owned('file:///cache/receipt.pdf', 'application/pdf');
+  const clip = video('clip');
+  const oversized = owned('file:///cache/large.jpg', 'image/jpeg', LIMITS.bytes + 1);
+  for (const [candidate, reason] of [[pdf, 'file_type'], [clip, 'file_type'], [oversized, 'total_size']] as const) {
+    await flow.pickDocument(async () => ({ status: 'ok', candidates: [candidate] }));
+    assert.deepEqual(flow.getSnapshot().document, { kind: 'failed', reason });
+  }
+
+  const receipt = owned('file:///cache/receipt.jpg', 'image/jpeg');
+  await flow.pickDocument(async () => ({ status: 'ok', candidates: [receipt] }));
+  flow.discardDocument();
+  flow.attachDocument();
+  assert.deepEqual(flow.getSnapshot().draft.evidence, []);
+  assert.deepEqual(flow.getSnapshot().document, { kind: 'idle' });
+  assert.deepEqual(disposed, [pdf.uri, clip.uri, oversized.uri, receipt.uri]);
+});
+
+test('leaving a report releases pending document copies, including results arriving after leaving', async () => {
+  const { files, disposed } = recordingFiles();
+  const flow = bareFlow(fakeServer().api, files);
+  const pending = owned('file:///cache/preview.jpg', 'image/jpeg');
+  await flow.pickDocument(async () => ({ status: 'ok', candidates: [pending] }));
+  await flow.dispose();
+  flow.open();
+  const late = owned('file:///cache/late.png', 'image/png');
+  const picker = Promise.withResolvers<CaptureOutcome>();
+  const selection = flow.pickDocument(() => picker.promise);
+  await flow.dispose();
+  picker.resolve({ status: 'ok', candidates: [late] });
+  await selection;
+
+  flow.open();
+  const original = { ...owned('file:///external/original.jpg', 'image/jpeg'), owned: false };
+  await flow.pickDocument(async () => ({ status: 'ok', candidates: [original] }));
+  await flow.dispose();
+  assert.deepEqual(flow.getSnapshot().document, { kind: 'idle' });
+  assert.deepEqual(disposed, [pending.uri, late.uri]);
+});
 
 test('a video is identified by a thumbnail made from it, and a failure to make one is a state of its own', async () => {
   const { files } = recordingFiles({ 'file:///cache/ok.mp4': 'file:///cache/ok-thumb.jpg', 'file:///cache/none.mp4': null, 'file:///cache/boom.mp4': 'throws' });

@@ -1,6 +1,6 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import type { EvidenceCandidate } from '../domain/report';
+import { DOCUMENT_CONTENT_TYPES, type EvidenceCandidate } from '../domain/report';
 import { isAppCopy } from './expo-evidence-files';
 import type { CaptureOutcome, EvidenceSource } from '../application/ports';
 
@@ -38,6 +38,17 @@ export function createExpoEvidenceSource(): EvidenceSource {
       try {
         return outcomeOf(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], allowsMultipleSelection: true,
           selectionLimit: Math.max(1, limit), quality: PHOTO_QUALITY, exif: false }));
+      } catch { return { status: 'failed' }; }
+    },
+    scanDocument: () => withCamera(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false })),
+    chooseDocument: async () => {
+      try {
+        const { getDocumentAsync } = await import('expo-document-picker');
+        const result = await getDocumentAsync({ type: [...DOCUMENT_CONTENT_TYPES, 'image/heif'], copyToCacheDirectory: true });
+        if (result.canceled) return { status: 'cancelled' };
+        const candidates = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null,
+          byteSize: sizeOf(asset.uri, asset.size), owned: isAppCopy(asset.uri) }));
+        return { status: 'ok', candidates };
       } catch { return { status: 'failed' }; }
     },
   };
