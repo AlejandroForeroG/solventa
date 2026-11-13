@@ -134,12 +134,20 @@ try {
   assert.deepEqual((await store.evidence(actor, policyId)).map(({ claimId, fileId }) => ({ claimId, fileId })), [reference]);
   assert.deepEqual(await store.evidence(stranger, policyId), []);
   const referenced = confirmed(await sync(referencedId, referenceCommand));
+  assert.equal(confirmed(await sync(referencedId, command(1, { evidence: [reference] }))).revision, referenced.revision,
+    'JSONB key ordering cannot manufacture a data revision for unchanged evidence');
   confirmed(await sync(referencedId, command(1, { evidence: [reference], description: 'Synthetic competing server note' })));
+  const referenceConflict = await sync(referencedId, command(1, { evidence: [reference], description: 'Synthetic competing local note' }));
+  if (referenceConflict.status !== 'conflict') throw Error('expected evidence-bearing conflict');
+  const referenceChoice = confirmed(await sync(referencedId, { commandId: randomUUID(), baseRevision: 2, content: referenceConflict.conflict.local,
+    resolution: { conflictId: referenceConflict.conflict.conflictId, keep: 'local' } }));
+  assert.equal(referenceChoice.content.description, 'Synthetic competing local note');
+  assert.deepEqual(referenceChoice.content.evidence, [reference]);
   await db.query('UPDATE policy.evidence_metadata SET created_at=now()-INTERVAL \'2 days\', retention_until=now()-INTERVAL \'1 second\' WHERE claim_id=$1', [reference.claimId]);
   assert.deepEqual(await store.evidence(actor, policyId), []);
-  assert.equal((await sync(referencedId, command(referenced.revision, { description: 'Synthetic competing local note' }))).status, 'evidence_unavailable',
+  assert.equal((await sync(referencedId, command(referenced.revision, { description: 'Synthetic newer local note' }))).status, 'evidence_unavailable',
     'a conflict cannot advertise an expired server reference as a valid version');
-  assert.equal((await store.get(actor, referencedId))?.revision, 2);
+  assert.equal((await store.get(actor, referencedId))?.revision, referenceChoice.revision);
   const captures = (await db.query('SELECT result FROM policy.claim_draft_commands WHERE draft_id=$1', [id])).rows;
   assert.ok(captures.some(({ result }) => result.response.status === 'conflict' && result.capture.inputs.serverRevision >= 2));
   assert.ok(captures.some(({ result }) => result.capture.inputs.resolution?.keep === 'local'));
