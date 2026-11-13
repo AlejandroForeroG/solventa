@@ -1,4 +1,7 @@
 {
+  "claim_drafts": ["SELECT", "INSERT", "UPDATE"],
+  "claim_draft_revisions": ["SELECT", "INSERT"],
+  "claim_draft_commands": ["SELECT", "INSERT"],
   "policies": [
     "SELECT",
     "INSERT",

@@ -6,12 +6,14 @@ import type { DocumentFile, PolicyDetailResult, PolicyDocumentKind, PolicyDocume
 import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
+import { mountClaimDrafts, type ClaimDraftHttpDependencies } from './claim-drafts-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
 import { mountAssistanceRequests, type AssistanceRequestsHttpDependencies } from './assistance-requests-http';
 import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
 
 export type PolicyHttpDependencies = {
+  claimDrafts?: ClaimDraftHttpDependencies;
   advisor?: AdvisorHttpDependencies;
   assistance?: AssistanceHttpDependencies;
   assistanceRequests?: AssistanceRequestsHttpDependencies;
@@ -58,6 +60,7 @@ async function smallBody(request: Request): Promise<unknown> {
 
 export function createHttp(deps?: PolicyHttpDependencies) {
   const app = new Hono<{ Bindings: PolicyEnv }>();
+  if (deps?.claimDrafts) mountClaimDrafts(app, deps.claimDrafts);
   app.get('/health', (c) => c.json({ service: 'policy-claims-payments', status: 'alive' }));
   if (deps?.advisor) mountAdvisor(app, deps.advisor, smallBody);
   app.all('/api/v1/policies', listOwnHandler);

@@ -7,6 +7,8 @@ import { ClaimInbox } from './application/claim-inbox';
 import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
 import { ClaimReport } from './application/claim-report';
 import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
+import { ClaimDrafts } from './application/claim-drafts';
+import { SqlClaimDrafts } from './adapters/outbound/sql-claim-drafts';
 import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
 import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
 import { AssistanceRequests } from './application/assistance-requests';
@@ -27,6 +29,8 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const response = await createHttp({ finance,
+      claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       advisor: { finance, authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
         approve: input => this.env.IDENTITY_SERVICE.authorizeAdvisorApprovalV1(input),
         deny: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input) },

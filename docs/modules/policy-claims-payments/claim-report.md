@@ -4,6 +4,8 @@ Policy, Claims & Payments owns the customer's report of a claim from the native 
 
 ## Flow
 
+An owner can prepare partial event data and notes through [editable claim drafts](claim-drafts.md), including offline synchronization and conflict resolution. Continue report rereads a confirmed owned draft and pre-fills this form; its evidence references remain in the editable draft. The customer attaches the actual files and completes the existing validated declaration/upload/submission flow below. Neither draft synchronization nor opening this form files a claim.
+
 A report is three owner-side steps, so a partial failure can never claim that the case was received.
 
 | Step | Route | Result |
