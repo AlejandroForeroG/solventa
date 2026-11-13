@@ -14,7 +14,7 @@ function world() {
   let response: (command: DraftCommand) => Promise<SyncReply> = async command => ({ status: 'confirmed', merged: false,
     draft: { draftId, content: command.content, revision: 1, updatedAt: '2026-11-12T12:00:00.000Z' } });
   const api: DraftApi = { list: async () => [], get: async () => { throw Error('unused'); }, evidence: async () => [],
-    sync: async (_, command) => { calls.push(structuredClone(command)); return response(command); } };
+    sync: async (_, command, queuedOwner) => { assert.deepEqual(queuedOwner, owner); calls.push(structuredClone(command)); return response(command); } };
   const restart = () => new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', custody.port), api, newId: randomUUID, now: () => 123 });
   return { custody, owner, draftId, content, calls, restart, respond: (next: typeof response) => { response = next; } };
 }

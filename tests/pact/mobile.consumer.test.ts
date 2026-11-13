@@ -40,7 +40,7 @@ for (const operation of ['list', 'get', 'evidence'] as const) {
       .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { ...body, traceId: MatchersV3.uuid(traceId) } });
     await pact.executeTest(async server => {
       const api = draftClient(server);
-      assert.deepEqual(operation === 'list' ? await api.list() : operation === 'get' ? await api.get(draftExamples.draftId) : await api.evidence(draftCommand.content.policyId),
+      assert.deepEqual(operation === 'list' ? await api.list(draftExamples.owner) : operation === 'get' ? await api.get(draftExamples.draftId) : await api.evidence(draftCommand.content.policyId),
         operation === 'list' ? [draftVersion] : operation === 'get' ? draftVersion : []);
     });
   });
@@ -57,7 +57,7 @@ for (const mode of ['ready', 'conflict', 'resolved', 'unavailable'] as const) {
       .willRespondWith({ status: mode === 'conflict' ? 409 : mode === 'unavailable' ? 503 : 200,
         headers: { 'Content-Type': 'application/json' }, body: { ...body, traceId: MatchersV3.uuid(traceId) } });
     await pact.executeTest(async server => {
-      const result = draftClient(server).sync(draftExamples.draftId, command);
+      const result = draftClient(server).sync(draftExamples.draftId, command, draftExamples.owner);
       if (mode === 'unavailable') await assert.rejects(result, (error: unknown) => error instanceof DraftFailure && error.kind === 'unavailable');
       else assert.deepEqual(await result, body);
     });

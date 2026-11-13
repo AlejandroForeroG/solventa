@@ -94,12 +94,14 @@ test('contractual refusals and methods retain their precise status without a suc
 
 test('the real native adapter consumes list, get, evidence and sync through the public gateway', async () => {
   const w = world(); let forwarded = 0;
+  const owners: unknown[] = [];
   const env = { APP_ENV: 'dev', POLICY: { fetch: (r: Request) => { forwarded++; return w.fetch(r); } } } as unknown as WebEnv;
   const transport: typeof fetch = async (input, init) => worker.fetch(new Request(input, init), env);
-  const api = createDraftApi('https://dev.solventa.site', { execute: operation => operation('synthetic.jwt.token') }, transport);
-  assert.deepEqual(await api.list(), [version]); assert.deepEqual(await api.get(draftId), version);
-  assert.deepEqual(await api.evidence(policyId), []); assert.deepEqual(await api.sync(draftId, command), w.state.result);
+  const api = createDraftApi('https://dev.solventa.site', { execute: (operation, owner) => { owners.push(owner); return operation('synthetic.jwt.token'); } }, transport);
+  assert.deepEqual(await api.list(principal), [version]); assert.deepEqual(await api.get(draftId), version);
+  assert.deepEqual(await api.evidence(policyId), []); assert.deepEqual(await api.sync(draftId, command, principal), w.state.result);
   assert.equal(forwarded, 4);
+  assert.deepEqual(owners, [principal, undefined, undefined, principal], 'queue reads and writes bind the expected owner at credential execution');
   const unknown = await worker.fetch(new Request('https://dev.solventa.site/api/v1/claim-drafts-other'), env);
   assert.equal(unknown.status, 404); assert.equal(forwarded, 4);
 });
@@ -107,18 +109,18 @@ test('the real native adapter consumes list, get, evidence and sync through the 
 test('the native adapter rejects a response for another draft or policy', async () => {
   const w = world(); w.state.result = { status: 'confirmed', draft: { ...version, draftId: randomUUID() }, merged: false };
   const api = createDraftApi('https://dev.solventa.site', { execute: operation => operation('synthetic.jwt.token') }, async (input, init) => w.fetch(new Request(input, init)));
-  await assert.rejects(api.sync(draftId, command), { kind: 'invalid_response' });
+  await assert.rejects(api.sync(draftId, command, principal), { kind: 'invalid_response' });
   w.state.result = { status: 'confirmed', draft: version, merged: false };
-  await assert.rejects(api.sync(draftId, { ...command, baseRevision: 2 }), { kind: 'invalid_response' });
+  await assert.rejects(api.sync(draftId, { ...command, baseRevision: 2 }, principal), { kind: 'invalid_response' });
   w.state.result = { status: 'conflict', conflict: { conflictId: command.commandId, draftId, base: version,
     server: { ...version, revision: 3 }, local: content, fields: ['description'], policy: 'claim-draft.fields.v1' } };
-  await assert.rejects(api.sync(draftId, { ...command, baseRevision: 2 }), { kind: 'invalid_response' });
+  await assert.rejects(api.sync(draftId, { ...command, baseRevision: 2 }, principal), { kind: 'invalid_response' });
 });
 
 test('only a validated permanent refusal allows correction; an ambiguous error reply stays uncertain', async () => {
   const commandApi = (body: unknown) => createDraftApi('https://dev.solventa.site', { execute: operation => operation('synthetic.jwt.token') }, async () =>
     new Response(JSON.stringify(body), { status: 422, headers: { 'content-type': 'application/json' } }));
-  await assert.rejects(commandApi({ error: 'outside_coverage', traceId: randomUUID() }).sync(draftId, command), { kind: 'rejected' });
-  await assert.rejects(commandApi({ error: 'unexpected', traceId: randomUUID() }).sync(draftId, command), { kind: 'invalid_response' });
-  await assert.rejects(commandApi({ status: 'confirmed' }).sync(draftId, command), { kind: 'invalid_response' });
+  await assert.rejects(commandApi({ error: 'outside_coverage', traceId: randomUUID() }).sync(draftId, command, principal), { kind: 'rejected' });
+  await assert.rejects(commandApi({ error: 'unexpected', traceId: randomUUID() }).sync(draftId, command, principal), { kind: 'invalid_response' });
+  await assert.rejects(commandApi({ status: 'confirmed' }).sync(draftId, command, principal), { kind: 'invalid_response' });
 });

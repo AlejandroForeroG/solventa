@@ -9,7 +9,7 @@ export interface DraftStorage {
 }
 export interface DraftApi {
   evidence(policyId: string): Promise<{ claimId: string; fileId: string; contentType: string; createdAt: string }[]>;
-  list(): Promise<DraftVersion[]>;
+  list(owner: DraftOwner): Promise<DraftVersion[]>;
   get(draftId: string): Promise<DraftVersion>;
-  sync(draftId: string, command: DraftCommand): Promise<SyncReply>;
+  sync(draftId: string, command: DraftCommand, owner: DraftOwner): Promise<SyncReply>;
 }
