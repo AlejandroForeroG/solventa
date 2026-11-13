@@ -41,7 +41,7 @@ export class DraftSync {
 
   lock(): void { this.generation++; this.deps.storage.lock(); this.emit({ status: 'locked' }); }
 
-  save(draftId: string, source: DraftContent): Promise<void> {
+  save(draftId: string, source: DraftContent, baseRevision: number): Promise<void> {
     return this.serial(async () => {
       if (this.snapshot.status !== 'ready') throw new DraftFailure('locked');
       const { owner, entries } = this.snapshot;
@@ -50,10 +50,11 @@ export class DraftSync {
       const refused = existing?.status === 'failed' && existing.failure === 'rejected';
       if (existing && (existing.status === 'sending' || existing.status === 'conflict' || (existing.command && (existing.attempted || existing.command.resolution) && !refused))) throw new DraftFailure('rejected');
       if (!existing && entries.length >= 20) throw new DraftFailure('limit');
+      if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 || baseRevision > (existing?.confirmed?.revision ?? 0)) throw new DraftFailure('rejected');
       const content = contentOf(source);
       if (existing && existing.content.policyId !== content.policyId) throw new DraftFailure('rejected');
       const entry: DraftEntry = { draftId, content, confirmed: existing?.confirmed ?? null,
-        command: { commandId: existing?.command && !existing.attempted ? existing.command.commandId : this.deps.newId(), baseRevision: existing?.confirmed?.revision ?? 0, content },
+        command: { commandId: existing?.command && !existing.attempted ? existing.command.commandId : this.deps.newId(), baseRevision, content },
         status: 'pending', attempted: false, savedAt: this.deps.now() };
       await this.persist(owner, [...entries.filter(e => e.draftId !== draftId), entry]);
     });

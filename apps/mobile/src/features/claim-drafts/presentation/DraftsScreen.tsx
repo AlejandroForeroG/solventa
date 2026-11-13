@@ -48,7 +48,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
   const session = useAuthenticatedSession();
   const { sync, snapshot } = useDraftSync();
   const network = Network.useNetworkState();
-  const [editing, edit] = useState<{ id: string; content: DraftContent } | null>(null);
+  const [editing, edit] = useState<{ id: string; content: DraftContent; baseRevision: number } | null>(null);
   const [failure, fail] = useState<DraftFailureKind>();
   const current = useRef({ auth, network });
   useEffect(() => { current.current = { auth, network }; }, [auth, network]);
@@ -81,12 +81,12 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
     <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;
   if (editing) return <Editor key={editing.id} content={editing.content} copy={copy} online={online}
-    session={session} locale={locale} onSave={content => act(() => sync.save(editing.id, content))} onBack={() => edit(null)} failure={failure} />;
+    session={session} locale={locale} onSave={content => act(() => sync.save(editing.id, content, editing.baseRevision))} onBack={() => edit(null)} failure={failure} />;
   return <Page title={copy.title}>
     {!online && <Text accessibilityRole="alert" style={ui.notice}>{copy.offline}</Text>}
     <Text style={ui.caption}>{copy.unsent}</Text>
     {(failure ?? snapshot.failure) && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[(failure ?? snapshot.failure)!]}</Text>}
-    {requestedPolicy && <Action label={copy.create} onPress={() => edit({ id: randomUUID(), content: emptyDraft(requestedPolicy) })} />}
+    {requestedPolicy && <Action label={copy.create} onPress={() => edit({ id: randomUUID(), content: emptyDraft(requestedPolicy), baseRevision: 0 })} />}
     {!snapshot.entries.length && <Text style={ui.body}>{copy.empty}</Text>}
     {snapshot.entries.map(entry => <View key={entry.draftId} style={ui.card}>
       <Text style={ui.subtitle}>{policyReference(entry.content.policyId)}</Text>
@@ -102,7 +102,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
         : entry.command && (entry.attempted || entry.command.resolution) && !(entry.status === 'failed' && entry.failure === 'rejected') ? <>
           <Text style={ui.caption}>{copy.immutable}</Text>
           {entry.status !== 'sending' && <Action label={copy.retry} onPress={() => void act(() => sync.retry(entry.draftId))} />}
-        </> : <Action secondary label={copy.edit} onPress={() => edit({ id: entry.draftId, content: entry.content })} />}
+        </> : <Action secondary label={copy.edit} onPress={() => edit({ id: entry.draftId, content: entry.content, baseRevision: entry.command?.baseRevision ?? entry.confirmed?.revision ?? 0 })} />}
     </View>)}
     <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;
