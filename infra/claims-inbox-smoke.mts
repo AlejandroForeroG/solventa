@@ -247,8 +247,18 @@ try {
   const extended = await review.review(id, analystLease(), extend, 'extend-deadline');
   assert.equal(extended.status, 'ok');
   assert.deepEqual(await review.review(id, analystLease(), extend, 'extend-deadline'), { ...extended, replayed: true });
+  await db.query(`WITH previous_requests AS (
+    INSERT INTO policy.claim_review_actions (id,claim_id,actor_id,key_hash,payload_hash,action,resulting_state,decision_capture)
+    SELECT gen_random_uuid(),$1,$2,lpad(n::STRING,64,'0'),repeat('a',64),'request_information','pending_information','{}'::JSONB
+    FROM generate_series(1,25) AS history(n) RETURNING id
+  )
+  INSERT INTO policy.claim_requirements (id,claim_id,details,deadline,status,response_action,received_at)
+  SELECT id,$1,'Previously received synthetic requirement',$3::TIMESTAMPTZ+INTERVAL '1 day','received',id,now()-INTERVAL '1 day'
+  FROM previous_requests`, [id, caseReviewer.clientId, extend.deadline]);
   const reopened = await review.detail(id, caseOwner, randomUUID());
-  assert.equal(reopened?.requirements[0].deadline, extend.deadline);
+  assert.equal(reopened?.requirements.length, 25);
+  assert.equal(reopened.requirements[0].id, requirement);
+  assert.equal(reopened.requirements[0].deadline, extend.deadline);
   assert.equal(reopened?.notices.filter(notice => notice.action === 'extend_requirement').length, 1);
   const response = { text: 'Synthetic information attached.', evidenceIds: [responseFile.fileId] };
   assert.deepEqual(await review.respond(id, requirement, { clientId: randomUUID(), subjectToken: randomUUID() }, response, 'response-external', randomUUID()), { status: 'not_found' });
@@ -279,7 +289,7 @@ try {
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.state, 'rejected');
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.filter(notice => notice.action === 'reject').length, 1);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume', 'pending-requirement-kept-with-full-history'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);
