@@ -134,6 +134,7 @@ test('actual responses and committed examples match the public OpenAPI schemas',
   };
   const examples = JSON.parse(readFileSync('packages/contracts/examples/claims.json', 'utf8'));
   check('ClaimPage', examples.page); check('ClaimPage', examples.emptyPage); check('Error', examples.invalidRequest); check('Error', examples.forbidden);
+  check('ClaimDecisionRequest', examples.decisionRequest); check('ClaimDecisionResult', examples.decisionResult);
   const service = http();
   check('ClaimPage', await (await call(service)).json());
   check('Error', await (await call(http({ allowed: false, status: 403, error: 'forbidden' }))).json());

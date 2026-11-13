@@ -3,6 +3,8 @@ import { ClaimInbox } from '../../../backend/policy-claims-payments/src/applicat
 import type { OpenClaimRecord } from '../../../backend/policy-claims-payments/src/domain/claims';
 import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
+import { listSyntheticExperts } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
+import type { CaseRecord } from '../../../backend/policy-claims-payments/src/application/claim-review';
 import examples from '../../../packages/contracts/examples/claims.json';
 
 const DAY = 86_400_000;
@@ -30,7 +32,22 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
     }
   }, { now: () => new Date() });
   const app = createHttp({ authorizeFinancialAccess: async () => null, denyResourceAccess: async () => null, finance: {} as never,
-    claims: { inbox, authorize: input => authorizeApiAccess(authorization, input) } });
+    claims: { inbox,
+      decisions: { decide: async () => ({ status: 'ok', decisionId: examples.decisionResult.decisionId, state: 'approved', replayed: false }) },
+      review: {
+        directory: listSyntheticExperts,
+        owned: async () => [{ ...examples.ownedCases.items[0], state: 'in_review' }],
+        detail: async (id, access) => id === examples.page.items[0].claimId
+          ? { ...examples.caseFile, state: 'in_review', access: access.kind === 'analyst' ? 'assigned' : 'customer' } satisfies CaseRecord : null,
+        evidence: async () => null,
+        review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
+        respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),
+        receive: async (_id, _requirement, _owner, declaration) => {
+          return declaration && typeof declaration === 'object' && 'fileId' in declaration
+            && declaration.fileId === examples.actionReceipt.actionId ? 'verified' : 'invalid_request';
+        }
+      },
+      authorize: input => authorizeApiAccess(authorization, input) } });
   return { sessionCookie: cookie, policy: { fetch: (request: Request) => {
     const { pathname, search } = new URL(request.url);
     return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, { APP_ENV: 'dev' } as PolicyEnv));
