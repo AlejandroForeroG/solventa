@@ -33,6 +33,34 @@ test('an editor retains its original base when refresh receives a newer remote r
   assert.equal(entries(restarted)[0].command?.baseRevision, 1, 'The original base must be durable');
 });
 
+test('an open creation editor pauses automatic transmission until its final durable save', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  const firstCommand = entries(engine)[0].command?.commandId;
+  const release = engine.pauseForEditing(w.draftId);
+  await engine.sync(w.owner); assert.equal(w.calls.length, 0);
+  await engine.save(w.draftId, { ...w.content, description: 'Still editing the first offline draft' }, 0);
+  assert.equal(entries(engine)[0].command?.commandId, firstCommand);
+  release(); await engine.sync(w.owner);
+  assert.equal(entries(engine)[0].status, 'confirmed');
+  assert.equal(w.calls.length, 1); assert.equal(w.calls[0].content.description, 'Still editing the first offline draft');
+  assert.equal(w.calls[0].baseRevision, 0);
+});
+
+test('opening an editor wins over a pump selected in the same turn, but never unlocks an already attempted command', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  const pumping = engine.sync(w.owner);
+  const release = engine.pauseForEditing(w.draftId);
+  await pumping; assert.equal(w.calls.length, 0);
+  release();
+  let complete!: (result: SyncReply) => void;
+  w.respond(() => new Promise(resolve => { complete = resolve; }));
+  const sending = engine.sync(w.owner);
+  while (!complete) await new Promise(resolve => setImmediate(resolve));
+  assert.throws(() => engine.pauseForEditing(w.draftId), /rejected/);
+  complete({ status: 'confirmed', merged: false, draft: { draftId: w.draftId, revision: 1, content: w.content, updatedAt: '2026-11-12T12:00:00Z' } });
+  await sending; assert.equal(entries(engine)[0].status, 'confirmed');
+});
+
 test('an explicit permanent refusal permits a corrected new intent while uncertain outcomes remain immutable', async () => {
   const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
   w.respond(async () => { throw new DraftFailure('rejected'); }); await engine.sync(w.owner);

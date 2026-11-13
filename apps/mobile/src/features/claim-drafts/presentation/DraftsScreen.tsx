@@ -50,10 +50,12 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
   const network = Network.useNetworkState();
   const [editing, edit] = useState<{ id: string; content: DraftContent; baseRevision: number } | null>(null);
   const [failure, fail] = useState<DraftFailureKind>();
+  const releaseEdit = useRef<(() => void) | null>(null);
   const current = useRef({ auth, network });
   useEffect(() => { current.current = { auth, network }; }, [auth, network]);
   const online = auth.status === 'authenticated' && !!auth.principal && network.isConnected !== false && network.isInternetReachable !== false;
   const open = useCallback(async () => {
+    releaseEdit.current?.(); releaseEdit.current = null;
     edit(null); fail(undefined);
     try {
       const { auth: latestAuth, network: latestNetwork } = current.current;
@@ -64,11 +66,18 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
       }
     } catch (error) { fail(error instanceof DraftFailure ? error.kind : 'storage'); }
   }, [sync]);
-  useFocusEffect(useCallback(() => { void open(); return () => sync.lock(); }, [open, sync]));
+  useFocusEffect(useCallback(() => { void open(); return () => { releaseEdit.current?.(); releaseEdit.current = null; sync.lock(); }; }, [open, sync]));
+  const beginEdit = (value: NonNullable<typeof editing>) => {
+    if (releaseEdit.current) return;
+    fail(undefined);
+    try { releaseEdit.current = sync.pauseForEditing(value.id); edit(value); }
+    catch (error) { fail(error instanceof DraftFailure ? error.kind : 'storage'); }
+  };
+  const closeEditor = () => { releaseEdit.current?.(); releaseEdit.current = null; edit(null); };
   const act = async (work: () => Promise<void>) => {
     fail(undefined);
     try {
-      await work(); edit(null);
+      await work(); closeEditor();
       if (online && auth.principal) await sync.sync(auth.principal);
     } catch (error) { fail(error instanceof DraftFailure ? error.kind : 'storage'); }
   };
@@ -81,12 +90,12 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
     <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;
   if (editing) return <Editor key={editing.id} content={editing.content} copy={copy} online={online}
-    session={session} locale={locale} onSave={content => act(() => sync.save(editing.id, content, editing.baseRevision))} onBack={() => edit(null)} failure={failure} />;
+    session={session} locale={locale} onSave={content => act(() => sync.save(editing.id, content, editing.baseRevision))} onBack={closeEditor} failure={failure} />;
   return <Page title={copy.title}>
     {!online && <Text accessibilityRole="alert" style={ui.notice}>{copy.offline}</Text>}
     <Text style={ui.caption}>{copy.unsent}</Text>
     {(failure ?? snapshot.failure) && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[(failure ?? snapshot.failure)!]}</Text>}
-    {requestedPolicy && <Action label={copy.create} onPress={() => edit({ id: randomUUID(), content: emptyDraft(requestedPolicy), baseRevision: 0 })} />}
+    {requestedPolicy && <Action label={copy.create} onPress={() => beginEdit({ id: randomUUID(), content: emptyDraft(requestedPolicy), baseRevision: 0 })} />}
     {!snapshot.entries.length && <Text style={ui.body}>{copy.empty}</Text>}
     {snapshot.entries.map(entry => <View key={entry.draftId} style={ui.card}>
       <Text style={ui.subtitle}>{policyReference(entry.content.policyId)}</Text>
@@ -102,7 +111,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
         : entry.command && (entry.attempted || entry.command.resolution) && !(entry.status === 'failed' && entry.failure === 'rejected') ? <>
           <Text style={ui.caption}>{copy.immutable}</Text>
           {entry.status !== 'sending' && <Action label={copy.retry} onPress={() => void act(() => sync.retry(entry.draftId))} />}
-        </> : <Action secondary label={copy.edit} onPress={() => edit({ id: entry.draftId, content: entry.content, baseRevision: entry.command?.baseRevision ?? entry.confirmed?.revision ?? 0 })} />}
+        </> : <Action secondary label={copy.edit} onPress={() => beginEdit({ id: entry.draftId, content: entry.content, baseRevision: entry.command?.baseRevision ?? entry.confirmed?.revision ?? 0 })} />}
     </View>)}
     <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;

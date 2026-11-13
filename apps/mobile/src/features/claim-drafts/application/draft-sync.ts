@@ -12,6 +12,7 @@ export class DraftSync {
   private tail: Promise<unknown> = Promise.resolve();
   private syncing = false;
   private opening: Promise<void> | null = null;
+  private readonly editing = new Set<string>();
   private readonly listeners = new Set<() => void>();
   constructor(private readonly deps: Dependencies) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -40,6 +41,19 @@ export class DraftSync {
   }
 
   lock(): void { this.generation++; this.deps.storage.lock(); this.emit({ status: 'locked' }); }
+
+  pauseForEditing(draftId: string): () => void {
+    if (this.snapshot.status !== 'ready') throw new DraftFailure('locked');
+    const entry = this.snapshot.entries.find(e => e.draftId === draftId);
+    const refused = entry?.status === 'failed' && entry.failure === 'rejected';
+    if (entry && (entry.status === 'sending' || entry.status === 'conflict' || (entry.command && (entry.attempted || entry.command.resolution) && !refused))) throw new DraftFailure('rejected');
+    const key = this.editKey(this.snapshot.owner, draftId);
+    if (this.editing.has(key)) throw new DraftFailure('rejected');
+    this.editing.add(key);
+    return () => { this.editing.delete(key); };
+  }
+
+  private editKey(owner: DraftOwner, draftId: string): string { return `${owner.clientId}/${owner.subjectToken}/${draftId}`; }
 
   save(draftId: string, source: DraftContent, baseRevision: number): Promise<void> {
     return this.serial(async () => {
@@ -93,7 +107,7 @@ export class DraftSync {
         const entries = [...this.snapshot.entries];
         for (const draft of remote) {
           const old = entries.find(e => e.draftId === draft.draftId);
-          if (old?.command || old?.status === 'conflict') continue;
+          if (old?.command || old?.status === 'conflict' || this.editing.has(this.editKey(owner, draft.draftId))) continue;
           const next: DraftEntry = { draftId: draft.draftId, content: draft.content, confirmed: draft, command: null, status: 'confirmed', attempted: false, savedAt: this.deps.now() };
           if (old) entries[entries.indexOf(old)] = next; else if (entries.length < 20) entries.push(next);
         }
@@ -107,13 +121,13 @@ export class DraftSync {
     this.syncing = true;
     const epoch = this.generation;
     try {
-      const ids = this.snapshot.entries.filter(e => e.command && (e.status === 'pending' || e.status === 'sending' || (e.status === 'failed' && e.failure === 'unavailable'))).map(e => e.draftId);
+      const ids = this.snapshot.entries.filter(e => e.command && !this.editing.has(this.editKey(owner, e.draftId)) && (e.status === 'pending' || e.status === 'sending' || (e.status === 'failed' && e.failure === 'unavailable'))).map(e => e.draftId);
       for (const id of ids) {
         if (epoch !== this.generation) break;
         const sending = await this.serial(async () => {
           if (this.snapshot.status !== 'ready' || epoch !== this.generation) return null;
           const entry = this.snapshot.entries.find(e => e.draftId === id);
-          if (!entry?.command) return null;
+          if (!entry?.command || this.editing.has(this.editKey(owner, id))) return null;
           const next: DraftEntry = { ...entry, status: 'sending', attempted: true, failure: undefined };
           await this.persist(owner, this.snapshot.entries.map(e => e.draftId === id ? next : e));
           return next;
