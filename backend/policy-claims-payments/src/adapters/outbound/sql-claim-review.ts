@@ -98,7 +98,7 @@ export class SqlClaimReview implements ClaimReviewStore {
       const evidence = (await db.query<EvidenceRow>(`SELECT e.id,e.content_type,e.byte_size::STRING,e.verified_at,e.checksum_sha256,e.object_key
         FROM policy.evidence_metadata e WHERE e.claim_id=$1 AND ${visibleEvidence} ORDER BY e.created_at,e.id LIMIT 50`, [claimId])).rows.map(describeEvidence);
       const requirements = (await db.query<RequirementRow>(`SELECT id,details,deadline,status,response_text,received_at
-        FROM policy.claim_requirements WHERE claim_id=$1 ORDER BY deadline DESC,id LIMIT 25`, [claimId])).rows;
+        FROM policy.claim_requirements WHERE claim_id=$1 ORDER BY (status = 'pending') DESC,received_at DESC NULLS LAST,id LIMIT 25`, [claimId])).rows;
       const attached = requirements.length ? (await db.query<{ requirement_id: string; evidence_id: string }>(
         'SELECT requirement_id,evidence_id FROM policy.claim_requirement_files WHERE requirement_id=ANY($1::UUID[]) AND included', [requirements.map(r => r.id)])).rows : [];
       const history = view === 'assigned' ? (await db.query<HistoryRow>(`

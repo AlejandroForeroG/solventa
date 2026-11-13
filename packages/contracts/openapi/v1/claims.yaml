@@ -1407,6 +1407,7 @@ components:
                 type: array
                 items: *a1
                 maxItems: 3
+          description: Pending requirement first, followed by recent received requirements.
           maxItems: 25
         history:
           type: array
