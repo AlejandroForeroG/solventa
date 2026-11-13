@@ -126,6 +126,8 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/DraftCommand' }
+            examples:
+              create: { $ref: '../../examples/claim-drafts.json#/create' }
       responses:
         '200':
           description: Committed or replayed result. A confirmed no-op retains its current revision.

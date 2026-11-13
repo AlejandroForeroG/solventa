@@ -1,4 +1,11 @@
 {
+  "create": {
+    "summary": "Create a partial draft with no uploaded evidence",
+    "value": {
+      "commandId": "30000000-0000-4000-8000-000000000014", "baseRevision": 0,
+      "content": { "policyId": "30000000-0000-4000-8000-000000000011", "eventType": "other", "occurredAt": null, "place": "", "description": "Synthetic offline note", "evidence": [] }
+    }
+  },
   "draftId": "30000000-0000-4000-8000-000000000010",
   "owner": { "clientId": "30000000-0000-4000-8000-000000000001", "subjectToken": "30000000-0000-4000-8000-000000000002" },
   "command": {
