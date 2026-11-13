@@ -5,6 +5,10 @@ import { databaseProbe } from './adapters/outbound/database-probe';
 import { createPolicyFinance } from './adapters/composition';
 import { ClaimInbox } from './application/claim-inbox';
 import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
+import { ClaimReview } from './application/claim-review';
+import { SqlClaimReview } from './adapters/outbound/sql-claim-review';
+import { ClaimDecisions } from './application/claim-decisions';
+import { SqlClaimDecisions } from './adapters/outbound/sql-claim-decisions';
 import { ClaimReport } from './application/claim-report';
 import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
 import { ClaimDrafts } from './application/claim-drafts';
@@ -14,7 +18,7 @@ import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
 import { AssistanceRequests } from './application/assistance-requests';
 import { SqlAssistanceRequests } from './adapters/outbound/sql-assistance-requests';
 import { newAssistanceReference } from './adapters/outbound/random-assistance-reference';
-import { findSyntheticProvider, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { findSyntheticProvider, listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -27,6 +31,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
     const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
+    const evidence = evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const response = await createHttp({ finance,
       claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
@@ -39,10 +44,13 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
       assistanceRequests: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input),
         requests: new AssistanceRequests(new SqlAssistanceRequests(this.env.POLICY_DB.connectionString), { find: id => findSyntheticProvider(id) }, new Sha256ReportDigest(), newAssistanceReference) },
-      claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+      claims: { decisions: new ClaimDecisions(new SqlClaimDecisions(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+        review: new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString), evidence, listSyntheticExperts),
+        download: evidence && ((...args) => evidence.download(...args)),
+        inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
-      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined, new Sha256ReportDigest(), { now: () => new Date() }),
+      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {

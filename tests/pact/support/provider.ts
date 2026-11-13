@@ -362,7 +362,7 @@ export async function verifyPact(pactFile: string): Promise<void> {
       }])),
       // The browser sends Origin on POST and the session cookie on same-origin requests; the contract does not carry them.
       requestFilter: (request, _response, next) => {
-        if (request.method === 'POST' && !request.headers.authorization) request.headers.origin = origin;
+        if ((request.method === 'POST' || request.method === 'PUT') && !request.headers.authorization) request.headers.origin = origin;
         if (world.sessionCookie && /^\/(api|auth)\//.test(request.url)) request.headers.cookie = `${sessionCookieName}=${world.sessionCookie}`;
         next();
       },

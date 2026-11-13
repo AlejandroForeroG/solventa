@@ -1,4 +1,8 @@
 {
+  "claim_review_actions": ["SELECT", "INSERT"],
+  "claim_requirements": ["SELECT", "INSERT", "UPDATE"],
+  "claim_requirement_files": ["SELECT", "INSERT", "UPDATE"],
+  "claim_notices": ["SELECT", "INSERT"],
   "claim_drafts": ["SELECT", "INSERT", "UPDATE"],
   "claim_draft_revisions": ["SELECT", "INSERT"],
   "claim_draft_commands": ["SELECT", "INSERT"],
@@ -11,6 +15,10 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "claim_decisions": [
+    "SELECT",
+    "INSERT"
   ],
   "indemnities": [
     "SELECT",
