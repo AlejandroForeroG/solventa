@@ -1,0 +1,255 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Editable claim drafts
+  version: 1.0.0
+  description: >-
+    Owner-scoped native claim drafts. Each request requires a verified native session with claims:report;
+    a draft is not a filed claim, payment, consent or contractual action. Stable command UUIDs recover uncertain
+    outcomes. The server compares immutable base revisions, merges compatible changes under claim-draft.fields.v1
+    and records incompatible changes before returning both versions. A manual choice is a new idempotent command
+    tied to its conflict and server revision; concurrent changes are evaluated again. Data, revision, command result
+    and audit commit in the same Policy transaction. No local choice can restore revoked permissions.
+servers:
+  - url: /api/v1
+tags:
+  - name: Claim drafts
+    description: Save editable incident data and verified evidence references before filing.
+security:
+  - MobileBearer: []
+paths:
+  /claim-drafts:
+    get:
+      operationId: listOwnClaimDrafts
+      summary: List the owner's editable claim drafts
+      description: At most 20 drafts, newest update first. Only the owner's issued policies are eligible.
+      tags: [Claim drafts]
+      responses:
+        '200':
+          description: The owner's drafts.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [drafts, traceId]
+                properties:
+                  drafts:
+                    type: array
+                    maxItems: 20
+                    items: { $ref: '#/components/schemas/DraftVersion' }
+                  traceId: { type: string, format: uuid }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /claim-drafts/evidence:
+    get:
+      operationId: listOwnDraftEvidence
+      summary: Select previously verified evidence of the same owned policy
+      description: At most 50 references, newest first. No binary content, hash, object key or foreign evidence is returned.
+      tags: [Claim drafts]
+      parameters:
+        - in: query
+          name: policyId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Eligible references; an unknown or foreign policy returns an empty list.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [evidence, traceId]
+                properties:
+                  evidence:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [claimId, fileId, contentType, createdAt]
+                      properties:
+                        claimId: { type: string, format: uuid }
+                        fileId: { type: string, format: uuid }
+                        contentType: { type: string, enum: [image/jpeg, image/png, image/heic, video/mp4, video/quicktime] }
+                        createdAt: { type: string, format: date-time }
+                  traceId: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /claim-drafts/{draftId}:
+    parameters:
+      - in: path
+        name: draftId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getOwnClaimDraft
+      summary: Read the owner's current draft revision
+      tags: [Claim drafts]
+      responses:
+        '200':
+          description: Current editable revision.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DraftVersion'
+                  - type: object
+                    required: [traceId]
+                    properties:
+                      traceId: { type: string, format: uuid }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    put:
+      operationId: syncOwnClaimDraft
+      summary: Save or resolve one stable offline action
+      description: >-
+        Body is limited to 16384 bytes. Base revision 0 creates a draft with a client-chosen stable UUID.
+        Later edits use an existing revision of that draft. Exact command replay returns its original result;
+        reusing a command UUID with another intent returns idempotency_conflict. The policy must remain issued
+        and owned, the event time must fall inside coverage and not more than five minutes in the future,
+        and evidence references must still be verified, unexpired and of that same owned policy.
+        A manual choice submits the conflict's local content, its server revision and resolution reference.
+        It replaces only conflicting fields; compatible changes are preserved. A newer incompatible revision
+        returns a new conflict. The request can never submit a claim, set a premium or change permissions.
+      tags: [Claim drafts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftCommand' }
+      responses:
+        '200':
+          description: Committed or replayed result. A confirmed no-op retains its current revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Confirmed' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409':
+          description: Recorded version conflict, unknown base, reused key with another payload, or storage limit (20 drafts / 1000000 revisions).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ConflictReply'
+                  - $ref: '#/components/schemas/Error'
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS access token of a registered native session; verified by Identity on every request.
+  responses:
+    Error:
+      description: >-
+        No action is acknowledged. Read error and traceId for the refusal.
+        Responses carry Cache-Control no-store and X-Trace-Id; 405 also carries Allow.
+      headers:
+        Cache-Control: { schema: { type: string, enum: [no-store] } }
+        X-Trace-Id: { schema: { type: string, format: uuid } }
+        Allow: { schema: { type: string }, description: Present for method_not_allowed. }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, unauthorized, forbidden, not_found, method_not_allowed, invalid_base, idempotency_conflict, limit_reached, outside_coverage, evidence_unavailable, access_unavailable, service_unavailable]
+        traceId: { type: string, format: uuid }
+    DraftContent:
+      type: object
+      additionalProperties: false
+      required: [policyId, eventType, occurredAt, place, description, evidence]
+      properties:
+        policyId: { type: string, format: uuid }
+        eventType: { type: string, nullable: true, enum: [collision, theft, damage, other, null] }
+        occurredAt: { type: string, nullable: true, format: date-time }
+        place: { type: string, maxLength: 120 }
+        description: { type: string, maxLength: 600 }
+        evidence:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [claimId, fileId]
+            properties:
+              claimId: { type: string, format: uuid }
+              fileId: { type: string, format: uuid }
+    DraftVersion:
+      type: object
+      required: [draftId, revision, content, updatedAt]
+      properties:
+        draftId: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1, maximum: 1000000 }
+        content: { $ref: '#/components/schemas/DraftContent' }
+        updatedAt: { type: string, format: date-time }
+    DraftCommand:
+      type: object
+      additionalProperties: false
+      required: [commandId, baseRevision, content]
+      properties:
+        commandId: { type: string, format: uuid }
+        baseRevision: { type: integer, minimum: 0, maximum: 1000000 }
+        content: { $ref: '#/components/schemas/DraftContent' }
+        resolution:
+          type: object
+          additionalProperties: false
+          required: [conflictId, keep]
+          properties:
+            conflictId: { type: string, format: uuid }
+            keep: { type: string, enum: [local, server] }
+    Confirmed:
+      type: object
+      additionalProperties: false
+      required: [status, draft, merged, traceId]
+      properties:
+        status: { type: string, enum: [confirmed] }
+        draft: { $ref: '#/components/schemas/DraftVersion' }
+        merged: { type: boolean }
+        traceId: { type: string, format: uuid }
+    ConflictReply:
+      type: object
+      additionalProperties: false
+      required: [status, conflict, traceId]
+      properties:
+        status: { type: string, enum: [conflict] }
+        traceId: { type: string, format: uuid }
+        conflict:
+          type: object
+          additionalProperties: false
+          required: [conflictId, draftId, base, server, local, fields, policy]
+          properties:
+            conflictId: { type: string, format: uuid }
+            draftId: { type: string, format: uuid }
+            base: { $ref: '#/components/schemas/DraftVersion' }
+            server: { $ref: '#/components/schemas/DraftVersion' }
+            local: { $ref: '#/components/schemas/DraftContent' }
+            policy: { type: string, enum: [claim-draft.fields.v1] }
+            fields:
+              type: array
+              minItems: 1
+              maxItems: 5
+              uniqueItems: true
+              items: { type: string, enum: [eventType, occurredAt, place, description, evidence] }

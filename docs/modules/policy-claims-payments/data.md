@@ -6,6 +6,8 @@ Policies preserve coverage and offer version. Money uses DECIMAL(19,4) and curre
 
 See [permissions, events and SQL operations](../../infrastructure/data-model.md).
 
+Editable [claim drafts](claim-drafts.md) use `claim_drafts` for current owner/policy-bound content, `claim_draft_revisions` for immutable base snapshots and `claim_draft_commands` for immutable idempotent results and decision captures. A content revision, command and audit commit together; conflicts retain the versions without changing current content. Runtime may update only the current draft, never revision/command history, and has no DELETE permission. This resource is separate from the immutable `claims` upload declaration and cannot confirm a filing or financial effect.
+
 The [synthetic financial flow](README.md#transactions-and-recovery) stores accepted terms, their keyed digest, canonical document and decision capture in append-only `financial_contracts`. `policy_signatures` binds a synthetic receipt to that exact document fingerprint. `financial_commands` scopes request fingerprints and final results to actor and hashed idempotency key. A unique index over the accepted offer ID/revision prevents another Policy record for the same revision. No legacy row is backfilled into an assumed accepted offer.
 
 `mock_gateway_operations` is the durable ledger of the explicitly synthetic external payment protocol. It records a unique payment intent, exact DECIMAL amount/currency, request hash and confirmation/refund. This permits reconciliation across service instances; it does not represent a real charge. Provider interaction remains outside the owner transaction committing business state/audit/outbox, so recovery must handle a provider confirmation followed by incomplete local issuance.

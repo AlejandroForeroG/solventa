@@ -21,7 +21,7 @@ const es = {
   policyCachePrompt: 'Desbloquea para ver tus pólizas',
   actions: {
     verifyIdentity: 'Verificar identidad',
-    wallet: 'Mis pólizas',
+    wallet: 'Mis pólizas', drafts: 'Borradores de siniestro',
     notificationPreferences: 'Preferencias de avisos',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
     enable: 'Activar huella o rostro', revoke: 'Revocar acceso de este dispositivo', retry: 'Reintentar conexión',
@@ -66,7 +66,7 @@ const en: typeof es = {
   policyCachePrompt: 'Unlock to view your policies',
   actions: {
     verifyIdentity: 'Verify identity',
-    wallet: 'My policies',
+    wallet: 'My policies', drafts: 'Claim drafts',
     notificationPreferences: 'Notification preferences',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
     enable: 'Enable fingerprint or face', revoke: 'Revoke access for this device', retry: 'Retry connection',
