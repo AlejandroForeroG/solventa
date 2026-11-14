@@ -210,6 +210,19 @@ test('the lease is checked again after asking the destination, so an expired gra
   assert.equal((await new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date() }, new TimerDeadline(), 25).list({}, actor())).items[0].delivery?.status, 'pending');
 });
 
+test('an answer that arrives after the lease expired is recorded but never returned', async () => {
+  const { store, destinations } = service();
+  let later = false;
+  const reports = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date(Date.now() + (later ? 60_000 : 0)) }, new TimerDeadline(), 25);
+  const { report } = await reports.generate({ period, destination: 'regulator' }, actor());
+  const deliver = destinations.regulator.deliver.bind(destinations.regulator);
+  destinations.regulator.deliver = async message => { later = true; return deliver(message); };
+  await assert.rejects(reports.send(report.id, actor()), /expired/);
+  assert.equal(destinations.regulator.deliveries, 1);
+  const fresh = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date() }, new TimerDeadline(), 25);
+  assert.equal((await fresh.list({}, actor())).items[0].delivery?.status, 'acknowledged', 'the outcome that was already in flight is kept');
+});
+
 test('a destination rejects a delivery whose manifest breaks the versioned contract even when the hash and the totals agree', () => {
   for (const destination of ['regulator', 'reinsurer'] as const) {
     const message = deliveryFor(destination, syntheticFacts());
