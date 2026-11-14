@@ -71,6 +71,8 @@ export class Reports {
     const result: DeliveryResult = outcome === 'uncertain' || outcome === null ? { status: 'uncertain' }
       : outcome.outcome === 'acknowledged' ? { status: 'acknowledged', reference: outcome.reference } : { status: 'rejected', code: outcome.code };
     const delivery = await this.store.recordDelivery(message.deliveryId, result, actor);
+    // An outcome already in flight is kept, but its status and reference are only returned while the authorization still holds.
+    this.active(actor);
     return { status: 'sent', delivery, destination: report.destination, durationMs: this.clock.now().getTime() - started };
   }
 

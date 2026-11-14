@@ -170,7 +170,8 @@ export class SqlReportStore implements ReportStore {
       const row = (await db.query<DeliveryRow>(`UPDATE policy.report_deliveries SET status = 'dispatched', attempts = attempts + 1, updated_at = now()
         WHERE id = $1 AND status IN ('pending', 'dispatched', 'uncertain') RETURNING id, status, attempts, reference, rejection_code, updated_at`, [deliveryId])).rows[0];
       if (!row) return null;
-      await audit(db, actor, 'reports.delivery.dispatched', 'report_delivery', deliveryId, 'dispatched', false);
+      // The only transition before report data leaves the service, so an expired lease rolls it back; recording an outcome afterwards is not guarded.
+      await audit(db, actor, 'reports.delivery.dispatched', 'report_delivery', deliveryId, 'dispatched', true);
       return deliveryOf(row);
     });
   }
