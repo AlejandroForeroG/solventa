@@ -139,6 +139,12 @@ try {
   await assert.rejects(store.list({}, { ...lease(), expiresAt: new Date(Date.now() - 1).toISOString() }), /report_authorization_expired/);
   assert.equal(await count(`SELECT count(*) AS n FROM policy.audit_events WHERE action LIKE 'reports.%'`), rows, 'an expired lease releases nothing and records nothing');
 
+  // The transition that precedes sending is guarded by the lease inside its own transaction, so an expired grant changes nothing.
+  const guarded = await reports().generate({ period: '2026-02', destination: 'regulator' }, lease());
+  const opened = await store.openDelivery(guarded.report.id, lease());
+  await assert.rejects(store.markDispatched(opened!.delivery.id, { ...lease(), expiresAt: new Date(Date.now() - 1).toISOString() }), /report_authorization_expired/);
+  assert.equal((await db.query('SELECT status, attempts FROM policy.report_deliveries WHERE id=$1', [opened!.delivery.id])).rows[0].status, 'pending', 'an expired lease leaves the delivery untouched');
+
   await db.query(`UPDATE policy.report_revisions SET manifest = jsonb_set(manifest, '{rowCount}', '999'::JSONB) WHERE id=$1`, [changed.report.id]);
   // Not reachable by the runtime role: only an administrator could do this, and the destination still catches it.
   const tampered = await reports().send(changed.report.id, lease());
@@ -172,7 +178,7 @@ try {
   await claim('archived', '2026-10-20T00:00:00Z', null, null);
   await assert.rejects(store.facts(periodBounds(period)), error => error instanceof ReportError && error.code === 'invalid_fact', 'an unknown claim state is an error, never hidden or guessed');
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['bogota-month-boundaries', 'issued-lifecycle-claims-payments', 'draft-and-pending-excluded', 'revision-by-content', 'concurrent-generation', 'period-without-data',
-    'earlier-revision-kept', 'delivery-ack', 'retry-without-duplicate', 'timeout-then-lookup', 'corpus-timeout-cases', 'rejection-code', 'audit-actions', 'expired-lease', 'runtime-immutable', 'unknown-claim-state'] }));
+    'earlier-revision-kept', 'delivery-ack', 'retry-without-duplicate', 'timeout-then-lookup', 'corpus-timeout-cases', 'rejection-code', 'audit-actions', 'expired-lease', 'dispatch-guarded-by-lease', 'runtime-immutable', 'unknown-claim-state'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);
