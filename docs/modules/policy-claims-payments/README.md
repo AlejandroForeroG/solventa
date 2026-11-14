@@ -4,6 +4,8 @@ Code: `backend/policy-claims-payments`. This module owns issuance, policies, pre
 
 Explicitly granted web analysts can list open claims through the [claims inbox](claims-inbox.md). Identity owns the `claims:read` permission; this module owns the list, its ordering and the read audit. A customer reports a claim from the native app through the [claim report](claim-report.md): a draft, one verified upload per declared file and a submission that assigns the single case number and opens the claim in that list. The [case file](claims-inbox.md#case-actions) supports analyst decisions, expert assignments and information requests, and a web policyholder can answer a request.
 
+The [regulator and reinsurer reports](regulatory-reports.md) guide covers the monthly period reports, their custody and the simulated delivery to each destination, behind per-operation operator grants.
+
 The [assistance provider search](assistance-provider-search.md) guide describes the shared lookup rules and the versioned synthetic directory.
 
 The [editable claim drafts](claim-drafts.md) guide covers offline preparation, automatic synchronization, revision conflicts, durable customer choices and their SQL/HTTP boundaries. These drafts do not file claims or replace the upload declaration.

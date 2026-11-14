@@ -1,4 +1,8 @@
 {
+  "assistance_requests": ["SELECT"],
+  "report_revisions": ["SELECT", "INSERT"],
+  "report_deliveries": ["SELECT", "INSERT", "UPDATE"],
+  "report_destination_receipts": ["SELECT", "INSERT"],
   "claim_review_actions": ["SELECT", "INSERT"],
   "claim_requirements": ["SELECT", "INSERT", "UPDATE"],
   "claim_requirement_files": ["SELECT", "INSERT", "UPDATE"],
