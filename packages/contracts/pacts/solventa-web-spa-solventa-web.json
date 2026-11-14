@@ -2020,6 +2020,383 @@
       }
     },
     {
+      "description": "a report delivery",
+      "providerStates": [
+        {
+          "name": "an operator with every report grant and a generated report"
+        }
+      ],
+      "request": {
+        "body": {},
+        "headers": {
+          "Content-Type": "application/json",
+          "accept": "application/json",
+          "origin": "https://solventa-web-dev.ja-forerog1.workers.dev"
+        },
+        "method": "POST",
+        "path": "/api/v1/reports/90000000-0000-4000-8000-000000000001/delivery"
+      },
+      "response": {
+        "body": {
+          "delivery": {
+            "attempts": 1,
+            "id": "90000000-0000-4000-8000-0000000000d1",
+            "reference": "MOCK-RPT-90000000-0000-4000-8000-0000000000d1",
+            "rejectionCode": null,
+            "status": "acknowledged",
+            "updatedAt": "2026-11-30T12:05:00.000Z"
+          },
+          "reportId": "90000000-0000-4000-8000-000000000001",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a report generation",
+      "providerStates": [
+        {
+          "name": "an operator with every report grant"
+        }
+      ],
+      "request": {
+        "body": {
+          "destination": "regulator",
+          "format": "csv",
+          "period": "2026-10"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "accept": "application/json",
+          "origin": "https://solventa-web-dev.ja-forerog1.workers.dev"
+        },
+        "matchingRules": {
+          "body": {
+            "$.period": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/reports"
+      },
+      "response": {
+        "body": {
+          "created": true,
+          "report": {
+            "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+            "destination": "regulator",
+            "formatVersion": "regulator-portfolio.v1",
+            "generatedAt": "2026-11-30T12:00:00.000Z",
+            "manifest": {
+              "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+              "destination": "regulator",
+              "formatVersion": "regulator-portfolio.v1",
+              "generatedAt": "2026-11-30T12:00:00.000Z",
+              "period": "2026-11",
+              "records": {
+                "claim_total": 2,
+                "payment_total": 3,
+                "policy_cancelled": 1,
+                "policy_issued": 2,
+                "policy_modified": 1
+              },
+              "revision": 1,
+              "rowCount": 9,
+              "ruleVersion": "academic-report-1",
+              "synthetic": true,
+              "totals": [
+                {
+                  "amount": "15000000.0000",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "claim:in_review"
+                },
+                {
+                  "amount": "0.0000",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "claim:paid"
+                },
+                {
+                  "amount": "100000.0000",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "payment:indemnity:confirmed"
+                },
+                {
+                  "amount": "1250000.5000",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "payment:premium:confirmed"
+                },
+                {
+                  "amount": "410000.0001",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "payment:premium:refunded"
+                },
+                {
+                  "amount": "410000.0001",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "policy_cancelled"
+                },
+                {
+                  "amount": "2230000.7500",
+                  "count": 2,
+                  "currency": "COP",
+                  "group": "policy_issued"
+                },
+                {
+                  "amount": "1250000.5000",
+                  "count": 1,
+                  "currency": "COP",
+                  "group": "policy_modified"
+                }
+              ]
+            },
+            "period": "2026-11",
+            "reportId": "90000000-0000-4000-8000-000000000001",
+            "revision": 1
+          },
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "a reports list",
+      "providerStates": [
+        {
+          "name": "an operator with every report grant and a generated report"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/reports"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+              "destination": "regulator",
+              "formatVersion": "regulator-portfolio.v1",
+              "generatedAt": "2026-11-30T12:00:00.000Z",
+              "manifest": {
+                "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+                "destination": "regulator",
+                "formatVersion": "regulator-portfolio.v1",
+                "generatedAt": "2026-11-30T12:00:00.000Z",
+                "period": "2026-11",
+                "records": {
+                  "claim_total": 2,
+                  "payment_total": 3,
+                  "policy_cancelled": 1,
+                  "policy_issued": 2,
+                  "policy_modified": 1
+                },
+                "revision": 1,
+                "rowCount": 9,
+                "ruleVersion": "academic-report-1",
+                "synthetic": true,
+                "totals": [
+                  {
+                    "amount": "15000000.0000",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "claim:in_review"
+                  },
+                  {
+                    "amount": "0.0000",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "claim:paid"
+                  },
+                  {
+                    "amount": "100000.0000",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "payment:indemnity:confirmed"
+                  },
+                  {
+                    "amount": "1250000.5000",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "payment:premium:confirmed"
+                  },
+                  {
+                    "amount": "410000.0001",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "payment:premium:refunded"
+                  },
+                  {
+                    "amount": "410000.0001",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "policy_cancelled"
+                  },
+                  {
+                    "amount": "2230000.7500",
+                    "count": 2,
+                    "currency": "COP",
+                    "group": "policy_issued"
+                  },
+                  {
+                    "amount": "1250000.5000",
+                    "count": 1,
+                    "currency": "COP",
+                    "group": "policy_modified"
+                  }
+                ]
+              },
+              "period": "2026-11",
+              "reportId": "90000000-0000-4000-8000-000000000001",
+              "revision": 1
+            }
+          ],
+          "next": null,
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a reports list resulting in forbidden",
+      "providerStates": [
+        {
+          "name": "an operator without report grants"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/reports"
+      },
+      "response": {
+        "body": {
+          "error": "forbidden",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 403
+      }
+    },
+    {
+      "description": "a reports list resulting in unavailable",
+      "providerStates": [
+        {
+          "name": "the report store is unavailable"
+        }
+      ],
+      "request": {
+        "headers": {
+          "accept": "application/json"
+        },
+        "method": "GET",
+        "path": "/api/v1/reports"
+      },
+      "response": {
+        "body": {
+          "error": "service_unavailable",
+          "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 503
+      }
+    },
+    {
       "description": "a request for the consent terms",
       "providerStates": [
         {

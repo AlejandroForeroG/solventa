@@ -65,7 +65,9 @@ jobs:
       - run: npm run test:offers:sql
       - run: npm run test:audit:sql
       - run: npm run test:claims:access:sql
+      - run: npm run test:report-access:sql
       - run: npm run test:claims:sql
+      - run: npm run test:reports:sql
       - run: npm run test:claim-report:sql
       - run: npm run test:claim-drafts:sql
       - run: npm run test:financial:sql
