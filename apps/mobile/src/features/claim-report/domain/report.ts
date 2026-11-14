@@ -22,11 +22,15 @@ export type Preview = { status: 'pending' } | { status: 'ready'; uri: string } |
 export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview; document?: true };
 export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null; owned?: boolean };
 
+// The customer decides whether the report carries their position. Only `ready` attaches it; a refused permission or a failed reading means the report goes without it.
+export type LocationChoice = { state: 'off' } | { state: 'reading' } | { state: 'ready'; latitude: number; longitude: number } | { state: 'denied' } | { state: 'failed' };
+
 export type Draft = {
   policyId: string;
   eventType: EventType | null;
   occurredAt: Date;
   place: string;
+  location: LocationChoice;
   description: string;
   evidence: EvidenceItem[];
 };
@@ -37,6 +41,7 @@ export type Issue =
   | { field: 'occurredAt'; code: 'future' | 'before_coverage' | 'after_coverage' }
   | { field: 'description'; code: 'too_short' | 'too_long' }
   | { field: 'place'; code: 'too_long' }
+  | { field: 'location'; code: 'reading' }
   | { field: 'evidence'; code: 'none' | 'too_many' | 'total_size' };
 export type RejectedCandidate = 'file_type' | 'empty' | 'too_many' | 'total_size' | 'unreadable';
 
@@ -84,6 +89,7 @@ export function validate(draft: Draft, window: PolicyWindow, now: Date): Issue[]
   if (description < LIMITS.description.min) issues.push({ field: 'description', code: 'too_short' });
   else if (description > LIMITS.description.max) issues.push({ field: 'description', code: 'too_long' });
   if (length(draft.place.trim()) > LIMITS.place) issues.push({ field: 'place', code: 'too_long' });
+  if (draft.location.state === 'reading') issues.push({ field: 'location', code: 'reading' });
   if (draft.evidence.length < 1) issues.push({ field: 'evidence', code: 'none' });
   else if (draft.evidence.length > LIMITS.files) issues.push({ field: 'evidence', code: 'too_many' });
   else if (totalBytes(draft.evidence) > LIMITS.bytes) issues.push({ field: 'evidence', code: 'total_size' });
@@ -98,6 +104,7 @@ export type Manifest = {
   eventType: EventType;
   occurredAt: string;
   place?: string;
+  location?: { authorized: true; latitude: number; longitude: number };
   description: string;
   evidence: { fileId: string; contentType: EvidenceContentType; byteSize: number; sha256: string }[];
 };
@@ -106,7 +113,8 @@ export function manifestOf(draft: Draft & { eventType: EventType }, digests: Rea
   const place = draft.place.trim();
   return {
     policyId: draft.policyId, eventType: draft.eventType, occurredAt: draft.occurredAt.toISOString(),
-    ...(place ? { place } : {}), description: draft.description.trim(),
+    ...(place ? { place } : {}), ...(draft.location.state === 'ready' ? { location: { authorized: true as const, latitude: draft.location.latitude, longitude: draft.location.longitude } } : {}),
+    description: draft.description.trim(),
     evidence: draft.evidence.map(item => ({ fileId: item.id, contentType: item.contentType, byteSize: item.byteSize, sha256: digests.get(item.id) ?? '' })),
   };
 }

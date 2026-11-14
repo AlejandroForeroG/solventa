@@ -24,6 +24,10 @@ export interface ClaimReportApi {
 
 export interface FileDigest { sha256(uri: string): Promise<string> }
 
+// The device position, read only after the customer asks for it. The reading stops when the signal aborts and never rejects.
+export type LocationReading = { status: 'ok'; latitude: number; longitude: number } | { status: 'denied' } | { status: 'failed' };
+export interface LocationSource { read(signal: AbortSignal): Promise<LocationReading> }
+
 export interface EvidenceFiles {
   // A still image from a video, or null when it cannot be made. It never rejects.
   thumbnail(uri: string): Promise<string | null>;

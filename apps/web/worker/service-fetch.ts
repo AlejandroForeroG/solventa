@@ -2,6 +2,8 @@ import { assistanceSearchPath } from '@solventa/contracts';
 
 function bodyLimit(path: string): number {
   if (path === assistanceSearchPath) return 1024;
+  // A request for assistance on site: a provider reference and an address or a position, no more than the service itself accepts.
+  if (/^\/api\/v1\/assistance\/requests(?:\/|$)/.test(path)) return 4 * 1024;
   if (/^\/api\/v1\/advisor-authorizations(?:\/|$)/.test(path)) return 1024;
   if (/^\/api\/v[12]\/policies(?:\/|$)/.test(path) || /^\/api\/v1\/(?:offers(?:\/|$)|quotes\/[^/]+\/offers(?:\/|$))/.test(path)) return 1024;
   if (/^\/api\/v1\/(?:(?:me\/)?quotes|quote-estimates)(?:\/|$)/.test(path)) return 16 * 1024;
