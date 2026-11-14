@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "report-delivery-regulator.v1",
+  "title": "Regulator report delivery v1",
+  "description": "What Policy hands to the simulated regulator: the artifact in its own format (regulator-portfolio.v1), its manifest and the delivery identity that makes a retry safe.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "destination",
+    "deliveryId",
+    "manifest",
+    "csv"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "regulator-portfolio.v1"
+    },
+    "destination": {
+      "const": "regulator"
+    },
+    "deliveryId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "csv": {
+      "type": "string",
+      "pattern": "^record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\\n"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "ruleVersion",
+        "synthetic",
+        "period",
+        "destination",
+        "revision",
+        "generatedAt",
+        "contentHash",
+        "rowCount",
+        "records",
+        "totals"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": "regulator-portfolio.v1"
+        },
+        "ruleVersion": {
+          "const": "academic-report-1"
+        },
+        "synthetic": {
+          "const": true
+        },
+        "period": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+        },
+        "destination": {
+          "const": "regulator"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rowCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "policy_issued",
+              "policy_modified",
+              "policy_renewed",
+              "policy_cancelled",
+              "claim_total",
+              "payment_total"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "totals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "group",
+              "currency",
+              "count",
+              "amount"
+            ],
+            "properties": {
+              "group": {
+                "type": "string",
+                "pattern": "^(policy_(issued|modified|renewed|cancelled)|claim:[a-z_]+|payment:(premium|indemnity):(confirmed|refunded))$"
+              },
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "amount": {
+                "type": "string",
+                "pattern": "^[0-9]{1,15}\\.[0-9]{4}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

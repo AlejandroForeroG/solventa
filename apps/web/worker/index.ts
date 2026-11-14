@@ -14,6 +14,7 @@ const claimsPath = /^\/api\/v1\/claims(\/|$)/;
 const claimDraftsPath = /^\/api\/v1\/claim-drafts(\/|$)/;
 const assistanceRequestsPath = /^\/api\/v1\/assistance\/requests(?:\/[^/]+)?$/;
 const requirementEvidencePath = /^\/api\/v1\/claims\/[^/]+\/requirements\/[^/]+\/files\/[^/]+$/;
+const reportsPath = /^\/api\/v1\/reports(\/|$)/;
 const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
 // One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
@@ -68,7 +69,7 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
       const response = /^\/api\/v[12]\/partner-portal$/.test(path) || isQuotesPath(path) || offersPath.test(path) || partnerOffersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) || /^\/api\/v1\/advisor-authorizations(\/|$)/.test(path) ? await forwardToPolicy(request, env, headers)
         : (claimEvidencePath.test(path) || requirementEvidencePath.test(path)) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
-        : claimsPath.test(path) || claimDraftsPath.test(path) || path === assistanceSearchPath || assistanceRequestsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
+        : claimsPath.test(path) || claimDraftsPath.test(path) || reportsPath.test(path) || path === assistanceSearchPath || assistanceRequestsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }
