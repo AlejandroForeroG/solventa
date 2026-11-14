@@ -142,12 +142,15 @@ export class SqlReportStore implements ReportStore {
     });
   }
 
-  async load(id: string, actor: ReportActor): Promise<StoredRevision | null> {
+  async load(id: string): Promise<StoredRevision | null> {
     return inTransaction(this.connectionString, async db => {
       const row = await revision(db, id);
-      await audit(db, actor, 'reports.download', 'report_revision', id, row ? 'success' : 'not_found', true);
       return row ? { ...summaryOf(row), content: row.content as string } : null;
-    });
+    }, { readOnly: true });
+  }
+
+  async recordDownload(id: string, outcome: 'success' | 'not_found' | 'integrity_failure', actor: ReportActor) {
+    await inTransaction(this.connectionString, db => audit(db, actor, 'reports.download', 'report_revision', id, outcome, true));
   }
 
   async openDelivery(id: string, actor: ReportActor) {
