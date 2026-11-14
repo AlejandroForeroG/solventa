@@ -2,6 +2,7 @@ import { advisorEs, advisorEn } from '../advisor/messages';
 import { portalEs, portalEn } from '../partner-portal/messages';
 import { auditEs, auditEn } from '../audit/messages';
 import { claimsEs, claimsEn } from '../claims/messages';
+import { reportsEs, reportsEn } from '../reports/messages';
 import { policiesEs, policiesEn } from '../policies/messages';
 import { assistanceEs, assistanceEn } from '../assistance/messages';
 // Catalogues for the commercial front end. Texts come from the approved prototype
@@ -682,6 +683,6 @@ const enUS: typeof esCO = {
 };
 
 export const messages: Record<Locale, Record<string, string>> = {
-  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...policiesEs, ...assistanceEs },
-  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...policiesEn, ...assistanceEn },
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn },
 };

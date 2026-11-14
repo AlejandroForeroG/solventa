@@ -1,0 +1,948 @@
+{
+  "description": "Valid and negative deliveries for the simulated regulator; synthetic data only.",
+  "cases": [
+    {
+      "name": "regulator accepts a period with data",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "acknowledged"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator accepts a period without data",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "acknowledged"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "fdf69ed7c4d13582c83383f102fc586842aa36e38168804a5542f1048ba7cde9",
+          "rowCount": 0,
+          "records": {},
+          "totals": []
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\n"
+      }
+    },
+    {
+      "name": "regulator records a delivery but its answer never arrives",
+      "destination": "regulator",
+      "fault": "timeout",
+      "expected": {
+        "outcome": "uncertain",
+        "afterLookup": "acknowledged"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a csv changed after hashing",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "hash_mismatch"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,9999999.0000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a total that does not match its rows",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "totals_mismatch"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a count that does not match its rows",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "totals_mismatch"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 2,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a row count that does not match its rows",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "totals_mismatch"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 10,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a header of another format",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "malformed_csv"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "235cd35f83ba20a13fb1344c96963bfbac6c828d22d614d7e43f2f8012291a6a",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,claim_id,claim_number,payment_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,reference,currency,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a row with an extra column",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "malformed_csv"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "797436692c0b56d0b2141b16e5b036a0a67c0534e28e1db3f19205cd9bf10311",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001,extra\n"
+      }
+    },
+    {
+      "name": "regulator rejects a delivery meant for the other destination",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "destination_mismatch"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "reinsurer",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a format version it does not support",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "unsupported_format_version"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v0",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a message without its manifest",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "invalid_message"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n"
+      }
+    },
+    {
+      "name": "regulator rejects a message with an unknown field",
+      "destination": "regulator",
+      "expected": {
+        "outcome": "rejected",
+        "code": "invalid_message"
+      },
+      "message": {
+        "formatVersion": "regulator-portfolio.v1",
+        "destination": "regulator",
+        "deliveryId": "90000000-0000-4000-8000-0000000000d1",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "csv": "record_type,policy_id,coverage_kind,operation,state,event_at,effective_from,effective_until,premium,coverage_amount,currency,count,amount\npolicy_issued,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-03T15:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_issued,90000000-0000-4000-8000-00000000a002,mortgage_life,,,2026-11-04T16:30:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,980000.2500,148000000.0000,COP,,\npolicy_modified,90000000-0000-4000-8000-00000000a001,mortgage_life,,,2026-11-10T14:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,1250000.5000,148000000.0000,COP,,\npolicy_cancelled,90000000-0000-4000-8000-00000000a003,mortgage_life,,,2026-11-12T09:00:00.000Z,2026-11-01T05:00:00.000Z,2027-11-01T05:00:00.000Z,410000.0001,148000000.0000,COP,,\nclaim_total,,,,in_review,,,,,,COP,1,15000000.0000\nclaim_total,,,,paid,,,,,,COP,1,0.0000\npayment_total,,,indemnity,confirmed,,,,,,COP,1,100000.0000\npayment_total,,,premium,confirmed,,,,,,COP,1,1250000.5000\npayment_total,,,premium,refunded,,,,,,COP,1,410000.0001\n",
+        "extra": true
+      }
+    }
+  ]
+}

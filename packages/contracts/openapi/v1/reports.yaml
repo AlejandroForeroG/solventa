@@ -1,0 +1,518 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Regulator and reinsurer reports
+  version: 1.0.0
+  description: Generation, custody, download and delivery of the period reports for the simulated regulator and reinsurer.
+    Every operation needs its own expiring, revocable Identity grant (reports:generate, reports:read, reports:download,
+    reports:send); a session alone is insufficient and partners and native clients are excluded. Input never carries data or
+    totals; the server reads the persisted facts of the period. Each revision is immutable, bound to its format version and
+    SHA-256 hash, and a changed fact set adds another revision. Dispatch and acknowledgement are distinct delivery states and
+    a timeout stays uncertain. Both destinations are simulations. The reports carry identifiers, states, instants and decimal
+    amounts only, and make no claim about regulatory compliance or acceptance by a real recipient. Responses and errors are no-store.
+servers:
+  - url: /api/v1
+tags:
+  - name: Reports
+    description: Period reports for the regulator and the reinsurer.
+paths:
+  /reports:
+    get:
+      tags:
+        - Reports
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: listReports
+      summary: List at most twenty revisions, newest first
+      description: Requires reports:read. Pass next as before, preserving filters. Each revision carries its manifest and delivery state.
+        The collection read is durably audited without persisting search values. Unknown, duplicate and empty parameters are rejected.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: period
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Period"
+        - name: destination
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Destination"
+        - name: before
+          in: query
+          required: false
+          description: Opaque keyset cursor from the prior page.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Page of revisions.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPage"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - Reports
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: generateReport
+      summary: Generate the report of a period for one destination
+      description: Requires reports:generate. The server reads the persisted facts of the month in America/Bogota in one consistent snapshot,
+        reconciles the totals against an independent sum and stores the artifact and manifest with the audit record in one transaction.
+        The same content returns the existing revision with created false; a changed fact set creates the next revision and never
+        overwrites a sent one. A month that has not started is rejected.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateRequest"
+      responses:
+        "200":
+          description: The same content already has a revision.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResponse"
+        "201":
+          description: A new revision was created.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "415":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /reports/{reportId}/download:
+    get:
+      tags:
+        - Reports
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: downloadReport
+      summary: Download the CSV or the manifest of a revision
+      description: Requires reports:download. The stored artifact is checked against its hash before release; a mismatch is an integrity violation
+        and nothing is returned. Each download is audited.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: file
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - csv
+              - manifest
+            default: csv
+      responses:
+        "200":
+          description: The artifact as an attachment.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+            X-Report-Hash:
+              schema:
+                type: string
+                pattern: ^[0-9a-f]{64}$
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Manifest"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /reports/{reportId}/delivery:
+    post:
+      tags:
+        - Reports
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: sendReport
+      summary: Deliver a revision to its destination
+      description: Requires reports:send. The delivery identity belongs to the revision, so a retry first asks the destination what it already
+        recorded and never repeats a confirmed outcome. The answer is 200 with the delivery state; uncertain means the destination did not answer
+        within 700 ms and is never a success. A rejected delivery is final for that revision.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Current state of the delivery.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "415":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Existing sealed HttpOnly WorkOS web session plus an active Identity-owned grant for the exact reports operation.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local development cookie only; still requires the exact reports grant.
+  headers:
+    NoStore:
+      schema:
+        type: string
+        enum:
+          - no-store
+    TraceId:
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Failure with a fixed code and the trace identifier.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        X-Trace-Id:
+          $ref: "#/components/headers/TraceId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Period:
+      type: string
+      pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+      description: Calendar month in America/Bogota.
+    Destination:
+      type: string
+      enum:
+        - regulator
+        - reinsurer
+    FormatVersion:
+      type: string
+      enum:
+        - regulator-portfolio.v1
+        - reinsurer-bordereau.v1
+    GenerateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - period
+        - destination
+        - format
+      properties:
+        period:
+          $ref: "#/components/schemas/Period"
+        destination:
+          $ref: "#/components/schemas/Destination"
+        format:
+          type: string
+          enum:
+            - csv
+    Group:
+      type: object
+      additionalProperties: false
+      required:
+        - group
+        - currency
+        - count
+        - amount
+      properties:
+        group:
+          type: string
+          pattern: ^(policy_(issued|modified|renewed|cancelled)|claim:[a-z_]+|payment:(premium|indemnity):(confirmed|refunded))$
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        count:
+          type: integer
+          minimum: 1
+        amount:
+          type: string
+          pattern: ^[0-9]{1,15}\.[0-9]{4}$
+    Manifest:
+      type: object
+      additionalProperties: false
+      required:
+        - formatVersion
+        - ruleVersion
+        - synthetic
+        - period
+        - destination
+        - revision
+        - generatedAt
+        - contentHash
+        - rowCount
+        - records
+        - totals
+      properties:
+        formatVersion:
+          $ref: "#/components/schemas/FormatVersion"
+        ruleVersion:
+          type: string
+          enum:
+            - academic-report-1
+        synthetic:
+          type: boolean
+          enum:
+            - true
+        period:
+          $ref: "#/components/schemas/Period"
+        destination:
+          $ref: "#/components/schemas/Destination"
+        revision:
+          type: integer
+          minimum: 1
+        generatedAt:
+          type: string
+          format: date-time
+        contentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        rowCount:
+          type: integer
+          minimum: 0
+        records:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+        totals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Group"
+    Delivery:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - attempts
+        - reference
+        - rejectionCode
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - dispatched
+            - acknowledged
+            - rejected
+            - uncertain
+        attempts:
+          type: integer
+          minimum: 0
+        reference:
+          type: string
+          nullable: true
+          pattern: ^MOCK-RPT-[0-9a-f-]{36}$
+        rejectionCode:
+          type: string
+          nullable: true
+          pattern: ^[a-z_]{3,48}$
+        updatedAt:
+          type: string
+          format: date-time
+    Report:
+      type: object
+      additionalProperties: false
+      required:
+        - reportId
+        - period
+        - destination
+        - revision
+        - formatVersion
+        - contentHash
+        - manifest
+        - generatedAt
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        period:
+          $ref: "#/components/schemas/Period"
+        destination:
+          $ref: "#/components/schemas/Destination"
+        revision:
+          type: integer
+          minimum: 1
+        formatVersion:
+          $ref: "#/components/schemas/FormatVersion"
+        contentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        manifest:
+          $ref: "#/components/schemas/Manifest"
+        generatedAt:
+          type: string
+          format: date-time
+        delivery:
+          description: Absent until a delivery is requested.
+          $ref: "#/components/schemas/Delivery"
+    ReportPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - next
+        - traceId
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/Report"
+        next:
+          type: string
+          format: uuid
+          nullable: true
+        traceId:
+          type: string
+          format: uuid
+    GenerateResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - report
+        - created
+        - traceId
+      properties:
+        report:
+          $ref: "#/components/schemas/Report"
+        created:
+          type: boolean
+        traceId:
+          type: string
+          format: uuid
+    SendResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - reportId
+        - delivery
+        - traceId
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        delivery:
+          $ref: "#/components/schemas/Delivery"
+        traceId:
+          type: string
+          format: uuid
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - not_found
+            - method_not_allowed
+            - unsupported_media_type
+            - integrity_violation
+            - reconciliation_failed
+            - invalid_fact
+            - access_unavailable
+            - service_unavailable
+        fields:
+          type: array
+          items:
+            type: string
+        traceId:
+          type: string
+          format: uuid
