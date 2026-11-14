@@ -19,7 +19,9 @@ export interface ReportStore {
   facts(range: { start: string; end: string }): Promise<ReportFacts>;
   save(input: NewRevision, actor: ReportActor): Promise<{ report: RevisionSummary; created: boolean }>;
   list(query: ReportQuery, actor: ReportActor): Promise<{ items: RevisionSummary[]; next: string | null }>;
-  load(id: string, actor: ReportActor): Promise<StoredRevision | null>;
+  load(id: string): Promise<StoredRevision | null>;
+  // Recorded only after the artifact was verified and before it is released; the audit insert fails once the lease has expired.
+  recordDownload(id: string, outcome: 'success' | 'not_found' | 'integrity_failure', actor: ReportActor): Promise<void>;
   openDelivery(id: string, actor: ReportActor): Promise<{ report: StoredRevision; delivery: DeliveryRecord } | null>;
   markDispatched(deliveryId: string, actor: ReportActor): Promise<DeliveryRecord | null>;
   recordDelivery(deliveryId: string, result: DeliveryResult, actor: ReportActor): Promise<DeliveryRecord>;

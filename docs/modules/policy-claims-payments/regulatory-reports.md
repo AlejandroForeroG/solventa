@@ -8,7 +8,7 @@ Each route calls Identity's `authorizeApiAccessV1` once, with a two-second deadl
 
 The reports are an operational view of every client in the environment, like the [claims inbox](claims-inbox.md): an authorized operator is not limited to customer-owned data. Another customer, a partner or an operator holding a different report operation reaches nothing, and an unknown report id is a 404 after authorization. Denials are recorded by Identity's security path. Writes require the same-origin check Identity performs for a sealed web session.
 
-Every successful operation inserts into `policy.audit_events` in the same transaction: `reports.generate` (outcome `created` or `unchanged`), `reports.list`, `reports.download` (outcome `success` or `not_found`), `reports.send` and, for the delivery, `reports.delivery.dispatched`, `reports.delivery.acknowledged`, `reports.delivery.rejected` or `reports.delivery.uncertain`. The actor is the operator's internal client UUID. Search values, amounts and file contents are never copied into the audit record, and the existing provisional 90-day audit retention applies. Delivery results are recorded even when the authorization lease has meanwhile expired, so a provider outcome is never lost.
+Every successful operation inserts into `policy.audit_events` in the same transaction: `reports.generate` (outcome `created` or `unchanged`), `reports.list`, `reports.download` (outcome `success`, `not_found` or `integrity_failure`, recorded after the artifact is verified and before it is released, so a refused file is never audited as a download), `reports.send` and, for the delivery, `reports.delivery.dispatched`, `reports.delivery.acknowledged`, `reports.delivery.rejected` or `reports.delivery.uncertain`. The actor is the operator's internal client UUID. Search values, amounts and file contents are never copied into the audit record, and the existing provisional 90-day audit retention applies. Delivery results are recorded even when the authorization lease has meanwhile expired, so a provider outcome is never lost.
 
 ## What a report contains
 
@@ -51,7 +51,7 @@ A revision has at most one delivery (`policy.report_deliveries`, unique by repor
 `POST /api/v1/reports/{reportId}/delivery` works like the premium charge: it commits the delivery record and its audit first, never keeps a SQL transaction open during the destination call, then records the outcome.
 
 1. A final state (`acknowledged` or `rejected`) is returned as it is, without calling the destination.
-2. Otherwise the destination is asked what it already recorded for that delivery identity. If it answers, that outcome is stored and nothing is sent again.
+2. Otherwise the destination is asked what it already recorded for that delivery identity. If it answers, that outcome is stored and nothing is sent again. The authorization lease is checked again after that question: once it has expired nothing is dispatched and the delivery stays `pending`, while an answer already received is still recorded.
 3. If it has nothing, the delivery is marked `dispatched` (attempts + 1) and sent. An answer inside the deadline is stored; a timeout or a transport failure stores `uncertain`.
 4. The response is 200 with the delivery; the web workspace shows `uncertain` as such and offers "Retry delivery", which repeats the steps above with the same identity.
 
@@ -63,14 +63,14 @@ Retries never repeat a confirmed outcome: the destination keeps its own ledger k
 
 | Code | Cause |
 |---|---|
-| `invalid_message` | the envelope is not the exact delivery shape of that destination |
+| `invalid_message` | the envelope or its manifest is not the exact versioned shape of that destination: every manifest field (rule version, period, revision, instant, counts, record types) is checked, not only the hash and the totals |
 | `destination_mismatch` | the message is addressed to the other destination |
 | `unsupported_format_version` | a format version other than its own |
 | `hash_mismatch` | the SHA-256 of the CSV differs from the manifest |
 | `malformed_csv` | wrong header, wrong column count or an unreadable row |
 | `totals_mismatch` | totals, counts or rows recomputed from the CSV differ from the manifest |
 
-Each destination has its own corpus, [regulator](../../../packages/contracts/examples/report-deliveries-regulator.json) and [reinsurer](../../../packages/contracts/examples/report-deliveries-reinsurer.json), with two valid cases, one delivery whose answer never arrives (the destination records it and answers once asked again) and ten negative ones that cover every code above; `tests/regulatory-reports.test.ts` runs every case on each `npm run check` (the unanswered one against an in-memory destination, and `test:reports:sql` against the real simulated destination and its ledger), requires the valid ones to satisfy that destination's schema and the foreign-destination and wrong-version ones to fail it, and checks that the valid ones are exactly what the builders produce. The configuration switch `REPORT_DESTINATION_FAULT` is read only in the composition root. It is `none` in every environment; with `timeout` the destination records its receipt and withholds the answer, which shows an `uncertain` delivery locally and in tests without a second implementation. Set it only in a local `.dev.vars`.
+Each destination has its own corpus, [regulator](../../../packages/contracts/examples/report-deliveries-regulator.json) and [reinsurer](../../../packages/contracts/examples/report-deliveries-reinsurer.json), with two valid cases, one delivery whose answer never arrives (the destination records it and answers once asked again) and eleven negative ones that cover every code above; `tests/regulatory-reports.test.ts` runs every case on each `npm run check` (the unanswered one against an in-memory destination, and `test:reports:sql` against the real simulated destination and its ledger), requires the valid ones to satisfy that destination's schema and the foreign-destination and wrong-version ones to fail it, and checks that the valid ones are exactly what the builders produce. The configuration switch `REPORT_DESTINATION_FAULT` is read only in the composition root. It is `none` in every environment; with `timeout` the destination records its receipt and withholds the answer, which shows an `uncertain` delivery locally and in tests without a second implementation. Set it only in a local `.dev.vars`.
 
 Each delivery is logged as `report_delivery` with environment, trace, destination, status and duration (`overBudget` above the 120 ms budget). No report, policy or person identifier is logged.
 

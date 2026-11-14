@@ -140,6 +140,8 @@ test('download is audited, hash-checked and refuses a tampered artifact', async 
   assert.deepEqual(store.audit.map(entry => `${entry.action}:${entry.outcome}`), ['reports.generate:created', 'reports.download:success', 'reports.download:not_found']);
   store.revisions[0].content = store.revisions[0].content.replace('1250000.5000', '9250000.5000');
   await assert.rejects(reports.download(report.id, 'csv', actor()), /integrity_violation/);
+  assert.equal(store.audit.at(-1)?.action + ':' + store.audit.at(-1)?.outcome, 'reports.download:integrity_failure', 'a refused artifact is never audited as a download');
+  assert.equal(store.audit.filter(entry => entry.action === 'reports.download' && entry.outcome === 'success').length, 1);
 });
 
 for (const destination of ['regulator', 'reinsurer'] as const) {
@@ -194,6 +196,29 @@ test('a missing report is not found and still audited', async () => {
   const { reports, store } = service();
   assert.deepEqual(await reports.send(ids.claim(9), actor()), { status: 'not_found' });
   assert.deepEqual(store.audit.map(entry => `${entry.action}:${entry.outcome}`), ['reports.send:not_found']);
+});
+
+test('the lease is checked again after asking the destination, so an expired grant never dispatches', async () => {
+  const { store, destinations } = service();
+  let later = false;
+  const reports = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date(Date.now() + (later ? 60_000 : 0)) }, new TimerDeadline(), 25);
+  const { report } = await reports.generate({ period, destination: 'regulator' }, actor());
+  const lookup = destinations.regulator.lookup.bind(destinations.regulator);
+  destinations.regulator.lookup = async id => { later = true; return lookup(id); };
+  await assert.rejects(reports.send(report.id, actor()), /expired/);
+  assert.equal(destinations.regulator.deliveries, 0, 'no report data reaches the destination');
+  assert.equal((await new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date() }, new TimerDeadline(), 25).list({}, actor())).items[0].delivery?.status, 'pending');
+});
+
+test('a destination rejects a delivery whose manifest breaks the versioned contract even when the hash and the totals agree', () => {
+  for (const destination of ['regulator', 'reinsurer'] as const) {
+    const message = deliveryFor(destination, syntheticFacts());
+    const broken = (change: Record<string, unknown>) => ({ ...message, manifest: { ...message.manifest, ...change } });
+    for (const change of [{ ruleVersion: 'academic-report-0' }, { synthetic: false }, { period: '2026-13' }, { revision: 0 }, { revision: 1.5 }, { generatedAt: 'yesterday' },
+      { rowCount: -1 }, { records: { ...message.manifest.records, unknown_record: 1 } }, { records: { ...message.manifest.records, policy_issued: 0 } }]) {
+      assert.deepEqual(reviewDelivery(destination, broken(change)), { outcome: 'rejected', code: 'invalid_message' }, `${destination} ${JSON.stringify(change).slice(0, 60)}`);
+    }
+  }
 });
 
 for (const destination of ['regulator', 'reinsurer'] as const) {

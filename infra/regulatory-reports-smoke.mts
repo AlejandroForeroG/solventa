@@ -108,13 +108,14 @@ try {
   assert.equal(await count('SELECT count(*) AS n FROM policy.report_revisions WHERE destination=$1', 'regulator'), 1);
   const empty = await reports().generate({ period: '2026-01', destination: 'regulator' }, lease());
   assert.equal(empty.report.manifest.rowCount, 0);
-  const stored = await store.load(first.report.id, lease());
+  const stored = await store.load(first.report.id);
+  assert.equal((await reports().download(first.report.id, 'csv', lease())).status, 'ok');
   assert.equal(stored?.content.split('\n')[0].startsWith('record_type,policy_id,claim_id'), true);
 
   await db.query(`UPDATE policy.payments SET amount=1250000.5001 WHERE operation='premium' AND status='confirmed'`);
   const changed = await reports().generate({ period, destination: 'reinsurer' }, lease());
   assert.equal(changed.created, true); assert.equal(changed.report.manifest.revision, 2); assert.notEqual(changed.report.contentHash, first.report.contentHash);
-  assert.equal((await store.load(first.report.id, lease()))?.contentHash, first.report.contentHash, 'the earlier revision is never overwritten');
+  assert.equal((await store.load(first.report.id))?.contentHash, first.report.contentHash, 'the earlier revision is never overwritten');
 
   const sent = await reports().send(first.report.id, lease());
   assert.ok(sent.status === 'sent' && sent.delivery.status === 'acknowledged', JSON.stringify(sent));

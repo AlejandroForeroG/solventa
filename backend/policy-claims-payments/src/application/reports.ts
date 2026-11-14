@@ -37,10 +37,14 @@ export class Reports {
 
   async download(id: string, file: ReportFile, actor: ReportActor): Promise<Download> {
     this.active(actor);
-    const report = await this.store.load(id, actor);
+    const report = await this.store.load(id);
+    if (!report) { await this.store.recordDownload(id, 'not_found', actor); return { status: 'not_found' }; }
+    if (report.manifest.contentHash !== report.contentHash || await this.digest.sha256Hex(report.content) !== report.contentHash) {
+      await this.store.recordDownload(id, 'integrity_failure', actor);
+      throw new Error('report_integrity_violation');
+    }
+    await this.store.recordDownload(id, 'success', actor);
     this.active(actor);
-    if (!report) return { status: 'not_found' };
-    if (report.manifest.contentHash !== report.contentHash || await this.digest.sha256Hex(report.content) !== report.contentHash) throw new Error('report_integrity_violation');
     const name = `${report.destination}-${report.period}-r${report.revision}`;
     return file === 'csv' ? { status: 'ok', body: report.content, contentType: 'text/csv; charset=utf-8', filename: `${name}.csv`, contentHash: report.contentHash }
       : { status: 'ok', body: JSON.stringify(report.manifest), contentType: 'application/json', filename: `${name}.manifest.json`, contentHash: report.contentHash };
@@ -59,6 +63,8 @@ export class Reports {
     const message: ReportDelivery = { formatVersion: report.formatVersion, destination: report.destination, deliveryId: opened.delivery.id, manifest: report.manifest, csv: report.content };
     let outcome = await this.attempt(destination.lookup(message.deliveryId));
     if (outcome === null) {
+      // The lookup may have outlived the lease: nothing is sent once authorization has expired, while an answer already in flight is still recorded below.
+      this.active(actor);
       if (!await this.store.markDispatched(message.deliveryId, actor)) return { status: 'sent', delivery: (await this.store.openDelivery(id, actor))?.delivery ?? opened.delivery, destination: report.destination, durationMs: 0 };
       outcome = await this.attempt(destination.deliver(message));
     }

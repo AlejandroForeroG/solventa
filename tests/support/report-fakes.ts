@@ -28,10 +28,12 @@ export class MemoryReportStore implements ReportStore {
     const items = this.revisions.filter(row => (!query.period || row.period === query.period) && (!query.destination || row.destination === query.destination)).map(row => this.summary(row)).reverse();
     return { items, next: null };
   }
-  async load(id: string, actor: ReportActor) {
+  async load(id: string) {
     const row = this.revisions.find(candidate => candidate.id === id);
-    this.audit.push({ action: 'reports.download', outcome: row ? 'success' : 'not_found', actor: actor.clientId });
     return row ? { ...this.summary(row), content: row.content } : null;
+  }
+  async recordDownload(_id: string, outcome: 'success' | 'not_found' | 'integrity_failure', actor: ReportActor) {
+    this.audit.push({ action: 'reports.download', outcome, actor: actor.clientId });
   }
   async openDelivery(id: string, actor: ReportActor) {
     const row = this.revisions.find(candidate => candidate.id === id);
