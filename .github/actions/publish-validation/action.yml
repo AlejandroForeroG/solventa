@@ -1,0 +1,12 @@
+name: Publish validation evidence
+description: Upload the data-only receipt with the pinned official artifact SDK.
+inputs:
+  context:
+    description: Local validation context file.
+    required: true
+  receipt:
+    description: Local completed validation receipt.
+    required: true
+runs:
+  using: node20
+  main: publish.cjs

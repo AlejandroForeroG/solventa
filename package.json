@@ -92,6 +92,7 @@
     "test:partner-quota:sql": "tsx infra/partner-quota-smoke.mts"
   },
   "devDependencies": {
+    "@actions/artifact": "2.3.2",
     "@pact-foundation/pact": "^17.1.4",
     "@redocly/cli": "^2.59.0",
     "@scalar/api-reference": "1.73.1",
