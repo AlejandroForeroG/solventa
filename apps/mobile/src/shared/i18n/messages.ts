@@ -3,7 +3,7 @@ const es = {
     authenticated: 'Sesión iniciada', profile: 'Perfil', locked: 'Vuelve a tu cuenta', blocked: 'Revisa la conexión',
     logoutPending: 'Cierre pendiente', signedOut: 'Bienvenido a Solventa', signIn: 'Inicia sesión',
   },
-  introduction: 'Aquí puedes gestionar tus productos y cuidar tu bienestar en un solo lugar.',
+  introduction: 'Consulta tus pólizas y prepara tus reportes de siniestro.',
   authorizing: 'Completa el ingreso en el navegador.',
   biometricPrompt: 'Confirma tu huella o rostro.',
   verifying: 'Verificando tu sesión…',
@@ -20,6 +20,7 @@ const es = {
   securePrompt: 'Confirma tu identidad para entrar a Solventa',
   policyCachePrompt: 'Desbloquea para ver tus datos guardados',
   actions: {
+    reportClaim: 'Reportar siniestro',
     verifyIdentity: 'Verificar identidad',
     wallet: 'Mis pólizas', drafts: 'Borradores de siniestro',
     notificationPreferences: 'Preferencias de avisos',
@@ -48,7 +49,7 @@ const en: typeof es = {
     authenticated: 'Signed in', profile: 'Profile', locked: 'Welcome back', blocked: 'Check your connection',
     logoutPending: 'Sign-out pending', signedOut: 'Welcome to Solventa', signIn: 'Sign in',
   },
-  introduction: 'Manage your products and take care of your wellbeing, all in one place.',
+  introduction: 'View your policies and prepare your claim reports.',
   authorizing: 'Complete sign-in in your browser.',
   biometricPrompt: 'Confirm your fingerprint or face.',
   verifying: 'Verifying your session…',
@@ -65,6 +66,7 @@ const en: typeof es = {
   securePrompt: 'Confirm your identity to access Solventa',
   policyCachePrompt: 'Unlock to view your saved data',
   actions: {
+    reportClaim: 'Report a claim',
     verifyIdentity: 'Verify identity',
     wallet: 'My policies', drafts: 'Claim drafts',
     notificationPreferences: 'Notification preferences',

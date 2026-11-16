@@ -35,10 +35,9 @@ function VerificationFlow({ locale }: { locale: Locale }) {
   const disabled = state.busy || state.retryPending || !state.loaded;
   const canEdit = !inactive && verification.retryAllowed && !disabled;
   const error = state.error ? copy.errors[state.error as keyof typeof copy.errors] ?? copy.errors.other : null;
-  return <SafeAreaView style={styles.safe}>
+  return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.card}>
-        <Action label={copy.back} secondary disabled={state.busy} onPress={() => router.replace('/')} />
         <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
         <Text style={styles.notice}>{copy.simulated}</Text>
         {state.busy && <ActivityIndicator accessibilityLabel={copy.working} color={theme.colors.primary} />}
@@ -104,8 +103,8 @@ function Action({ label, disabled = false, secondary = false, onPress }: { label
 }
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background }, content: { padding: 24, paddingVertical: 32 },
-  card: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: 24, borderRadius: 28, backgroundColor: theme.colors.surface, gap: 18 },
-  title: { fontSize: 23, lineHeight: 30, color: theme.colors.foreground, fontWeight: '600' },
+  card: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 18 },
+  title: { fontSize: 30, lineHeight: 38, color: theme.colors.foreground, fontWeight: '700', letterSpacing: -0.6 },
   body: { fontSize: 15, lineHeight: 23, color: theme.colors.foreground }, caption: { fontSize: 12, lineHeight: 18, color: theme.colors.muted },
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, color: theme.colors.primaryDark, fontSize: 14, lineHeight: 21 },
   checkbox: { minHeight: 48, justifyContent: 'center' }, section: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 18, gap: 12 },

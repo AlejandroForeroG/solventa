@@ -36,11 +36,15 @@ export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }
     const problem = problems.find(p => p.key === key);
     const spec = inputs[key];
     const id = fieldId(key);
+    const birthDate = key === 'birthDate' && /^\d{4}-\d{2}-\d{2}$/.test(values.birthDate) ? new Date(`${values.birthDate}T12:00:00Z`) : null;
+    const validDate = birthDate && Number.isFinite(birthDate.getTime()) && birthDate.toISOString().slice(0, 10) === values.birthDate;
     return <div className="field" key={key}>
       <label htmlFor={id}>{intl.formatMessage({ id: spec.label })} <span className="required" aria-hidden="true">*</span></label>
       <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
         value={values[key]} onChange={event => onChange(key, event.target.value)}
-        aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
+        aria-invalid={problem ? true : undefined} aria-describedby={[problem ? `${id}-error` : '', key === 'birthDate' ? `${id}-hint` : ''].filter(Boolean).join(' ') || undefined} />
+      {key === 'birthDate' && <p className="note" id={`${id}-hint`}>{intl.formatMessage({ id: validDate ? 'form.dateSelected' : 'form.dateHint' },
+        validDate ? { date: intl.formatDate(birthDate, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) } : undefined)}</p>}
       {problem && <p className="field-error" id={`${id}-error`}>{intl.formatMessage({ id: problem.message }, problem.values)}</p>}
     </div>;
   };

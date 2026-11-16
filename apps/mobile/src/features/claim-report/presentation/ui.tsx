@@ -4,15 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
 
-export function Action({ label, onPress, secondary, disabled }: { label: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
+export function Action({ label, accessibilityLabel, onPress, secondary, disabled }: { label: string; accessibilityLabel?: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [ui.button, secondary && ui.secondary, (pressed || disabled) && ui.dimmed]}>
     <Text style={[ui.buttonText, secondary && ui.secondaryText]}>{label}</Text>
   </Pressable>;
 }
 
 export function Page({ title, subtitle, children }: PropsWithChildren<{ title: string; subtitle?: string }>) {
-  return <SafeAreaView style={ui.safe} edges={['top', 'left', 'right']}>
+  return <SafeAreaView style={ui.safe} edges={['left', 'right', 'bottom']}>
     <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
       <View style={ui.page}>
         {subtitle && <Text style={ui.caption}>{subtitle}</Text>}

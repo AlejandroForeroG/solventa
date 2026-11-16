@@ -1,4 +1,6 @@
 export const policiesEs = {
+  'policies.contractLanguage': 'Las condiciones originales se muestran en español.',
+  'policies.lifecycle.submit.cancelled': 'Cancelar póliza', 'policies.lifecycle.submit.modified': 'Modificar póliza', 'policies.lifecycle.submit.renewed': 'Renovar póliza',
   'policies.open': 'Mis pólizas', 'policies.title': 'Mis pólizas', 'policies.label': 'Pólizas emitidas',
   'policies.subtitle': 'Consulta tus coberturas, documentos y pagos.',
   'policies.loading': 'Consultando tus pólizas…', 'policies.unavailable': 'No se pudo consultar tus pólizas.', 'policies.retry': 'Reintentar',
@@ -51,6 +53,8 @@ export const policiesEs = {
 };
 
 export const policiesEn: Record<keyof typeof policiesEs, string> = {
+  'policies.contractLanguage': 'The original policy conditions are displayed in Spanish.',
+  'policies.lifecycle.submit.cancelled': 'Cancel policy', 'policies.lifecycle.submit.modified': 'Modify policy', 'policies.lifecycle.submit.renewed': 'Renew policy',
   'policies.open': 'My policies', 'policies.title': 'My policies', 'policies.label': 'Issued policies',
   'policies.subtitle': 'Review your coverage, documents and payments.',
   'policies.loading': 'Loading your policies…', 'policies.unavailable': 'Your policies could not be loaded.', 'policies.retry': 'Try again',

@@ -1,6 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
@@ -123,11 +123,14 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
       {categories.map(category => <View key={category} style={styles.row}>
         <View style={styles.categoryLabel}><Text style={styles.rowTitle}>{text.categories[category][0]}</Text>
           <Text style={styles.caption}>{text.categories[category][1]}</Text></View>
-        {channels.map(channel => <View key={channel} style={styles.switchCell}><Switch
-          accessibilityLabel={`${text.categories[category][0]} · ${text.channels[channel]}`}
-          accessibilityState={{ disabled: busy || !!pending }} value={draft[category][channel]}
-          disabled={busy || !!pending} onValueChange={value => void toggle(category, channel, value)}
-          trackColor={{ false: theme.colors.border, true: theme.colors.primary }} /></View>)}
+        {channels.map(channel => <Pressable key={channel} style={styles.switchCell}
+          accessibilityRole="switch" accessibilityLabel={`${text.categories[category][0]} · ${text.channels[channel]}`}
+          accessibilityState={{ checked: draft[category][channel], disabled: busy || !!pending }} disabled={busy || !!pending}
+          onPress={() => void toggle(category, channel, !draft[category][channel])}>
+          <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+            style={[styles.switchTrack, draft[category][channel] && styles.switchTrackOn, (busy || !!pending) && styles.dimmed]}>
+            <View style={[styles.switchThumb, draft[category][channel] && styles.switchThumbOn]} />
+          </View></Pressable>)}
       </View>)}
     </View>}
     {pushSelected && permission === false && <Text accessibilityLiveRegion="polite" style={styles.warningText}>{text.pending}</Text>}
@@ -153,12 +156,16 @@ const styles = StyleSheet.create({
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },
   channelHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
-  categoryLabel: { flex: 1.6 },
-  channelLabel: { flex: 1, color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  categoryLabel: { flex: 1, minWidth: 0, paddingRight: 8 },
+  channelLabel: { width: 48, color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: theme.colors.border, minHeight: 82 },
   rowTitle: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600' },
   caption: { color: theme.colors.muted, fontSize: 11, lineHeight: 16, paddingTop: 3 },
-  switchCell: { flex: 1, alignItems: 'center' },
+  switchCell: { width: 48, minHeight: 56, alignItems: 'center', justifyContent: 'center' },
+  switchTrack: { width: 44, height: 28, borderRadius: 14, backgroundColor: theme.colors.muted, padding: 4 },
+  switchTrackOn: { backgroundColor: theme.colors.primary },
+  switchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.surface, alignSelf: 'flex-start' },
+  switchThumbOn: { alignSelf: 'flex-end' },
   action: { backgroundColor: theme.colors.primaryDark, borderRadius: 14, minHeight: 48, justifyContent: 'center', alignItems: 'center', padding: 10 },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
   actionText: { color: theme.colors.onPrimary, fontSize: 14, fontWeight: '600' },

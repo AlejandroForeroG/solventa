@@ -72,6 +72,7 @@ describe('my policies', () => {
     const exclusions = screen.getByRole('region', { name: 'Exclusiones' });
     expect(within(exclusions).getAllByRole('listitem')).toHaveLength(2);
     expect(within(exclusions).getByText('Actos intencionales del asegurado dirigidos a producir el siniestro.')).toBeVisible();
+    await user.click(within(exclusions).getByText('Datos de verificación'));
     expect(within(exclusions).getByText(/academic-conditions-1/)).toBeVisible();
   });
 
@@ -200,6 +201,8 @@ describe('my policies', () => {
     expect(within(card).getByText('Expired')).toBeVisible();
     await user.click(card);
     expect(await screen.findByRole('tab', { name: 'Information' })).toBeVisible();
+    expect(screen.getByText('The original policy conditions are displayed in Spanish.')).toBeVisible();
+    await user.click(screen.getByText('Verification details'));
     expect(screen.getByText(/The contract text is shown in Spanish/)).toBeVisible();
   });
 

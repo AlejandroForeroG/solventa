@@ -1,7 +1,7 @@
 import { useIntl } from 'react-intl';
 import './landing.css';
 
-export function Landing({ sessionUnavailable, onRetry }: { sessionUnavailable: boolean; onRetry: () => void }) {
+export function Landing({ authenticated = false, sessionUnavailable, onRetry }: { authenticated?: boolean; sessionUnavailable: boolean; onRetry: () => void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `landing.${key}` });
   return <main className="landing">
@@ -12,11 +12,11 @@ export function Landing({ sessionUnavailable, onRetry }: { sessionUnavailable: b
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-intro">
         <p className="section-label">{t('product')}</p>
-        <h1 id="landing-title">{t('title')}</h1>
-        <p className="landing-lede">{t('intro')}</p>
+        <h1 id="landing-title">{t(authenticated ? 'accountHeading' : 'title')}</h1>
+        <p className="landing-lede">{t(authenticated ? 'accountIntro' : 'intro')}</p>
         <div className="landing-actions">
-          <a className="btn btn-primary" href="/cotizar">{t('start')} <span aria-hidden="true">→</span></a>
-          <a className="landing-text-link" href="#how-it-works">{t('how')}</a>
+          <a className="btn btn-primary" href={authenticated ? '/polizas' : '/cotizar'}>{authenticated ? intl.formatMessage({ id: 'policies.open' }) : t('start')} <span aria-hidden="true">→</span></a>
+          <a className="landing-text-link" href={authenticated ? '/cotizar' : '#how-it-works'}>{authenticated ? intl.formatMessage({ id: 'navigation.quote' }) : t('how')}</a>
         </div>
       </div>
       <aside className="landing-preparation" aria-labelledby="landing-prepare-title">
@@ -30,7 +30,7 @@ export function Landing({ sessionUnavailable, onRetry }: { sessionUnavailable: b
         <p>{t('preliminary')}</p>
       </aside>
     </section>
-    <section className="landing-process" id="how-it-works" aria-labelledby="landing-how-title">
+    {!authenticated && <section className="landing-process" id="how-it-works" aria-labelledby="landing-how-title">
       <h2 id="landing-how-title">{t('how')}</h2>
       <div className="landing-process-grid">
         {['estimate', 'account', 'consent'].map(topic => <article key={topic}>
@@ -38,7 +38,7 @@ export function Landing({ sessionUnavailable, onRetry }: { sessionUnavailable: b
           <p>{t(`${topic}Detail`)}</p>
         </article>)}
       </div>
-    </section>
+    </section>}
     <footer className="landing-footer"><span>Solventa</span><p>{t('footer')}</p></footer>
   </main>;
 }

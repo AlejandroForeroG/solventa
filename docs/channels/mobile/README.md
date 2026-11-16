@@ -17,7 +17,11 @@ Keep routes thin. Each capability's UI and logic live in its `src/features` dire
 
 ## Navigation
 
-The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts displays the availability of the notification inbox. Profile contains identity verification, notification preferences, device access settings and sign-out. Home and Claims both link to `/assistance-providers`.
+The signed-in shell has five bottom tabs: Home, Wallet, Claims, Notices and Profile. The original `/wallet`, `/alerts`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Notices opens the implemented notification-preferences editor; it does not promise an unavailable inbox. Its editor unmounts when the tab loses focus and rereads the authoritative preferences on return. Profile contains identity verification, notification preferences, device access settings and sign-out. Home and Claims both link to `/assistance-providers`.
+
+Home and Claims also link directly to Claim drafts. Tabs and home shortcuts use SDK-compatible Ionicons with consistent size and tint; their text remains the accessible navigation name. The active tint follows the shared theme rather than giving Claims a permanent active appearance.
+
+Secondary routes share the native stack's top Back control, theme and title. Claim-report review keeps its separate Edit action, and the draft editor's Back to drafts action returns within that workspace. Profile uses the same left-aligned heading and content width as the other account screens. Access screens retain their separate sign-in card.
 
 Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
 
@@ -46,6 +50,12 @@ The current build exports for web. For native capability changes, validate the f
 
 Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
 
+Opening drafts without a selected policy offers Choose a policy and a short instruction to open its wallet detail. It does not read protected policy data before the wallet's device prompt or create a draft with an invented policy. A selected policy retains the direct Create draft action.
+
+Cancelling the shared device prompt leaves the workspace locked and offers unlocking again. It does not report an unconfirmed save or alter custody. Both the offline owner lookup and the draft store translate the shared prompt's locked failure into the draft contract; actual storage failures remain distinct.
+
+Edit draft changes the partial preparation; Complete report opens the existing file-attachment/review journey. Their accessible names include both policy reference and draft reference to distinguish repeated actions. An empty list is not announced while its initial opening or remote refresh is still pending. When no verified online owner is available, identifying the protected wallet owner and opening the separately protected drafts each retain their device prompt.
+
 This screen prepares an editable report; it does not file a claim or persist new camera/gallery binaries. Existing references remain usable offline; selecting new received references needs the server. Continue report is available for a confirmed draft while online: it rereads the owned server draft and policy, restores event data/notes and opens the existing [claim reporting](#claim-report) form. The customer still attaches files, reviews and submits; saved references remain in the editable draft and are not automatically copied into an upload declaration. No offline confirmation authorizes finance, contracts or consent. See [editable claim drafts](../../modules/policy-claims-payments/claim-drafts.md) for merge policy, API, limits, custody, data and errors.
 
 Install SDK-compatible dependencies and rebuild the native app after adding `expo-network`; Expo Go/web cannot validate protected draft storage. Run `npm run test:claim-drafts`, the real SQL suite, mobile lint/types, Pact and `npm run check`. Native acceptance requires airplane-mode save, force-close/reopen, restored connection/owner session and a single confirmed server effect, plus retries, concurrent changes, manual choice persistence, background lock and account clearing. Automated custody doubles and SQL tests are not native evidence.
@@ -59,6 +69,8 @@ Open Nearby providers from Home or Claims. The customer can search manually by c
 After sign-in, the notification preferences action in Profile opens `/notification-preferences` on the root stack. The native header back action returns to Profile. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
 
 The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission. If denied, the saved choice remains visible and the screen offers a Settings shortcut in the permission warning. This warning clears when the device grants permission. This uses `expo-notifications` in an Expo development build and `expo-crypto` for the command's idempotency key. The public web gateway forwards the complete PUT body with the same 4 KiB limit enforced by Identity; `tests/notification-preferences-runtime.test.mjs` checks that path through a Service Binding. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
+
+Each preference cell is a single accessible switch with checked/disabled state and a minimum 48 by 56 dp press area. A noninteractive View track/thumb reflects the same state; there is no nested native Switch or duplicate accessible control. Track position and color distinguish on/off. Pending writes disable the entire cell.
 
 Run `npm run test:notification-preferences`, mobile lint and types, and `npm run check`. On Android and iOS, test initial permission, denial, return from Settings, save/retry/conflict, sign-out and account switching with a development build. Keep mobile and Identity on matching revisions; the route fails closed against an older backend.
 
@@ -78,7 +90,7 @@ The native welcome/access UI centers a single white action card on a warm off-wh
 
 The application uses Expo SDK 57, Expo Router in `src/app`, shared theme/assets and the app scheme `solventa` in `app.json`. WorkOS login, installation-bound biometric custody and the backend session/device lifecycle live in `src/features/authentication`, against the [native authentication contract](../../modules/identity-consent-ecosystem/mobile-authentication.md), version 1.3.0. The matching backend must be deployed before reinstall recovery is available; older environments fail closed.
 
-Signed-out entry shows a brief welcome and product-purpose description about managing products and personal wellbeing in one place. This copy appears only before sign-in; it is not evidence of implemented policy or claims flows. The current native increment implements account access and device authentication rather than those business capabilities.
+Signed-out entry describes the available policy-reading and claim-preparation actions and offers sign-in. This copy appears only before sign-in. Hosted login and protected device custody remain separate from those business capabilities.
 
 Cancelling WorkOS (browser dismissal, the cancel action or a valid `access_denied` callback) silently returns to signed-out or locked biometric entry, without a cancellation notice or trace reference in either language. The attempt/verifier is still consumed and no access is granted. Existing biometric preference remains intact; actual provider, callback, storage and connection failures still surface normally.
 
@@ -281,6 +293,8 @@ The wallet represents the products and data Solventa has: `vida_hipotecario` (su
 
 Validity (`Por iniciar`, `Vigente`, `Vencida`) is computed from the policy dates and the device clock, also on the stored copy. The device is never the contractual source: no action in the wallet changes a policy, and a stored copy cannot enable contracting, payment or claims.
 
+Policy validity dates use the `America/Bogota` calendar in both channels and both languages, including the protected copy. An instant after UTC midnight can still belong to the preceding calendar day in Bogota. Event pickers and local synchronization timestamps continue to use the phone's time zone; policy status still compares the full instants.
+
 ### Tests and limits
 
 `tests/mobile-policy-wallet.test.ts` covers the coordinator (locked gate, online, stored copy, no copy, failed save, revoked session, late responses after locking), `tests/mobile-policies-api.test.ts` the HTTP adapter and formatting, and the native Pact interaction `mobile own policy list` the contract with the gateway. They run with injected collaborators and mocked Expo modules. No screen rendering test exists for `WalletScreen`; render it on a device or emulator and check every state, the language switch and screen-reader labels.
@@ -312,7 +326,8 @@ The claim report lets a signed-in customer report a claim on one of their polici
 
 ### Limits and verification
 
-- The event types (collision, theft, damage, other) are provisional values taken from the approved prototype, and no per-product list exists yet. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
+- The transport enum retains `collision`, `theft`, `damage`, `other` for compatibility. New mortgage-life reports use `other`, presented as Policy event, and ask the customer to describe the event for coverage review. The new draft editor offers that generic category; a restored legacy category remains visible and is never silently relabelled or retagged. Draft/report translations match. There is no invented per-product benefit catalog or promise of coverage. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
+- Android date/time controls expose their selected localized value separately from their action label. Native screen-reader behavior still needs device validation; a property-level test alone is not a TalkBack audit.
 - Reporting from the web, scanning documents, the location choice and the status view are separate work.
 - `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers the limits, the declaration, the retry sequence with a server that remembers its drafts, and every refusal of the contract. The camera, the pickers and the native upload need a development build; they are not exercised by unit tests.
 

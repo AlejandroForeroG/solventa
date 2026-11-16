@@ -5,14 +5,14 @@ import { ClaimsInbox } from './claims/ClaimsInbox';
 import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { brandAssets } from '@solventa/assets/web';
+import { ChannelShell } from './navigation/ChannelShell';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
 import type { SessionStatus } from './api/auth';
 import { useIntl } from 'react-intl';
 import { PrivacyPanel } from './consent/PrivacyPanel';
 import { reconcileConsent, type Consent } from './consent/api';
-import { I18n, useLocale } from './i18n/I18n';
-import { locales } from './i18n/messages';
+import { I18n } from './i18n/I18n';
 import { LiveRegion, useAnnounce } from './quote/Live';
 import { QuoteFlow } from './quote/QuoteFlow';
 import { clearPurchaseDraft, readPurchaseDraft } from './offer/purchase-draft';
@@ -23,16 +23,6 @@ import { invalidEstimateFields } from './quote/estimate-api';
 
 type Session = 'loading' | SessionStatus;
 
-function LocaleSwitch() {
-  const intl = useIntl();
-  const { locale, setLocale } = useLocale();
-  return <div className="locale-switch" role="group" aria-label={intl.formatMessage({ id: 'locale.group' })}>
-    {locales.map(code => <button key={code} type="button" className="locale-btn" aria-pressed={locale === code} lang={code.slice(0, 2)}
-      aria-label={intl.formatMessage({ id: 'locale.switchTo' }, { language: intl.formatMessage({ id: `locale.name.${code}` }) })}
-      onClick={() => setLocale(code)}>{intl.formatMessage({ id: `locale.${code}` })}</button>)}
-  </div>;
-}
-
 function Shell() {
   const intl = useIntl();
   const announce = useAnnounce();
@@ -40,6 +30,7 @@ function Shell() {
   const [busy, setBusy] = useState(false);
   const [estimateDraft, setEstimateDraft] = useState(readEstimateDraft);
   const [loginStorageFailed, setLoginStorageFailed] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [view, setView] = useState<'flow' | 'privacy'>('flow');
   const [consentUpdates, setConsentUpdates] = useState<Record<string, Consent>>({});
   const [uncertainConsents, setUncertainConsents] = useState<Record<string, boolean>>({});
@@ -48,7 +39,7 @@ function Shell() {
     setUncertainConsents(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, false])) }));
   }, []);
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
-  const sessionLost = useCallback(() => setSession('anonymous'), []);
+  const sessionLost = useCallback(() => { setSessionExpired(true); setSession('anonymous'); }, []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   const [purchaseInProgress] = useState(() => readPurchaseDraft() !== null);
   const isAudit = window.location.pathname === '/auditoria';
@@ -83,34 +74,21 @@ function Shell() {
     finally { setBusy(false); }
   }
   const t = (id: string) => intl.formatMessage({ id });
-  return <div className="app-shell">
-    <header className="channel-header">
-      <a href="/" aria-label={t('landing.home')}><img src={brandAssets.logo.green} alt="Solventa" width={174} /></a>
-      <div className="header-tools">
-        <LocaleSwitch />
-        {session === 'anonymous' && <a className="btn btn-secondary btn-small" href="/auth/login" onClick={event => {
-          if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
-        }}>{t('session.title')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/polizas">{t('policies.open')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/siniestros">{t('claims.open')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/prestadores">{t('assistance.title')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/asesor">{t('advisor.title')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/socios">{t('partnerPortal.title')}</a>}
-        {session === 'authenticated' && <a className="btn btn-secondary btn-small" href="/auditoria">{t('audit.open')}</a>}
-        {session === 'authenticated' && <button type="button" className="btn btn-secondary btn-small" onClick={() => void logout()} disabled={busy}>{busy ? t('session.loggingOut') : t('session.logout')}</button>}
-      </div>
-    </header>
+  return <ChannelShell authenticated={session === 'authenticated'} canLogin={session === 'anonymous'} busy={busy} onLogout={() => void logout()} onLogin={event => {
+    if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
+  }}>
     {isConsole ? (session === 'authenticated' && !busy
       ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(sectionTitle)}</h1>
+        {sessionExpired && <p role="alert">{t('navigation.expired')}</p>}
         {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>
           : session === 'unavailable' ? <>
             <p role="alert">{t('session.unavailable')}</p>
             <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
           </> : <a className="btn btn-primary" href="/auth/login">{t('session.title')}</a>}
       </main>)
-      : isLanding ? <Landing sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
+      : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
           <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
@@ -119,12 +97,13 @@ function Shell() {
         {view === 'privacy' && <PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => setView('flow')} onSessionLost={sessionLost} />}
       </main>
       : <main className="content">
+        {sessionExpired && <p className="banner banner-error" role="alert">{t('navigation.expired')}</p>}
         {failed && <p className="banner banner-error" role="alert">{t('session.failed')}</p>}
         {loginStorageFailed && <div className="banner banner-error" role="alert"><p>{t('estimate.storageFailed')}</p><a href="/auth/login" onClick={clearEstimateDraft}>{t('estimate.signInWithoutDraft')}</a></div>}
         {session === 'unavailable' && <div className="banner banner-error"><p>{t('session.unavailable')}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => void load()}>{t('session.retry')}</button></div>}
         <PublicQuoteFlow initialValues={estimateDraft} onValuesChange={setEstimateDraft} />
       </main>}
-  </div>;
+  </ChannelShell>;
 }
 
 export default function App() {

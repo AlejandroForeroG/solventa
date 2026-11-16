@@ -70,7 +70,7 @@ describe('step 1: form', () => {
     const dob = await screen.findByLabelText(/Fecha de nacimiento/);
     expect(dob).toHaveAttribute('aria-invalid', 'true');
     expect(dob).toHaveFocus();
-    expect(document.getElementById(dob.getAttribute('aria-describedby')!)).toHaveTextContent('Edad calculada: 74 años. El rango asegurable es de 18 a 70 años.');
+    expect(dob).toHaveAccessibleDescription(/Edad calculada: 74 años\. El rango asegurable es de 18 a 70 años\./);
     expect(screen.getByLabelText(/Nombre completo/)).not.toHaveAttribute('aria-invalid');
   });
 

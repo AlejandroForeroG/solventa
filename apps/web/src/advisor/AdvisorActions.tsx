@@ -40,7 +40,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     return grantApproval(policy.policyId,payload,command.current.key);
   });
   return <section className="card policy-section" aria-labelledby="advisor-heading">
-    <h2 id="advisor-heading" className="h-card">{t(policy?'authorizations':'title')}</h2>
+    {policy ? <h2 id="advisor-heading" className="h-card">{t('authorizations')}</h2> : <h1 id="advisor-heading" className="h-card">{t('title')}</h1>}
     {page?.advisorReference&&<p className="mono">{t('reference')}: {page.advisorReference}</p>}
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}

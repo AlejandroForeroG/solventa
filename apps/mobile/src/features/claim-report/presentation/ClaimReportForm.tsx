@@ -9,7 +9,7 @@ import type { AuthenticatedSession } from '../../policy-wallet/application/ports
 import { useNow } from '../../policy-wallet/presentation/use-now';
 import { createClaimReport } from '../adapters/create-claim-report';
 import type { CaptureOutcome } from '../application/ports';
-import { descriptionLength, EVENT_TYPES, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
+import { descriptionLength, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
 import { issueText, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
 
@@ -20,6 +20,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   initial?: { eventType: 'collision' | 'theft' | 'damage' | 'other' | null; occurredAt: string | null; place: string; description: string }; preparationNotice?: string }) {
   const [{ flow, source }] = useState(() => {
     const created = createClaimReport(session.baseUrl, session, policy);
+    created.flow.setEventType('other');
     if (initial) {
       if (initial.eventType) created.flow.setEventType(initial.eventType);
       if (initial.occurredAt) created.flow.setOccurredAt(new Date(initial.occurredAt));
@@ -53,12 +54,8 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
     {preparationNotice && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
-        <View style={ui.chips}>
-          {EVENT_TYPES.map(type => <Pressable key={type} accessibilityRole="button" accessibilityState={{ selected: draft.eventType === type }}
-            onPress={() => flow.setEventType(type)} style={[ui.chip, draft.eventType === type && ui.chipSelected]}>
-            <Text style={[ui.chipText, draft.eventType === type && ui.chipTextSelected]}>{copy.eventTypes[type]}</Text>
-          </Pressable>)}
-        </View>
+        <Text style={ui.body}>{draft.eventType ? copy.eventTypes[draft.eventType] : copy.eventTypes.other}</Text>
+        <Text style={ui.caption}>{copy.eventHint}</Text>
       </Group>
 
       <Group label={copy.fields.occurredAt} issues={issues} field="occurredAt" copy={copy}>
@@ -93,7 +90,6 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
       </Group>
 
       <Action label={copy.review.next(draft.evidence.length)} onPress={() => { if (flow.review()) setStep('review'); }} />
-      <Action label={copy.back} secondary onPress={goBack} />
     </> : <>
       <View style={ui.card}>
         <Summary label={copy.review.policy} value={`${copy.products[policy.product]} · ${policyReference(policy.policyId)}`} />
@@ -118,7 +114,6 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
         {phase.failure === 'incomplete' ? copy.failures.incomplete(phase.missing) : copy.failures[phase.failure]}</Text>}
       {__DEV__ && phase.kind === 'failed' && phase.cause && <Text selectable style={ui.caption}>{`dev: ${phase.cause}`}</Text>}
       <Action label={phase.kind === 'failed' && RETRYABLE.has(phase.failure) ? copy.retry : copy.review.send} disabled={busy} onPress={() => void flow.send()} />
-      <Action label={copy.back} secondary disabled={busy} onPress={goBack} />
     </>}
   </Page>;
 }
@@ -167,9 +162,9 @@ function When({ value, from, now, copy, locale, onChange }: { value: Date; from:
     return <DateTimePicker value={value} mode="datetime" minimumDate={from} maximumDate={new Date(now)} onChange={(_, picked) => { if (picked) onChange(picked); }} />;
   }
   return <View style={ui.row}>
-    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.date} onPress={() => open('date')} style={[ui.picker, ui.grow]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.date} accessibilityValue={{ text: value.toLocaleDateString(locale, { dateStyle: 'medium' }) }} onPress={() => open('date')} style={[ui.picker, ui.grow]}>
       <Text style={ui.pickerText}>{value.toLocaleDateString(locale, { dateStyle: 'medium' })}</Text></Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.time} onPress={() => open('time')} style={[ui.picker, ui.grow]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.time} accessibilityValue={{ text: value.toLocaleTimeString(locale, { timeStyle: 'short' }) }} onPress={() => open('time')} style={[ui.picker, ui.grow]}>
       <Text style={ui.pickerText}>{value.toLocaleTimeString(locale, { timeStyle: 'short' })}</Text></Pressable>
   </View>;
 }

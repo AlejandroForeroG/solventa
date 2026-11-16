@@ -67,10 +67,12 @@ test('only a pinned Solventa gateway is accepted as the API origin', () => {
   assert.throws(() => createPoliciesApi('https://attacker.example', session));
 });
 
-test('money is shown as whole pesos and dates in UTC so the stored copy reads the same everywhere', () => {
+test('policy dates use the same Bogota calendar as web, including instants after UTC midnight', () => {
   assert.match(formatMoney('86400.0000', 'es-CO'), /86[.,\s]?400/);
   assert.match(formatMoney('320000000.0000', 'en-US'), /320,000,000/);
-  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'en-US'), /Oct 16, 2027/);
+  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'en-US'), /Oct 15, 2027/);
+  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'es-CO'), /15/);
+  assert.match(formatDate('2027-10-16T05:00:00.000Z', 'en-US'), /Oct 16, 2027/);
   assert.match(formatDateTime(Date.parse('2026-10-16T02:00:00.000Z'), 'en-US'), /2026/);
 });
 

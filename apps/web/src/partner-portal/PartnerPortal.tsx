@@ -35,9 +35,8 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const page = state?.kind === 'ok' ? state.value : null;
   const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
   return <main className="audit-shell portal-shell">
-    <aside className="audit-nav" aria-label={t('title')}><p>{t('title')}</p><a href="/socios" aria-current="page">{t('overview')}</a><a href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></aside>
     <div className="audit-main">
-      <div className="audit-heading"><h1>{t('title')}</h1></div>
+      <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
       <form className="portal-period" onSubmit={event => { event.preventDefault(); setResult(null); setPeriod({ ...draft }); setRefresh(v => v + 1); }}>
         <label className="field">{t('from')}<input type="date" required value={draft.from} onChange={e => setDraft({ ...draft, from: e.target.value })} /></label>
         <label className="field">{t('to')}<input type="date" required value={draft.to} onChange={e => setDraft({ ...draft, to: e.target.value })} /></label>
@@ -55,13 +54,13 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
           <p className="note">{t('metricLimit')}</p>
         </section>
         <section aria-labelledby="portal-transactions"><h2 id="portal-transactions">{t('transactions')}</h2>
-          {page.items.length ? <div className="audit-table-wrap"><table className="audit-table"><caption className="visually-hidden">{t('transactions')}</caption><thead><tr>{['reference','kind','date','result','rule'].map(k => <th key={k} scope="col">{t(k)}</th>)}</tr></thead>
-            <tbody>{page.items.map(item => <tr key={item.kind + item.id}><td className="mono audit-id">{item.reference}</td><td>{t(item.kind)}</td><td>{timestamp(item.occurredAt)}</td><td>{t(item.result)}</td><td className="mono">{item.ruleVersion}</td></tr>)}</tbody></table></div> : <p role="status">{t('empty')}</p>}
+          {page.items.length ? <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('transactions')}</caption><thead><tr>{['reference','kind','date','result','rule'].map(k => <th key={k} scope="col">{t(k)}</th>)}</tr></thead>
+            <tbody>{page.items.map(item => <tr key={item.kind + item.id}><td data-label={t('reference')} className="mono audit-id">{item.reference}</td><td data-label={t('kind')}>{t(item.kind)}</td><td data-label={t('date')}>{timestamp(item.occurredAt)}</td><td data-label={t('result')}>{t(item.result)}</td><td data-label={t('rule')} className="mono">{item.ruleVersion}</td></tr>)}</tbody></table></div> : <p role="status">{t('empty')}</p>}
           {page.hasMore && <p className="note">{t('recentLimit')}</p>}
         </section>
         <section aria-labelledby="portal-credentials"><h2 id="portal-credentials">{t('credentials')}</h2>
           <p className="note">{t('credentialHint')}</p>
-          {page.credentials.length ? <div className="audit-table-wrap"><table className="audit-table"><caption className="visually-hidden">{t('credentials')}</caption><thead><tr>{['reference','scopes','expires','status'].map(k => <th key={k} scope="col">{t(k)}</th>)}</tr></thead><tbody>{page.credentials.map(c => <tr key={c.id}><td className="mono audit-id">{c.id}</td><td>{c.scopes.join(', ')}</td><td>{timestamp(c.expiresAt)}</td><td>{t(c.status)}</td></tr>)}</tbody></table></div> : <p>{t('noCredentials')}</p>}
+          {page.credentials.length ? <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('credentials')}</caption><thead><tr>{['reference','scopes','expires','status'].map(k => <th key={k} scope="col">{t(k)}</th>)}</tr></thead><tbody>{page.credentials.map(c => <tr key={c.id}><td data-label={t('reference')} className="mono audit-id">{c.id}</td><td data-label={t('scopes')}>{c.scopes.join(', ')}</td><td data-label={t('expires')}>{timestamp(c.expiresAt)}</td><td data-label={t('status')}>{t(c.status)}</td></tr>)}</tbody></table></div> : <p>{t('noCredentials')}</p>}
           {page.hasMoreCredentials && <p className="note">{t('credentialLimit')}</p>}
         </section>
         <section aria-labelledby="portal-catalog"><h2 id="portal-catalog">{t('catalog')}</h2><p>{t('mortgage')}</p><ul>{page.catalog.flatMap(p => p.operations).map(o => <li className="mono" key={o.path}>{o.method} {o.path} · {o.scope}</li>)}</ul></section>

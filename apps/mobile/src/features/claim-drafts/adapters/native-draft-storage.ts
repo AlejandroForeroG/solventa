@@ -5,6 +5,7 @@ import { installationMarker } from '../../../shared/native/installation-marker';
 import { deviceAuthentication, deviceLockAvailable } from '../../policy-cache/adapters/device-authentication';
 import { DraftFailure } from '../domain/draft';
 import { EncryptedDraftStorage, type DraftCustody } from './encrypted-draft-storage';
+import { draftDeviceFailure } from './draft-device-failure';
 
 const key = 'solventa.claim-drafts.v1';
 const discardKey = 'solventa.claim-drafts.discard.v1';
@@ -12,7 +13,7 @@ const options = (service: string): SecureStore.SecureStoreOptions => ({ keychain
 const directory = () => new Directory(Paths.document, 'solventa-claim-drafts-v1');
 const custody: DraftCustody = {
   available: async () => await SecureStore.isAvailableAsync() && await deviceLockAvailable(),
-  authenticate: () => deviceAuthentication.authenticate(),
+  authenticate: async () => { try { await deviceAuthentication.authenticate(); } catch (error) { throw draftDeviceFailure(error); } },
   installationId: installationMarker,
   readMeta: async () => await SecureStore.isAvailableAsync() ? SecureStore.getItemAsync(key, options(key)) : null,
   writeMeta: value => SecureStore.setItemAsync(key, value, options(key)),

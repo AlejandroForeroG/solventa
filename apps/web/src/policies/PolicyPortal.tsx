@@ -82,6 +82,7 @@ function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void;
 }
 
 function Coverage({ policy }: { policy: PolicyDetail }) {
+  const intl = useIntl();
   const t = useTranslate();
   const format = useFormatters();
   const rows: [string, React.ReactNode][] = [['coverage.type', t(`product.${policy.product}`)]];
@@ -96,7 +97,9 @@ function Coverage({ policy }: { policy: PolicyDetail }) {
       <dl className="policy-facts">{rows.map(([key, value]) => <div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>)}</dl></section>
     <section className="card policy-section" aria-labelledby="policy-exclusions"><h2 id="policy-exclusions" className="h-card">{t('exclusions')}</h2>
       <ul className="policy-exclusions">{policy.exclusions.map(item => <li key={item.code}><span className="mono">{item.code}</span><span>{item.text}</span></li>)}</ul>
-      <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></section>
+      {intl.locale === 'en-US' && <p className="note">{t('contractLanguage')}</p>}
+      <details className="document-verification"><summary>{intl.formatMessage({ id: 'document.verification' })}</summary>
+        <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details></section>
   </>;
 }
 
