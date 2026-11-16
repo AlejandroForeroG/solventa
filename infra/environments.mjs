@@ -28,6 +28,9 @@ export function validateEnvironments(configs, provisionedEnvironment) {
       const target = config.env[environment];
       assert.equal(target.name, `solventa-${name}-${environment}`);
       assert.equal(target.vars.APP_ENV, environment);
+      if (name === 'policy-claims-payments') {
+        assert.deepEqual(target.r2_buckets, [{ binding: 'CLAIM_EVIDENCE', bucket_name: `solventa-${environment}-claim-evidence` }]);
+      }
       assert.equal(target.preview_urls, false);
       assert.equal(target.workers_dev, name === 'web');
       assert.deepEqual(target.routes ?? [], name === 'web' ? [{ pattern: new URL(publicOrigins[environment]).hostname, custom_domain: true, zone_id: publicZone }] : []);
