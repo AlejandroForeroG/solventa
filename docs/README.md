@@ -50,3 +50,5 @@ Customer claim report with evidence: [Claim report](modules/policy-claims-paymen
 Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).
 
 Automatic indemnities for flight delay and heavy rainfall: [Parametric payouts](modules/policy-claims-payments/parametric-payouts.md).
+
+Monthly reports to the simulated regulator and reinsurer: [Regulator and reinsurer reports](modules/policy-claims-payments/regulatory-reports.md).

@@ -108,6 +108,100 @@
       }
     },
     {
+      "description": "mobile assistance request",
+      "providerStates": [
+        {
+          "name": "a native session that may request assistance"
+        }
+      ],
+      "request": {
+        "body": {
+          "place": {
+            "address": "Calle de prueba 10, Bogotá",
+            "kind": "address"
+          },
+          "providerId": "demo-bog-workshop"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pact-request-key-0001"
+        },
+        "method": "POST",
+        "path": "/api/v1/assistance/requests"
+      },
+      "response": {
+        "body": {
+          "request": {
+            "createdAt": "2026-11-12T22:30:00.000Z",
+            "id": "40000000-0000-4000-8000-000000000001",
+            "place": {
+              "address": "Calle de prueba 10, Bogotá",
+              "kind": "address"
+            },
+            "provider": {
+              "address": "Calle de prueba 10",
+              "city": "Bogotá",
+              "hours": "Lun–vie 08:00–17:00",
+              "id": "demo-bog-workshop",
+              "kind": "workshop",
+              "name": "Taller de prueba Bogotá",
+              "phone": "+570000000001"
+            },
+            "reference": "ASI-22222221",
+            "status": "requested"
+          },
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.request.createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
+            "$.request.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.request.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^ASI-[0-9A-HJKMNP-TV-Z]{8}$"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
       "description": "mobile claim draft sync conflict",
       "providerStates": [
         {
@@ -521,6 +615,198 @@
         },
         "matchingRules": {
           "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim report draft",
+      "providerStates": [
+        {
+          "name": "a native session that may report a claim"
+        }
+      ],
+      "request": {
+        "body": {
+          "description": "Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.",
+          "eventType": "collision",
+          "evidence": [
+            {
+              "byteSize": 84,
+              "contentType": "image/jpeg",
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "sha256": "cc2c18329a97018fc7a848827738391cc54e8f42b30018690bfd8fa45bcbebf4"
+            }
+          ],
+          "location": {
+            "authorized": true,
+            "latitude": 4.696944,
+            "longitude": -74.044167
+          },
+          "occurredAt": "2026-11-10T15:00:00.000Z",
+          "place": "Autopista Norte con Calle 116",
+          "policyId": "91000000-0000-4000-8000-000000000020"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pact-report-key-0001"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "evidence": [
+            {
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "state": "pending"
+            }
+          ],
+          "state": "draft",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "mobile claim report evidence",
+      "providerStates": [
+        {
+          "name": "a native session with a draft claim report"
+        }
+      ],
+      "request": {
+        "body": "/9j/4AAQSkZJRgABAQAAAQABAABzb2x2ZW50YSBzeW50aGV0aWMgZXZpZGVuY2UgZm9yIHRoZSBjbGFpbSByZXBvcnQgY29udHJhY3QgMDAwMf/Z",
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "image/jpeg"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "contentType",
+                  "value": "image/jpeg"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/evidence/91000000-0000-4000-8000-0000000000e1"
+      },
+      "response": {
+        "body": {
+          "fileId": "91000000-0000-4000-8000-0000000000e1",
+          "state": "verified",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim report submission",
+      "providerStates": [
+        {
+          "name": "a native session with a claim report whose evidence was received"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/submit"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "claimNumber": "SIN-2026-00001",
+          "state": "unassigned",
+          "submittedAt": "2026-11-11T00:00:00.000Z",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimNumber": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SIN-[0-9]{4}-[0-9]{5}$"
+                }
+              ]
+            },
+            "$.submittedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
             "$.traceId": {
               "combine": "AND",
               "matchers": [
@@ -2043,6 +2329,93 @@
         },
         "matchingRules": {
           "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile own assistance requests",
+      "providerStates": [
+        {
+          "name": "a native session with a stored assistance request"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/assistance/requests"
+      },
+      "response": {
+        "body": {
+          "requests": [
+            {
+              "createdAt": "2026-11-12T22:30:00.000Z",
+              "id": "40000000-0000-4000-8000-000000000001",
+              "place": {
+                "address": "Calle de prueba 10, Bogotá",
+                "kind": "address"
+              },
+              "provider": {
+                "address": "Calle de prueba 10",
+                "city": "Bogotá",
+                "hours": "Lun–vie 08:00–17:00",
+                "id": "demo-bog-workshop",
+                "kind": "workshop",
+                "name": "Taller de prueba Bogotá",
+                "phone": "+570000000001"
+              },
+              "reference": "ASI-22222221",
+              "status": "requested"
+            }
+          ],
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.requests[0].createdAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
+            "$.requests[0].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.requests[0].reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^ASI-[0-9A-HJKMNP-TV-Z]{8}$"
+                }
+              ]
+            },
             "$.traceId": {
               "combine": "AND",
               "matchers": [

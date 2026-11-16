@@ -90,7 +90,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <div className="audit-table-wrap"><table className="audit-table claims-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['claim', 'policy', 'state', 'age', 'amount', 'evidence', 'priority'].map(key => <th key={key} scope="col" className={key === 'amount' ? 'claims-amount' : undefined}>{t(`col.${key}`)}</th>)}</tr></thead>
           <tbody>{page.items.map(item => <tr key={item.claimId}>
-            <td className="mono claims-number">{item.claimNumber}</td>
+            <td className="mono claims-number"><a href={'/siniestros/' + item.claimId}>{item.claimNumber}</a></td>
             <td className="mono audit-id">{item.policyId}</td>
             <td><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
             <td className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
