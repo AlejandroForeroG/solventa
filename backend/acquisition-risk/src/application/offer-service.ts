@@ -1,11 +1,11 @@
-import { offerRequestIdentity, offerTerms, underwrite, type OfferActor, type OfferAuthorization, type OfferSignalSource } from '../domain/offer';
+import { offerRequestIdentity, offerTerms, underwrite, type OfferActor, type OfferAuthorization, type OfferCapture, type OfferSignalSource } from '../domain/offer';
 import { CONFIDENCE, SIGNAL_FRESHNESS_MS, SIGNAL_SCOPES } from '../domain/signal';
 import type { Clock } from './ports/platform';
 import type { FlightSchedule, OfferCreationSnapshot, OfferIntegrity, OfferStore, StoredOffer, OfferRequestResult } from './ports/offer-store';
 import type { SignalResult } from './read-signal';
 import type { DependencyTimings } from './dependency-timings';
 
-type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization; timings?: DependencyTimings };
+type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization; timings?: DependencyTimings; channel?: OfferCapture['channel'] };
 type OfferSignalReader = { executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: { allowed: true } & OfferAuthorization; timings?: DependencyTimings }): Promise<{ results: SignalResult[]; confidence: number }> };
 const validKey = (key: string) => typeof key === 'string' && key.length > 0 && key.length <= 128;
 
@@ -72,8 +72,9 @@ export class OfferService {
         failure: result.degradation.failure, substitute: result.degradation.substitute });
     const decision = underwrite(quote, signals, input.authorization, input.traceId, provenance);
     if (!decision) return { status: 'unavailable' as const };
+    const capture = input.channel ? { ...decision.capture, channel: input.channel } : decision.capture;
     if (!decision.accepted && !decision.preliminary) {
-      const result = await this.timed(input, 'offer_write', () => this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture: decision.capture, traceId: input.traceId }));
+      const result = await this.timed(input, 'offer_write', () => this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture, traceId: input.traceId }));
       return this.outcome(result, input.actor, requestIdentity);
     }
     // A slow or unavailable provider cannot stretch a previously verified authorization window.
@@ -82,7 +83,7 @@ export class OfferService {
       decision.preliminary ? 'preliminary' : 'definitive');
     const consent = { consentId: input.authorization.consentId, consentVersion: input.authorization.textVersion };
     const offer: StoredOffer = { terms, seal: await this.deps.integrity.seal(terms, consent), ...consent };
-    const result = await this.timed(input, 'offer_write', () => this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture: decision.capture, traceId: input.traceId }));
+    const result = await this.timed(input, 'offer_write', () => this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture, traceId: input.traceId }));
     return this.outcome(result, input.actor, requestIdentity);
   }
   async createFlight(input: { actor: OfferActor; flightReference: string; idempotencyKey: string; traceId: string }) {
@@ -100,11 +101,15 @@ export class OfferService {
       coverage: { kind: 'flight_delay' as const, flightReference: input.flightReference, thresholdMinutes: 180 as const, payoutAmount: '100000.0000' as const },
       effectiveFrom: now.toISOString(), effectiveUntil: new Date(now.getTime() + 86400000).toISOString(), expiresAt: new Date(now.getTime() + 15 * 60000).toISOString(),
       ruleVersion: 'academic-flight-1', synthetic: true as const, status: 'definitive' as const };
-    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: input.traceId, inputs: { premium: terms.premium, payoutAmount: terms.coverage.payoutAmount, thresholdMinutes: 180 },
+    const capture = { schemaVersion: 1, contractVersion: 'v1', correlationId: input.traceId, inputs: { flightReference: input.flightReference, scheduleAvailable: schedule.available, premium: terms.premium, payoutAmount: terms.coverage.payoutAmount, thresholdMinutes: 180 },
       sources: [{ source: 'mock:flight-schedule', capturedAt: schedule.capturedAt, quality: 'mock', degraded: false }], consent: { status: 'not_required' }, rule: { id: 'flight-underwriting', version: terms.ruleVersion }, outcome: 'accepted' };
     const stored = { terms, seal: await this.deps.integrity.seal(terms, { consentId: '', consentVersion: 0 }), consentId: '', consentVersion: 0 };
     const result = await this.deps.store.create({ actor: input.actor, quote: null, sourceReference: input.flightReference, requestIdentity, key: input.idempotencyKey, offer: stored, capture, traceId: input.traceId });
     return this.outcome(result, input.actor, requestIdentity);
+  }
+  // The retained decision capture of an offer the actor owns, used to explain its price and signals.
+  explanation(actor: OfferActor, offerId: string) {
+    return this.deps.store.explanation(actor, offerId);
   }
   async get(input: { actor: OfferActor; offerId: string; traceId: string }) {
     if (!this.deps.enabled) return { status: 'unavailable' as const };

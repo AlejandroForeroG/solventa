@@ -65,14 +65,36 @@ function withConsents() {
   return { store, time, consents, deps, user, grant, grantPartial };
 }
 
-test('financial operations are explicit web permissions, forbidden to native and partner identities', async () => {
+test('financial operations are explicit web permissions; native users may only read their policies and partners none', async () => {
   const app = new ApiAccess({ find: async () => { throw Error('partner lookup must not occur'); } }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
   const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
-  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue']) {
+  for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage']) {
     assert.equal((await app.webUser(identity, operation)).allowed, true);
-    assert.deepEqual(await app.mobileUser(identity, operation), { allowed: false, error: 'forbidden', status: 403 });
+    if (operation === 'policies:read') assert.equal((await app.mobileUser(identity, operation)).allowed, true);
+    else assert.deepEqual(await app.mobileUser(identity, operation), { allowed: false, error: 'forbidden', status: 403 });
     assert.deepEqual(await app.partner({ issuer: 'https://synthetic.authkit.app', applicationId: 'client_synthetic', organizationId: 'org_synthetic', scopes: [operation] }, operation), { allowed: false, error: 'forbidden', status: 403 });
   }
+});
+
+test('policy lifecycle access verifies the live web session and Origin without reusing underwriting consent as a permission', async () => {
+  let active = true;
+  const application = new ApiAccess({ find: async () => null }, {
+    find: async () => active ? principal : null, open: async () => principal, revoke: async () => {},
+  });
+  const deps = {
+    authorize: (input: unknown) => authorizeApiAccess({ application, partner: null, web: {
+      allowedOrigins: ['https://web.example'],
+      authenticate: async () => ({ identity: { providerSubject: 'synthetic-user', sessionReference: 'synthetic-session', emailVerified: true } }),
+    } }, input),
+    verifyConsents: async (): Promise<ConsentDecision[]> => { assert.fail('managing an existing policy does not read risk signals'); },
+  };
+  const input = { ...request, operation: 'policies:manage' };
+  const allowed = await authorizeFinancialAccess(deps, input);
+  assert.equal(allowed.allowed, true);
+  if (allowed.allowed) assert.deepEqual(allowed.actor.operations, ['policies:manage']);
+  assert.deepEqual(await authorizeFinancialAccess(deps, { ...input, origin: 'https://foreign.example' }), { allowed: false, error: 'forbidden', status: 403 });
+  active = false;
+  assert.deepEqual(await authorizeFinancialAccess(deps, input), { allowed: false, error: 'unauthorized', status: 401 });
 });
 
 test('the combined RPC preserves actual Origin and current local session enforcement', async () => {
@@ -307,6 +329,7 @@ test('native and partner financial requests reach the audited policy and record 
   };
   const traceId = '50000000-0000-4000-8000-000000000001';
   for (const kind of ['partner', 'mobile']) for (const operation of ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue']) {
+    if (kind === 'mobile' && operation === 'policies:read') continue;
     decisions.length = 0;
     assert.deepEqual(await authorizeFinancialAccess(deps, { kind, operation, token: 'synthetic-token', traceId }), { allowed: false, error: 'forbidden', status: 403 });
     assert.equal(decisions.length, 1);
@@ -317,4 +340,21 @@ test('native and partner financial requests reach the audited policy and record 
   decisions.length = 0;
   assert.deepEqual(await authorizeFinancialAccess(deps, { kind: 'unknown', operation: 'offers:create', traceId }), { allowed: false, error: 'invalid_request', status: 400 });
   assert.equal(decisions.length, 0);
+});
+
+test('a native user reads policies through the combined RPC without any consent query, and the actor must be native', async () => {
+  const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
+  const application = new ApiAccess({ find: async () => assert.fail('partner storage is not used') }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
+  const build = (decide: (verified: typeof identity, operation: string) => ReturnType<ApiAccess['mobileUser']>) => ({
+    authorize: (input: unknown) => authorizeApiAccess({ application, web: null,
+      mobile: { authenticate: async () => identity, authorize: decide }, partner: null }, input),
+    verifyConsents: async (): Promise<ConsentDecision[]> => assert.fail('reading policies needs no risk consent'),
+  });
+  const traceId = '50000000-0000-4000-8000-000000000001';
+  const allowed = await authorizeFinancialAccess(build((verified, operation) => application.mobileUser(verified, operation)), { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
+  assert.ok(allowed.allowed && allowed.actor.kind === 'user' && allowed.actor.channel === 'mobile');
+  assert.deepEqual(allowed.allowed && allowed.actor.kind === 'user' && allowed.actor.operations, ['policies:read']);
+  // A dependency answering with a web actor for a native request is inconsistent, never an authorization.
+  const webActor = await authorizeFinancialAccess(build(async () => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: ['policies:read'] } })), { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
+  assert.deepEqual(webActor, { allowed: false, error: 'access_unavailable', status: 503 });
 });

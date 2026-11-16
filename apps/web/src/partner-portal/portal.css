@@ -1,0 +1,6 @@
+.portal-period { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-bottom: 24px; }
+.portal-period .note { flex-basis: 100%; margin: 0; }
+.portal-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.portal-metrics div { border: 1px solid #e3e1dc; background: #fff; border-radius: 12px; padding: 16px; }
+.portal-metrics dd { font-size: 28px; margin: 8px 0 0; }
+.portal-shell .audit-main section { margin-top: 32px; }

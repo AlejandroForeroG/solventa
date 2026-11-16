@@ -1,6 +1,6 @@
 const es = {
   headings: {
-    authenticated: 'Sesión iniciada', locked: 'Vuelve a tu cuenta', blocked: 'Revisa la conexión',
+    authenticated: 'Sesión iniciada', profile: 'Perfil', locked: 'Vuelve a tu cuenta', blocked: 'Revisa la conexión',
     logoutPending: 'Cierre pendiente', signedOut: 'Bienvenido a Solventa', signIn: 'Inicia sesión',
   },
   introduction: 'Aquí puedes gestionar tus productos y cuidar tu bienestar en un solo lugar.',
@@ -18,8 +18,11 @@ const es = {
   pendingLogout: 'El acceso está bloqueado hasta confirmar el cierre remoto.',
   nativeOnly: 'El ingreso está disponible en la app nativa.',
   securePrompt: 'Confirma tu identidad para entrar a Solventa',
+  policyCachePrompt: 'Desbloquea para ver tus datos guardados',
   actions: {
     verifyIdentity: 'Verificar identidad',
+    wallet: 'Mis pólizas', drafts: 'Borradores de siniestro',
+    notificationPreferences: 'Preferencias de avisos',
     signIn: 'Iniciar sesión', unlock: 'Entrar con huella o rostro', alternative: 'Usar inicio de sesión',
     enable: 'Activar huella o rostro', revoke: 'Revocar acceso de este dispositivo', retry: 'Reintentar conexión',
     retryLogout: 'Reintentar cierre', signOut: 'Cerrar sesión', cancel: 'Cancelar',
@@ -36,12 +39,13 @@ const es = {
     biometric_unavailable: 'No hay biometría segura disponible. Usa el inicio de sesión.',
     biometric_failed: 'No pudimos confirmar tu identidad. Reintenta o usa el inicio de sesión.',
     logout_unconfirmed: 'Sesión cerrada en este dispositivo. No pudimos confirmar el cierre remoto.',
+    discard_incomplete: 'No pudimos terminar de cerrar tu sesión en este dispositivo. Intenta de nuevo.',
   },
 };
 
 const en: typeof es = {
   headings: {
-    authenticated: 'Signed in', locked: 'Welcome back', blocked: 'Check your connection',
+    authenticated: 'Signed in', profile: 'Profile', locked: 'Welcome back', blocked: 'Check your connection',
     logoutPending: 'Sign-out pending', signedOut: 'Welcome to Solventa', signIn: 'Sign in',
   },
   introduction: 'Manage your products and take care of your wellbeing, all in one place.',
@@ -59,8 +63,11 @@ const en: typeof es = {
   pendingLogout: 'Access is blocked until remote sign-out is confirmed.',
   nativeOnly: 'Sign-in is available in the native app.',
   securePrompt: 'Confirm your identity to access Solventa',
+  policyCachePrompt: 'Unlock to view your saved data',
   actions: {
     verifyIdentity: 'Verify identity',
+    wallet: 'My policies', drafts: 'Claim drafts',
+    notificationPreferences: 'Notification preferences',
     signIn: 'Sign in', unlock: 'Sign in with fingerprint or face', alternative: 'Use account sign-in',
     enable: 'Enable fingerprint or face', revoke: 'Revoke access for this device', retry: 'Retry connection',
     retryLogout: 'Retry sign-out', signOut: 'Sign out', cancel: 'Cancel',
@@ -77,6 +84,7 @@ const en: typeof es = {
     biometric_unavailable: 'Secure biometrics are unavailable. Use account sign-in.',
     biometric_failed: 'We couldn’t confirm your identity. Try again or use account sign-in.',
     logout_unconfirmed: 'Signed out on this device. We couldn’t confirm remote sign-out.',
+    discard_incomplete: 'We could not finish signing you out on this device. Try again.',
   },
 };
 

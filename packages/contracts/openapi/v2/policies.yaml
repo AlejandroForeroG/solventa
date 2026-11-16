@@ -6,11 +6,12 @@ info:
     payment and signature providers are explicitly mocked; Solventa
     authorization, owner transactions and idempotency remain real. The isolated
     production demo requires explicit FINANCIAL_PROVIDER_MODE=mock, a valid
-    environment-specific FINANCIAL_EVENT_KEY and separately provisioned production
-    bindings, queues and SQL. Missing or invalid configuration fails closed.
-    Synthetic results do not establish real payment settlement, legal external
-    signature or insurance coverage. Credentials, actor identifiers, approval and amounts cannot be
-    selected by clients. All responses are no-store and correlated.
+    environment-specific FINANCIAL_EVENT_KEY and separately provisioned
+    production bindings, queues and SQL. Missing or invalid configuration fails
+    closed. Synthetic results do not establish real payment settlement, legal
+    external signature or insurance coverage. Credentials, actor identifiers,
+    approval and amounts cannot be selected by clients. All responses are
+    no-store and correlated.
 servers:
   - url: /api/v2
 tags:
@@ -21,7 +22,7 @@ paths:
     post:
       operationId: chargeOwnPolicy
       summary: Confirm the mock premium for a reviewed policy before signing
-      tags: [Policies]
+      tags: [ Policies ]
       security:
         - WebSession: []
         - LocalWebSession: []
@@ -42,12 +43,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [documentHash]
+              required: [ documentHash ]
               properties:
                 documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
       responses:
         "200":
-          description: The charged policy and one confirmed mock receipt; signing remains separate.
+          description: The charged policy and one confirmed mock receipt; signing remains
+            separate.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Policy' }
@@ -61,8 +63,9 @@ paths:
   /policies/{policyId}/signature-challenges:
     post:
       operationId: beginPolicySignatureChallenge
-      summary: Accept a reviewed charged policy document and request a simulated authentication code
-      tags: [Policies]
+      summary: Accept a reviewed charged policy document and request a simulated
+        authentication code
+      tags: [ Policies ]
       security:
         - WebSession: []
         - LocalWebSession: []
@@ -79,13 +82,14 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [documentHash, accepted]
+              required: [ documentHash, accepted ]
               properties:
                 documentHash: { type: string, pattern: '^[0-9a-f]{64}$' }
-                accepted: { type: boolean, enum: [true] }
+                accepted: { type: boolean, enum: [ true ] }
       responses:
         "200":
-          description: Short-lived simulated code for this owner and exact document after confirmed payment.
+          description: Short-lived simulated code for this owner and exact document after
+            confirmed payment.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SignatureChallengeResponse' }
@@ -100,7 +104,7 @@ paths:
     post:
       operationId: cancelPolicySignatureChallenge
       summary: Cancel an unconsumed signature challenge
-      tags: [Policies]
+      tags: [ Policies ]
       security:
         - WebSession: []
         - LocalWebSession: []
@@ -242,22 +246,21 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/Unavailable"
-      description: Requires a charged policy with confirmed premium, same-origin POST, an active challenge for the exact
-        documentHash returned by GET and its six-digit simulated code. Three
-        failed attempts cancel the challenge; expiry or cancellation blocks
-        issuance. A verified challenge is consumed with the
-        durable issuance command, so retries use the same command key and
-        challenge ID. The owner derives the premium and beneficiary from immutable
-        accepted terms; caller-supplied amounts, approvals and payment
+      description: Requires a charged policy with confirmed premium, same-origin POST,
+        an active challenge for the exact documentHash returned by GET and its
+        six-digit simulated code. Three failed attempts cancel the challenge;
+        expiry or cancellation blocks issuance. A verified challenge is consumed
+        with the durable issuance command, so retries use the same command key
+        and challenge ID. The owner derives the premium and beneficiary from
+        immutable accepted terms; caller-supplied amounts, approvals and payment
         destinations are invalid. Stable provider keys and durable steps protect
         retries. A failed signature compensates a confirmed mock charge; an
         uncertain outcome is unavailable and must be reconciled, never blindly
         charged again. Mock issuance is not legal insurance or real money
-        movement.
-        A signature_failed response can occur during a concurrent refund;
-        read the owned policy and require status refunded before confirming
-        compensation. Retry an uncertain operation with its original key.
-        After document_mismatch, reread and review the document before
+        movement. A signature_failed response can occur during a concurrent
+        refund; read the owned policy and require status refunded before
+        confirming compensation. Retry an uncertain operation with its original
+        key. After document_mismatch, reread and review the document before
         submitting its current server-provided fingerprint.
   /policies/by-acceptance/{acceptanceId}/policy:
     get:
@@ -330,7 +333,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/Policy'
         - type: object
-          required: [challenge]
+          required: [ challenge ]
     Error:
       type: object
       additionalProperties: false
@@ -410,7 +413,7 @@ components:
         challenge:
           type: object
           additionalProperties: false
-          required: [challengeId, expiresAt, demoCode]
+          required: [ challengeId, expiresAt, demoCode ]
           properties:
             challengeId: { type: string, format: uuid }
             expiresAt: { type: string, format: date-time }
@@ -420,14 +423,16 @@ components:
         traceId:
           type: string
           format: uuid
+        lifecycle:
+          $ref: "#/components/schemas/LifecycleChange"
     PremiumPayment:
       type: object
       additionalProperties: false
       description: Current state of the policy's single premium charge with the
-        synthetic provider. Absent until the customer starts the separate charge. A
-        declined premium is final for this policy. The reference is the
-        synthetic receipt and is present only once the provider confirmed the
-        charge; it is not a real payment receipt.
+        synthetic provider. Absent until the customer starts the separate
+        charge. A declined premium is final for this policy. The reference is
+        the synthetic receipt and is present only once the provider confirmed
+        the charge; it is not a real payment receipt.
       required:
         - status
         - reference
@@ -460,6 +465,68 @@ components:
         code:
           type: string
           pattern: ^[0-9]{6}$
+    LifecycleChange:
+      type: object
+      additionalProperties: false
+      required:
+        - changeId
+        - policyId
+        - action
+        - reason
+        - at
+        - replacementPolicyId
+        - sourceDocumentHash
+        - replacementDocumentHash
+        - refund
+        - ruleVersion
+        - documentHash
+      properties:
+        changeId: &a1
+          type: string
+          format: uuid
+        policyId: *a1
+        action:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+        reason:
+          type: string
+          pattern: ^[a-z][a-z_]{2,63}$
+        at:
+          type: string
+          format: date-time
+        replacementPolicyId:
+          type: string
+          format: uuid
+          nullable: true
+        sourceDocumentHash: &a2
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        replacementDocumentHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          nullable: true
+        refund:
+          type: string
+          enum:
+            - not_automated
+        ruleVersion:
+          type: string
+          enum:
+            - academic-policy-lifecycle-1
+        documentHash: *a2
+    PolicySummary:
+      properties:
+        contractStatus:
+          type: string
+          enum:
+            - modified
+            - renewed
+            - cancelled
+          description: Present when the original contract has ended through an owner
+            lifecycle command. Historical issuance and payments remain intact.
   responses:
     Invalid:
       description: Invalid JSON, media type, resource identifier, unsupported field,

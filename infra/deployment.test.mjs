@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { parse } from 'yaml';
 test('deployment resolves only an environment branch before credentials', async () => {
   const workflow = await readFile('.github/workflows/deploy.yml','utf8');
   const block = workflow.split('name: Resolve environment branch')[1].split('  validate:')[0].split('run: |')[1];
@@ -13,4 +14,18 @@ test('deployment resolves only an environment branch before credentials', async 
   }
   assert.ok(!workflow.includes('workflow_dispatch'));
   assert.match(workflow,/needs: \[resolve, validate\]/);
+});
+
+test('remote publication depends on migration success with a separate environment-bound credential', async () => {
+  const workflow = parse(await readFile('.github/workflows/deploy.yml', 'utf8'));
+  assert.deepEqual(workflow.jobs.migrate.needs, ['resolve', 'validate']);
+  assert.deepEqual(workflow.jobs.deploy.needs, ['resolve', 'validate', 'migrate']);
+  const { migrate, deploy } = workflow.jobs;
+  assert.equal(migrate.environment.name, deploy.environment.name);
+  assert.equal(migrate.steps[0].with.ref, '${{ github.sha }}');
+  assert.ok(migrate.steps.some(step => step.run === 'npm run db:migrations -- apply "$TARGET_ENVIRONMENT"'));
+  assert.ok(migrate.steps.some(step => step.if === 'always()' && step.run.includes('cleanup')));
+  assert.equal(migrate.steps.find(step => step.env?.MIGRATION_DATABASE_URL)?.env.MIGRATION_DATABASE_URL, '${{ secrets.MIGRATION_DATABASE_URL }}');
+  assert.ok(!JSON.stringify(deploy).includes('MIGRATION_DATABASE_URL'));
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
 });

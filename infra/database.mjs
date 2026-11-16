@@ -67,7 +67,7 @@ export async function applyRuntimeGrants(db, owner, role, grants) {
     if (missing.length) await db.query(`GRANT ${missing.join(', ')} ON TABLE ${target} TO ${id(role)}`);
   }
 }
-export async function applyMigrations(db, owner) {
+export async function applyMigrations(db, owner, frozenMigrations) {
   // Persist intent outside the DDL transaction. CockroachDB XXA00 can commit
   // ledger DML while failing a schema change; a checksum alone is insufficient.
   const guard = `${id(owner.schema)}.schema_migration_failures`;
@@ -76,9 +76,9 @@ export async function applyMigrations(db, owner) {
   if ((await db.query(`SELECT version FROM ${guard}`)).rowCount) {
     throw Object.assign(Error('Inspect and reconcile incomplete migrations before replay'), { code: 'migration_reconciliation_required' });
   }
-  const migrations = (await readdir(`backend/${owner.name}/migrations`)).filter(f => f.endsWith('.sql')).sort();
-  for (const version of migrations) {
-    const sql = await readFile(`backend/${owner.name}/migrations/${version}`, 'utf8');
+  const migrations = frozenMigrations ?? await Promise.all((await readdir(`backend/${owner.name}/migrations`)).filter(f => f.endsWith('.sql')).sort()
+    .map(async version => ({ version, sql: await readFile(`backend/${owner.name}/migrations/${version}`, 'utf8') })));
+  for (const { version, sql } of migrations) {
     const checksums = migrationChecksums(sql);
     const checksum = checksums.canonical;
     const applied = (await db.query(`SELECT checksum FROM ${id(owner.schema)}.schema_migrations WHERE version=$1`, [version])).rows[0];

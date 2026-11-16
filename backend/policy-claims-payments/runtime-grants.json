@@ -1,4 +1,8 @@
 {
+  "assistance_requests": ["SELECT"],
+  "claim_drafts": ["SELECT", "INSERT", "UPDATE"],
+  "claim_draft_revisions": ["SELECT", "INSERT"],
+  "claim_draft_commands": ["SELECT", "INSERT"],
   "policies": [
     "SELECT",
     "INSERT",
@@ -63,5 +67,26 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "policy_lifecycle_changes": [
+    "SELECT",
+    "INSERT"
+  ],
+  "claim_number_counters": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "advisor_authorizations": [
+    "SELECT",
+    "INSERT"
+  ],
+  "advisor_authorization_revocations": [
+    "SELECT",
+    "INSERT"
+  ],
+  "advisor_lifecycle_executions": [
+    "SELECT",
+    "INSERT"
   ]
 }

@@ -6,6 +6,10 @@ Code: `backend/acquisition-risk`. This module owns quotes, pricing, profiling, r
 
 Worker with its own `acquisition` schema, runtime role and Hyperdrive. `/health` indicates liveness. RPC diagnostics protected by web check SQL and communication with Identity. Base tables exist. The anonymous indicative calculator (`POST /api/v1/quote-estimates`) and minimum-data quote (`POST /api/v1/quotes`) are implemented. Signal providers are isolated behind their port with two interchangeable simulated adapters, and an ACORD Life inspired translator maps partner quote messages to the quote model; see [external integrations](#external-integrations). Synthetic mortgage offer profiling consumes `ReadSignal`: it saves successful reads, replaces a failing source with a same-consent stored copy or conservative default, and persists degraded decisions as non-acceptable preliminary offers. Definitive offer acceptance and asynchronous publication remain under the explicit financial mock mode. Real provider access, dynamic simulated personas and general asynchronous signal refresh remain pending.
 
+## Historical underwriting audit
+
+Explicitly granted web auditors can list and inspect historical decisions through the [audit API and workspace](underwriting-audit.md). Identity owns the permission; Acquisition owns lookup, retained-rule reconstruction and durable read auditing. Omitted inputs may be recovered from matching immutable profiles or the retained original fixed mock contract, with per-field provenance. No current source or consent data is fetched and original captures remain unchanged.
+
 ## Anonymous indicative calculator
 
 An estimate gateway outage returns 503 without any write. It can be retried as a new calculation, without an idempotency key; saved-quote write recovery instructions apply only to the authenticated quote entries.
@@ -105,6 +109,30 @@ This call only imports the acceptance, without charging, signing or issuing. Que
 The explicit `academic-mortgage-1` rule requires verified identity, active affiliation, payment score at least 600 and monthly obligations no higher than 50% of monthly income. A score of at least 750 with obligations no higher than 30% applies a 10% discount to the existing provisional monthly premium. All calculations use integer units before the established four-decimal money representation. The offer expires within 15 minutes, capped by the quote and current consent expiry. Accepted and declined underwriting captures preserve the actual normalized source inputs/timestamps and rule version with the owner's audit/outbox; a decline does not create a definitive offer. The independent `academic-flight-1` fixture uses a verified mock schedule, a COP 10,000.0000 premium, COP 100,000.0000 indemnity at 180 minutes of delay and a one-day coverage window. These values are versioned academic fixtures, not source-approved commercial tariffs.
 
 After acceptance, resolve the policy through the [Policy flow](../policy-claims-payments/README.md#financial-http-flow). The [offers OpenAPI](../../../packages/contracts/openapi/v1/offers.yaml), [event schema](../../../packages/contracts/schemas/financial-event.v1.json) and [synthetic examples](../../../packages/contracts/examples/financial.json) describe the boundaries. Example signatures are deliberately invalid and never authenticate a message. Additive offer migrations and runtime grants are prerequisites; resource/secret provisioning and a real browser/Queue/SQL acceptance check are separate from builds. Unit and HTTP checks run in `npm run test:financial`; SQL checks run in `npm run test:offers:sql`.
+
+## Partner offers
+
+`POST /api/v1/partner/offers` lets a distribution partner obtain the same profiled mortgage life offer as the customer's own web journey, for a customer who authorized that partner. Contract: [partner-offers.yaml](../../../packages/contracts/openapi/v1/partner-offers.yaml) with the [corpus](../../../packages/contracts/examples/partner-offers.json). Authorization, its limits and Identity's private check are in [Partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).
+
+| Layer | Code |
+|---|---|
+| HTTP | `src/adapters/inbound/partner-offers-http.ts`: only `POST`, a Bearer token and a body of at most 4096 bytes; a browser session is not a partner credential |
+| Use case | `src/application/partner-offers.ts`, which coordinates the steps below through ports |
+| Identity | `src/adapters/outbound/identity-partner-offer-access.ts` calls `authorizePartnerOfferAccessV1` with a 2 s deadline and validates the untrusted reply; `src/application/ports/partner-offer-access.ts` is the port |
+| Reuse | `CreateQuote.createFor` and `OfferService.create`, unchanged rules, so a partner offer cannot price differently from a web offer |
+| Response | `src/domain/partner-offer.ts` builds the partner view from the stored decision capture |
+
+The request is `{ authorizationId, product, customer, credit }`: the authorization the customer created plus the same quote fields as `POST /quotes`. The partner never names the customer. Identity answers who the customer is and whether their consent is fresh in one call, the only internal remote dependency of the flow. Each request then runs in this order: authorization check (timed as `identity_access`), `Idempotency-Key`, quote validation, quote saved for the customer, offer profiling with the existing `ReadSignal` degradation, offer saved, response.
+
+- **Customer and ownership.** The quote and the offer belong to the customer's `clientId` and `subjectToken` from Identity, never to the partner. A customer identifier, document or unknown property in the body is rejected (400) or ignored for identity; the `customer` block only supplies age and display data for the quote rules. The partner and its authorization are recorded in the decision capture's optional `channel` (`kind: partner`, `partnerId`, `authorizationId`), which holds identifiers only.
+- **Idempotency.** An order key belongs to one partner and one authorization (a keyed hash of both and the key). The same key and request returns 200 with the original offer and no second quote; the same key with another request under the same authorization is 409 `idempotency_key_reused`. Another partner, another authorization or another customer using the same key places a different order and never replays this one, and no 409 reports that the key was used elsewhere: there is no partner-wide ledger of keys, so a partner must not reuse a key for a different order. A revoked authorization or consent blocks a retry too.
+- **Validity.** `validity.expiresAt` is never later than the customer's consent, the authorization given to the partner or the quote's validity, and is at most the 15-minute offer window.
+- **Signals and degradation.** The response lists each signal's scope, origin (`live`, `stored_copy` or `default`), `degraded`, `confidence` (100, 60, 0) and `failure`. A replaced source makes the offer `preliminary` and `contractable: false`; a partner cannot accept offers at all, because acceptance stays in the customer's web journey and the offer routes reject an `Authorization` header. The 120 ms provider budget and 700 ms hard limit apply unchanged.
+- **Explanation.** `explanation` carries the rating and underwriting rule versions and the base and adjustment rates in parts per million. Raw signal values, the debt ratio, the payment score and the customer's identifiers are never returned.
+- **Errors.** 400 `validation_error` (nothing stored), 401 with `WWW-Authenticate`, 403 `forbidden` (no scope, or an authorization the partner does not hold, indistinguishable from an unknown one) or `consent_required`, 409 `declined`, `conflict` or `idempotency_key_reused`, 503 `access_unavailable` (Identity could not verify in time; nothing priced) or `financial_unavailable`, 500 `internal_error`. A 503 or 500 may follow a commit, so retry with the same key.
+- **Observability.** Each attempt logs one `mortgage_offer_profiled` line with `channel: "partner"`, the result, the offer status and the timing of every dependency, so [dependency percentiles](../../../infra/load/README.md) include partner calls. The line holds no customer data.
+
+Limits. The offer is synthetic: signal providers are the configured mocks and no real settlement, coverage or signature is involved. The route is not wired to the ACORD translator: partners send the JSON contract above. Evidence is in-process: the partner journey test runs the real gateway, Identity and Acquisition use cases with in-memory persistence, a local key set standing in for the WorkOS Connect issuer and the mock providers; the SQL adapters have their own suites and no run against a real WorkOS issuer, workerd or a deployed environment exists. The partner portal that would let a partner see its authorizations and transactions is a separate story.
 
 ## External integrations
 
@@ -238,7 +266,10 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 
 ## Documents
 
+- [Partner portal: access, credential metadata, channel facts and period metrics](partner-portal.md).
+- [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
+- [Partner offers](#partner-offers) and [partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).
 - [Contracts and decision capture](../../shared/contracts/README.md).
 - [Boundaries and communication](../../architecture.md).
 - [Operations](../../infrastructure/README.md).

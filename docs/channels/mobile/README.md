@@ -15,6 +15,12 @@ See [Mobile architecture](architecture.md) for the implemented folder structure,
 
 Keep routes thin. Each capability's UI and logic live in its `src/features` directory; reusable code between capabilities may go in `src/shared` when a concrete need exists.
 
+## Navigation
+
+The signed-in shell has five bottom tabs: Home, Wallet, Claims, Alerts and Profile. The original `/wallet`, `/notification-preferences`, `/identity-verification` and `/auth/callback` paths still resolve. Alerts displays the availability of the notification inbox. Profile contains identity verification, notification preferences, device access settings and sign-out. Home and Claims both link to `/assistance-providers`.
+
+Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
+
 ## Development
 
 Run from the monorepo root:
@@ -36,9 +42,29 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Offline claim drafts
+
+Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
+
+This screen prepares an editable report; it does not file a claim or persist new camera/gallery binaries. Existing references remain usable offline; selecting new received references needs the server. Continue report is available for a confirmed draft while online: it rereads the owned server draft and policy, restores event data/notes and opens the existing [claim reporting](#claim-report) form. The customer still attaches files, reviews and submits; saved references remain in the editable draft and are not automatically copied into an upload declaration. No offline confirmation authorizes finance, contracts or consent. See [editable claim drafts](../../modules/policy-claims-payments/claim-drafts.md) for merge policy, API, limits, custody, data and errors.
+
+Install SDK-compatible dependencies and rebuild the native app after adding `expo-network`; Expo Go/web cannot validate protected draft storage. Run `npm run test:claim-drafts`, the real SQL suite, mobile lint/types, Pact and `npm run check`. Native acceptance requires airplane-mode save, force-close/reopen, restored connection/owner session and a single confirmed server effect, plus retries, concurrent changes, manual choice persistence, background lock and account clearing. Automated custody doubles and SQL tests are not native evidence.
+
+## Assistance provider search
+
+Open Nearby providers from Home or Claims. The customer can search manually by city or address at any time. Use my location requests the operating system's foreground permission for a single search. If Android pauses the app for the permission dialog, the screen waits for session revalidation before reading coordinates and querying the directory. The pending search is discarded when the account changes, session revalidation fails or the screen closes. Permission denial, a location timeout and an unavailable directory preserve the manual field. The signed-in native client uses the [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md). A matching backend revision and a development build that includes `expo-location` are required for an Android or iOS test. Exercise permission grant, denial, manual fallback and an empty result using a synthetic catalog location. A web export does not validate the native prompt.
+
+## Notification preferences
+
+After sign-in, the notification preferences action in Profile opens `/notification-preferences` on the root stack. The native header back action returns to Profile. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
+
+The app checks native push permission when the screen opens and when it returns from Settings. Enabling push asks the operating system for permission. If denied, the saved choice remains visible and the screen offers a Settings shortcut in the permission warning. This warning clears when the device grants permission. This uses `expo-notifications` in an Expo development build and `expo-crypto` for the command's idempotency key. The public web gateway forwards the complete PUT body with the same 4 KiB limit enforced by Identity; `tests/notification-preferences-runtime.test.mjs` checks that path through a Service Binding. The web export cannot validate OS permission. Message delivery and an in-app feed are outside this increment. See [Identity notification preferences](../../modules/identity-consent-ecosystem/notification-preferences.md) for the API, migration and ownership.
+
+Run `npm run test:notification-preferences`, mobile lint and types, and `npm run check`. On Android and iOS, test initial permission, denial, return from Settings, save/retry/conflict, sign-out and account switching with a development build. Keep mobile and Identity on matching revisions; the route fails closed against an older backend.
+
 ## Identity onboarding
 
-The signed-in welcome action opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
+The identity action in Profile opens `/identity-verification`. Accept the server's KYC consent, valid for 24 hours, then select the bundled document, selfie and liveness test files and save each selection. No camera/gallery permission or personal file upload is used. Evaluation returns an explicitly simulated result. Failed checks retain passed steps; technical failures preserve all steps. Retry manually during the original validity or request assistance after the first failure. Assistance exposes one persisted pending reference; resolution is outside this increment.
 
 Revocation or expiry requires new explicit consent and an empty attempt. Pending operations retry the same key/body; a persisted evaluation resumes after restart. Refresh reads authoritative progress. Backgrounding, sign-out and account changes hide progress until authentication is revalidated. The adapter uses the existing serialized session execution port; tokens never enter UI state. No result grants contracting access or a legal certificate.
 
@@ -222,3 +248,122 @@ Failures while fetching configuration, generating PKCE or saving the OAuth trans
 Regression tests also cover same-account alternative entry with replacement tokens, browser cancellation/restart, pre-browser configuration/PKCE/storage recovery, rejected exchanges, foreign-account isolation, logout/revocation preference cleanup, legacy-marker upgrade and failed regular-record cleanup during suspension. Native acceptance must separately check WorkOS alternative entry, the new confirmation, background/cold restart and biometric re-entry; an earlier native result does not validate this changed path.
 
 The [Bruno collection](../../../tools/bruno/solventa/README.md#native-connection) independently checks the backend connection after obtaining a user token securely. Deploy/HTTP verification and native validation are separate evidence.
+
+## Policy wallet
+
+A fresh owner sync excludes contracts ended by modification, renewal or cancellation before the native list limit. The web portal retains their historical documents and payments; the protected offline copy stays explicitly stale until a successful sync.
+
+The wallet is the section where a signed-in customer reads their own issued policies, also without connection. Code: `src/features/policy-wallet`; route `/wallet`, opened from **Mis pólizas** on the home screen.
+
+### Journey
+
+1. The route asks for the device authentication (strong biometrics or the device code, through the system prompt) every time it opens, and again after the app goes to the background. Until it passes, the wallet shows only the locked state, with or without connection. A device with no screen lock cannot use it.
+2. With the device unlocked, the wallet reads `GET /api/v1/policies` with the user access token (see the [native policy list](../../modules/policy-claims-payments/README.md#native-policy-list)). It shows the answer as **online** and saves a minimal protected copy.
+3. If the request fails for a network or server reason (no connection, timeout, a 5xx or a rate limit), it shows the saved copy as **stored**: an amber banner says it is data saved on the device, not verified today, with the last synchronization date. Only an outage falls back. A revoked session never does, a `409 integrity_violation` from the server is shown as an integrity error, and a malformed or incompatible answer (any other 4xx, a wrong body, or a policy that is not `issued`) is shown as a failure, never as lost connectivity.
+3b. **Offline start.** When the app cannot verify the session because the server is unreachable (`blocked` with `unavailable`, after a cold start, returning from the background or an expired token that cannot be renewed offline), **Mis pólizas** is still offered. The wallet then opens only the last stored copy, behind the same device authentication, without calling the server, and says the session could not be verified. On a known revocation or explicit logout, `Authentication` first stores a `logout` intent in credential custody, then clears the copy before removing credentials or contacting the server. Failed cleanup leaves `logoutPending` and gives no wallet access, including after an offline restart when the cache's own discard note could not be stored. Every pending-logout retry attempts local cleanup before the remote request. The cache also records the owed removal in `solventa.policies.discard.v1`: while that note is set it refuses reads and writes, and a direct wallet read shows `discard_pending`. Neither a different block (`forbidden`, an invalid answer) nor a pending logout gives access. These barriers depend on native persistence; see the [storage limits](architecture.md#policy-wallet-and-protected-local-data).
+4. The list shows each policy's product, reference, validity state and end date, and marks it as available offline. Opening one shows the insured credential card, premium and coverage; **Volver a mis pólizas** returns to the list.
+5. If online data could not be saved, the banner says so. If there is no connection and no copy, the wallet says so and offers a retry. An owner with no issued policy sees an empty state, and that empty answer is saved too.
+
+### What it shows, and what it does not
+
+The wallet represents the products and data Solventa has: `vida_hipotecario` (sum insured), `flight_delay` (flight, minimum delay and payout) and `weather_event` (station, minimum rainfall in 24 hours and payout), with the sealed premium and validity. The compact protected encoding gives each coverage kind its own code, and six policies of any mix stay within the 1800-byte bound. The mockup's cars, homes, names, amounts and two sample policies are illustrative and did not create products.
+
+| Mockup element | Wallet behavior |
+|---|---|
+| Policy number `AUT-••••-4471` | `POL-` plus the first eight characters of the policy identifier, because policies have no human-readable number |
+| Monthly premium | The single sealed premium, in whole pesos |
+| Deductible and limits | Not shown: the two products have none |
+| Holder name and masked document number | Not shown and never stored: the policy model has only a pseudonymous subject |
+| Emergency contacts | Not shown: no source defines them. They need a product decision and a data owner |
+| Certificate PDF | Not stored on the device; the wallet says the policy document is read online. No signed PDF exists |
+| Valid / expired filters | Not implemented: the list is sorted by end date and each item carries its state |
+| Pending actions queue and conflicts | Synchronization of actions and conflict resolution belong to other stories |
+
+Validity (`Por iniciar`, `Vigente`, `Vencida`) is computed from the policy dates and the device clock, also on the stored copy. The device is never the contractual source: no action in the wallet changes a policy, and a stored copy cannot enable contracting, payment or claims.
+
+### Tests and limits
+
+`tests/mobile-policy-wallet.test.ts` covers the coordinator (locked gate, online, stored copy, no copy, failed save, revoked session, late responses after locking), `tests/mobile-policies-api.test.ts` the HTTP adapter and formatting, and the native Pact interaction `mobile own policy list` the contract with the gateway. They run with injected collaborators and mocked Expo modules. No screen rendering test exists for `WalletScreen`; render it on a device or emulator and check every state, the language switch and screen-reader labels.
+
+## Claim report
+
+The claim report lets a signed-in customer report a claim on one of their policies, with photos, video or scanned documents as evidence. Code: `src/features/claim-report`; route `/claim-report`. It is opened from the **Reportar siniestro** tile of the Claims tab and from the same action in the detail of a policy. The server side, limits and refusals are described in the [claim report guide](../../modules/policy-claims-payments/claim-report.md).
+
+### Journey
+
+1. **Policy.** Only active mortgage life policies read from `GET /api/v1/policies` can be reported; flight delay and heavy rain are parametric and pay on their own, so it is never offered. With one eligible policy the choice is skipped, and the policy detail offers the action only online. The list route returns only the six most recent policies; when it reports more, the policy choice says that older ones were not checked instead of claiming there are none, and loading them needs a paginated list route that does not exist yet.
+2. **Capture (step 1 of 3).** Event type, the exact date and time, an optional place, a description of 40 to 600 characters and one to ten files, at most 50 MiB together. The date and time are chosen on the system pickers, shown in the phone's time zone and sent in UTC with milliseconds. A file comes from the camera (a photo, or a video of up to 30 seconds) or from the gallery; photos are compressed on capture. A photo is its own preview; a video is identified by a still image made from it (`expo-video-thumbnails`), shown while the customer captures and reviews. While the image is being made the item says so, and if it cannot be made the item says that there is no preview and keeps its label, its size and the remove action, so a failure never leaves a blank. There is no player: the customer confirms which clip is attached by its thumbnail and can remove it and attach another before sending. The phone checks the file type (JPEG, PNG, HEIC, MP4, QuickTime), the count, the size, that the event is not in the future and falls inside the policy dates, and the description, and each problem is shown next to its field.
+3. **Review (step 2 of 3).** The summary, the files and the note that sending creates a single case. **Editar** returns to the capture without losing anything.
+4. **Send.** The phone hashes each file, creates the draft, uploads each file and submits. The result shows the case number `SIN-YYYY-NNNNN`. A partial failure says that the report is not filed yet and never claims reception.
+
+### Document evidence
+
+In the evidence section, **Escanear documento** opens the camera at full capture quality. **Elegir archivo de documento** opens the native file picker with `expo-document-picker` and does not require camera permission. Documents use the report's existing image formats (JPEG, PNG and HEIC) and share its ten-file, 50 MiB limits with other evidence. PDF and multi-page assembly are outside this flow. Rebuild the native app after installing the document picker module.
+
+The app must decode the image before enabling **Adjuntar documento**. The preview shows the full image and can be enlarged to help the customer check the text, orientation and edges. The customer can cancel to take another picture or choose a different file. Confirmation adds the document to the current report. **Enviar reporte** sends its type, byte count and checksum in the same declaration as the other evidence, uploads it to that draft and files the claim using the existing API. Document previews and unconfirmed picks are kept only in the open report. Cancelling the preview or abandoning the report releases the app's copy and preserves the selected original.
+
+### Retries and failures
+
+- One idempotency key and one declaration are kept for the whole attempt. A retry sends again only what the server lacks, so repeating a send never creates a second case. Changing the report after a failure starts a new declaration and a new key.
+- The size declared for a file is that of the copy the picker hands over, because the picker reports the size of the original while the server checks the size of what it receives.
+- The native layer streams each file from its path with a known length; a file is read into memory only to hash it, so the largest allowed file (a video near the 50 MiB limit) briefly needs that much memory on a phone with little RAM. That limit has not been measured on such a device, and an incremental hash is the way out if it proves too tight.
+- An upload has a 120 second deadline. When it expires the transfer is cancelled and has stopped before the failure is shown, so a retry never runs next to the attempt that timed out.
+- Each failure of the contract has its own message: session, coverage dates, a changed file, an unsupported type, missing files and an unavailable service. A development build also shows the underlying cause under the generic message; a customer never sees it.
+
+### Permissions and the background
+
+- The camera needs the system permission, requested when the customer takes a photo, scans a document or records a video. If permission is denied, the screen explains the corresponding system picker alternative. It links to system settings when the OS cannot ask again. The usage descriptions are declared in `app.json` in both languages.
+- The picker and the thumbnail generator write copies into the app cache. The app deletes only files inside that cache, never a gallery original, and deletes them when their life ends: a file the report refuses (type, count or size), a file the customer removes or replaces (with its thumbnail), the whole report once it is filed, and the whole report when it is abandoned, which includes leaving the screen, signing out and switching account. A file that the camera or the gallery returns after that point is deleted instead of admitted. A failed send keeps every file because the retry needs them. A copy left by the app being killed or by a deletion that failed stays until the system evicts the cache.
+- The camera, gallery and file picker are system activities. When they send the app to the background, the report stays hidden until the session is revalidated, and returns intact. It is dropped when the session ends or another account signs in. The draft is held in memory and does not survive the app being closed. Resuming an interrupted upload is separate work.
+
+### Limits and verification
+
+- The event types (collision, theft, damage, other) are provisional values taken from the approved prototype, and no per-product list exists yet. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
+- Reporting from the web, the location choice and the status view are separate work.
+- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers document confirmation, refusal and cleanup, report limits, declarations, retries and API refusals. On Android and iOS, test a camera grant and denial, selection of a synthetic document without camera access, preview and enlargement, corrupt image rejection, cancellation, and submission against a matching deployment. Confirm that the submitted case includes the document once. Native pickers, image rendering and native upload need a development build.
+
+## Protected local data
+
+Design and rules are in the [architecture guide](architecture.md#protected-local-data). This section is the operating guide for anyone adding a screen that reads or writes data on the device.
+
+### What exists
+
+- `protectedPolicyCache` (`src/features/policy-cache/adapters/secure-policy-store.ts`) offers `unlock()`, `lock()`, `save(owner, policies)`, `read(owner)` and `clear()`. `save` accepts the policy summaries the API returns and keeps only the allowed fields; `read` returns `{ syncedAt, policies }` or `null` and fails with `locked` until `unlock()` succeeds.
+- `unlock()` runs the system authentication prompt (`expo-local-authentication`, strong biometrics or the device code). The wallet unlocks when it opens and locks when it closes or the app is backgrounded.
+- `Authentication` clears the cache on logout, denied credentials, environment change and account change. A new screen does not need to do that.
+- `protectedDraftStorage` implements the larger encrypted-file design for editable claim drafts. The same authentication clearing port locks and clears both stores, attempts both removals even if one fails, and propagates a failure so logout recovery stays guarded. See [claim draft custody](../../modules/policy-claims-payments/claim-drafts.md#mobile-custody-and-delivery).
+
+### What you can and cannot do
+
+| Allowed | Not allowed |
+|---|---|
+| Keep the allowed policy fields and `syncedAt` in `protectedPolicyCache` | Store the policy document, its hash, payment data, trace ids, holder name, document number or any field outside `CachedPolicy` |
+| Show cached data only after `unlock()` and label it with its sync date, apart from online data | Show cached data before the device authentication, or present it as current |
+| Let a stored copy inform the customer | Let a stored copy enable contracting, payment, claims or any action the server must authorize |
+| Store a small non-sensitive UI preference outside the cache | Put business data in `AsyncStorage`, plain files, logs, query strings or persisted React state |
+| Add a field to `CachedPolicy` with its validation, a test, a size check and a documented reason | Raise `maxCachedPolicies` (6) or `maxSnapshotBytes` (1800) without changing the storage design |
+| Keep working offline when the prompt is cancelled (stay locked) | Fall back to unprotected storage when there is no device lock |
+
+### How it is protected, and the trade-off
+
+The value is encrypted by Keystore or Keychain with a key that is readable only while the device is unlocked and only on this device (`WHEN_PASSCODE_SET_THIS_DEVICE_ONLY`), under its own key `solventa.policies.v1`. It is also bound to the installation and the pseudonymous owner. Opening it requires the system prompt, which accepts biometrics or the device code, as the design shows.
+
+That prompt is enforced by the application, not by the cryptographic key. The credential records still use a key that requires strong biometrics on each use; the wallet does not, because a customer without an enrolled fingerprint or face must still be able to use the device code. A process that could bypass the application code on a compromised device could therefore read the value without the prompt. State this limit when describing the feature.
+
+### Larger or new data
+
+The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. Editable claim drafts use SDK 57 `expo-crypto` AES-GCM, a small SecureStore key/pointer and an immutable encrypted private file bound to the installation UUID, API environment and owner. New data types must keep their own minimum schema, limits, native validation and tests, plus device authentication before reading and clearing with the session. Do not enlarge the policy snapshot to store drafts.
+
+### Verification
+
+`tests/mobile-policy-cache.test.ts`, `tests/mobile-policy-store.test.mts` and the new cases in `tests/mobile-channel-authentication.test.ts` and `tests/mobile-biometric-authentication.test.ts` run in `npm run check`. They use in-memory and mocked Expo modules, so they do not establish the native behavior. On a real Android and a real iOS device, check separately:
+
+1. After the wallet saves data, opening it again asks for the system prompt, with and without connection, and a cancelled prompt shows nothing.
+2. The device code is accepted when no biometrics are enrolled, and a device without any screen lock stores nothing and the wallet explains why.
+3. Sending the app to the background hides the policies and asks again on return.
+4. Logout, including offline logout, empties the stored copy before the remote revocation finishes, and signing in as another account never shows the previous account's policies.
+5. A reinstall (iOS Keychain survival) and a backup restore do not bring the stored copy back.
+6. With the network off, the wallet shows the stored copy with its own date and banner, and with the network on it shows online data without it.
+7. Force the Android commit to fail (full storage) and confirm the copy is missing or older after a restart, with its own sync date, and that a refused iOS removal during logout keeps sign-out pending instead of completing it.
+
+A build, export or unit test result is not evidence for these checks.

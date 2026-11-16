@@ -60,5 +60,42 @@
     "SELECT",
     "INSERT",
     "UPDATE"
+  ],
+  "underwriting_audit_grants": [
+    "SELECT"
+  ],
+  "notification_preferences": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "notification_preference_commands": [
+    "SELECT",
+    "INSERT"
+  ],
+  "claims_access_grants": [
+    "SELECT"
+  ],
+  "partner_authorizations": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "partner_portal_grants": [
+    "SELECT"
+  ],
+  "policy_advisor_grants": [
+    "SELECT"
+  ],
+  "partner_quota_policy": [
+    "SELECT"
+  ],
+  "partner_quota_overrides": [
+    "SELECT"
+  ],
+  "partner_quota_windows": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
   ]
 }

@@ -37,20 +37,20 @@ mock.module(new URL('features/authentication/presentation/AuthenticationProvider
   { namedExports: { useAuthentication: () => auth } });
 
 const copy = {
-  headings: { authenticated: 'authenticated', locked: 'locked', blocked: 'blocked', logoutPending: 'logoutPending', signedOut: 'signedOut', signIn: 'signIn' },
+  headings: { authenticated: 'authenticated', profile: 'profile', locked: 'locked', blocked: 'blocked', logoutPending: 'logoutPending', signedOut: 'signedOut', signIn: 'signIn' },
   authorizing: 'authorizing', biometricPrompt: 'biometricPrompt', verifying: 'verifying', introduction: 'introduction',
   failures: { unavailable: 'unavailable', biometric_locked: 'biometric_locked' }, reference: 'reference', or: 'or',
   currentAccount: 'currentAccount', biometricEnabled: 'biometricEnabled', biometricSetup: 'biometricSetup',
   biometricReady: 'biometricReady', biometricDescription: 'biometricDescription', primaryRequired: 'primaryRequired',
   pendingLogout: 'pendingLogout', nativeOnly: 'nativeOnly',
-  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', verifyIdentity: 'verifyIdentity', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
+  actions: { signIn: 'signIn', unlock: 'unlock', alternative: 'alternative', verifyIdentity: 'verifyIdentity', wallet: 'wallet', drafts: 'drafts', notificationPreferences: 'notificationPreferences', enable: 'enable', revoke: 'revoke', retry: 'retry', retryLogout: 'retryLogout', signOut: 'signOut', cancel: 'cancel' },
 };
 mock.module(new URL('shared/i18n/use-app-messages.ts', mobile).href, { namedExports: { useAppMessages: () => copy } });
 
 const imported = await import('../apps/mobile/src/features/welcome/presentation/WelcomeScreen');
 const welcome = (imported.default ?? imported) as typeof import('../apps/mobile/src/features/welcome/presentation/WelcomeScreen');
 
-function render(status: string, overrides: Record<string, unknown> = {}) {
+function render(status: string, overrides: Record<string, unknown> = {}, profile = false) {
   nodes.length = 0;
   actions.length = 0;
   routes.length = 0;
@@ -61,7 +61,7 @@ function render(status: string, overrides: Record<string, unknown> = {}) {
     cancel: () => actions.push('cancel'), enableBiometrics: () => actions.push('enable'), unlock: () => actions.push('unlock'),
     revokeDevice: () => actions.push('revoke'), ...overrides,
   };
-  welcome.WelcomeScreen();
+  welcome.WelcomeScreen({ profile });
   return nodes;
 }
 
@@ -119,13 +119,21 @@ for (const [state, message, availableActions] of [
   });
 }
 
+test('a session that cannot be verified offline still opens the stored wallet, and other blocks do not', () => {
+  render('blocked', { failure: 'unavailable', traceId: 'trace-1' });
+  press('wallet');
+  assert.deepEqual(routes, ['/wallet']);
+  render('blocked', { failure: 'forbidden', traceId: 'trace-1' });
+  assert.equal(nodes.some(node => node.type === 'Pressable' && (node.props.children as { props: { children: unknown } }).props.children === 'wallet'), false);
+});
+
 test('a blocked session displays its error and trace and permits retry or logout', () => {
   render('blocked', { failure: 'unavailable', traceId: 'trace-1' });
   assert.ok(text().includes('blocked'));
   assert.ok(text().includes('unavailable'));
   assert.ok(text().includes('reference: trace-1'));
   assert.equal(nodes.some(node => node.type === 'ActivityIndicator'), false);
-  assert.deepEqual(labels(), ['retry', 'signOut']);
+  assert.deepEqual(labels(), ['retry', 'wallet', 'drafts', 'signOut']);
   press('retry');
   press('signOut');
   assert.deepEqual(actions, ['retry', 'signOut']);
@@ -143,24 +151,24 @@ test('a locked session offers biometric unlock and primary authentication as an 
 });
 
 test('biometric setup is disabled until primary authentication allows it', () => {
-  render('authenticated', { email: 'cliente@example.test', canEnableBiometrics: false });
-  assert.ok(text().includes('authenticated'));
+  render('authenticated', { email: 'cliente@example.test', canEnableBiometrics: false }, true);
+  assert.ok(text().includes('profile'));
   assert.ok(text().includes('cliente@example.test'));
   assert.ok(text().includes('primaryRequired'));
   assert.equal(button('enable').props.disabled, true);
   assert.deepEqual(button('enable').props.accessibilityState, { disabled: true });
-  assert.deepEqual(labels(), ['verifyIdentity', 'enable', 'signOut']);
-  render('authenticated');
+  assert.deepEqual(labels(), ['drafts', 'verifyIdentity', 'notificationPreferences', 'enable', 'signOut']);
+  render('authenticated', {}, true);
   assert.ok(text().includes('biometricSetup'));
   press('enable');
   assert.deepEqual(actions, ['enable']);
 });
 
 test('an enrolled account can revoke biometric access and a pending logout can be retried', () => {
-  render('authenticated', { biometricEnabled: true });
+  render('authenticated', { biometricEnabled: true }, true);
   assert.ok(text().includes('biometricEnabled'));
   assert.ok(text().includes('biometricReady'));
-  assert.deepEqual(labels(), ['verifyIdentity', 'revoke', 'signOut']);
+  assert.deepEqual(labels(), ['drafts', 'verifyIdentity', 'notificationPreferences', 'revoke', 'signOut']);
   press('revoke');
   assert.deepEqual(actions, ['revoke']);
   render('logoutPending');
@@ -186,4 +194,19 @@ test('an authenticated account retains the existing identity-verification entry'
   render('authenticated');
   press('verifyIdentity');
   assert.deepEqual(routes, ['/identity-verification']);
+});
+
+test('an authenticated account opens the wallet', () => {
+  render('authenticated');
+  press('wallet');
+  assert.deepEqual(routes, ['/wallet']);
+});
+
+test('notification preferences are opened from the authenticated profile', () => {
+  render('authenticated');
+  assert.ok(!text().includes('notificationPreferences'));
+  render('authenticated', {}, true);
+  assert.ok(text().includes('profile'));
+  press('notificationPreferences');
+  assert.deepEqual(routes, ['/notification-preferences']);
 });

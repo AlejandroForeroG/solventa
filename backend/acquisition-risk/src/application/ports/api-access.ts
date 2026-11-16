@@ -6,11 +6,11 @@ export type QuoteActor =
   | { kind: 'partner'; partnerId: string }
   | { kind: 'user'; clientId: string; subjectToken: string };
 
-export type AccessDenial = 'unauthorized' | 'forbidden' | 'access_unavailable';
+export type AccessDenial = 'quota_exceeded' | 'unauthorized' | 'forbidden' | 'access_unavailable';
 
 export type AccessDecision =
   | { allowed: true; actor: QuoteActor }
-  | { allowed: false; error: AccessDenial; status: 401 | 403 | 503 };
+  | { allowed: false; error: AccessDenial; retryAfter?: number; status: 401 | 403 | 429 | 503 };
 
 // Identity owns authentication and permissions. A failure to verify must block the quote.
 export interface ApiAccess {

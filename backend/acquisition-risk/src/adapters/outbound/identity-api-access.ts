@@ -26,6 +26,9 @@ function decisionFrom(reply: unknown): AccessDecision {
     const actor = actorFrom(reply.actor);
     return actor ? { allowed: true, actor } : unavailable;
   }
+  if (reply.allowed === false && reply.status === 429 && reply.error === 'quota_exceeded' && typeof reply.retryAfter === 'number'
+    && Number.isSafeInteger(reply.retryAfter) && reply.retryAfter >= 1 && reply.retryAfter <= 86400)
+    return { allowed: false, error: 'quota_exceeded', status: 429, retryAfter: reply.retryAfter };
   // This adapter supplies the fixed RPC shape. A 400 is an integration failure,
   // not a recorded authentication denial that can be exposed as 401.
   if (reply.status === 401) return { allowed: false, error: 'unauthorized', status: 401 };

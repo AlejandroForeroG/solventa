@@ -215,11 +215,41 @@ async function smoke(api) {
   }
   console.log(JSON.stringify({ status: 'passed', environment, url, authentication: 'configured', privateBackends: 3, services: result.services }));
 }
+// Claim evidence objects stay private to the Policy Worker's R2 binding. Only dev and staging hold synthetic data, so only they expire objects;
+// prod retention follows the retention_until recorded in SQL and is never shortened by a bucket rule.
+const evidenceBucket = `solventa-${environment}-claim-evidence`;
+const evidenceExpiryDays = environment === 'prod' ? null : 30;
+async function verifyEvidenceBucket(api) {
+  // The listing omits the storage class, so read the bucket itself.
+  const bucket = await api(`/r2/buckets/${evidenceBucket}`);
+  assert.equal(bucket.name, evidenceBucket);
+  assert.equal(bucket.storage_class, 'Standard');
+  assert.equal(bucket.jurisdiction, 'default');
+  assert.equal((await api(`/r2/buckets/${evidenceBucket}/domains/managed`)).enabled, false, 'The public r2.dev domain must stay disabled');
+  assert.deepEqual((await api(`/r2/buckets/${evidenceBucket}/domains/custom`)).domains, [], 'Custom public domains are not allowed');
+  const { rules } = await api(`/r2/buckets/${evidenceBucket}/lifecycle`);
+  const expiry = rules?.find(rule => rule.enabled && rule.deleteObjectsTransition?.condition?.type === 'Age');
+  assert.equal(expiry?.deleteObjectsTransition.condition.maxAge, evidenceExpiryDays === null ? undefined : evidenceExpiryDays * 86400);
+}
+async function storage(api) {
+  const { buckets } = await api('/r2/buckets');
+  // A bucket is created only when absent; an existing one is verified, never replaced.
+  if (!buckets.some(bucket => bucket.name === evidenceBucket)) await api('/r2/buckets', 'POST', { name: evidenceBucket, storageClass: 'Standard' });
+  if (evidenceExpiryDays !== null) {
+    await api(`/r2/buckets/${evidenceBucket}/lifecycle`, 'PUT', { rules: [{
+      id: 'expire-claim-evidence', enabled: true, conditions: { prefix: '' },
+      deleteObjectsTransition: { condition: { type: 'Age', maxAge: evidenceExpiryDays * 86400 } },
+    }] });
+  }
+  await verifyEvidenceBucket(api);
+  console.log(JSON.stringify({ environment, account, evidenceBucket, storageClass: 'Standard', publicAccess: 'disabled', expiryDays: evidenceExpiryDays }));
+}
 try {
   if (!remoteEnvironments.includes(environment)) throw Error('Specify dev, staging or prod');
   const api = await cloudflare();
   const action = process.argv[2];
   if (action === 'up') await up(api);
+  else if (action === 'storage') await storage(api);
   else if (action === 'deploy') await deploy(api);
   else if (action === 'verify') {
     await verifyIsolation(environment);

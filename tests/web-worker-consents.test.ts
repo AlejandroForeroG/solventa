@@ -53,7 +53,7 @@ test('a failed upload reader returns a correlated 503 without calling Identity o
 
 test('transport caps match the owner and replace oversized bytes without forwarding their data or length', async () => {
   for (const [path, limit, owner] of [
-    ['/api/v1/consents', 4096, 'IDENTITY'], ['/api/v1/me/quotes', 16384, 'ACQUISITION'],
+    ['/api/v1/consents', 4096, 'IDENTITY'], ['/api/v1/me/partner-authorizations', 4096, 'IDENTITY'], ['/api/v1/partner/offers', 4096, 'ACQUISITION'], ['/api/v1/me/quotes', 16384, 'ACQUISITION'],
     ['/api/v1/quote-estimates', 16384, 'ACQUISITION'], ['/api/v1/offers', 1024, 'ACQUISITION'],
     ['/api/v1/quotes/COT-2026-00001/offers', 1024, 'ACQUISITION'], ['/api/v1/policies/policy/issue', 1024, 'POLICY'],
     ['/api/v2/policies/policy/issue', 1024, 'POLICY']

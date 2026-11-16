@@ -5,6 +5,13 @@ import { databaseProbe } from './adapters/outbound/database-probe';
 import { authorizeApiAccess } from './adapters/inbound/api-access-http';
 import type { ApiAccessRequest } from './adapters/inbound/api-access-http';
 
+import { SqlUnderwritingAuditGrants } from './adapters/outbound/underwriting-audit-grants';
+import { SqlClaimsAccessGrants } from './adapters/outbound/claims-access-grants';
+import { SqlPartnerPortalGrants } from './adapters/outbound/partner-portal-grants';
+import { SqlPolicyAdvisorGrants } from './adapters/outbound/policy-advisor-grants';
+import { authorizeAdvisorApproval } from './application/advisor-access';
+import { SqlPartnerQuotas } from './adapters/outbound/partner-quotas';
+import { admitPartnerRequest } from './application/partner-quota';
 import { ApiAccess } from './application/api-access';
 import { Consents } from './application/consents';
 import type { ConsentCheck } from './application/consents';
@@ -32,6 +39,11 @@ import { IdentityVerifications } from './application/identity-verifications';
 import { SqlIdentityVerifications } from './adapters/outbound/sql-identity-verifications';
 import { SyntheticVerificationCorpus, syntheticKycSource } from './adapters/outbound/synthetic-identity-verification';
 import { KycProvider } from './adapters/outbound/kyc-provider';
+import { NotificationPreferences } from './application/notification-preferences';
+import { PartnerAuthorizations } from './application/partner-authorizations';
+import { authorizePartnerOfferAccess } from './application/partner-offer-access';
+import { SqlPartnerAuthorizations } from './adapters/outbound/sql-partner-authorizations';
+import { SqlNotificationPreferences } from './adapters/outbound/sql-notification-preferences';
 
 function securityFor(env: IdentityEnv) {
   return new SecurityDecisions(new SqlSecurityDecisions(env.IDENTITY_DB.connectionString), () => crypto.randomUUID());
@@ -41,7 +53,7 @@ type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.shared
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared));
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
       security: securityFor(env),
@@ -109,6 +121,8 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
         provider: new KycProvider(syntheticKycSource, 2500), corpus: new SyntheticVerificationCorpus(),
         integrity: new HmacIntegrity(this.env.CONSENT_SEAL_KEY ?? ''), platform: { now: () => new Date(), newId: () => crypto.randomUUID() },
       }),
+      notificationPreferences: new NotificationPreferences(new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString)),
+      partnerAuthorizations: new PartnerAuthorizations({ store: new SqlPartnerAuthorizations(this.env.IDENTITY_DB.connectionString), now: () => new Date() }),
       verificationAccess: (identity, operation) => new ApiAccess(new SqlPartnerAccess(this.env.IDENTITY_DB.connectionString),
         new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)).mobileUser(identity, operation),
       mobile: config ? {
@@ -128,7 +142,8 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
   async authorizeApiAccessV1(request: ApiAccessRequest) {
     const decision = await authorize(this.env, request);
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
-    return decision;
+    return decision.allowed && decision.actor.kind === 'partner' && request.operation === 'quotes:create'
+      ? admitPartnerRequest(decision, decision.actor.partnerId, new SqlPartnerQuotas(this.env.IDENTITY_DB.connectionString)) : decision;
   }
   async verifyConsentV1(request: ConsentCheck) {
     const decision = await consentsFor(this.env).verify(request);
@@ -146,6 +161,17 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
     finally { await shared?.close(); }
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return decision;
+  }
+  async authorizeAdvisorApprovalV1(request: unknown) {
+    return authorizeAdvisorApproval({ authorize: input => authorize(this.env, input), security: securityFor(this.env),
+      advisors: new SqlPolicyAdvisorGrants(this.env.IDENTITY_DB.connectionString) }, request);
+  }
+  async authorizePartnerOfferAccessV1(request: unknown) {
+    const decision = await authorizePartnerOfferAccess({ authorize: input => authorize(this.env, input),
+      authorizations: new SqlPartnerAuthorizations(this.env.IDENTITY_DB.connectionString),
+      verifyConsents: input => consentsFor(this.env, false).verifyScopes(input), security: securityFor(this.env) }, request);
+    if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return decision.allowed ? admitPartnerRequest(decision, decision.partnerId, new SqlPartnerQuotas(this.env.IDENTITY_DB.connectionString)) : decision;
   }
   async denyResourceAccessV1(request: unknown) {
     const result = await denyResourceAccess(securityFor(this.env), request);

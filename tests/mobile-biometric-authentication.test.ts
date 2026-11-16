@@ -34,6 +34,7 @@ function fixture() {
   let accessDenied = false;
   let setupFailure: 'configuration' | 'pkce' | 'storage' | undefined;
   let browserOpens = 0;
+  let policyClears = 0;
   const calls: string[] = [];
   const custody = {
     read: async (key: string, protectedValue = false) => {
@@ -57,6 +58,7 @@ function fixture() {
   const make = () => {
     const credentials = createCredentials(custody);
     const auth = new Authentication({ baseUrl, ...{ store: credentials.store, biometrics: credentials.vault },
+      policyCache: { clear: async () => { policyClears++; } },
       browser: { assertAvailable: () => {}, open: async () => {
         browserOpens++;
         return browserCancelled ? null : `solventa://auth/callback?state=${'s'.repeat(43)}&code=synthetic-code`;
@@ -100,6 +102,7 @@ function fixture() {
     rejectExchange: () => { exchangeRejected = true; },
     failSetup: (step: NonNullable<typeof setupFailure>) => { setupFailure = step; },
     browserOpens: () => browserOpens,
+    policyClears: () => policyClears,
     advance: (ms: number) => { currentTime += ms; },
     forbidAccess: () => { accessDenied = true; },
     pauseInspection: () => {
@@ -374,6 +377,7 @@ test('cancelling the alternative browser restores locked biometric entry across 
   assert.equal(flow.auth.getSnapshot().failure, undefined);
   assert.equal(flow.auth.getSnapshot().traceId, undefined);
   assert.equal(f.prompts(), prompts);
+  assert.equal(f.policyClears(), 0, 'cancelling keeps the current owner\'s offline data');
   assert.equal(f.values.has('solventa.biometric.credentials.v1'), true);
   assert.deepEqual((await flow.vault.info())?.owner, principal);
   assert.equal((await flow.vault.info())?.suspended, false);
@@ -418,6 +422,7 @@ test('another WorkOS account never inherits the previous biometric preference or
   assert.equal(flow.auth.getSnapshot().email, 'other@example.test');
   assert.equal(f.prompts(), prompts);
   assert.equal(await flow.vault.info(), null);
+  assert.equal(f.policyClears(), 1, 'the previous owner\'s offline data is erased when the new account is confirmed');
   assert.equal(f.calls.includes('registerDevice'), false);
   const restarted = f.make(); await restarted.auth.restore();
   assert.equal(restarted.auth.getSnapshot().biometricEnabled, false);
@@ -487,6 +492,7 @@ test('an ownerless legacy preference never enables biometrics for a new WorkOS a
   assert.equal(restarted.auth.getSnapshot().status, 'authenticated');
   assert.equal(restarted.auth.getSnapshot().biometricEnabled, false);
   assert.equal(await restarted.vault.info(), null);
+  assert.equal(f.policyClears(), 1);
   assert.equal(f.values.has('solventa.biometric.credentials.v1'), false);
   assert.equal(f.calls.includes('registerDevice'), false);
 });

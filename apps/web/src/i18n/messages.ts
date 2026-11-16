@@ -1,9 +1,17 @@
+import { advisorEs, advisorEn } from '../advisor/messages';
+import { portalEs, portalEn } from '../partner-portal/messages';
+import { auditEs, auditEn } from '../audit/messages';
+import { claimsEs, claimsEn } from '../claims/messages';
+import { policiesEs, policiesEn } from '../policies/messages';
+import { assistanceEs, assistanceEn } from '../assistance/messages';
 // Catalogues for the commercial front end. Texts come from the approved prototype
 // dictionary; parameters use ICU placeholders. Currency is always COP in both locales.
 export const locales = ['es-CO', 'en-US'] as const;
 export type Locale = (typeof locales)[number];
 
 const esCO = {
+  ...portalEs,
+  ...advisorEs,
   'landing.home': 'Inicio de Solventa',
   'landing.product': 'Seguro de vida hipotecario',
   'landing.title': 'Conoce el seguro de vida de tu crédito.',
@@ -338,6 +346,8 @@ const esCO = {
 };
 
 const enUS: typeof esCO = {
+  ...portalEn,
+  ...advisorEn,
   'landing.home': 'Solventa home',
   'landing.product': 'Mortgage life insurance',
   'landing.title': 'Understand the life insurance for your loan.',
@@ -671,4 +681,7 @@ const enUS: typeof esCO = {
   'session.retry': 'Retry'
 };
 
-export const messages: Record<Locale, Record<string, string>> = { 'es-CO': esCO, 'en-US': enUS };
+export const messages: Record<Locale, Record<string, string>> = {
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...policiesEs, ...assistanceEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...policiesEn, ...assistanceEn },
+};

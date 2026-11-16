@@ -26,6 +26,12 @@ test('captures with minimum data and with a profile are valid', () => {
   assert.equal(validate(profiled), true);
 });
 
+test('a partner channel is optional, identifies only the partner and its authorization, and rejects anything else', () => {
+  const channel = { kind: 'partner', partnerId: '10000000-0000-4000-8000-000000000001', authorizationId: '60000000-0000-4000-8000-000000000001' };
+  assert.equal(validate({ ...profiled, channel }), true);
+  for (const bad of [{ ...channel, kind: 'web' }, { ...channel, partnerId: 'acme' }, { kind: 'partner', partnerId: channel.partnerId }]) assert.equal(validate({ ...profiled, channel: bad }), false);
+});
+
 test('new optional fields do not break a v1 capture', () => {
   assert.equal(validate({ ...minimum, futureField: { any: 'value' } }), true);
 });

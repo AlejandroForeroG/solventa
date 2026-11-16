@@ -1,3 +1,5 @@
+import { AuditDecisions } from '../backend/acquisition-risk/src/application/audit-decisions';
+import { SqlAuditDecisions } from '../backend/acquisition-risk/src/adapters/outbound/sql-audit-decisions';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +17,7 @@ import { ReadSignal } from '../backend/acquisition-risk/src/application/read-sig
 import type { SignalProvider } from '../backend/acquisition-risk/src/application/ports/signal-sources';
 import { SqlSignalSnapshots } from '../backend/acquisition-risk/src/adapters/outbound/sql-signal-snapshots';
 import { platformTimer } from '../backend/acquisition-risk/src/adapters/outbound/degradation-log';
+import { reconstructMortgageDecision } from '../backend/acquisition-risk/src/domain/reconstruct-mortgage-decision';
 
 // Real local owner SQL; Identity and external data sources are explicit stand-ins.
 const config = await settings('local');
@@ -73,10 +76,31 @@ try {
   const command = { actor, authorization, quoteId: quote.quote.quoteId, idempotencyKey: randomUUID(), traceId: trace() };
   const created = await service.create(command); assert.equal(created.status, 'created'); if (created.status !== 'created') throw Error('offer failed');
   assert.equal(created.offer.status, 'definitive');
+  const storedCapture = (await admin.query(`SELECT d.input_snapshot FROM acquisition.underwriting_decisions d
+    JOIN acquisition.offers o ON o.decision_id=d.id WHERE o.id=$1`, [created.offer.offerId])).rows[0].input_snapshot;
+  const reconstructed = reconstructMortgageDecision(storedCapture);
+  assert.equal(reconstructed.status, 'reconstructed');
+  if (reconstructed.status !== 'reconstructed') throw Error('stored mortgage reconstruction failed');
+  assert.equal(reconstructed.calculatedPremium, created.offer.premium);
+  assert.equal(reconstructed.inputs.identityVerified, true);
+  assert.equal(reconstructed.inputs.affiliationActive, true);
+  assert.equal(reconstructed.inputs.monthlyIncomeCop, 8000000);
+  assert.equal(reconstructed.inputs.monthlyObligationsCop, 1800000);
+  assert.equal(reconstructed.consent.id, authorization.consentId);
   assert.equal((await admin.query("SELECT count(*)::INT4 AS n FROM acquisition.risk_profiles WHERE subject_token=$1 AND consent_reference=$2 AND purpose='risk_profiling'", [actor.subjectToken, authorization.consentId])).rows[0].n, 4);
   assert.equal((await service.create(command)).status, 'replayed');
   assert.equal((await service.create({ ...command, quoteId: 'COT-2026-99999' })).status, 'conflict');
   assert.equal((await service.get({ actor: other, offerId: created.offer.offerId, traceId: trace() })).status, 'not_found');
+  // The retained decision explains an offer to its owner only, and records the partner channel when one requested it.
+  assert.deepEqual(await store.explanation(actor, created.offer.offerId), storedCapture);
+  assert.equal(await store.explanation(other, created.offer.offerId), null, 'a foreign customer cannot read the retained decision');
+  assert.equal(await store.explanation(actor, randomUUID()), null);
+  const channel = { kind: 'partner' as const, partnerId: randomUUID(), authorizationId: randomUUID() };
+  const partnerOffer = await service.create({ ...command, idempotencyKey: randomUUID(), traceId: trace(), channel });
+  assert.equal(partnerOffer.status, 'created'); if (partnerOffer.status !== 'created') throw Error('partner offer failed');
+  const partnerCapture = await store.explanation(actor, partnerOffer.offer.offerId);
+  assert.deepEqual(partnerCapture?.channel, channel);
+  assert.equal(storedCapture.channel, undefined, 'an offer the customer requested has no partner channel');
   // One snapshot statement returns the ledger outcome, the keyed context and only the caller's own quote.
   const snapshot = await store.creationSnapshot(actor, command.idempotencyKey, quote.quote.quoteId);
   if (snapshot.request?.outcome !== 'accepted') throw Error('ledger outcome missing from snapshot');
@@ -182,6 +206,11 @@ try {
   const preliminaryCapture = (await admin.query(`SELECT d.outcome,d.input_snapshot FROM acquisition.underwriting_decisions d
     JOIN acquisition.offers o ON o.decision_id=d.id WHERE o.id=$1 AND o.status='preliminary'`, [preliminary.offer.offerId])).rows[0];
   assert.equal(preliminaryCapture.outcome, 'preliminary');
+  const reconstructedPreliminary = reconstructMortgageDecision(preliminaryCapture.input_snapshot);
+  assert.equal(reconstructedPreliminary.status, 'reconstructed');
+  if (reconstructedPreliminary.status !== 'reconstructed') throw Error('stored preliminary reconstruction failed');
+  assert.equal(reconstructedPreliminary.outcome, 'preliminary');
+  assert.equal(reconstructedPreliminary.calculatedPremium, preliminary.offer.premium);
   assert.deepEqual(preliminaryCapture.input_snapshot.sources.find((source: { degraded: boolean }) => source.degraded), {
     source: 'signal:payment_history_score', capturedAt: preliminaryCapture.input_snapshot.sources[1].capturedAt,
     quality: 'stored_copy', degraded: true, confidence: 60, failure: 'unavailable', substitute: 'stored_copy'
@@ -209,6 +238,14 @@ try {
     (SELECT count(*)::INT4 FROM acquisition.offer_contexts ctx WHERE ctx.client_id=r.client_id AND ctx.idempotency_key=r.idempotency_key) AS offers
     FROM acquisition.offer_requests r WHERE r.client_id=$1 AND r.idempotency_key=$2`, [actor.clientId, declineCommand.idempotencyKey])).rows[0];
   assert.deepEqual(declineEffects, { outcome: 'declined', decisions: 1, audit: 1, outbox: 1, offers: 0 });
+  const declinedCapture = (await admin.query(`SELECT d.input_snapshot FROM acquisition.underwriting_decisions d
+    JOIN acquisition.offer_requests r ON r.decision_id=d.id WHERE r.client_id=$1 AND r.idempotency_key=$2`, [actor.clientId, declineCommand.idempotencyKey])).rows[0].input_snapshot;
+  const reconstructedDecline = reconstructMortgageDecision(declinedCapture);
+  assert.equal(reconstructedDecline.status, 'reconstructed');
+  if (reconstructedDecline.status !== 'reconstructed') throw Error('stored decline reconstruction failed');
+  assert.equal(reconstructedDecline.outcome, 'declined');
+  assert.equal(reconstructedDecline.checks.debtRatioWithinLimit, false);
+  assert.equal(reconstructedDecline.inputs.monthlyObligationsCop, 5000000);
   // Runtime INSERT is allowed, but inconsistent accepted/declined references are rejected by the new table.
   const declineDecision = (await admin.query('SELECT decision_id FROM acquisition.offer_requests WHERE client_id=$1 AND idempotency_key=$2', [actor.clientId, declineCommand.idempotencyKey])).rows[0].decision_id;
   await assert.rejects(admin.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
@@ -361,6 +398,20 @@ try {
   } finally {
     await admin.query('UPDATE acquisition.offer_contexts SET client_id=$2,subject_token=$3 WHERE offer_id=$1', [created.offer.offerId, actor.clientId, actor.subjectToken]);
   }
+  const audit = new AuditDecisions(new SqlAuditDecisions(runtime.toString()), { now: () => new Date() });
+  const auditReader = () => ({ clientId: other.clientId, traceId: trace(), expiresAt: new Date(Date.now() + 5000).toISOString() });
+  const historical = await audit.list({ reference: created.offer.offerId }, auditReader());
+  assert.equal(historical.items.length, 1);
+  const auditedDecision = await audit.get(historical.items[0].decisionId, auditReader());
+  assert.equal(auditedDecision?.reconstruction.status, 'reconstructed');
+  assert.equal(auditedDecision?.quoteId, quote.quote.quoteId);
+  const quotedHistory = await audit.list({ reference: quote.quote.quoteId }, auditReader());
+  assert.ok(quotedHistory.items.some(item => item.outcome === 'declined'));
+  assert.ok(quotedHistory.items.some(item => item.outcome === 'preliminary'));
+  for (const item of quotedHistory.items) assert.equal((await audit.get(item.decisionId, auditReader()))?.reconstruction.status, item.product === 'vida_hipotecario' ? 'reconstructed' : 'invalid_capture');
+  const flightHistory = await audit.list({ product: 'flight_delay' }, auditReader());
+  assert.ok(flightHistory.items.length);
+  for (const item of flightHistory.items) assert.equal((await audit.get(item.decisionId, auditReader()))?.reconstruction.status, 'reconstructed');
   const probe = clientFor(runtime, { ca: (config.ssl as { ca?: string }).ca, rejectUnauthorized: true }); await probe.connect();
   try {
     for (const table of ['offer_contexts', 'offer_acceptances', 'offer_revisions', 'offer_requests']) {
@@ -368,7 +419,7 @@ try {
       await assert.rejects(probe.query(`UPDATE acquisition.${table} SET ${table === 'offer_contexts' ? 'terms_seal=terms_seal' : table === 'offer_acceptances' ? 'result=result' : table === 'offer_requests' ? 'outcome=outcome' : 'premium=premium'}`), /privilege|permission|denied/i);
     }
   } finally { await probe.end(); }
-  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'successful signals append same-consent risk profiles', 'provider failure reuses stored copy in a non-acceptable preliminary offer', 'actor ownership and payload/key conflicts', 'single creation snapshot returns ledger, keyed context and owned quote only', 'pre-ledger keyed offer replays without sources and rejects changed requests', 'expired owned quote stops before providers without an outcome', 'acceptance snapshot is owner-scoped and fresh', 'different-key acceptance race writes one acceptance/audit/event', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'required audit/outbox failure rolls back complete offer graph and acceptance', 'stored term tamper rejected', 'authorization expiring under the offer row lock leaves no acceptance', 'targeted publication of a committed acceptance', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history'] }));
+  console.log(JSON.stringify({ status: 'passed', checks: ['quote-owned definitive offer with immutable revision/capture/audit/outbox', 'successful signals append same-consent risk profiles', 'provider failure reuses stored copy in a non-acceptable preliminary offer', 'actor ownership and payload/key conflicts', 'single creation snapshot returns ledger, keyed context and owned quote only', 'pre-ledger keyed offer replays without sources and rejects changed requests', 'expired owned quote stops before providers without an outcome', 'acceptance snapshot is owner-scoped and fresh', 'different-key acceptance race writes one acceptance/audit/event', 'concurrent create and acceptance deduplicate atomically', 'declines replay with one decision/audit/outbox and reject changed request identity', 'request ledger rejects inconsistent outcome and offer references', 'accepted and declined races share one atomic first outcome', 'GET integrity rejection persists its request trace', 'acceptance+audit+signed outbox in one transaction', 'fresh consent required on replay', 'flight source separate from mortgage quote', 'mid-transaction constraint leaves no partial business effect', 'required audit/outbox failure rolls back complete offer graph and acceptance', 'stored term tamper rejected', 'authorization expiring under the offer row lock leaves no acceptance', 'targeted publication of a committed acceptance', 'publisher confirms only after queue acknowledgment', 'publisher failure defers without publication', 'concurrent publisher leases dispatch once', 'unsealed appended fields quarantined', 'interrupted final lease becomes dead letter', 'runtime cannot update/delete offer history', 'auditor lookup reconstructs persisted mortgage and flight outcomes across clients'] }));
 } catch (error) {
   testFailure = error;
   throw error;

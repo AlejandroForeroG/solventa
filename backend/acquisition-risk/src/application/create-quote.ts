@@ -1,5 +1,5 @@
 import { ageOn, decisionCapture, monthlyPremium, RULE_VERSION, validateQuoteRequest, VALIDITY_DAYS, type FieldError } from '../domain/quote';
-import type { AccessCredential, AccessDenial, ApiAccess } from './ports/api-access';
+import type { AccessCredential, AccessDenial, ApiAccess, QuoteActor } from './ports/api-access';
 import type { QuoteStore, StoredQuote } from './ports/quote-store';
 import type { Clock, Protector } from './ports/platform';
 
@@ -7,9 +7,10 @@ export type CreateQuoteInput = { credential: AccessCredential | null; idempotenc
 
 export type CreateQuoteResult =
   | { status: 'created' | 'replayed'; quote: StoredQuote & { currency: 'COP'; basis: 'minimum_data'; traceId: string } }
-  | { status: 'denied'; error: AccessDenial; httpStatus: 401 | 403 | 503 }
+  | { status: 'denied'; error: AccessDenial; retryAfter?: number; httpStatus: 401 | 403 | 429 | 503 }
   | { status: 'invalid'; errors: FieldError[] }
   | { status: 'idempotency_conflict' };
+export type CreateQuoteForResult = Exclude<CreateQuoteResult, { status: 'denied' }>;
 
 const BOGOTA_OFFSET_MS = 5 * 3600 * 1000; // Colombia has no daylight saving time.
 const DAY_MS = 24 * 3600 * 1000;
@@ -21,9 +22,12 @@ export class CreateQuote {
     // Before validation, so a caller without access learns nothing about the rules.
     if (!input.credential) return { status: 'denied', error: 'unauthorized', httpStatus: 401 };
     const decision = await this.deps.access.authorize(input.credential, input.traceId);
-    if (!decision.allowed) return { status: 'denied', error: decision.error, httpStatus: decision.status };
-    const { actor } = decision;
+    if (!decision.allowed) return { status: 'denied', error: decision.error, httpStatus: decision.status, ...(decision.retryAfter === undefined ? {} : { retryAfter: decision.retryAfter }) };
+    return this.createFor(decision.actor, input);
+  }
 
+  // For callers whose actor Identity has already established, such as a partner acting for an authorizing customer.
+  async createFor(actor: QuoteActor, input: Pick<CreateQuoteInput, 'idempotencyKey' | 'body' | 'traceId'>): Promise<CreateQuoteForResult> {
     const key = input.idempotencyKey;
     if (key === null || key.length < 1) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'required' }] };
     if (key.length > 128) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'invalid_format' }] };

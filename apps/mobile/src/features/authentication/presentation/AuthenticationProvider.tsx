@@ -1,6 +1,5 @@
 import * as Linking from 'expo-linking';
-import React from 'react';
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
@@ -10,6 +9,7 @@ import { parseCallback } from '../adapters/callback';
 import { biometricVault, secureTokenStore } from '../adapters/secure-token-store';
 import { createSessionApi } from '../adapters/solventa-session';
 import { workosIdentity } from '../adapters/workos';
+import { localBusinessData } from '../../../shared/native/local-business-data';
 
 const Context = createContext<Authentication | null>(null);
 
@@ -19,7 +19,7 @@ export function AuthenticationProvider({ children }: PropsWithChildren) {
     return new Authentication({
       baseUrl, store: secureTokenStore, identity: workosIdentity,
       api: createSessionApi(baseUrl), browser: authBrowser, now: Date.now, parseCallback,
-      biometrics: biometricVault,
+      biometrics: biometricVault, policyCache: localBusinessData,
     });
   });
 
@@ -59,5 +59,5 @@ export function useAuthentication() {
 export function useAuthenticatedSession() {
   const authentication = useContext(Context);
   if (!authentication) throw new Error('AuthenticationProvider is required');
-  return { execute: authentication.withSession, baseUrl: authentication.getApiBaseUrl() };
+  return useMemo(() => ({ execute: authentication.withSession, baseUrl: authentication.getApiBaseUrl() }), [authentication]);
 }

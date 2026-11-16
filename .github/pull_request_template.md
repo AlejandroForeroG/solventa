@@ -26,4 +26,4 @@ Link available Codex review and explain how findings were resolved. Confirm pass
 
 ## Candidate
 
-For staging: link the candidate branch, any separate integration branch and the successful dev deployment containing that tested revision. Branch names do not require an environment suffix. For prod: link the successful deployment of the staging candidate. Declare migrations or configuration required before integration.
+For staging: link the candidate branch, any separate integration branch and the successful dev deployment containing that tested revision. Branch names do not require an environment suffix. For prod: link the successful deployment of the staging candidate. Declare pending migrations, migration-secret configuration and bootstrap prerequisites. Normal Deploy applies the approved revision's pending migrations before publishing Workers; partial migrations still require reconciliation.

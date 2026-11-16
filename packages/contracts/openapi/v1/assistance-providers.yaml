@@ -1,0 +1,156 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Assistance providers
+  version: 1.0.0
+  description: Read-only search of a synthetic assistance directory. Search terms and coordinates are not retained.
+servers:
+  - url: /api/v1
+tags:
+  - name: Assistance providers
+    description: Customer lookup by manually entered place or explicitly authorized device coordinates.
+paths:
+  /assistance/providers/search:
+    post:
+      operationId: searchAssistanceProviders
+      summary: Find simulated assistance providers
+      tags: [Assistance providers]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+        - NativeSession: []
+      description: Requires assistance-providers:read through Identity. Web sessions also require a matching Origin. Send exactly one input shape and no more than 1024 bytes. POST keeps location out of the URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ManualSearch'
+                - $ref: '#/components/schemas/NearbySearch'
+            examples:
+              manual:
+                value: { kind: manual, query: Bogotá }
+              nearby:
+                value: { kind: nearby, locationAuthorized: true, coordinates: { latitude: 4.648, longitude: -74.098 } }
+      responses:
+        '200':
+          description: Simulated results. An empty list is a successful search with no matches.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResult'
+        '400':
+          description: Invalid credentials combination, JSON, search fields or location authorization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid customer session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Session or request Origin is not authorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method other than POST.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Authorization or the directory is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+    NativeSession:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ManualSearch:
+      type: object
+      additionalProperties: false
+      required: [kind, query]
+      properties:
+        kind:
+          type: string
+          enum: [manual]
+        query:
+          type: string
+          minLength: 2
+          maxLength: 160
+          description: City, fixture address, or fixture address plus city. At least two characters after trimming.
+    NearbySearch:
+      type: object
+      additionalProperties: false
+      required: [kind, locationAuthorized, coordinates]
+      properties:
+        kind:
+          type: string
+          enum: [nearby]
+        locationAuthorized:
+          type: boolean
+          enum: [true]
+          description: Explicit, single-query authorization provided by the customer before the client reads location.
+        coordinates:
+          type: object
+          additionalProperties: false
+          required: [latitude, longitude]
+          properties:
+            latitude: { type: number, minimum: -90, maximum: 90 }
+            longitude: { type: number, minimum: -180, maximum: 180 }
+    Provider:
+      type: object
+      additionalProperties: false
+      required: [id, kind, name, city, address, phone, hours]
+      properties:
+        id: { type: string, pattern: '^demo-[a-z0-9-]{1,48}$' }
+        kind: { type: string, enum: [workshop, expert, roadside] }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        city: { type: string, minLength: 1, maxLength: 160 }
+        address: { type: string, minLength: 1, maxLength: 160 }
+        phone: { type: string, pattern: '^\+570{8}[0-9]{2}$' }
+        hours: { type: string, minLength: 1, maxLength: 160 }
+        distanceKm:
+          type: number
+          minimum: 0
+          maximum: 25
+          description: Straight-line distance returned only for coordinate search.
+    SearchResult:
+      type: object
+      additionalProperties: false
+      required: [simulated, providers, traceId]
+      properties:
+        simulated: { type: boolean, enum: [true] }
+        providers:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Provider'
+        traceId: { type: string, format: uuid }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, unauthorized, forbidden, method_not_allowed, access_unavailable, directory_unavailable, service_unavailable]
+        traceId: { type: string, format: uuid }

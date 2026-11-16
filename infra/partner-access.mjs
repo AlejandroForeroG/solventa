@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 const environments = ['local', 'dev', 'staging', 'prod'];
 const actions = ['register', 'revoke'];
+const partnerScopes = ['quotes:create', 'partner-offers:create'];
 function failure(code) { return Object.assign(Error(code), { code }); }
 function boundedString(value, max) { return typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value); }
 
@@ -23,7 +24,8 @@ export function validatePartnerAccessInput(environment, action, input, now = Dat
   if (input.reference !== JSON.stringify(tuple)) throw failure('invalid_reference');
   if (action === 'register') {
     if (typeof input.partnerCode !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(input.partnerCode)) throw failure('invalid_partner_code');
-    if (!Array.isArray(input.scopes) || input.scopes.length !== 1 || input.scopes[0] !== 'quotes:create') throw failure('invalid_scopes');
+    if (!Array.isArray(input.scopes) || input.scopes[0] !== 'quotes:create' || new Set(input.scopes).size !== input.scopes.length
+      || input.scopes.some(scope => !partnerScopes.includes(scope))) throw failure('invalid_scopes');
     if (typeof input.expiresAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(input.expiresAt)) throw failure('invalid_expiry');
     const expires = new Date(input.expiresAt);
     if (!Number.isFinite(expires.getTime()) || expires.getTime() <= now || expires.toISOString() !== input.expiresAt.replace(/(?<!\.\d{3})Z$/, '.000Z')) throw failure('invalid_expiry');

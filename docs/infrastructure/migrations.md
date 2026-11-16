@@ -1,6 +1,6 @@
 # Creating, applying and recovering migrations
 
-Run commands from the repository root. The runner is [infra/database.mjs](../../infra/database.mjs); [schema-verify](../../infra/schema-verify.mjs) compares the revision with the actual schema. Migrations require an operator with administrative configuration held in custody. CI/CD never receives that remote administrative connection.
+Run commands from the repository root. The runner is [infra/database.mjs](../../infra/database.mjs); [schema-verify](../../infra/schema-verify.mjs) compares the revision with the actual schema. The migration job uses environment-bound administrative configuration held in GitHub Environment secrets. PR validation and Worker publication use no administrative connection. An operator remains responsible for bootstrap and reconciliation.
 
 ## 1. Preparing the change
 
@@ -49,45 +49,44 @@ node infra/schema-verify.mjs local --admin
 
 First application records version, checksum and timestamp in `<schema>.schema_migrations`. New checksums normalize LF; equivalent historical CRLF checksums are accepted without rewriting the ledger. Any other modification of applied SQL fails. Repeating the runner normally skips recorded versions; a pending guard blocks the owner's complete replay.
 
-## 4. Applying per environment before integration
+## 4. Automatic application per environment
 
-Administrative application requires an authorized task and the final candidate approved for that environment. Freeze locally/CI-tested SQL; apply it from that checkout before integrating code that needs it. If the candidate is corrected after SQL application, preserve it and add another migration.
+The migration utility is [infra/migrations.mjs](../../infra/migrations.mjs). It reuses the existing version/checksum ledger, durable failure guard, SQL executor and runtime-grant reconciler. It does not create databases/users, rotate passwords or provision Cloudflare resources. Bootstrap an environment separately using the existing provisioner before its first automatic deployment.
 
-### Running migrations as a teammate
-
-Any designated teammate with the approved candidate checkout and the environment's authorized operator bundle can run the existing provisioner. The privilege belongs to the operator credentials, not to a particular person's laptop or GitHub account. Obtain the bundle through the team's authorized secret channel; Git, PR comments, CI logs and chat messages must not carry the administrative URL or runtime passwords. Do not reuse another environment's bundle. A remote runtime role cannot apply DDL; each developer can apply the candidate migrations to their own local environment with `npm run infra:up`.
-
-From the repository root of the **exact candidate branch** to be deployed:
-
-1. Install locked dependencies with `npm ci`, update the local environment with `npm run infra:up`, then run the branch's required tests, including `npm run test:schema` and `npm run infra:local:schema-verify`. Read and review its new owner SQL and `runtime-grants.json` before touching a remote environment.
-2. Restore `.env.infra.dev`, its referenced CA file and `infra/.local/runtime.dev.json` from the approved dev bundle. On another environment, replace every `dev` occurrence consistently. These files must remain ignored with user-restricted access. The runtime state is required even for a SQL-only provision because existing roles must keep their original passwords.
-3. Coordinate a single operator for that environment. Run `node infra/migration-plan.mjs dev`: it opens an administrative **READ ONLY** transaction, checks all three ledgers and guards against the checkout, and prints only applied counts and pending file names. It never prints URLs, passwords or checksums. Review the affected objects and permissions against the candidate. Stop on a guard, unexpected object or changed applied checksum and use section 5.
-4. Run `node infra/database.mjs provision dev`, then `node infra/schema-verify.mjs dev --admin` and `node infra/database.mjs verify dev`. The provisioner applies pending migrations and reconciles runtime grants for **all three owners** in that environment; inspect their directories before running it. A repeat with the same applied checksums skips those migrations.
-5. Record the environment, candidate commit, applied migration names, verification outcome and operator in the team's private operational record. Then finish the PR, CI and Deploy checks. The Deploy job itself does not apply DDL.
-
-For the current Acquisition quote candidate, the pending files are `0006_partner_quotes.sql`, `0007_user_quotes.sql` and `0008_quote_idempotency_by_actor.sql`. They add a quote-code counter and actor-scoped idempotency; the `quote_counters` runtime grant is part of the same candidate. Apply from that candidate before integrating its Worker code. Repeat the process in staging only when promoting the tested base branch. A deployment on dev does not migrate staging.
-
-The synthetic financial increment additionally requires Acquisition `0009_financial_offers.sql` and `0010_offer_request_outcomes.sql`, and Policy `0004_financial_integrity.sql` through `0007_signature_time_integrity.sql`, together with their minimum runtime grants. These add immutable offer context, acceptance and first-outcome history; financial contracts, commands, payment intents and signatures; a durable synthetic gateway ledger; and inbox integrity metadata. Acquisition allows a null quote reference only for independently sourced flight underwriting. No owner boundary or existing data is removed. Inspect the actual environment plan rather than assuming these files are all pending there; final CI SQL validation and guard review precede application.
-
-Restore `.env.infra.<environment>`, the CA and `infra/.local/runtime.<environment>.json` from custody. See [access and custody](README.md) and [read-only queries](read-only-sql.md). Never print administrative URLs or secrets. If users are provisioned without their runtime state, `runtime_state_missing` stops the process: restore the original rather than inventing passwords.
-
-The separate v2 policy charge/signature flow also requires Policy `0008_signature_challenges.sql` before its code is integrated in each environment. It adds owner- and document-bound challenges, hashed simulated codes, expiry, bounded attempts and a consumed-command constraint. Its runtime role receives only `SELECT`, `INSERT` and `UPDATE` on `signature_challenges`; the existing v1 issuance route remains compatible. Use the exact candidate's read-only migration plan and verify checksums, catalog and runtime grants after application.
-
-Before mutation, inspect ledger, catalog and guards through an administrative READ ONLY connection to the environment. Distinguish expected pending-migration differences from changed checksums, unexpected objects or partial execution. Do not use `schema-verify` as a preflight requiring the new version to be already applied: strict comparison is necessary **after** application.
-
-For SQL only, an operator uses these commands, one environment at a time according to authorization:
+From the exact candidate checkout, inspect one explicit environment at a time:
 
 ```sh
-node infra/database.mjs provision dev
-node infra/schema-verify.mjs dev --admin
-node infra/database.mjs verify dev
+npm run db:migrations -- status local
+npm run db:migrations -- status dev
+npm run db:migrations -- status staging
+npm run db:migrations -- status prod
 ```
 
-Replace all three `dev` arguments with `staging` or `prod` for the corresponding promotion. `provision` visits all three owners, applies pending migrations and reconciles permissions; its CLI selects neither a single migration nor a single owner. For SQL-only changes, this avoids reprovisioning Hyperdrive. `infra:<environment>:up` also changes Cloudflare resources and is reserved for infrastructure changes requiring it.
+Each status command uses that environment's ignored administrative configuration in a READ ONLY transaction. It lists applied and pending filenames separately for all three owners, validates recorded checksums, rejects versions missing from the checkout, out-of-order history, pending failure guards, unexpected tables and objects in public. Status never executes SQL migrations or changes permissions. The legacy `node infra/migration-plan.mjs <environment>` command delegates to the same status implementation. A missing database/ledger is a bootstrap error, not an empty history.
 
-After administrative verification, integrate the PR and wait for successful Deploy. CD checks schema, versions, checksums and permissions with runtime roles before publishing; it also checks remote SQL/RPC and isolation. Additional administrative verification confirms empty `public` and guards. Local CI does not establish remote application.
+To apply an authorized revision manually, use `npm run db:migrations -- apply staging`, replacing the environment consistently. Restore its original `.env.infra.<environment>`, referenced CA and `infra/.local/runtime.<environment>.json` from custody first. Never reuse another environment's bundle. The utility loads a fixed SQL/grants catalog, preflights every owner before its first write, applies only unrecorded versions in order, reconciles minimum runtime grants and verifies the resulting plan, complete administrative/runtime catalog, checksums, guards, empty public schema and runtime isolation. Rerunning skips recorded SQL; grant reconciliation converges after interruption. It reports before/after inventories and the applied filenames without connection strings, passwords or data.
 
-Under current Gitflow, dev may contain migrations from several features. Staging receives only migrations present in the base-branch candidate validated by a successful dev deployment; prod receives the staging release's migrations. Do not copy data or credentials between environments.
+### Deployment sequence
+
+Every push to dev, staging or prod runs the existing Deploy workflow:
+
+1. Resolve the environment from the protected branch and run full CI on the exact deployment SHA, without remote administrative credentials.
+2. Run the separate `migrate` job on a fresh runner, using that GitHub Environment. Restore only migration configuration, CA and original runtime state; execute `db:migrations -- apply <environment>`; remove the temporary files even after failure.
+3. Only after successful migration and verification, run the separate `deploy` job. It restores runtime/publication credentials, checks the remote schema, publishes the four Workers and executes SQL/RPC/isolation smokes. It never receives the migration URL.
+
+Migration is automatic after integration and **before Worker publication**. This replaces the former manual pre-merge application requirement. Branch PR/CI requirements, conversation resolution and applicable human approvals remain in force. Migration does not mean that a business journey or an entire story passed acceptance.
+
+The workflow serializes deployments per environment with cancellation disabled. Do not run an operator/provisioner concurrently with Deploy. The durable per-version guard prevents replay after interrupted DDL, including cases where ledger DML committed. Automation never clears a guard or rewrites an applied migration. A failure in migration, grant reconciliation or verification blocks publication. Retrying a completed migration skips its SQL. CockroachDB DDL/grants can survive rollback; use section 5 for partial execution rather than retrying blindly.
+
+### Credential setup
+
+Set `MIGRATION_DATABASE_URL` as an encrypted secret in each authorized GitHub Environment, not a repository/global variable. Use an authorized SQL migration identity and an explicit URL of the form `postgresql://<operator>:<password>@<configured-host>:<port>/solventa_<environment>?sslmode=verify-full`. Keep its original credential in authorized custody. This utility does not create or rotate that identity.
+
+The migration restore validates the exact branch, environment database, configured host/port, runtime-state database and public CA before writing files. It rejects client-certificate paths, TLS overrides and crossed environments. Verified TLS is mandatory. `DATABASE_CA_PEM`, `RUNTIME_STATE_JSON`, `DATABASE_HOST` and `DATABASE_PORT` already belong to that Environment. Credentials are available only to the environment's matching branch; no PR receives them. See [CI/CD configuration](ci-cd.md#github-configuration).
+
+Temporary migration files are private and cleaned on success/failure, with a manifest so cleanup does not remove unrelated operator files. Secrets are not logged, uploaded as artifacts or bound to a Worker. A secret's environment label and URL check do not narrow the SQL identity's server-side privileges: restrict those privileges in CockroachDB where possible. If the custodied identity has cluster-wide administrative access, trusted workflow code can exercise that access; this is a deployment trust boundary, not cross-environment credential isolation enforced by the URL.
+
+The SQL files must remain compatible with the currently deployed Workers during the migration/publication window. Expand first and remove obsolete structures only in a later compatible release. A failed publication does not roll back SQL, and an older checkout with missing applied versions is rejected. Staging applies only its tested candidate's migrations; prod applies only its approved staging release. No environment copies another's data.
 
 ## 5. Failures, reconciliation and rollback
 

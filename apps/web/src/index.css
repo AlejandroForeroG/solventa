@@ -9,7 +9,7 @@ p { color: #3a424e; line-height: 1.5; }
 button, .primary-action { display: block; width: 100%; padding: 14px 20px; border: 1px solid #0b6b5f; border-radius: 8px; background: #0b6b5f; color: #fff; font: 500 16px 'IBM Plex Sans', sans-serif; text-decoration: none; text-align: center; cursor: pointer; }
 .access-panel button:hover, .primary-action:hover { background: #08544a; }
 button:disabled { opacity: .6; cursor: wait; }
-a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
 .error { color: #a32b22; }
 @media (max-width: 600px) { header { padding: 24px; } .access-panel { padding: 28px; } }
 
@@ -59,7 +59,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
 .field label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #3a424e; }
 .required { color: #a32b22; }
-.field input { width: 100%; padding: 10px 12px; border: 1px solid #cfccc5; border-radius: 10px; background: #fff; color: #12151a; font: 400 14px 'IBM Plex Sans', sans-serif; }
+.field input, .field select { width: 100%; padding: 10px 12px; border: 1px solid #cfccc5; border-radius: 10px; background: #fff; color: #12151a; font: 400 14px 'IBM Plex Sans', sans-serif; }
 .field input.mono-input { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13.5px; }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 720px) { .grid, .grid-3 { grid-template-columns: 1fr; } }
@@ -199,3 +199,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .trace + .note { margin-top: 12px; }
 .charge-key { color: #0b6b5f; overflow-wrap: anywhere; }
 .btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #6b7583; border-color: #edebe6; cursor: wait; }
+
+.assistance-search .btn { margin-top: 12px; }
+.assistance-result { margin-top: 16px; }
+.assistance-result p { margin: 6px 0; }

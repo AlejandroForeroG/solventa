@@ -26,6 +26,7 @@ class MemoryOffers implements OfferStore {
   async request(a: OfferActor, key: string) { return this.requests.get(a.clientId + key) ?? null; }
   async quote(a: OfferActor, id: string): Promise<OfferQuote | null> { return a.clientId === actor.clientId && a.subjectToken === actor.subjectToken && id === quote.quoteId ? quote : null; }
   async byKey(a: OfferActor, key: string) { return this.keys.get(a.clientId + key) ?? null; }
+  async explanation() { return null; }
   async get(a: OfferActor, id: string) { const r = this.rows.get(id); return r?.terms.clientId === a.clientId && r.terms.subjectToken === a.subjectToken ? r : null; }
   async creationSnapshot(a: OfferActor, key: string, quoteId: string | null) {
     this.snapshots.creation++;

@@ -1,79 +1,13 @@
-import type { Context, Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
+import type { Hono } from 'hono';
 import type { Consents } from '../../application/consents';
-import type { Principal } from '../../application/authentication';
-import { safeCode } from '../safe-code';
 import { isConsentCode } from '../../domain/consent';
 import type { AuthorizeApiAccess } from './api-access-http';
+import { readJson, webUserRoute } from './web-user-route';
 
-const MAX_BODY_BYTES = 4 * 1024;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Status = 200 | 201 | 400 | 401 | 403 | 404 | 409 | 503;
-type Handler = (c: Context<{ Bindings: IdentityEnv }>, principal: Principal, traceId: string, reply: (body: object, status: Status) => Response) => Promise<Response>;
-
-async function readLimited(request: Request): Promise<string | null> {
-  const declared = Number(request.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-  if (!request.body) return '';
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-async function readJson(request: Request): Promise<unknown> {
-  const raw = await readLimited(request);
-  if (raw === null) return undefined;
-  try { return JSON.parse(raw); } catch { return undefined; }
-}
-
-// The sealed session cookie decides who the user is; an identifier in the body or the path never does.
 export function mountConsents(app: Hono<{ Bindings: IdentityEnv }>, deps: { authorizeApiAccess: AuthorizeApiAccess; consents: Consents }) {
   const { consents } = deps;
 
-  function route(operation: 'consents:read' | 'consents:write', handler: Handler) {
-    return async (c: Context<{ Bindings: IdentityEnv }>) => {
-      const supplied = c.req.header('X-Trace-Id') ?? '';
-      const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
-      const reply = (body: object, status: Status) => c.json({ ...body, traceId }, status, { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-      try {
-        if (c.req.header('Authorization') !== undefined) return reply({ error: 'invalid_request' }, 400);
-        const decision = await deps.authorizeApiAccess({
-          kind: 'web', operation, requestOrigin: new URL(c.req.url).origin, method: c.req.method, origin: c.req.header('Origin') ?? '', traceId,
-          cookie: getCookie(c, (c.env.APP_ENV === 'local' ? '' : '__Host-') + 'solventa-session') ?? ''
-        });
-        if (!decision.allowed) return reply({ error: decision.error }, decision.status);
-        if (decision.actor.kind !== 'user') return reply({ error: 'forbidden' }, 403);
-        return await handler(c, decision.actor.principal, traceId, reply);
-      } catch (error) {
-        console.error(JSON.stringify({ event: 'consent_failed', traceId, code: safeCode(error) }));
-        return reply({ error: 'access_unavailable' }, 503);
-      } finally {
-        // Revocation and early denials do not consume a body; finish its transport before the binding responds.
-        if (c.req.raw.body && !c.req.raw.bodyUsed) {
-          await c.req.raw.body.cancel().catch(() => {
-            console.error(JSON.stringify({ event: 'consent_body_cancel_failed', traceId, code: 'request_body_unavailable' }));
-          });
-        }
-      }
-    };
-  }
+  const route = webUserRoute<'consents:read' | 'consents:write'>(deps.authorizeApiAccess, { failed: 'consent_failed', bodyCancelFailed: 'consent_body_cancel_failed' });
 
   app.get('/api/v1/consents/terms', route('consents:read', async (_c, _principal, _traceId, reply) => reply(consents.terms(), 200)));
 

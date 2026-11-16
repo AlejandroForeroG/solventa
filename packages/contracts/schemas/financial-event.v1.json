@@ -91,7 +91,8 @@
             "product": {
               "enum": [
                 "vida_hipotecario",
-                "flight_delay"
+                "flight_delay",
+                "weather_event"
               ]
             },
             "premium": {
@@ -139,6 +140,39 @@
                     },
                     "thresholdMinutes": {
                       "const": 180
+                    },
+                    "payoutAmount": {
+                      "const": "100000.0000"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "stationId",
+                    "parameter",
+                    "unit",
+                    "threshold",
+                    "payoutAmount"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "weather_event"
+                    },
+                    "stationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "parameter": {
+                      "const": "precipitation_24h"
+                    },
+                    "unit": {
+                      "const": "mm"
+                    },
+                    "threshold": {
+                      "const": 50
                     },
                     "payoutAmount": {
                       "const": "100000.0000"

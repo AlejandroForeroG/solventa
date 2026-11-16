@@ -24,7 +24,7 @@ git push -u origin feat/quotes
 git push -u origin feat/quotes-validation
 ```
 
-Resolve integration conflicts in `feat/quotes-validation`. Open **`feat/quotes-validation` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
+Resolve integration conflicts in `feat/quotes-validation`. Open **`feat/quotes-validation` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, applies and verifies pending dev migrations in a dedicated job, then publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
 
 If functionality is corrected on the separate integration branch, cherry-pick relevant commits back to the base; never copy merges or unrelated dev work:
 
@@ -63,7 +63,7 @@ Keep the candidate and any separate integration branch until promotion is comple
 
 ## 4. Publishing a staging release to prod
 
-Staging Deploy reruns CI, publishes staging and validates infrastructure. Test the candidate and open **`staging` → `prod`** for each release. Link the successful Deploy of the exact staging SHA, release guides and checks. CI requires that deployment and a merge preserving the source tree. Use a normal merge and wait for successful prod Deploy.
+Staging Deploy reruns CI, automatically applies and verifies staging migrations, then publishes staging and validates infrastructure. Test the candidate and open **`staging` → `prod`** for each release. Link the successful Deploy of the exact staging SHA, release guides and checks. CI requires that deployment and a merge preserving the source tree. Use a normal merge and wait for successful prod Deploy.
 
 If prod merge history needs to return to staging, use a maintenance base originating from staging and, when needed, a separate integration branch, following the same flow. Never push directly or copy all dev changes. `main` is a historical reference without deployment.
 
@@ -84,19 +84,20 @@ Go to **Settings > Environments** in the repository. `dev`, `staging` and `prod`
 | Variable | DATABASE_HOST | CockroachDB cluster host |
 | Variable | DATABASE_PORT | SQL port, normally 26257 |
 | Secret | DATABASE_CA_PEM | Complete public cluster CA bundle |
+| Secret | MIGRATION_DATABASE_URL | Authorized migration URL with the exact solventa_<environment> database; dedicated migration job only |
 | Secret | RUNTIME_STATE_JSON | Contents of infra/.local/runtime.<environment>.json |
 | Secret | WEB_INFRA_TOKEN | DEV_INFRA_TOKEN from infra/.local/web.<environment>.secrets.json |
 | Secret | IDENTITY_AUTH_JSON | Identity configuration held for that environment; see [authentication](../modules/identity-consent-ecosystem/authentication.md) |
 | Optional secret | SECURITY_ALERT_EMAIL_CONFIG | Exact JSON with `environment`, `from` and `to` for that environment; see [security email setup](../security.md). Omission deploys an empty Worker secret and disables publication |
 | Secret | CLOUDFLARE_API_TOKEN | Deployment token for the configured account |
 
-Runtime/web values belong to the environment and must preserve provisioned credentials. Never put an administrative URL, root password or client certificates in GitHub. CD uses runtime credentials to check SQL and the Cloudflare API to publish. The account ID stays fixed in configuration.
+Runtime/web values belong to the environment and must preserve provisioned credentials. Store the authorized migration URL only as the encrypted MIGRATION_DATABASE_URL Environment secret. The separate migration job receives it after CI; PR validation and Worker publication do not. Client certificates and private keys are not supported by this job. Publication uses runtime credentials to check SQL and the Cloudflare API to publish. The account ID stays fixed in configuration.
 
 Email configuration is validated before CI writes credential files: only the matching environment, two bounded email addresses and the exact three keys are accepted. The value is included in Identity's protected deployment secret file and is never printed. Configure it in each authorized GitHub environment after sender onboarding; normal deployment applies it. Removing it disables publication on the next successful deployment. Do not enable email by a direct secret update that bypasses the normal release flow.
 
 Create a Cloudflare token limited to the configured account with **Workers Scripts: Edit**, **Workers Tail: Read**, **Account Settings: Read**, **Hyperdrive: Read** and **Account: SSL and Certificates: Read**. The SQL/Worker flow needs neither Hyperdrive Edit nor certificate-creation permission. Publishing the declared web Custom Domains additionally requires **Zone: Workers Routes: Edit**, scoped to the `solventa.site` zone; verify the existing deployment identity before publication. See [public domains](README.md#public-domains) and [Cloudflare routing authorization](https://developers.cloudflare.com/workers/authorization/workers/#routes-and-custom-domains). Workers Tail Read is part of usual Wrangler publishing permissions. Workers Scripts authorization covers the account, so environment selection also depends on repository controls and verified bindings.
 
-GitHub environment policies allow only their matching branch: dev, staging or prod. PRs receive no remote credentials; only the post-CI Deploy job restores them. Secrets are always cleaned afterward. Provision all required resources before integrating dependent changes.
+GitHub environment policies allow only their matching branch: dev, staging or prod. PRs receive no remote credentials. The post-CI migration job restores migration configuration; publication runs on a separate runner with runtime/deployment credentials only. Secrets are always cleaned afterward. Bootstrap required databases, roles and Cloudflare resources separately; ordinary pending migrations run automatically before publication.
 
 The optional `FINANCIAL_EVENT_JSON` environment secret enables only the synthetic financial increment in dev/staging/prod. Its exact shape is `{ "environment": "dev", "secrets": { "FINANCIAL_EVENT_KEY": "<64 lowercase hex characters>" } }`, replacing `dev` consistently with the selected environment. Generate independent keys per environment and retain them in authorized custody; never reuse cookie or quote keys. Both Acquisition and Policy receive the same key within their environment. A mismatched environment, unknown field or malformed key fails restoration before writing files. An absent value restores an empty key and financial composition fails closed. Cleanup removes only the selected environment's financial secret file.
 
@@ -106,6 +107,6 @@ An account-level Workers Scripts token can modify Workers in other environments.
 
 ## Migrations and recovery
 
-[Migration procedures](migrations.md) are the single reference for creating SQL, validating permissions, applying approved candidates before integration and reconciling failures. CD uses only runtime roles: it checks schema before publication and never receives administrative credentials or applies remote DDL.
+[Migration procedures](migrations.md) are the single reference for creating SQL, inspecting applied/pending versions, automatic application and reconciling failures. After CI on the exact SHA, the environment-bound migrate job applies pending SQL and reconciles grants, verifies administrative/runtime schema and isolation, and cleans its credentials. The deploy job requires migration success and runs on another runner without administrative SQL. Deployment concurrency serializes the complete migration/publication sequence per environment. A migration or verification failure blocks publication; do not disable these checks or erase guards to retry.
 
 Deploy does not automatically roll back after a failed post-deployment check. Prepare a compatible revision through the same Gitflow and verify it before promotion. Worker rollback does not revert SQL/data; preserve migrations/checksums and follow that guide's recovery procedure.

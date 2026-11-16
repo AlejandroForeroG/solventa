@@ -1,0 +1,702 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Underwriting audit
+  version: 1.1.0
+  description: Historical underwriting lookup for explicitly granted web auditors. A session alone is
+    insufficient. Partners and native clients are excluded. Identity verifies an active, expiring, revocable
+    grant on each request; Acquisition records each successful read and not-found detail in its own SQL
+    transaction before releasing data. Responses and errors are no-store. Inputs and consent are historical
+    references, never refreshed from current providers. Retained deterministic rules support consistency
+    reconstruction; this does not certify authenticity. Omitted legacy inputs can be recovered from matching
+    immutable risk profiles or replayed from the retained original fixed mock artifact. inputEvidence identifies
+    each recovered field and its provenance. Unrecoverable gaps and unsupported artifacts remain explicit;
+    no current provider data or invented model is substituted. Unknown, duplicate and empty query parameters are rejected.
+    Dates use America/Bogota day boundaries. Authorization uses a maximum five-second lease, with no
+    distributed atomicity across owners.
+servers:
+  - url: /api/v1
+tags:
+  - name: Underwriting audit
+    description: Protected historical decisions and retained rule artifacts.
+paths:
+  /underwriting-decisions:
+    get:
+      tags:
+        - Underwriting audit
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      responses:
+        "200":
+          description: Historical decision page.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "400":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "405":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      operationId: listUnderwritingDecisions
+      summary: List at most twenty historical decisions
+      description: Newest decidedAt and decisionId first. Pass next as before, preserving filters. No total count.
+        Reference matches a decision UUID, immutable offer revision UUID or quote code. Missing/foreign cursor
+        produces an empty page. The collection access is durably audited without persisting search values.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: reference
+          in: query
+          required: false
+          description: Exact decision, offer or quote reference.
+          schema:
+            type: string
+            pattern: ^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|COT-[0-9]{4}-[0-9]{5,19})$
+        - name: product
+          in: query
+          required: false
+          description: Historical product inferred only from the recorded rule ID.
+          schema:
+            type: string
+            enum:
+              - vida_hipotecario
+              - flight_delay
+        - name: outcome
+          in: query
+          required: false
+          description: Recorded outcome.
+          schema:
+            type: string
+            enum:
+              - accepted
+              - declined
+              - preliminary
+        - name: from
+          in: query
+          required: false
+          description: Inclusive Bogotá day; must not follow to.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          description: Inclusive Bogotá day.
+          schema:
+            type: string
+            format: date
+        - name: before
+          in: query
+          required: false
+          description: Opaque keyset cursor from the prior page.
+          schema:
+            type: string
+            format: uuid
+  /underwriting-decisions/{decisionId}:
+    get:
+      tags:
+        - Underwriting audit
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      responses:
+        "200":
+          description: Historical detail and reconstruction status.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Detail"
+        "400":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "405":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Invalid input, absent session, absent permission, missing decision, unsupported method, or
+            unavailable authorization, SQL or durable audit. No decision data is returned.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            X-Trace-Id:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      operationId: getUnderwritingDecision
+      summary: Read an historical decision and reconstruct its retained rule
+      description: Returns known decision inputs and immutable offer revisions, never current offer projections
+        or arbitrary stored JSON. inputEvidence distinguishes recovered profile facts, immutable revision fields
+        and retained fixed mock replay from the original capture. All query parameters are rejected. Repeating this GET for a JSON export
+        performs fresh authorization and durable read audit.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: decisionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Existing sealed HttpOnly WorkOS web session plus an active Identity-owned underwriting audit grant.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local development cookie only; still requires an active audit grant.
+  schemas:
+    Summary:
+      type: object
+      additionalProperties: false
+      required:
+        - decisionId
+        - decidedAt
+        - outcome
+        - ruleVersion
+        - contractVersion
+        - correlationId
+        - quoteId
+        - product
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+        decidedAt:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+          minLength: 1
+          maxLength: 128
+        ruleVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        contractVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        correlationId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          pattern: ^COT-[0-9]{4}-[0-9]{5,19}$
+          nullable: true
+        product:
+          type: string
+          enum:
+            - vida_hipotecario
+            - flight_delay
+          nullable: true
+    Decision:
+      type: object
+      additionalProperties: false
+      required:
+        - decisionId
+        - decidedAt
+        - outcome
+        - ruleVersion
+        - contractVersion
+        - correlationId
+        - quoteId
+        - product
+        - inputs
+        - sources
+        - consent
+        - rule
+        - model
+        - reconstruction
+        - revisions
+      properties:
+        decisionId:
+          type: string
+          format: uuid
+        decidedAt:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+          minLength: 1
+          maxLength: 128
+        ruleVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        contractVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        correlationId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          pattern: ^COT-[0-9]{4}-[0-9]{5,19}$
+          nullable: true
+        product:
+          type: string
+          enum:
+            - vida_hipotecario
+            - flight_delay
+          nullable: true
+        inputs:
+          type: object
+          maxProperties: 30
+          additionalProperties:
+            oneOf:
+              - type: string
+                minLength: 1
+                maxLength: 128
+              - type: integer
+              - type: boolean
+        sources:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - source
+              - capturedAt
+              - quality
+              - degraded
+            properties:
+              source:
+                type: string
+                minLength: 1
+                maxLength: 128
+              capturedAt:
+                type: string
+                format: date-time
+              quality:
+                type: string
+                minLength: 1
+                maxLength: 128
+              degraded:
+                type: boolean
+              confidence:
+                type: integer
+                minimum: 0
+                maximum: 100
+              failure:
+                type: string
+                minLength: 1
+                maxLength: 128
+              substitute:
+                type: string
+                minLength: 1
+                maxLength: 128
+        consent:
+          type: object
+          additionalProperties: false
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              minLength: 1
+              maxLength: 128
+            id:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: integer
+              minimum: 1
+          nullable: true
+        rule:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - version
+          properties:
+            id:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: string
+              minLength: 1
+              maxLength: 128
+          nullable: true
+        model:
+          type: object
+          additionalProperties: false
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              enum:
+                - not_used
+                - recorded
+                - unknown
+            id:
+              type: string
+              minLength: 1
+              maxLength: 128
+            version:
+              type: string
+              minLength: 1
+              maxLength: 128
+        reconstruction:
+          type: object
+          additionalProperties: false
+          required:
+            - status
+            - missing
+          properties:
+            status:
+              type: string
+              enum:
+                - reconstructed
+                - incomplete_capture
+                - invalid_capture
+                - unsupported_rule
+                - unsupported_model
+                - inconsistent_capture
+            missing:
+              type: array
+              maxItems: 30
+              items:
+                type: string
+                minLength: 1
+                maxLength: 128
+            calculatedPremium:
+              type: string
+              pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+            checks:
+              type: object
+              maxProperties: 30
+              additionalProperties:
+                type: boolean
+        inputEvidence:
+          type: array
+          description: Provenance of inputs omitted from the original capture. An empty or absent array means no recovery.
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - field
+              - kind
+              - reference
+              - version
+            properties:
+              field:
+                type: string
+                pattern: ^inputs\.(monthlyIncomeCop|monthlyObligationsCop|paymentScore|identityVerified|affiliationActive|flightReference|scheduleAvailable)$
+              kind:
+                type: string
+                enum:
+                  - retained_profile
+                  - historical_mock
+                  - offer_revision
+              reference:
+                type: string
+                minLength: 1
+                maxLength: 128
+              version:
+                type: string
+                minLength: 1
+                maxLength: 128
+              capturedAt:
+                type: string
+                format: date-time
+        revisions:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - offerId
+              - version
+              - premium
+              - currency
+              - validFrom
+              - expiresAt
+            properties:
+              offerId:
+                type: string
+                format: uuid
+              version:
+                type: integer
+                minimum: 1
+              premium:
+                type: string
+                pattern: ^(0|[1-9][0-9]{0,14})\.[0-9]{4}$
+              currency:
+                type: string
+                pattern: ^[A-Z]{3}$
+              validFrom:
+                type: string
+                format: date-time
+              expiresAt:
+                type: string
+                format: date-time
+              flightReference:
+                type: string
+                format: uuid
+    Page:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - next
+        - traceId
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/Summary"
+        next:
+          type: string
+          format: uuid
+          nullable: true
+        traceId:
+          type: string
+          format: uuid
+    Detail:
+      type: object
+      additionalProperties: false
+      required:
+        - decision
+        - traceId
+      properties:
+        decision:
+          $ref: "#/components/schemas/Decision"
+        traceId:
+          type: string
+          format: uuid
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - traceId
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - not_found
+            - method_not_allowed
+            - access_unavailable
+            - audit_unavailable
+            - service_unavailable
+        traceId:
+          type: string
+          format: uuid

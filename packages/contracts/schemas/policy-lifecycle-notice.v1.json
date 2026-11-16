@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "policy-lifecycle-notice.v1",
+  "title": "Policy lifecycle customer notice v1",
+  "description": "An owner-addressed notice ready for notification delivery. Persisted atomically with the lifecycle decision. Transport is at least once; deduplicate by changeId. It does not establish notification delivery or an external refund.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "category",
+    "clientId",
+    "policyId",
+    "changeId",
+    "action",
+    "changedAt",
+    "replacementPolicyId",
+    "refund"
+  ],
+  "properties": {
+    "category": {
+      "const": "policy_lifecycle_changed"
+    },
+    "clientId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "policyId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "changeId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "action": {
+      "enum": [
+        "modified",
+        "renewed",
+        "cancelled"
+      ]
+    },
+    "changedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "replacementPolicyId": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "format": "uuid"
+        }
+      ]
+    },
+    "refund": {
+      "const": "not_automated"
+    }
+  }
+}
