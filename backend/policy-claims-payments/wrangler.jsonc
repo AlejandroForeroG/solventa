@@ -113,6 +113,7 @@
         "FINANCIAL_PROVIDER_MODE": "mock"
       },
       "triggers": { "crons": ["* * * * *"] },
+      "r2_buckets": [{ "binding": "CLAIM_EVIDENCE", "bucket_name": "solventa-prod-claim-evidence" }],
       "hyperdrive": [
         {
           "binding": "POLICY_DB",
