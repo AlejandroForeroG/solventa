@@ -28,7 +28,8 @@ const es = {
   credential: 'Credencial de asegurado', coverage: 'Coberturas',
   coverages: { mortgage_life: 'Vida deudor hipotecario', sumInsured: 'Suma asegurada', flight_delay: 'Retraso de vuelo',
     threshold: 'Retraso mínimo', minutes: 'min', payout: 'Pago', flight: 'Vuelo', rainThreshold: 'Lluvia mínima en 24 h', station: 'Estación' },
-  document: 'El documento de la póliza no se guarda en el teléfono: se consulta en línea.',
+  document: 'Los documentos se consultan en Mis pólizas de la web. Necesitas conexión y una sesión web.',
+  openDocuments: 'Abrir Mis pólizas en la web', documentFailed: 'No pudimos abrir el navegador. Intenta de nuevo.',
   reportClaim: 'Reportar siniestro', saveDraft: 'Preparar borrador de siniestro',
 };
 
@@ -60,7 +61,8 @@ const en: typeof es = {
   credential: 'Insured credential', coverage: 'Coverage',
   coverages: { mortgage_life: 'Mortgage debtor life', sumInsured: 'Sum insured', flight_delay: 'Flight delay',
     threshold: 'Minimum delay', minutes: 'min', payout: 'Payout', flight: 'Flight', rainThreshold: 'Minimum rainfall in 24 h', station: 'Station' },
-  document: 'The policy document is not saved on the phone: it is read online.',
+  document: 'View documents in My policies on the web. You need a connection and a web session.',
+  openDocuments: 'Open My policies on the web', documentFailed: 'We could not open your browser. Try again.',
   reportClaim: 'Report a claim', saveDraft: 'Prepare a claim draft',
 };
 

@@ -41,7 +41,7 @@ describe('protected underwriting audit workspace', () => {
     await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('Producto')).toHaveValue('flight_delay');
-    expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
+    expect(screen.getByLabelText('Desde')).toHaveValue('01/10/2026');
     await user.click(screen.getByRole('button', { name: 'Limpiar' }));
     for (const label of ['ID de decisión, oferta o cotización', 'Producto', 'Resultado', 'Desde', 'Hasta']) expect(screen.getByLabelText(label)).toHaveValue('');
     await screen.findByRole('button', { name: id });

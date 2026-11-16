@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
@@ -36,6 +36,7 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
   const [wallet] = useState(() => createPolicyWallet(session.baseUrl, session, access.mode === 'online' ? access.owner : undefined));
   const state = useSyncExternalStore(wallet.subscribe, wallet.getSnapshot, wallet.getSnapshot);
   const [selected, select] = useState<string>();
+  const [documentFailed, setDocumentFailed] = useState(false);
   const copy = walletMessages[locale];
   const now = useNow();
   useEffect(() => {
@@ -57,7 +58,10 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
         </>}
         {state.status === 'ready' && <>
           <SourceBanner state={state} locale={locale} unverified={access.mode === 'offline'} />
-          {policy ? <Detail policy={policy} state={state} locale={locale} now={now} onBack={() => select(undefined)} />
+          {documentFailed && <Text accessibilityRole="alert" style={styles.notice}>{copy.documentFailed}</Text>}
+          {policy ? <Detail policy={policy} state={state} locale={locale} now={now} onBack={() => select(undefined)} onOpenDocuments={() => {
+            setDocumentFailed(false); void Linking.openURL(new URL('/polizas', session.baseUrl).toString()).catch(() => setDocumentFailed(true));
+          }} />
             : <List state={state} locale={locale} now={now} onOpen={select} />}
           {!policy && <Action label={copy.refresh} secondary onPress={() => void wallet.refresh()} />}
         </>}
@@ -130,7 +134,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   </View>;
 }
 
-function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; state: Ready; locale: WalletLocale; now: number; onBack: () => void }) {
+function Detail({ policy, state, locale, now, onBack, onOpenDocuments }: { policy: CachedPolicy; state: Ready; locale: WalletLocale; now: number; onBack: () => void; onOpenDocuments: () => void }) {
   const copy = walletMessages[locale];
   const { coverage } = policy;
   return <View style={styles.section}>
@@ -158,6 +162,8 @@ function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; 
           <Row label={copy.coverages.station} value={coverage.stationId.slice(0, 8).toUpperCase()} />
         </>}
     <Text style={styles.caption}>{copy.document}</Text>
+    {state.source === 'online' && <Pressable accessibilityRole="link" onPress={onOpenDocuments} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.dimmed]}>
+      <Text style={[styles.buttonText, styles.secondaryText]}>{copy.openDocuments}</Text></Pressable>}
     <Action label={copy.saveDraft} secondary onPress={() => router.push({ pathname: '/claim-drafts', params: { policyId: policy.policyId } })} />
     {/* A report needs the server, so a stored copy never offers it. */}
     {state.source !== 'stored' && isReportableProduct(policy.product) && validityAt(policy, now) === 'active'
@@ -198,7 +204,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4, fontSize: 12, fontWeight: '700' },
   badgeNeutral: { color: theme.colors.muted, backgroundColor: theme.colors.background },
   facts: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  fact: { flexGrow: 1, gap: 2 },
+  fact: { flexGrow: 1, flexBasis: '45%', minWidth: 120, gap: 2 },
   factValue: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   itemTitle: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: theme.colors.foreground },
   credential: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 4 },

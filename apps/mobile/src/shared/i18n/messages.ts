@@ -20,7 +20,7 @@ const es = {
   securePrompt: 'Confirma tu identidad para entrar a Solventa',
   policyCachePrompt: 'Desbloquea para ver tus datos guardados',
   actions: {
-    reportClaim: 'Reportar siniestro',
+    back: 'Volver', reportClaim: 'Reportar siniestro',
     verifyIdentity: 'Verificar identidad',
     wallet: 'Mis pólizas', drafts: 'Borradores de siniestro',
     notificationPreferences: 'Preferencias de avisos',
@@ -66,7 +66,7 @@ const en: typeof es = {
   securePrompt: 'Confirm your identity to access Solventa',
   policyCachePrompt: 'Unlock to view your saved data',
   actions: {
-    reportClaim: 'Report a claim',
+    back: 'Back', reportClaim: 'Report a claim',
     verifyIdentity: 'Verify identity',
     wallet: 'My policies', drafts: 'Claim drafts',
     notificationPreferences: 'Notification preferences',

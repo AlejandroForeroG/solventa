@@ -48,7 +48,7 @@ function VerificationFlow({ locale }: { locale: Locale }) {
           <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>
         </>}
         {inactive && state.terms && <>
-          <Text style={styles.body}>{state.terms.wording}</Text>
+          <View style={styles.terms}>{state.terms.wording.split(/(?<=[.!?])\s+/).map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}</View>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted, disabled }} disabled={disabled}
             onPress={() => setAccepted(value => !value)} style={styles.checkbox}>
             <Text style={styles.body}>{accepted ? '☑' : '☐'} {copy.consent}</Text>
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 18 },
   title: { fontSize: 30, lineHeight: 38, color: theme.colors.foreground, fontWeight: '700', letterSpacing: -0.6 },
   body: { fontSize: 15, lineHeight: 23, color: theme.colors.foreground }, caption: { fontSize: 12, lineHeight: 18, color: theme.colors.muted },
+  terms: { gap: 12 },
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, color: theme.colors.primaryDark, fontSize: 14, lineHeight: 21 },
   checkbox: { minHeight: 48, justifyContent: 'center' }, section: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 18, gap: 12 },
   stepTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.foreground },

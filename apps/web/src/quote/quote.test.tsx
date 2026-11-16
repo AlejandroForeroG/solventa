@@ -24,7 +24,8 @@ async function fill(user: ReturnType<typeof userEvent.setup>, values: QuoteValue
   for (const key of Object.keys(values) as (keyof QuoteValues)[]) {
     const input = screen.getByLabelText(labels[key]);
     await user.clear(input);
-    await user.type(input, values[key]);
+    const date = key === 'birthDate' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(values[key]) : null;
+    await user.type(input, date ? `${input.getAttribute('placeholder') === 'MM/DD/YYYY' ? date[2] : date[3]}/${input.getAttribute('placeholder') === 'MM/DD/YYYY' ? date[3] : date[2]}/${date[1]}` : values[key]);
   }
 }
 const es = { fullName: /Nombre completo/, documentNumber: /Documento/, birthDate: /Fecha de nacimiento/, city: /Ciudad/, amount: /Monto/, termMonths: /Plazo/ };

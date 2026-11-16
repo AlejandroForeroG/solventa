@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { readPartnerPortal, type PortalOutcome } from './api';
+import { CalendarDateInput } from '../forms/CalendarDateInput';
 import '../audit/audit.css';
 import './portal.css';
 
@@ -38,8 +39,8 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
     <div className="audit-main">
       <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
       <form className="portal-period" onSubmit={event => { event.preventDefault(); setResult(null); setPeriod({ ...draft }); setRefresh(v => v + 1); }}>
-        <label className="field">{t('from')}<input type="date" required value={draft.from} onChange={e => setDraft({ ...draft, from: e.target.value })} /></label>
-        <label className="field">{t('to')}<input type="date" required value={draft.to} onChange={e => setDraft({ ...draft, to: e.target.value })} /></label>
+        <div className="field"><label htmlFor="portal-from">{t('from')}</label><CalendarDateInput id="portal-from" required value={draft.from} onChange={value => setDraft({ ...draft, from: value })} /></div>
+        <div className="field"><label htmlFor="portal-to">{t('to')}</label><CalendarDateInput id="portal-to" required value={draft.to} onChange={value => setDraft({ ...draft, to: value })} /></div>
         <button className="btn btn-secondary" type="submit">{t('apply')}</button>
         <p className="note">{t('periodHint')}</p>
       </form>

@@ -48,7 +48,7 @@ export const ui = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: theme.colors.surface, borderRadius: 16 },
   thumb: { width: 56, height: 56, borderRadius: 12, backgroundColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   thumbText: { fontSize: 11, fontWeight: '700', color: theme.colors.muted, letterSpacing: 0.6 },
-  remove: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, removeText: { fontSize: 22, color: theme.colors.muted },
+  remove: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, removeText: { fontSize: 22, color: theme.colors.muted },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderColor: theme.colors.border },
   summaryValue: { fontSize: 15, lineHeight: 22, fontWeight: '600', color: theme.colors.foreground, flexShrink: 1, textAlign: 'right' },
   banner: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, gap: 4 },

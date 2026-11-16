@@ -80,7 +80,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .actions { justify-content: flex-start; margin-top: 20px; }
 .actions a.btn, .header-tools a.btn { text-decoration: none; }
 .login-instructions { display: grid; gap: 12px; margin: 20px 0; padding-left: 24px; color: #3a424e; line-height: 1.5; }
-.note { margin: 0; font-size: 12.5px; color: #6b7583; }
+.note { margin: 0; font-size: 14px; line-height: 1.6; color: #56616f; }
 .banner { display: flex; gap: 12px; padding: 13px 16px; margin-bottom: 16px; border-radius: 12px; border: 1px solid; font-size: 13px; }
 .banner p { margin: 0; }
 .banner-error { background: #fbe9e7; border-color: #f0c9c4; color: #8a241c; }
@@ -111,7 +111,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .document-fields-group .document-fields { padding-left: 14px; border-left: 2px solid #e4f1ee; }
 .document-verification { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e3e1dc; }
 .document-verification summary { padding: 8px 0; cursor: pointer; color: #0b6b5f; font-size: 13px; font-weight: 600; }
-.document-verification .document-fields dd { font: 400 11px/1.7 'IBM Plex Mono', ui-monospace, monospace; }
+.document-verification .document-fields dd { font: 400 13px/1.7 'IBM Plex Mono', ui-monospace, monospace; }
 .document-verification summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 3px; }
 
 .card-error { padding: 0; overflow: hidden; }
@@ -119,7 +119,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .denied-head h1 { margin: 0; color: #8a241c; }
 .denied-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #a32b22; color: #fff; font: 700 13px 'IBM Plex Mono', ui-monospace, monospace; }
 .denied-body { padding: 24px 28px 28px; }
-.trace { padding: 12px 14px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.trace { padding: 12px 14px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
 
 .btn-privacy { margin-left: auto; background: transparent; }
 .btn-danger { background: #fbe9e7; color: #8a241c; border-color: #f0c9c4; }
@@ -172,7 +172,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .offer-verification summary:focus-visible { outline: 3px solid #7fc7bc; outline-offset: 4px; border-radius: 4px; }
 .offer-verification .offer-facts { border-top: 0; padding-top: 0; margin-top: 18px; }
 .offer-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 22px; }
-.step .offer-label { margin: 0; font: 600 10.5px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #9aa3af; }
+.step .offer-label { margin: 0; font: 600 24px/1.3 'Space Grotesk', sans-serif; letter-spacing: -.02em; color: #f7f6f3; }
 .offer-id { font: 400 12px 'IBM Plex Mono', ui-monospace, monospace; color: #12d9b8; overflow-wrap: anywhere; }
 .offer-caption { margin: 0 0 6px; font-size: 13px; color: #c3cad4; }
 .offer-premium { margin: 0; font: 700 44px 'Space Grotesk', sans-serif; letter-spacing: -.04em; line-height: 1.05; color: #f7f6f3; }
@@ -192,7 +192,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .banner-ok p { color: #175c3a; }
 .banner-ok .banner-icon { color: #1f7a4d; }
 .review-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
-.review-heading { margin-bottom: 24px; }
+.review-heading { margin-bottom: 24px; padding: 0; border: 0; background: transparent; }
 .document-card { flex: 1 1 420px; min-width: 0; padding: 0; overflow: hidden; }
 .document-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; background: #faf9f7; border-bottom: 1px solid #edebe6; }
 .document-bar .mono { font-weight: 400; overflow-wrap: anywhere; }
@@ -231,3 +231,4 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .assistance-search .btn { margin-top: 12px; }
 .assistance-result { margin-top: 16px; }
 .assistance-result p { margin: 6px 0; }
+.date-format { display: block; margin-top: 5px; }

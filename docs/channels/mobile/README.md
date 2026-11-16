@@ -21,7 +21,7 @@ The signed-in shell has five bottom tabs: Home, Wallet, Claims, Notices and Prof
 
 Home and Claims also link directly to Claim drafts. Tabs and home shortcuts use SDK-compatible Ionicons with consistent size and tint; their text remains the accessible navigation name. The active tint follows the shared theme rather than giving Claims a permanent active appearance.
 
-Secondary routes share the native stack's top Back control, theme and title. Claim-report review keeps its separate Edit action, and the draft editor's Back to drafts action returns within that workspace. Profile uses the same left-aligned heading and content width as the other account screens. Access screens retain their separate sign-in card.
+Secondary routes share a 48 dp Back control with a localized name and the native stack's theme. Report, draft and identity screens keep one primary heading in their content instead of repeating it in the top bar. Claim-report review keeps its separate Edit action, and the draft editor's Back to drafts action returns within that workspace. Profile uses the same left-aligned heading and content width as the other account screens. Access screens retain their separate sign-in card.
 
 Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
 
@@ -46,6 +46,8 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+The local `plugins/with-android-font-scale.cjs` config plugin adds `fontScale` to the generated main Activity's existing configuration changes. React Native receives the configuration callback and scales text without destroying the live Activity and its media-picker registrations. Regenerate Android through `npx expo prebuild --platform android --no-install` and rebuild after changing this plugin; do not edit the generated manifest. Native verification must change the system font size while the app is open, check that content still scales, return to the default size and open the photo picker without restarting the process. Unit tests and web export do not establish that behavior.
+
 ## Offline claim drafts
 
 Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
@@ -54,7 +56,7 @@ Opening drafts without a selected policy offers Choose a policy and a short inst
 
 Cancelling the shared device prompt leaves the workspace locked and offers unlocking again. It does not report an unconfirmed save or alter custody. Both the offline owner lookup and the draft store translate the shared prompt's locked failure into the draft contract; actual storage failures remain distinct.
 
-Edit draft changes the partial preparation; Complete report opens the existing file-attachment/review journey. Their accessible names include both policy reference and draft reference to distinguish repeated actions. An empty list is not announced while its initial opening or remote refresh is still pending. When no verified online owner is available, identifying the protected wallet owner and opening the separately protected drafts each retain their device prompt.
+Edit draft changes the partial preparation; Complete report opens the existing file-attachment/review journey. Their accessible names include both policy reference and draft reference to distinguish repeated actions. A pending edit labels the older server timestamp as Last confirmed version, keeping it separate from the current unconfirmed changes. An empty list is not announced while its initial opening or remote refresh is still pending. When no verified online owner is available, identifying the protected wallet owner and opening the separately protected drafts each retain their device prompt.
 
 This screen prepares an editable report; it does not file a claim or persist new camera/gallery binaries. Existing references remain usable offline; selecting new received references needs the server. Continue report is available for a confirmed draft while online: it rereads the owned server draft and policy, restores event data/notes and opens the existing [claim reporting](#claim-report) form. The customer still attaches files, reviews and submits; saved references remain in the editable draft and are not automatically copied into an upload declaration. No offline confirmation authorizes finance, contracts or consent. See [editable claim drafts](../../modules/policy-claims-payments/claim-drafts.md) for merge policy, API, limits, custody, data and errors.
 
@@ -287,7 +289,7 @@ The wallet represents the products and data Solventa has: `vida_hipotecario` (su
 | Deductible and limits | Not shown: the two products have none |
 | Holder name and masked document number | Not shown and never stored: the policy model has only a pseudonymous subject |
 | Emergency contacts | Not shown: no source defines them. They need a product decision and a data owner |
-| Certificate PDF | Not stored on the device; the wallet says the policy document is read online. No signed PDF exists |
+| Certificate PDF | Not cached in the native app. Online detail links to My policies on the web, where the owner can inspect/download the available server documents. Web authentication is separate; no native credential or policy data is placed in the URL |
 | Valid / expired filters | Not implemented: the list is sorted by end date and each item carries its state |
 | Pending actions queue and conflicts | Synchronization of actions and conflict resolution belong to other stories |
 
@@ -327,6 +329,7 @@ The claim report lets a signed-in customer report a claim on one of their polici
 ### Limits and verification
 
 - The transport enum retains `collision`, `theft`, `damage`, `other` for compatibility. New mortgage-life reports use `other`, presented as Policy event, and ask the customer to describe the event for coverage review. The new draft editor offers that generic category; a restored legacy category remains visible and is never silently relabelled or retagged. Draft/report translations match. There is no invented per-product benefit catalog or promise of coverage. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
+- Capture failures identify the failed action and offer an explicit retry with the current file limit, retaining the form. Remove-file targets are 48 dp.
 - Android date/time controls expose their selected localized value separately from their action label. Native screen-reader behavior still needs device validation; a property-level test alone is not a TalkBack audit.
 - Reporting from the web, scanning documents, the location choice and the status view are separate work.
 - `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers the limits, the declaration, the retry sequence with a server that remembers its drafts, and every refusal of the contract. The camera, the pickers and the native upload need a development build; they are not exercised by unit tests.

@@ -41,7 +41,7 @@
 .audit-section h3 { font-size: 13px; margin-top: 24px; }
 .audit-section ul { font-size: 13px; line-height: 1.8; }
 .audit-section > p { font-size: 14px; }
-.audit-section .note { font-size: 12px; }
+.audit-section .note { font-size: 14px; }
 .audit-section .audit-match { color: #175c3a; font-weight: 600; }
 .audit-section .audit-warning { color: #8a241c; font-weight: 600; }
 .audit-two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -68,3 +68,7 @@
 .audit-checks { margin-top: 24px; padding-top: 24px; border-top: 1px solid #e3e1dc; }
 
 .audit-mode { margin-top: 10px; }
+.audit-section-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 24px; }
+.audit-section-links a { display: inline-flex; align-items: center; min-height: 44px; color: #0b6b5f; font-size: 14px; text-underline-offset: 4px; }
+.audit-section:target { outline: 2px solid #0b6b5f; outline-offset: 3px; }
+.audit-pagination-top { margin: 0 0 16px; }

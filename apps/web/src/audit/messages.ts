@@ -1,4 +1,8 @@
 export const auditEs = {
+  'audit.sections': 'Secciones de la decisión', 'audit.paginationTop': 'Paginación antes de los resultados',
+  'audit.sourceName.income': 'Ingresos y obligaciones (12 meses)', 'audit.sourceName.payments': 'Historial de pagos y puntaje',
+  'audit.sourceName.affiliation': 'Afiliación y régimen', 'audit.sourceName.identity': 'Validación de identidad',
+  'audit.ppmHint': 'ppm significa partes por millón: 1.000.000 ppm equivale al 100 %.',
 
   'audit.simulated': 'Proveedores externos simulados', 'audit.title': 'Decisiones de suscripción', 'audit.open': 'Auditoría', 'audit.console': 'Consola operativa',
 
@@ -48,6 +52,10 @@ export const auditEs = {
 };
 
 export const auditEn: Record<keyof typeof auditEs, string> = {
+  'audit.sections': 'Decision sections', 'audit.paginationTop': 'Pagination before results',
+  'audit.sourceName.income': 'Income and obligations (12 months)', 'audit.sourceName.payments': 'Payment history and score',
+  'audit.sourceName.affiliation': 'Affiliation and regime', 'audit.sourceName.identity': 'Identity validation',
+  'audit.ppmHint': 'ppm means parts per million: 1,000,000 ppm equals 100%.',
 
   'audit.simulated': 'Simulated external providers', 'audit.title': 'Underwriting decisions', 'audit.open': 'Audit', 'audit.console': 'Operations console',
 

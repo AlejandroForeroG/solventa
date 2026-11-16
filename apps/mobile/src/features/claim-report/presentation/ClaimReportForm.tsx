@@ -33,7 +33,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   useEffect(() => { flow.open(); return () => { void flow.dispose(); }; }, [flow]);
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
-  const [pickerFailed, setPickerFailed] = useState(false);
+  const [pickerFailed, setPickerFailed] = useState<'photo' | 'video' | 'gallery' | null>(null);
   const now = useNow();
   const { draft, issues, rejected, phase } = state;
   const busy = phase.kind === 'sending';
@@ -41,12 +41,12 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
 
   if (phase.kind === 'submitted') return <Result copy={copy} locale={locale} phase={phase} header={header} />;
 
-  const capture = async (open: () => Promise<CaptureOutcome>) => {
-    setPermission(null); setPickerFailed(false);
-    const outcome = await open();
+  const capture = async (action: 'photo' | 'video' | 'gallery') => {
+    setPermission(null); setPickerFailed(null);
+    const outcome: CaptureOutcome = await (action === 'photo' ? source.takePhoto() : action === 'video' ? source.recordVideo() : source.choose(LIMITS.files - draft.evidence.length));
     if (outcome.status === 'ok') flow.add(outcome.candidates);
     else if (outcome.status === 'permission') setPermission(outcome.canAskAgain ? 'ask' : 'settings');
-    else if (outcome.status === 'failed') setPickerFailed(true);
+    else if (outcome.status === 'failed') setPickerFailed(action);
   };
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
@@ -78,15 +78,16 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
         <Text style={ui.caption}>{copy.evidence.counts(draft.evidence.length, LIMITS.files, megabytes(totalBytes(draft.evidence), locale), LIMITS.bytes / 1_048_576)}</Text>
         {draft.evidence.length === 0 && <Text style={ui.body}>{copy.evidence.empty}</Text>}
         {draft.evidence.map((item, index) => <Item key={item.id} item={item} copy={copy} locale={locale} position={index + 1} onRemove={() => flow.remove(item.id)} />)}
-        <Action label={copy.evidence.takePhoto} secondary onPress={() => void capture(source.takePhoto)} />
-        <Action label={copy.evidence.recordVideo} secondary onPress={() => void capture(source.recordVideo)} />
-        <Action label={copy.evidence.choose} secondary onPress={() => void capture(() => source.choose(LIMITS.files - draft.evidence.length))} />
+        <Action label={copy.evidence.takePhoto} secondary onPress={() => void capture('photo')} />
+        <Action label={copy.evidence.recordVideo} secondary onPress={() => void capture('video')} />
+        <Action label={copy.evidence.choose} secondary onPress={() => void capture('gallery')} />
         {permission && <View style={ui.group}>
           <Text accessibilityRole="alert" style={ui.notice}>{copy.permission.camera}</Text>
           {permission === 'settings' && <Action label={copy.permission.openSettings} secondary onPress={() => void Linking.openSettings()} />}
         </View>}
         {rejected.map((reason, index) => <Text key={`${reason}-${index}`} accessibilityRole="alert" style={ui.error}>{copy.rejected[reason]}</Text>)}
-        {pickerFailed && <Text accessibilityRole="alert" style={ui.error}>{copy.rejected.failed}</Text>}
+        {pickerFailed && <><Text accessibilityRole="alert" style={ui.error}>{copy.captureFailure[pickerFailed]}</Text>
+          <Action label={copy.retry} secondary onPress={() => void capture(pickerFailed)} /></>}
       </Group>
 
       <Action label={copy.review.next(draft.evidence.length)} onPress={() => { if (flow.review()) setStep('review'); }} />
