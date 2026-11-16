@@ -5,19 +5,23 @@ import { isDocumentKind } from '../../domain/policy-portal';
 import type { DocumentFile, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../../domain/policy-portal';
 import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
+import { mountReports, type ReportsHttpDependencies } from './reports-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 import { mountClaimDrafts, type ClaimDraftHttpDependencies } from './claim-drafts-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
+import { mountAssistanceRequests, type AssistanceRequestsHttpDependencies } from './assistance-requests-http';
 import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
 
 export type PolicyHttpDependencies = {
   claimDrafts?: ClaimDraftHttpDependencies;
   advisor?: AdvisorHttpDependencies;
   assistance?: AssistanceHttpDependencies;
+  assistanceRequests?: AssistanceRequestsHttpDependencies;
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
+  reports?: ReportsHttpDependencies;
   claimReport?: ClaimReportHttpDependencies;
   finance: {
     changeLifecycle?(input: { actor: FinancialActor; policyId: string; action: import('../../domain/policy-lifecycle').LifecycleAction;
@@ -227,7 +231,9 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   // The report routes share the list's path, so they register first and the list keeps the remaining methods.
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
   if (deps?.claims) mountClaims(app, deps.claims);
+  if (deps?.reports) mountReports(app, deps.reports);
   if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
+  if (deps?.assistanceRequests) mountAssistanceRequests(app, deps.assistanceRequests);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
 }

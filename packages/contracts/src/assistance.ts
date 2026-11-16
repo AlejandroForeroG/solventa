@@ -70,3 +70,74 @@ export function parseAssistanceResults(value: unknown): AssistanceProviderMatch[
   }
   return results;
 }
+
+// A customer asks for assistance on site from one provider of the directory, naming where. The request is stored and can be read back by its owner.
+export const assistanceRequestsPath = '/api/v1/assistance/requests';
+export const assistanceRequestCreateOperation = 'assistance-requests:create';
+export const assistanceRequestReadOperation = 'assistance-requests:read';
+const referencePattern = /^ASI-[0-9A-HJKMNP-TV-Z]{8}$/;
+
+export type AssistanceRequestBody = {
+  providerId: string;
+  place: { kind: 'device'; authorized: true; coordinates: { latitude: number; longitude: number } } | { kind: 'address'; address: string };
+};
+export type AssistanceRequestPlace = { kind: 'device'; latitude: number; longitude: number } | { kind: 'address'; address: string };
+export type AssistanceRequestView = {
+  id: string;
+  reference: string;
+  status: 'requested';
+  provider: Omit<AssistanceProviderMatch, 'distanceKm'>;
+  place: AssistanceRequestPlace;
+  createdAt: string;
+};
+
+// A device position needs the explicit authorization; a typed address is confirmed by sending it. Nothing else is accepted.
+export function parseAssistanceRequestBody(value: unknown): AssistanceRequestBody | null {
+  if (!assistanceRecord(value) || Object.keys(value).length !== 2 || typeof value.providerId !== 'string' || !/^demo-[a-z0-9-]{1,48}$/.test(value.providerId)
+    || !assistanceRecord(value.place)) return null;
+  const place = value.place;
+  if (place.kind === 'device' && Object.keys(place).length === 3 && place.authorized === true && assistanceRecord(place.coordinates)
+    && Object.keys(place.coordinates).length === 2 && coordinate(place.coordinates.latitude, 90) && coordinate(place.coordinates.longitude, 180)) {
+    return { providerId: value.providerId, place: { kind: 'device', authorized: true,
+      coordinates: { latitude: place.coordinates.latitude, longitude: place.coordinates.longitude } } };
+  }
+  if (place.kind === 'address' && Object.keys(place).length === 2 && typeof place.address === 'string') {
+    const address = place.address.trim();
+    if (address.length >= 2 && address.length <= 160 && !/\p{Cc}/u.test(address)) return { providerId: value.providerId, place: { kind: 'address', address } };
+  }
+  return null;
+}
+
+function view(value: unknown): AssistanceRequestView | null {
+  if (!assistanceRecord(value) || Object.keys(value).length !== 6) return null;
+  const { id, reference, status, provider, place, createdAt } = value;
+  const found = match(provider);
+  if (typeof id !== 'string' || !uuid.test(id) || typeof reference !== 'string' || !referencePattern.test(reference) || status !== 'requested'
+    || !found || found.distanceKm !== undefined || !assistanceRecord(place)
+    || typeof createdAt !== 'string' || !Number.isFinite(Date.parse(createdAt))) return null;
+  let parsedPlace: AssistanceRequestPlace | null = null;
+  if (place.kind === 'device' && Object.keys(place).length === 3 && coordinate(place.latitude, 90) && coordinate(place.longitude, 180)) {
+    parsedPlace = { kind: 'device', latitude: place.latitude, longitude: place.longitude };
+  } else if (place.kind === 'address' && Object.keys(place).length === 2 && boundedText(place.address)) parsedPlace = { kind: 'address', address: place.address };
+  if (!parsedPlace) return null;
+  const provider2: Omit<AssistanceProviderMatch, 'distanceKm'> = { id: found.id, kind: found.kind, name: found.name, city: found.city, address: found.address, phone: found.phone, hours: found.hours };
+  return { id: id.toLowerCase(), reference, status: 'requested', provider: provider2, place: parsedPlace, createdAt };
+}
+
+// Responses are checked again by the client: what it shows as a confirmed request must have the shape the server promises.
+export function parseAssistanceRequestResponse(value: unknown): AssistanceRequestView | null {
+  if (!assistanceRecord(value) || Object.keys(value).length !== 3 || value.simulated !== true || typeof value.traceId !== 'string' || !uuid.test(value.traceId)) return null;
+  return view(value.request);
+}
+
+export function parseAssistanceRequestList(value: unknown): AssistanceRequestView[] | null {
+  if (!assistanceRecord(value) || Object.keys(value).length !== 3 || value.simulated !== true || typeof value.traceId !== 'string' || !uuid.test(value.traceId)
+    || !Array.isArray(value.requests) || value.requests.length > 20) return null;
+  const requests: AssistanceRequestView[] = [];
+  for (const entry of value.requests) {
+    const parsed = view(entry);
+    if (!parsed) return null;
+    requests.push(parsed);
+  }
+  return requests;
+}

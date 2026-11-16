@@ -1,6 +1,6 @@
 import { admit, manifestOf, totalBytes, validate, type Draft, type EventType, type EvidenceCandidate, type EvidenceItem, type Issue, type Manifest, type Preview, type PolicyWindow, type RejectedCandidate } from '../domain/report';
 import { AuthFailure } from '../../authentication/domain/session';
-import { ClaimReportFailure, type CaptureOutcome, type ClaimFailureCode, type ClaimReportApi, type EvidenceFiles, type FileDigest } from './ports';
+import { ClaimReportFailure, type CaptureOutcome, type ClaimFailureCode, type ClaimReportApi, type EvidenceFiles, type FileDigest, type LocationSource } from './ports';
 
 export type Phase =
   | { kind: 'editing' }
@@ -14,7 +14,7 @@ type DocumentDraft =
   | { kind: 'review'; item: EvidenceItem };
 export type Snapshot = { draft: Draft; issues: readonly Issue[]; rejected: readonly RejectedCandidate[]; phase: Phase; document: DocumentDraft };
 
-type Dependencies = { policyId: string; window: PolicyWindow; api: ClaimReportApi; digest: FileDigest; files: EvidenceFiles; newId: () => string; now: () => Date };
+type Dependencies = { policyId: string; window: PolicyWindow; api: ClaimReportApi; digest: FileDigest; files: EvidenceFiles; location: LocationSource; newId: () => string; now: () => Date };
 type Attempt = { key: string; digests: Map<string, string>; manifest?: Manifest; claimId?: string; verified: Set<string> };
 
 // Holds one report in memory. A retry reuses the key, the declaration and the files already received, so repeating a send never makes a second case.
@@ -28,10 +28,13 @@ export class ClaimReportFlow {
   private epoch = 0;
   // True from the moment the report is abandoned until its screen opens it again: a file that arrives from the camera or the gallery meanwhile is released.
   private closed = false;
+  // The reading of the position that is under way, if any. Turning the choice off, or abandoning the report, cancels it.
+  private reading: AbortController | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly deps: Dependencies) {
-    this.snapshot = { draft: { policyId: deps.policyId, eventType: null, occurredAt: deps.now(), place: '', description: '', evidence: [] }, issues: [], rejected: [], phase: { kind: 'editing' }, document: { kind: 'idle' } };
+    this.snapshot = { draft: { policyId: deps.policyId, eventType: null, occurredAt: deps.now(), place: '', location: { state: 'off' }, description: '', evidence: [] },
+      issues: [], rejected: [], phase: { kind: 'editing' }, document: { kind: 'idle' } };
   }
 
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -41,6 +44,18 @@ export class ClaimReportFlow {
   setOccurredAt(occurredAt: Date) { this.edit({ occurredAt }); }
   setPlace(place: string) { this.edit({ place }); }
   setDescription(description: string) { this.edit({ description }); }
+
+  // Attaching the position is the customer's explicit choice: nothing is read until it is turned on, and turning it off discards what was read.
+  setLocationAttached(attached: boolean) {
+    if (this.locked()) return;
+    this.reading?.abort();
+    this.reading = null;
+    if (!attached) { this.edit({ location: { state: 'off' } }); return; }
+    const reading = new AbortController();
+    this.reading = reading;
+    this.edit({ location: { state: 'reading' } });
+    void this.readLocation(reading);
+  }
   remove(id: string) {
     const removed = this.snapshot.draft.evidence.find(item => item.id === id);
     if (!removed || this.locked()) return;
@@ -119,8 +134,10 @@ export class ClaimReportFlow {
     this.closed = true;
     this.epoch++;
     this.attempt = null;
-    if (evidence.length || document.kind !== 'idle') {
-      this.emit({ ...this.snapshot, draft: { ...draft, evidence: [] }, issues: [], rejected: [], document: { kind: 'idle' } });
+    this.reading?.abort();
+    this.reading = null;
+    if (evidence.length || document.kind !== 'idle' || draft.location.state !== 'off') {
+      this.emit({ ...this.snapshot, draft: { ...draft, evidence: [], location: { state: 'off' } }, issues: [], rejected: [], document: { kind: 'idle' } });
     }
     await this.release(evidence);
   }
@@ -190,6 +207,14 @@ export class ClaimReportFlow {
   }
 
   private locked() { return this.snapshot.phase.kind === 'sending' || this.snapshot.phase.kind === 'submitted'; }
+
+  private async readLocation(reading: AbortController) {
+    const result = await this.deps.location.read(reading.signal).catch((): { status: 'failed' } => ({ status: 'failed' }));
+    if (reading.signal.aborted || this.reading !== reading) return;
+    this.reading = null;
+    // Six decimals are about ten centimetres, which is more than a claim needs and the most the server keeps.
+    this.edit({ location: result.status === 'ok' ? { state: 'ready', latitude: Math.round(result.latitude * 1e6) / 1e6, longitude: Math.round(result.longitude * 1e6) / 1e6 } : { state: result.status } });
+  }
 
   private documentInProgress() { return this.snapshot.document.kind === 'picking' || this.snapshot.document.kind === 'review'; }
 
