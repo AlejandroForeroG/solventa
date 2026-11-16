@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, rmdirSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const sha = /^[a-f0-9]{40}$/;
@@ -16,13 +16,31 @@ const git = args => command('git', args, { encoding: 'utf8' }).trim();
 const api = path => JSON.parse(command('gh', ['api', path], { encoding: 'utf8', maxBuffer: 512 * 1024 }));
 
 export function validationKey(fingerprint) {
-  const fields = ['tree', 'runnerOS', 'runnerArch', 'imageOS', 'imageVersion', 'node', 'npm', 'sqlImage'];
+  const fields = ['tree', 'runnerOS', 'runnerArch', 'imageOS', 'imageVersion', 'node', 'npm', 'sqlImage', 'checkoutAction', 'setupNodeAction'];
   assert.deepEqual(Object.keys(fingerprint).sort(), fields.toSorted());
   assert.ok(fields.every(field => typeof fingerprint[field] === 'string' && fingerprint[field].length > 0));
   assert.ok(sha.test(fingerprint.tree));
   assert.equal(fingerprint.runnerOS, 'Linux');
   assert.match(fingerprint.sqlImage, /@sha256:[a-f0-9]{64}$/);
   return hash(JSON.stringify(fields.map(field => fingerprint[field])));
+}
+
+export function actionCodeHash(root) {
+  const result = createHash('sha256');
+  function visit(directory) {
+    for (const item of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      const path = join(directory, item.name);
+      if (item.isDirectory()) visit(path);
+      else {
+        assert.ok(item.isFile(), 'Action source cannot contain symbolic links');
+        const bytes = readFileSync(path);
+        const name = relative(root, path).split(sep).join('/');
+        result.update(JSON.stringify([name, bytes.length])).update('\n').update(bytes);
+      }
+    }
+  }
+  visit(root);
+  return result.digest('hex');
 }
 
 export function artifactName(context) {
@@ -143,6 +161,8 @@ function createContext() {
     tree: git(['rev-parse', 'HEAD^{tree}']), runnerOS: process.env.RUNNER_OS, runnerArch: process.env.RUNNER_ARCH,
     imageOS: process.env.ImageOS, imageVersion: process.env.ImageVersion,
     node: process.version, npm: command('npm', ['--version'], { encoding: 'utf8' }).trim(), sqlImage: sqlImages[0],
+    checkoutAction: actionCodeHash(join(dirname(process.env.RUNNER_WORKSPACE), '_actions', 'actions', 'checkout', 'v4')),
+    setupNodeAction: actionCodeHash(join(dirname(process.env.RUNNER_WORKSPACE), '_actions', 'actions', 'setup-node', 'v4')),
   };
   validationKey(fingerprint);
   const pull = event.pull_request;
@@ -166,7 +186,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (action === 'context') {
       const context = createContext();
       writeFileSync(file, JSON.stringify(context));
-      output({ artifact_name: artifactName(context), trusted: context.trusted });
+      output({ trusted: context.trusted });
     } else {
       const context = JSON.parse(readFileSync(file, 'utf8'));
       if (action === 'lookup') {
@@ -188,6 +208,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         command('git', ['diff', '--exit-code', 'HEAD', '--'], { stdio: ['ignore', 'ignore', 'pipe'] });
         mkdirSync(dirname(process.argv[4]), { recursive: true });
         writeFileSync(process.argv[4], JSON.stringify({ ...context, fullValidation: true, completedAt: new Date().toISOString() }));
+      } else if (action === 'publish') {
+        assert.equal(context.trusted, true);
+        assert.equal(process.version, context.fingerprint.node);
+        const receiptFile = process.argv[4];
+        const receipt = JSON.parse(readFileSync(receiptFile, 'utf8'));
+        assert.equal(receipt.fullValidation, true);
+        assert.equal(receipt.runId, context.runId);
+        assert.equal(validationKey(receipt.fingerprint), validationKey(context.fingerprint));
+        const { DefaultArtifactClient } = await import('@actions/artifact');
+        const result = await new DefaultArtifactClient().uploadArtifact(artifactName(context), [receiptFile], dirname(receiptFile), { retentionDays: 1 });
+        assert.ok(Number.isSafeInteger(result.id) && result.id > 0);
       } else throw Error('Unknown validation action');
     }
   } catch {

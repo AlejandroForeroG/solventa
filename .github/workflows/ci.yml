@@ -16,10 +16,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
       - run: node tools/git-policy.mjs pr
@@ -42,10 +42,10 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
       SCARF_ANALYTICS: 'false'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.revision || github.sha }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -118,9 +118,7 @@ jobs:
         run: node tools/validation-reuse.mjs receipt "$RUNNER_TEMP/solventa-validation.json" "$RUNNER_TEMP/solventa-validation-receipt/validation.json"
       - name: Publish validation receipt
         if: steps.reuse.outputs.reused != 'true' && steps.context.outputs.trusted == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/publish-validation
         with:
-          name: ${{ steps.context.outputs.artifact_name }}
-          path: ${{ runner.temp }}/solventa-validation-receipt/validation.json
-          if-no-files-found: error
-          retention-days: 1
+          context: ${{ runner.temp }}/solventa-validation.json
+          receipt: ${{ runner.temp }}/solventa-validation-receipt/validation.json

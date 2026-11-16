@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { artifactName, findReusableValidation, readReceiptArchive, validationKey, verifyEvidence } from './validation-reuse.mjs';
+import { actionCodeHash, artifactName, findReusableValidation, readReceiptArchive, validationKey, verifyEvidence } from './validation-reuse.mjs';
 
 const now = Date.parse('2026-11-16T16:00:00Z');
 const revision = 'a'.repeat(40);
@@ -15,7 +15,8 @@ const base = 'c'.repeat(40);
 function evidence() {
   const context = { trusted: true, repository: 'example/solventa', repositoryId: 42, runId: 200, attempt: 1,
     fingerprint: { tree: 'd'.repeat(40), runnerOS: 'Linux', runnerArch: 'X64', imageOS: 'ubuntu24',
-      imageVersion: '20261116.1', node: 'v22.21.1', npm: '10.9.4', sqlImage: `cockroachdb/cockroach@sha256:${'e'.repeat(64)}` } };
+      imageVersion: '20261116.1', node: 'v22.21.1', npm: '10.9.4', sqlImage: `cockroachdb/cockroach@sha256:${'e'.repeat(64)}`,
+      checkoutAction: '1'.repeat(64), setupNodeAction: '2'.repeat(64) } };
   const run = { id: 100, repository: { id: 42, full_name: 'example/solventa' }, head_repository: { id: 42 },
     event: 'pull_request', path: '.github/workflows/ci.yml', status: 'completed', conclusion: 'success',
     head_sha: source, run_attempt: 1, run_started_at: '2026-11-16T15:30:00Z', updated_at: '2026-11-16T15:50:05Z' };
@@ -144,6 +145,24 @@ test('only the bounded, digest-verified data-only archive is read and never extr
   assert.throws(() => readReceiptArchive(Buffer.alloc(65 * 1024), digest));
 });
 
+test('a mutable allowed action tag cannot reuse validation after its downloaded code changes', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'solventa-action-test-'));
+  try {
+    const file = join(directory, 'action.yml');
+    writeFileSync(file, 'runs: node20');
+    const original = actionCodeHash(directory);
+    assert.equal(actionCodeHash(directory), original);
+    writeFileSync(file, 'runs: node24');
+    assert.notEqual(actionCodeHash(directory), original);
+    writeFileSync(join(directory, 'additional.js'), 'changed entrypoint');
+    assert.notEqual(actionCodeHash(directory), original);
+  } finally {
+    assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+    assert.ok(basename(directory).startsWith('solventa-action-test-'));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('workflow preserves all full-validation commands and isolated migration/publication gates', () => {
   const ci = parse(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const deploy = parse(readFileSync('.github/workflows/deploy.yml', 'utf8'));
@@ -156,6 +175,9 @@ test('workflow preserves all full-validation commands and isolated migration/pub
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
   for (const step of commands.filter(step => step.run.startsWith('npm run '))) assert.ok(scripts[step.run.slice(8)]);
   assert.equal(ci.permissions.actions, 'read');
+  for (const job of Object.values(ci.jobs)) {
+    for (const step of job.steps ?? []) if (step.uses) assert.ok(['actions/checkout@v4', 'actions/setup-node@v4', './.github/actions/publish-validation'].includes(step.uses));
+  }
   assert.ok(!JSON.stringify(ci.jobs.validate).includes('secrets.'));
   for (const step of ci.jobs.validate.steps.filter(step => step.name?.includes('validation receipt'))) {
     assert.match(step.if, /steps\.context\.outputs\.trusted == 'true'/);
