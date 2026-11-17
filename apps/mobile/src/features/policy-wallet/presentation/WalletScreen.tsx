@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   credential: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 4 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderColor: theme.colors.border },
   stackedRow: { flexDirection: 'column', gap: 4 },
-  value: { fontSize: 15, lineHeight: 23, fontWeight: '600', color: theme.colors.foreground, flexShrink: 1 },
+  value: { fontSize: 15, lineHeight: 23, fontWeight: '600', color: theme.colors.foreground },
   button: { minHeight: 54, backgroundColor: theme.colors.primaryDark, borderRadius: 16, padding: 16, justifyContent: 'center' },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
   buttonText: { fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'center', color: theme.colors.onPrimary }, secondaryText: { color: theme.colors.primaryDark }, dimmed: { opacity: 0.5 },
