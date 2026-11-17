@@ -13,7 +13,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .error { color: #a32b22; }
 @media (max-width: 600px) { header { padding: 24px; } .access-panel { padding: 28px; } }
 
-/* Commercial front end: steps 1 and 2. Colours follow the Design System tokens; grey text never lighter than #6b7583. */
+/* Secondary text uses the established darker neutral on the paper surface. */
 .channel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .header-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .product { font-size: 13px; font-weight: 600; color: #3a424e; }
@@ -25,7 +25,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .btn { display: inline-flex; align-items: center; justify-content: center; width: auto; padding: 11px 18px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid transparent; cursor: pointer; }
 .btn-primary { background: #0b6b5f; color: #fff; border-color: #0b6b5f; }
 .btn-primary:hover:not(:disabled) { background: #08544a; }
-.btn-primary:disabled { background: #edebe6; color: #6b7583; border-color: #edebe6; opacity: 1; cursor: not-allowed; }
+.btn-primary:disabled { background: #edebe6; color: #56616f; border-color: #edebe6; opacity: 1; cursor: not-allowed; }
 .btn-secondary { background: #fff; color: #0b6b5f; border-color: #cbe5e0; }
 .btn-secondary:hover:not(:disabled) { background: #e4f1ee; }
 .btn-small { padding: 8px 14px; font-size: 13px; }
@@ -49,8 +49,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .stepper-dot { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; font: 600 11.5px 'IBM Plex Mono', ui-monospace, monospace; }
 .stepper-current .stepper-dot { background: #0b6b5f; color: #fff; }
 .stepper-done .stepper-dot { background: #e4f1ee; color: #0b6b5f; }
-.stepper-pending .stepper-dot { background: #edebe6; color: #6b7583; }
-.stepper-name { max-width: 132px; font-size: 12.5px; font-weight: 500; color: #6b7583; }
+.stepper-pending .stepper-dot { background: #edebe6; color: #56616f; }
+.stepper-name { max-width: 132px; font-size: 12.5px; font-weight: 500; color: #56616f; }
 .stepper-current .stepper-name { font-weight: 600; color: #12151a; }
 .step { animation: step-in .25s ease; }
 @keyframes step-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -63,8 +63,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .lede { max-width: 620px; margin: 0 0 20px; font-size: 15px; text-wrap: pretty; }
 .card { background: #fff; border: 1px solid #e3e1dc; border-radius: 16px; padding: 28px; box-shadow: 0 1px 2px rgb(18 21 26 / 4%); }
 .card-error { border-color: #f0c9c4; }
-.section-label { margin: 0 0 16px; font: 600 10.5px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6b7583; }
-.step h1.section-label { font-size: 10.5px; letter-spacing: .08em; margin-bottom: 4px; }
+.section-label { margin: 0 0 16px; font: 600 12px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #56616f; }
+.step h1.section-label { font-size: 12px; letter-spacing: .08em; margin-bottom: 4px; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
 .field label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #3a424e; }
 .required { color: #a32b22; }
@@ -159,7 +159,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .consent-item-main { flex: 1 1 320px; }
 .consent-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
 .consent-item-purpose { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #12151a; }
-.seal-line { margin-top: 8px; font-size: 11.5px; font-weight: 400; color: #6b7583; overflow-wrap: anywhere; }
+.seal-line { margin-top: 8px; font-size: 11.5px; font-weight: 400; color: #56616f; overflow-wrap: anywhere; }
 .confirm { flex: 1 1 100%; padding: 14px 16px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 10px; }
 .confirm p { margin: 0 0 6px; }
 .privacy-foot { margin-bottom: 16px; }
@@ -228,7 +228,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .facts-pairs > div { min-width: 0; }
 .trace + .note { margin-top: 12px; }
 .charge-key { color: #0b6b5f; overflow-wrap: anywhere; }
-.btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #6b7583; border-color: #edebe6; cursor: wait; }
+.btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #56616f; border-color: #edebe6; cursor: wait; }
 
 .assistance-search .btn { margin-top: 12px; }
 .assistance-result { margin-top: 16px; }
