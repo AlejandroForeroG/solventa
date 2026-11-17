@@ -3,6 +3,8 @@ import test, { mock } from 'node:test';
 
 const presentation = new URL('../apps/mobile/src/features/authentication/presentation/', import.meta.url);
 const calls: string[] = [];
+const custodyCalls: string[] = [];
+let draftClearFails = false;
 const effects: Array<() => void | (() => void)> = [];
 let currentContext: unknown;
 let currentStatus = 'signedOut';
@@ -35,6 +37,7 @@ mock.module('react', { defaultExport: React, namedExports: {
   useContext: () => currentContext,
   useEffect: (effect: () => void | (() => void)) => { effects.push(effect); },
   useState: (factory: () => unknown) => [factory()],
+  useMemo: (factory: () => unknown) => factory(),
   useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 } });
 mock.module('expo-linking', { namedExports: {
@@ -58,7 +61,9 @@ mock.module(new URL('../adapters/callback.ts', presentation).href, { namedExport
 mock.module(new URL('../adapters/secure-token-store.ts', presentation).href,
   { namedExports: { biometricVault: { kind: 'vault' }, secureTokenStore: { kind: 'store' } } });
 mock.module(new URL('../../policy-cache/adapters/secure-policy-store.ts', presentation).href,
-  { namedExports: { protectedPolicyCache: { kind: 'policy-cache' } } });
+  { namedExports: { protectedPolicyCache: { lock: () => custodyCalls.push('policy-lock'), clear: async () => { custodyCalls.push('policy-clear'); } } } });
+mock.module(new URL('../../claim-drafts/adapters/native-draft-storage.ts', presentation).href,
+  { namedExports: { protectedDraftStorage: { lock: () => custodyCalls.push('draft-lock'), clear: async () => { custodyCalls.push('draft-clear'); if (draftClearFails) throw Error('synthetic custody refusal'); } } } });
 mock.module(new URL('../adapters/solventa-session.ts', presentation).href,
   { namedExports: { createSessionApi: (baseUrl: string) => ({ baseUrl }) } });
 mock.module(new URL('../adapters/workos.ts', presentation).href, { namedExports: { workosIdentity: { kind: 'identity' } } });
@@ -71,7 +76,10 @@ test('provider restores, completes callbacks, locks on background and removes na
   process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.test';
   provider.AuthenticationProvider({ children: 'content' });
   assert.equal(constructorOptions?.baseUrl, 'https://api.example.test');
-  assert.deepEqual(constructorOptions?.policyCache, { kind: 'policy-cache' });
+  const cache = constructorOptions?.policyCache as { clear(): Promise<void> };
+  await cache.clear(); assert.deepEqual(custodyCalls, ['policy-lock', 'draft-lock', 'policy-clear', 'draft-clear']);
+  custodyCalls.length = 0; draftClearFails = true; await assert.rejects(cache.clear());
+  assert.deepEqual(custodyCalls, ['policy-lock', 'draft-lock', 'policy-clear', 'draft-clear']); draftClearFails = false;
   const cleanup = effects.shift()?.();
   await flush();
   assert.ok(calls.includes('restore'));

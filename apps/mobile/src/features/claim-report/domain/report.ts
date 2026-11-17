@@ -2,7 +2,8 @@
 export const EVENT_TYPES = ['collision', 'theft', 'damage', 'other'] as const;
 export type EventType = typeof EVENT_TYPES[number];
 
-export const EVIDENCE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'video/mp4', 'video/quicktime'] as const;
+export const DOCUMENT_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/heic'] as const;
+export const EVIDENCE_CONTENT_TYPES = [...DOCUMENT_CONTENT_TYPES, 'video/mp4', 'video/quicktime'] as const;
 export type EvidenceContentType = typeof EVIDENCE_CONTENT_TYPES[number];
 
 export const LIMITS = {
@@ -18,7 +19,7 @@ export type EvidenceKind = 'photo' | 'video';
 // A video is identified in the review by a still image made from it; making it can fail, and that is a state of its own, never a blank.
 export type Preview = { status: 'pending' } | { status: 'ready'; uri: string } | { status: 'failed' };
 // `owned` marks a copy the app created in its own cache. Only owned files are ever deleted: a gallery original never is.
-export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview };
+export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview; document?: true };
 export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null; owned?: boolean };
 
 // The customer decides whether the report carries their position. Only `ready` attaches it; a refused permission or a failed reading means the report goes without it.

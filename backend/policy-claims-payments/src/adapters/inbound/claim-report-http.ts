@@ -13,14 +13,14 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._-]{8,128}$/;
 const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-export function mountClaimReport(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimReportHttpDependencies) {
-  const route = (allow: string, work: (c: Context<{ Bindings: PolicyEnv }>, owner: ReportOwner, traceId: string, reply: Reply) => Promise<Response>) => async (c: Context<{ Bindings: PolicyEnv }>) => {
+export function createClaimReportRoute(deps: Pick<ClaimReportHttpDependencies, 'authorize'>) {
+  return (allow: string, work: (c: Context<{ Bindings: PolicyEnv }>, owner: ReportOwner, traceId: string, reply: Reply) => Promise<Response>) => async (c: Context<{ Bindings: PolicyEnv }>) => {
     const supplied = c.req.header('x-trace-id') ?? '';
     const traceId = isUuid(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
     const reply: Reply = (body, status) => c.json({ ...body, traceId }, status, { 'cache-control': 'no-store', 'x-trace-id': traceId, 'x-content-type-options': 'nosniff' });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (c.req.method !== allow) { c.header('Allow', allow); return reply({ error: 'method_not_allowed' }, 405); }
+      if (!allow.split(', ').includes(c.req.method)) { c.header('Allow', allow); return reply({ error: 'method_not_allowed' }, 405); }
       const token = c.req.header('authorization')?.match(BEARER)?.[1];
       if (!token || token.length > 8192) return reply({ error: 'unauthorized' }, 401);
       const access = await Promise.race([deps.authorize({ kind: 'mobile', operation: 'claims:report', token }),
@@ -39,6 +39,10 @@ export function mountClaimReport(app: Hono<{ Bindings: PolicyEnv }>, deps: Claim
     } catch { return reply({ error: 'service_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   };
+}
+
+export function mountClaimReport(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimReportHttpDependencies) {
+  const route = createClaimReportRoute(deps);
 
   app.post('/api/v1/claims', route('POST', async (c, owner, traceId, reply) => {
     const key = c.req.header('idempotency-key') ?? '';

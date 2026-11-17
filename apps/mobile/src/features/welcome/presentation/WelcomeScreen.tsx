@@ -57,6 +57,7 @@ export function WelcomeScreen({ profile = false }: { profile?: boolean } = {}) {
               <Action variant="secondary" label={copy.actions.alternative} onPress={() => void auth.signIn()} />
             </>}
             {authenticated && <>
+              <Action label={copy.actions.drafts} variant="secondary" onPress={() => router.push('/claim-drafts' as Href)} />
               <Action label={copy.actions.verifyIdentity} onPress={() => router.push('/identity-verification' as Href)} />
               {profile
                 ? <Action variant="secondary" label={copy.actions.notificationPreferences} onPress={() => router.push('/notification-preferences' as Href)} />
@@ -75,6 +76,7 @@ export function WelcomeScreen({ profile = false }: { profile?: boolean } = {}) {
             </>}
             {auth.status === 'blocked' && <Action label={copy.actions.retry} onPress={() => void auth.retry()} />}
             {auth.status === 'blocked' && auth.failure === 'unavailable' && <Action variant="secondary" label={copy.actions.wallet} onPress={() => router.push('/wallet' as Href)} />}
+            {auth.status === 'blocked' && auth.failure === 'unavailable' && <Action variant="secondary" label={copy.actions.drafts} onPress={() => router.push('/claim-drafts' as Href)} />}
             {auth.status === 'logoutPending' && <>
               <Text style={styles.description}>{copy.pendingLogout}</Text>
               <Action label={copy.actions.retryLogout} onPress={() => void auth.retry()} />

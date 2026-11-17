@@ -38,8 +38,8 @@ export class Authentication {
   getApiBaseUrl = () => this.deps.baseUrl;
 
   // Feature composition may use this port; credentials never enter a screen or observable snapshot.
-  withSession = <T>(operation: (accessToken: string) => Promise<T>): Promise<T> => {
-    const expected = this.snapshot.status === 'authenticated' ? this.snapshot.principal : null;
+  withSession = <T>(operation: (accessToken: string) => Promise<T>, expectedOwner?: Principal): Promise<T> => {
+    const expected = expectedOwner ? { ...expectedOwner } : this.snapshot.status === 'authenticated' ? this.snapshot.principal : null;
     const version = this.lockVersion;
     const eligible = () => Boolean(expected && this.foreground && !this.logoutRequested && version === this.lockVersion
       && this.snapshot.status === 'authenticated' && this.snapshot.principal?.clientId === expected.clientId

@@ -67,6 +67,7 @@ jobs:
       - run: npm run test:claims:access:sql
       - run: npm run test:claims:sql
       - run: npm run test:claim-report:sql
+      - run: npm run test:claim-drafts:sql
       - run: npm run test:financial:sql
       - run: npm run test:security:sql
       - run: npm run infra:local:schema-verify

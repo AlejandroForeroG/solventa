@@ -104,6 +104,14 @@ test('authenticated feature requests use the current credential without exposing
   assert.equal(reads, 0);
 });
 
+test('a stale queued owner cannot dispatch through a newer account session or sign that account out', async () => {
+  const f = fixture(sessionRecord()); await f.auth.restore();
+  const oldOwner = { clientId: '30000000-0000-4000-8000-000000000001', subjectToken: '30000000-0000-4000-8000-000000000002' };
+  await assert.rejects(f.auth.withSession(async () => assert.fail('foreign queued payload must not be transmitted'), oldOwner), AuthFailure);
+  assert.equal(f.auth.getSnapshot().status, 'authenticated');
+  assert.equal(await f.auth.withSession(async () => 'current-owner-only', principal), 'current-owner-only');
+});
+
 test('backgrounding while a feature refreshes cannot release a credential to its callback', async () => {
   const f = fixture(sessionRecord()); await f.auth.restore(); f.advance(300_000);
   let start!: () => void; const started = new Promise<void>(resolve => { start = resolve; });
