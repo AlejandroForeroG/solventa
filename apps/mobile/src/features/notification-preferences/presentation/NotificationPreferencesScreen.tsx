@@ -1,6 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
@@ -59,6 +59,8 @@ export function NotificationPreferencesScreen() {
 
 function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   const text = copy[language];
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = fontScale > 1.2 || width < 380;
   const session = useAuthenticatedSession();
   const [api] = useState(() => createPreferencesApi(session.baseUrl, session));
   const [saved, setSaved] = useState<Preferences>();
@@ -118,19 +120,23 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
       <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />
     </View>}
     {draft && <View style={styles.panel}>
-      <View style={styles.channelHeader}><View style={styles.categoryLabel} />{channels.map(channel =>
-        <Text key={channel} style={styles.channelLabel}>{text.channels[channel]}</Text>)}</View>
-      {categories.map(category => <View key={category} style={styles.row}>
-        <View style={styles.categoryLabel}><Text style={styles.rowTitle}>{text.categories[category][0]}</Text>
+      {!stacked && <View style={styles.channelHeader}><View style={styles.categoryLabel} />{channels.map(channel =>
+        <Text key={channel} style={styles.channelLabel}>{text.channels[channel]}</Text>)}</View>}
+      {categories.map(category => <View key={category} style={[styles.row, stacked && styles.stackedRow]}>
+        <View style={!stacked && styles.categoryLabel}><Text style={styles.rowTitle}>{text.categories[category][0]}</Text>
           <Text style={styles.caption}>{text.categories[category][1]}</Text></View>
-        {channels.map(channel => <Pressable key={channel} style={styles.switchCell}
+        <View style={[styles.channelControls, stacked && styles.stackedControls]}>
+        {channels.map(channel => <Pressable key={channel} style={[styles.switchCell,
+          stacked && { flexGrow: 1, flexBasis: Math.max(72, Math.ceil(36 * fontScale)), width: 'auto', gap: 8, paddingVertical: 8 }]}
           accessibilityRole="switch" accessibilityLabel={`${text.categories[category][0]} · ${text.channels[channel]}`}
           accessibilityState={{ checked: draft[category][channel], disabled: busy || !!pending }} disabled={busy || !!pending}
           onPress={() => void toggle(category, channel, !draft[category][channel])}>
+          {stacked && <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+            style={styles.stackedChannelLabel}>{text.channels[channel]}</Text>}
           <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
             style={[styles.switchTrack, draft[category][channel] && styles.switchTrackOn, (busy || !!pending) && styles.dimmed]}>
             <View style={[styles.switchThumb, draft[category][channel] && styles.switchThumbOn]} />
-          </View></Pressable>)}
+          </View></Pressable>)}</View>
       </View>)}
     </View>}
     {pushSelected && permission === false && <Text accessibilityLiveRegion="polite" style={styles.warningText}>{text.pending}</Text>}
@@ -158,7 +164,11 @@ const styles = StyleSheet.create({
   channelHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
   categoryLabel: { flex: 1, minWidth: 0, paddingRight: 8 },
   channelLabel: { width: 48, color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  stackedChannelLabel: { color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  channelControls: { flexDirection: 'row' },
+  stackedControls: { flexWrap: 'wrap', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: theme.colors.border, minHeight: 82 },
+  stackedRow: { flexDirection: 'column', alignItems: 'stretch', paddingVertical: 14, gap: 12 },
   rowTitle: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600' },
   caption: { color: theme.colors.muted, fontSize: 11, lineHeight: 16, paddingTop: 3 },
   switchCell: { width: 48, minHeight: 56, alignItems: 'center', justifyContent: 'center' },

@@ -2,7 +2,7 @@ import { router, useIsFocused } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Href } from 'expo-router';
 import type { PropsWithChildren } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
@@ -58,14 +58,19 @@ function Page({ title, children }: PropsWithChildren<{ title: string }>) {
 }
 
 function Tile({ title, detail, href, icon = 'document-text-outline' }: { title: string; detail: string; href: Href; icon?: React.ComponentProps<typeof Ionicons>['name'] }) {
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale > 1.4;
   return <Pressable accessibilityRole="link" accessibilityLabel={`${title}. ${detail}`} onPress={() => router.navigate(href)}
-    style={({ pressed }) => [styles.card, styles.tile, pressed && styles.pressed]}>
-    <View style={styles.tileIcon} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Ionicons name={icon} size={23} color={theme.colors.primaryDark} /></View>
-    <View style={styles.tileText}>
+    style={({ pressed }) => [styles.card, styles.tile, stacked && styles.tileStacked, pressed && styles.pressed]}>
+    <View style={stacked && styles.tileHeading} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={styles.tileIcon}><Ionicons name={icon} size={23} color={theme.colors.primaryDark} /></View>
+      {stacked && <Ionicons accessible={false} name="chevron-forward" size={18} color={theme.colors.muted} />}
+    </View>
+    <View style={[styles.tileText, stacked && styles.tileTextStacked]}>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.detail}>{detail}</Text>
     </View>
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Ionicons accessible={false} name="chevron-forward" size={18} color={theme.colors.muted} /></View>
+    {!stacked && <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Ionicons accessible={false} name="chevron-forward" size={18} color={theme.colors.muted} /></View>}
   </Pressable>;
 }
 
@@ -77,7 +82,10 @@ const styles = StyleSheet.create({
   title: { color: theme.colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -0.8, marginBottom: 6 },
   card: { padding: 18, borderRadius: 20, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 5 },
   tile: { flexDirection: 'row', alignItems: 'center', minHeight: 68, gap: 12 },
+  tileStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  tileHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tileText: { flex: 1, gap: 4 },
+  tileTextStacked: { flex: 0 },
   tileIcon: { width: 44, height: 44, backgroundColor: theme.colors.mint, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: theme.colors.foreground, fontSize: 18, fontWeight: '700' },
   detail: { color: theme.colors.muted, fontSize: 14, lineHeight: 20 },

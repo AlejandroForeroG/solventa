@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
@@ -180,7 +180,9 @@ function Detail({ policy, state, locale, now, onBack, onOpenDocuments }: { polic
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <View style={styles.row}><Text style={styles.body}>{label}</Text><Text style={styles.value}>{value}</Text></View>;
+  const { width, fontScale } = useWindowDimensions();
+  return <View style={[styles.row, (width < 380 || fontScale > 1.2) && styles.stackedRow]}>
+    <Text style={styles.body}>{label}</Text><Text style={styles.value}>{value}</Text></View>;
 }
 
 function Action({ label, secondary = false, onPress }: { label: string; secondary?: boolean; onPress: () => void }) {
@@ -217,7 +219,8 @@ const styles = StyleSheet.create({
   itemTitle: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: theme.colors.foreground },
   credential: { padding: 16, borderRadius: 16, backgroundColor: theme.colors.mint, gap: 4 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderColor: theme.colors.border },
-  value: { fontSize: 15, lineHeight: 23, fontWeight: '600', color: theme.colors.foreground },
+  stackedRow: { flexDirection: 'column', gap: 4 },
+  value: { fontSize: 15, lineHeight: 23, fontWeight: '600', color: theme.colors.foreground, flexShrink: 1 },
   button: { minHeight: 54, backgroundColor: theme.colors.primaryDark, borderRadius: 16, padding: 16, justifyContent: 'center' },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
   buttonText: { fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'center', color: theme.colors.onPrimary }, secondaryText: { color: theme.colors.primaryDark }, dimmed: { opacity: 0.5 },
