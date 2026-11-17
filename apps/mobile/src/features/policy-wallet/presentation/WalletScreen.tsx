@@ -158,6 +158,7 @@ function Detail({ policy, state, locale, now, onBack }: { policy: CachedPolicy; 
           <Row label={copy.coverages.station} value={coverage.stationId.slice(0, 8).toUpperCase()} />
         </>}
     <Text style={styles.caption}>{copy.document}</Text>
+    <Action label={copy.saveDraft} secondary onPress={() => router.push({ pathname: '/claim-drafts', params: { policyId: policy.policyId } })} />
     {/* A report needs the server, so a stored copy never offers it. */}
     {state.source !== 'stored' && isReportableProduct(policy.product) && validityAt(policy, now) === 'active'
       && <Action label={copy.reportClaim} onPress={() => router.push({ pathname: '/claim-report', params: { policyId: policy.policyId } })} />}

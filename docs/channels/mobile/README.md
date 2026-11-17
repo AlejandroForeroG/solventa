@@ -42,6 +42,14 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
+## Offline claim drafts
+
+Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
+
+This screen prepares an editable report; it does not file a claim or persist new camera/gallery binaries. Existing references remain usable offline; selecting new received references needs the server. Continue report is available for a confirmed draft while online: it rereads the owned server draft and policy, restores event data/notes and opens the existing [claim reporting](#claim-report) form. The customer still attaches files, reviews and submits; saved references remain in the editable draft and are not automatically copied into an upload declaration. No offline confirmation authorizes finance, contracts or consent. See [editable claim drafts](../../modules/policy-claims-payments/claim-drafts.md) for merge policy, API, limits, custody, data and errors.
+
+Install SDK-compatible dependencies and rebuild the native app after adding `expo-network`; Expo Go/web cannot validate protected draft storage. Run `npm run test:claim-drafts`, the real SQL suite, mobile lint/types, Pact and `npm run check`. Native acceptance requires airplane-mode save, force-close/reopen, restored connection/owner session and a single confirmed server effect, plus retries, concurrent changes, manual choice persistence, background lock and account clearing. Automated custody doubles and SQL tests are not native evidence.
+
 ## Assistance provider search
 
 Open Nearby providers from Home or Claims. The customer can search manually by city or address at any time. Use my location requests the operating system's foreground permission for a single search. If Android pauses the app for the permission dialog, the screen waits for session revalidation before reading coordinates and querying the directory. The pending search is discarded when the account changes, session revalidation fails or the screen closes. Permission denial, a location timeout and an unavailable directory preserve the manual field. The signed-in native client uses the [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md). A matching backend revision and a development build that includes `expo-location` are required for an Android or iOS test. Exercise permission grant, denial, manual fallback and an empty result using a synthetic catalog location. A web export does not validate the native prompt.
@@ -285,7 +293,7 @@ Validity (`Por iniciar`, `Vigente`, `Vencida`) is computed from the policy dates
 
 ## Claim report
 
-The claim report lets a signed-in customer report a claim on one of their policies, with photos or video as evidence. Code: `src/features/claim-report`; route `/claim-report`. It is opened from the **Reportar siniestro** tile of the Claims tab and from the same action in the detail of a policy. The server side, limits and refusals are described in the [claim report guide](../../modules/policy-claims-payments/claim-report.md).
+The claim report lets a signed-in customer report a claim on one of their policies, with photos, video or scanned documents as evidence. Code: `src/features/claim-report`; route `/claim-report`. It is opened from the **Reportar siniestro** tile of the Claims tab and from the same action in the detail of a policy. The server side, limits and refusals are described in the [claim report guide](../../modules/policy-claims-payments/claim-report.md).
 
 ### Journey
 
@@ -293,6 +301,12 @@ The claim report lets a signed-in customer report a claim on one of their polici
 2. **Capture (step 1 of 3).** Event type, the exact date and time, an optional place, a description of 40 to 600 characters and one to ten files, at most 50 MiB together. The date and time are chosen on the system pickers, shown in the phone's time zone and sent in UTC with milliseconds. A file comes from the camera (a photo, or a video of up to 30 seconds) or from the gallery; photos are compressed on capture. A photo is its own preview; a video is identified by a still image made from it (`expo-video-thumbnails`), shown while the customer captures and reviews. While the image is being made the item says so, and if it cannot be made the item says that there is no preview and keeps its label, its size and the remove action, so a failure never leaves a blank. There is no player: the customer confirms which clip is attached by its thumbnail and can remove it and attach another before sending. The phone checks the file type (JPEG, PNG, HEIC, MP4, QuickTime), the count, the size, that the event is not in the future and falls inside the policy dates, and the description, and each problem is shown next to its field.
 3. **Review (step 2 of 3).** The summary, the files and the note that sending creates a single case. **Editar** returns to the capture without losing anything.
 4. **Send.** The phone hashes each file, creates the draft, uploads each file and submits. The result shows the case number `SIN-YYYY-NNNNN`. A partial failure says that the report is not filed yet and never claims reception.
+
+### Document evidence
+
+In the evidence section, **Escanear documento** opens the camera at full capture quality. **Elegir archivo de documento** opens the native file picker with `expo-document-picker` and does not require camera permission. Documents use the report's existing image formats (JPEG, PNG and HEIC) and share its ten-file, 50 MiB limits with other evidence. PDF and multi-page assembly are outside this flow. Rebuild the native app after installing the document picker module.
+
+The app must decode the image before enabling **Adjuntar documento**. The preview shows the full image and can be enlarged to help the customer check the text, orientation and edges. The customer can cancel to take another picture or choose a different file. Confirmation adds the document to the current report. **Enviar reporte** sends its type, byte count and checksum in the same declaration as the other evidence, uploads it to that draft and files the claim using the existing API. Document previews and unconfirmed picks are kept only in the open report. Cancelling the preview or abandoning the report releases the app's copy and preserves the selected original.
 
 ### Retries and failures
 
@@ -304,15 +318,15 @@ The claim report lets a signed-in customer report a claim on one of their polici
 
 ### Permissions and the background
 
-- The camera needs the system permission, requested when the customer takes a photo or records a video. If it is denied the screen says so, explains that the gallery still works and offers the system settings. The gallery uses the system picker and needs no permission. The usage descriptions are declared in `app.json` in both languages.
+- The camera needs the system permission, requested when the customer takes a photo, scans a document or records a video. If permission is denied, the screen explains the corresponding system picker alternative. It links to system settings when the OS cannot ask again. The usage descriptions are declared in `app.json` in both languages.
 - The picker and the thumbnail generator write copies into the app cache. The app deletes only files inside that cache, never a gallery original, and deletes them when their life ends: a file the report refuses (type, count or size), a file the customer removes or replaces (with its thumbnail), the whole report once it is filed, and the whole report when it is abandoned, which includes leaving the screen, signing out and switching account. A file that the camera or the gallery returns after that point is deleted instead of admitted. A failed send keeps every file because the retry needs them. A copy left by the app being killed or by a deletion that failed stays until the system evicts the cache.
-- The camera and the gallery are system activities, so the app goes to the background and locks. The report stays in memory but hidden while the session is revalidated, and returns intact; it is dropped when the session ends or another account signs in. Nothing of the report is written to the device, so it does not survive the app being closed; resuming an interrupted upload is separate work.
+- The camera, gallery and file picker are system activities. When they send the app to the background, the report stays hidden until the session is revalidated, and returns intact. It is dropped when the session ends or another account signs in. The draft is held in memory and does not survive the app being closed. Resuming an interrupted upload is separate work.
 
 ### Limits and verification
 
 - The event types (collision, theft, damage, other) are provisional values taken from the approved prototype, and no per-product list exists yet. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
-- Reporting from the web, scanning documents, the location choice and the status view are separate work.
-- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers the limits, the declaration, the retry sequence with a server that remembers its drafts, and every refusal of the contract. The camera, the pickers and the native upload need a development build; they are not exercised by unit tests.
+- Reporting from the web, the location choice and the status view are separate work.
+- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers document confirmation, refusal and cleanup, report limits, declarations, retries and API refusals. On Android and iOS, test a camera grant and denial, selection of a synthetic document without camera access, preview and enlargement, corrupt image rejection, cancellation, and submission against a matching deployment. Confirm that the submitted case includes the document once. Native pickers, image rendering and native upload need a development build.
 
 ## Protected local data
 
@@ -323,6 +337,7 @@ Design and rules are in the [architecture guide](architecture.md#protected-local
 - `protectedPolicyCache` (`src/features/policy-cache/adapters/secure-policy-store.ts`) offers `unlock()`, `lock()`, `save(owner, policies)`, `read(owner)` and `clear()`. `save` accepts the policy summaries the API returns and keeps only the allowed fields; `read` returns `{ syncedAt, policies }` or `null` and fails with `locked` until `unlock()` succeeds.
 - `unlock()` runs the system authentication prompt (`expo-local-authentication`, strong biometrics or the device code). The wallet unlocks when it opens and locks when it closes or the app is backgrounded.
 - `Authentication` clears the cache on logout, denied credentials, environment change and account change. A new screen does not need to do that.
+- `protectedDraftStorage` implements the larger encrypted-file design for editable claim drafts. The same authentication clearing port locks and clears both stores, attempts both removals even if one fails, and propagates a failure so logout recovery stays guarded. See [claim draft custody](../../modules/policy-claims-payments/claim-drafts.md#mobile-custody-and-delivery).
 
 ### What you can and cannot do
 
@@ -343,7 +358,7 @@ That prompt is enforced by the application, not by the cryptographic key. The cr
 
 ### Larger or new data
 
-The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. For more data, keep a random key in SecureStore and encrypt a file in private storage with it, binding the file to the installation UUID and owner. That needs an encryption library chosen against the Expo SDK 57 documentation, a new development build and its own tests, and it keeps the same rules: minimum data, device authentication before reading, owner and installation binding, clearing with the session.
+The compact encoding keeps six policies near 1.3 KB, below the roughly 2 KB some iOS releases accept per keychain value. Editable claim drafts use SDK 57 `expo-crypto` AES-GCM, a small SecureStore key/pointer and an immutable encrypted private file bound to the installation UUID, API environment and owner. New data types must keep their own minimum schema, limits, native validation and tests, plus device authentication before reading and clearing with the session. Do not enlarge the policy snapshot to store drafts.
 
 ### Verification
 

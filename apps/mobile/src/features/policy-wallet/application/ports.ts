@@ -2,7 +2,7 @@ import type { CacheOwner } from '../../policy-cache/application/protected-policy
 import type { CachedPolicy, PolicySnapshot } from '../../policy-cache/domain/cached-policy';
 
 export interface AuthenticatedSession {
-  execute<T>(operation: (accessToken: string) => Promise<T>): Promise<T>;
+  execute<T>(operation: (accessToken: string) => Promise<T>, expectedOwner?: CacheOwner): Promise<T>;
 }
 
 export interface PoliciesApi {

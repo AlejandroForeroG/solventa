@@ -1,0 +1,168 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { DraftSync } from '../apps/mobile/src/features/claim-drafts/application/draft-sync';
+import { EncryptedDraftStorage } from '../apps/mobile/src/features/claim-drafts/adapters/encrypted-draft-storage';
+import { DraftFailure, emptyDraft, type DraftCommand, type DraftVersion, type SyncReply } from '../apps/mobile/src/features/claim-drafts/domain/draft';
+import type { DraftApi } from '../apps/mobile/src/features/claim-drafts/application/ports';
+import { draftCustody } from './support/draft-custody';
+
+function world() {
+  const custody = draftCustody(), owner = { clientId: randomUUID(), subjectToken: randomUUID() };
+  const draftId = randomUUID(), content = { ...emptyDraft(randomUUID()), description: 'Synthetic local note' };
+  const calls: DraftCommand[] = [];
+  let remote: DraftVersion[] = [];
+  let listing = async (): Promise<DraftVersion[]> => remote;
+  let response: (command: DraftCommand) => Promise<SyncReply> = async command => ({ status: 'confirmed', merged: false,
+    draft: { draftId, content: command.content, revision: 1, updatedAt: '2026-11-12T12:00:00.000Z' } });
+  const api: DraftApi = { list: () => listing(), get: async () => { throw Error('unused'); }, evidence: async () => [],
+    sync: async (_, command, queuedOwner) => { assert.deepEqual(queuedOwner, owner); calls.push(structuredClone(command)); return response(command); } };
+  const restart = () => new DraftSync({ storage: new EncryptedDraftStorage('https://staging.solventa.site', custody.port), api, newId: randomUUID, now: () => 123 });
+  return { custody, owner, draftId, content, calls, restart, remote: (next: DraftVersion[]) => { remote = next; },
+    listWith: (next: typeof listing) => { listing = next; }, respond: (next: typeof response) => { response = next; } };
+}
+const entries = (engine: DraftSync) => { const snapshot = engine.getSnapshot(); assert.equal(snapshot.status, 'ready'); if (snapshot.status !== 'ready') throw Error('not ready'); return snapshot.entries; };
+
+test('a list captured before acknowledgement cannot replace the newer durable confirmation', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); await engine.sync(w.owner);
+  const previous = structuredClone(entries(engine)[0].confirmed!);
+  let deliver!: (versions: DraftVersion[]) => void;
+  w.listWith(() => new Promise(resolve => { deliver = resolve; }));
+  const refreshing = engine.refresh(w.owner);
+  const content = { ...w.content, description: 'Newly confirmed customer note' };
+  await engine.save(w.draftId, content, 1);
+  w.respond(async command => ({ status: 'confirmed', merged: false,
+    draft: { ...previous, revision: 2, content: command.content } }));
+  await engine.sync(w.owner);
+  assert.equal(entries(engine)[0].confirmed?.revision, 2);
+  deliver([previous]); await refreshing;
+  assert.equal(entries(engine)[0].confirmed?.revision, 2);
+  assert.deepEqual(entries(engine)[0].content, content);
+  engine.lock(); const restarted = w.restart(); await restarted.open(w.owner);
+  assert.equal(entries(restarted)[0].confirmed?.revision, 2);
+  assert.deepEqual(entries(restarted)[0].content, content);
+});
+
+test('out-of-order lists preserve the newest revision and do not replace an equal immutable version', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); await engine.sync(w.owner);
+  const first = structuredClone(entries(engine)[0].confirmed!);
+  let deliver!: (versions: DraftVersion[]) => void;
+  w.listWith(() => new Promise(resolve => { deliver = resolve; }));
+  const oldList = engine.refresh(w.owner);
+  const newest = { ...first, revision: 3, content: { ...w.content, place: 'Latest remote place' } };
+  w.listWith(async () => [newest]); await engine.refresh(w.owner);
+  deliver([{ ...first, revision: 2 }]); await oldList;
+  assert.equal(entries(engine)[0].confirmed?.revision, 3);
+  assert.deepEqual(entries(engine)[0].content, newest.content);
+  w.listWith(async () => [{ ...newest, content: first.content }]); await engine.refresh(w.owner);
+  engine.lock(); const restarted = w.restart(); await restarted.open(w.owner);
+  assert.equal(entries(restarted)[0].confirmed?.revision, 3);
+  assert.deepEqual(entries(restarted)[0].content, newest.content);
+});
+
+test('an editor retains its original base when refresh receives a newer remote revision', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); await engine.sync(w.owner);
+  const opened = structuredClone(entries(engine)[0]);
+  w.remote([{ ...opened.confirmed!, revision: 2, content: { ...w.content, place: 'New remote place' } }]);
+  await engine.refresh(w.owner); assert.equal(entries(engine)[0].confirmed?.revision, 2);
+  await engine.save(w.draftId, { ...opened.content, description: 'Local editor note' }, opened.confirmed!.revision);
+  assert.equal(entries(engine)[0].command?.baseRevision, 1, 'Do not present stale editor content as based on the refreshed revision');
+  engine.lock(); const restarted = w.restart(); await restarted.open(w.owner);
+  assert.equal(entries(restarted)[0].command?.baseRevision, 1, 'The original base must be durable');
+});
+
+test('an open creation editor pauses automatic transmission until its final durable save', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  const firstCommand = entries(engine)[0].command?.commandId;
+  const release = engine.pauseForEditing(w.draftId);
+  await engine.sync(w.owner); assert.equal(w.calls.length, 0);
+  await engine.save(w.draftId, { ...w.content, description: 'Still editing the first offline draft' }, 0);
+  assert.equal(entries(engine)[0].command?.commandId, firstCommand);
+  release(); await engine.sync(w.owner);
+  assert.equal(entries(engine)[0].status, 'confirmed');
+  assert.equal(w.calls.length, 1); assert.equal(w.calls[0].content.description, 'Still editing the first offline draft');
+  assert.equal(w.calls[0].baseRevision, 0);
+});
+
+test('opening an editor wins over a pump selected in the same turn, but never unlocks an already attempted command', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  const pumping = engine.sync(w.owner);
+  const release = engine.pauseForEditing(w.draftId);
+  await pumping; assert.equal(w.calls.length, 0);
+  release();
+  let complete!: (result: SyncReply) => void;
+  w.respond(() => new Promise(resolve => { complete = resolve; }));
+  const sending = engine.sync(w.owner);
+  while (!complete) await new Promise(resolve => setImmediate(resolve));
+  assert.throws(() => engine.pauseForEditing(w.draftId), /rejected/);
+  complete({ status: 'confirmed', merged: false, draft: { draftId: w.draftId, revision: 1, content: w.content, updatedAt: '2026-11-12T12:00:00Z' } });
+  await sending; assert.equal(entries(engine)[0].status, 'confirmed');
+});
+
+test('an explicit permanent refusal permits a corrected new intent while uncertain outcomes remain immutable', async () => {
+  const w = world(), engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  w.respond(async () => { throw new DraftFailure('rejected'); }); await engine.sync(w.owner);
+  const refused = entries(engine)[0].command!;
+  await engine.save(w.draftId, { ...w.content, place: 'Corrected by the customer' }, 0);
+  assert.notEqual(entries(engine)[0].command?.commandId, refused.commandId);
+  assert.equal(entries(engine)[0].command?.baseRevision, refused.baseRevision);
+  w.respond(async () => { throw new DraftFailure('invalid_response'); }); await engine.sync(w.owner);
+  await assert.rejects(engine.save(w.draftId, w.content, 0));
+});
+
+test('offline edits survive restart and a lost acknowledgement retries the exact immutable command', async () => {
+  const w = world(); let engine = w.restart(); await engine.open(w.owner);
+  await engine.save(w.draftId, w.content, 0); const unsentId = entries(engine)[0].command?.commandId;
+  await engine.save(w.draftId, { ...w.content, place: 'Saved offline' }, 0);
+  assert.equal(entries(engine)[0].command?.commandId, unsentId, 'editing an unsent draft retains its pending action identity');
+  assert.equal(w.calls.length, 0); engine.lock(); engine = w.restart(); await engine.open(w.owner);
+  w.respond(async () => { throw new DraftFailure('unavailable'); });
+  await engine.sync(w.owner); assert.equal(entries(engine)[0].status, 'failed');
+  await assert.rejects(engine.save(w.draftId, w.content, 0));
+  const sent = w.calls[0]; engine.lock(); engine = w.restart(); await engine.open(w.owner);
+  w.respond(async command => ({ status: 'confirmed', merged: false, draft: { draftId: w.draftId, content: command.content, revision: 1, updatedAt: '2026-11-12T12:00:00Z' } }));
+  await engine.sync(w.owner); assert.deepEqual(w.calls[1], sent); assert.equal(entries(engine)[0].status, 'confirmed');
+  assert.equal(entries(engine)[0].command, null); assert.equal(entries(engine)[0].content.place, 'Saved offline');
+  await engine.sync(w.owner); assert.equal(w.calls.length, 2);
+});
+
+test('an explicit conflict choice survives restart and an uncertain response without losing either version', async () => {
+  const w = world(); let engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  const base: DraftVersion = { draftId: w.draftId, revision: 1, content: w.content, updatedAt: '2026-11-12T12:00:00Z' };
+  w.respond(async command => ({ status: 'conflict', conflict: { conflictId: command.commandId, draftId: w.draftId, base,
+    server: { ...base, revision: 2, content: { ...w.content, description: 'Server note' } }, local: command.content, fields: ['description'], policy: 'claim-draft.fields.v1' } }));
+  await engine.sync(w.owner); const conflict = entries(engine)[0].conflict;
+  engine.lock(); engine = w.restart(); await engine.open(w.owner); assert.deepEqual(entries(engine)[0].conflict, conflict);
+  await engine.resolve(w.draftId, 'server'); const choice = entries(engine)[0].command;
+  await assert.rejects(engine.save(w.draftId, w.content, 0), 'an offline pending choice cannot be replaced before server validation');
+  engine.lock(); engine = w.restart(); await engine.open(w.owner); assert.deepEqual(entries(engine)[0].command, choice);
+  w.respond(async () => { throw new DraftFailure('unavailable'); }); await engine.sync(w.owner);
+  await engine.retry(w.draftId); await engine.sync(w.owner);
+  assert.deepEqual(w.calls.at(-1), choice); assert.deepEqual(entries(engine)[0].conflict, conflict);
+});
+
+test('account isolation and locking during a request prevent a late result from exposing the old owner', async () => {
+  const w = world(); const engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  await engine.sync({ clientId: randomUUID(), subjectToken: randomUUID() }); assert.equal(w.calls.length, 0);
+  let release!: (reply: SyncReply) => void; w.respond(() => new Promise(resolve => { release = resolve; }));
+  const running = engine.sync(w.owner); while (!release) await new Promise(resolve => setImmediate(resolve));
+  engine.lock(); release({ status: 'confirmed', merged: false, draft: { draftId: w.draftId, revision: 1, content: w.content, updatedAt: '2026-11-12T12:00:00Z' } });
+  await running; assert.equal(engine.getSnapshot().status, 'locked');
+  const other = w.restart(); await other.open({ clientId: randomUUID(), subjectToken: randomUUID() }); assert.equal(other.getSnapshot().status, 'failed');
+  const restarted = w.restart(); await restarted.open(w.owner); assert.equal(entries(restarted)[0].status, 'pending');
+  assert.deepEqual(entries(restarted)[0].command, w.calls[0]);
+});
+
+test('a failed durable sending transition never transmits, and a failed acknowledgement commit keeps the command', async () => {
+  const w = world(); let engine = w.restart(); await engine.open(w.owner); await engine.save(w.draftId, w.content, 0);
+  w.custody.state.silentWrite = true; await engine.sync(w.owner); assert.equal(w.calls.length, 0);
+  w.custody.state.silentWrite = false;
+  w.respond(async command => { w.custody.state.silentWrite = true; return { status: 'confirmed', merged: false,
+    draft: { draftId: w.draftId, revision: 1, content: command.content, updatedAt: '2026-11-12T12:00:00Z' } }; });
+  await engine.sync(w.owner); assert.ok(entries(engine)[0].command); assert.notEqual(entries(engine)[0].status, 'confirmed');
+  w.custody.state.silentWrite = false; engine.lock(); engine = w.restart(); await engine.open(w.owner);
+  assert.deepEqual(entries(engine)[0].command, w.calls[0]);
+});

@@ -4,6 +4,6 @@ import { ClaimReportScreen } from '@/features/claim-report/presentation/ClaimRep
 
 // The policy id is optional: without it the screen asks which policy the report is about.
 export default function ClaimReportRoute() {
-  const { policyId } = useLocalSearchParams<{ policyId?: string }>();
-  return <ClaimReportScreen policyId={typeof policyId === 'string' ? policyId : undefined} />;
+  const { policyId, draftId } = useLocalSearchParams<{ policyId?: string; draftId?: string }>();
+  return <ClaimReportScreen policyId={typeof policyId === 'string' ? policyId : undefined} draftId={typeof draftId === 'string' ? draftId : undefined} />;
 }
