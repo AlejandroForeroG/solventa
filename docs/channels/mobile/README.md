@@ -333,7 +333,7 @@ The app must decode the image before enabling **Adjuntar documento**. The previe
 
 - The event types (collision, theft, damage, other) are provisional values taken from the approved prototype, and no per-product list exists yet. The restriction to mortgage life is applied by the app; the server accepts a report on any issued policy.
 - Reporting from the web and the status view are separate work.
-- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers document confirmation, refusal and cleanup, report limits, declarations, retries and API refusals. On Android and iOS, test a camera grant and denial, selection of a synthetic document without camera access, preview and enlargement, corrupt image rejection, cancellation, and submission against a matching deployment. Confirm that the submitted case includes the document once. Native pickers, image rendering and native upload need a development build.
+- `tests/mobile-claim-report.test.ts`, part of `npm run test:mobile`, covers document confirmation, refusal and cleanup, the location choice, report limits, declarations, retries and API refusals. On Android and iOS, test a camera grant and denial, selection of a synthetic document without camera access, preview and enlargement, corrupt image rejection, cancellation, and submission against a matching deployment. Confirm that the submitted case includes the document once. Native pickers, image rendering and native upload need a development build.
 
 ## Protected local data
 
