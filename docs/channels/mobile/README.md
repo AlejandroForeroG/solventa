@@ -88,6 +88,8 @@ Revocation or expiry requires new explicit consent and an empty attempt. Pending
 
 The feature follows the existing card/theme and device language, requesting server consent in Spanish or English. Existing consent keeps its original wording/locale. See [Identity verification](../../modules/identity-consent-ecosystem/identity-verification.md) for API, migration, corpus, errors, concurrency, recovery and retention. The matching Identity migration/Worker must be available on the selected environment first; an older environment fails closed.
 
+Editable identity sections keep their options mounted during save and pending-retry states, preserving the form's layout while the request runs. Radio choices expose checked and disabled state, and both choices and Save remain disabled until the operation permits editing again. Closed attempts retain their read-only presentation.
+
 Run `npm run test:identity-verification`, `npm run test:mobile`, `npm run test:pact` and `npm run check`. Consumer tests execute the real client against Identity handlers with explicit WorkOS/SQL doubles. The SQL suite uses a real local database. Neither establishes native/deployed validation: execute consent, three selections, approval/failure, retained-step retry, assistance, revocation, resume, language and expired-session paths on the dev build before completion.
 
 ## Connecting native login

@@ -59,7 +59,8 @@ function VerificationFlow({ locale }: { locale: Locale }) {
         </>}
         {!inactive && verification && <>
           {verificationSteps.map(step => <StepSelection key={step} step={step} locale={locale} fixtures={state.fixtures.filter(item => item.step === step)}
-            saved={verification.steps.find(item => item.step === step)?.reference} disabled={!canEdit} onSave={fixture => void flow.save(step, fixture)} />)}
+            saved={verification.steps.find(item => item.step === step)?.reference} editable={verification.retryAllowed}
+            disabled={disabled} onSave={fixture => void flow.save(step, fixture)} />)}
           <Action label={copy.evaluate} disabled={!canEdit || verification.steps.length !== 3} onPress={() => void flow.evaluate()} />
           {(verification.assistanceAllowed || verification.assistance) && <>
             {verification.assistance ? <View style={styles.section}><Text style={styles.body}>{copy.assistance}</Text>
@@ -74,8 +75,8 @@ function VerificationFlow({ locale }: { locale: Locale }) {
     </ScrollView>
   </SafeAreaView>;
 }
-function StepSelection({ step, locale, fixtures, saved, disabled, onSave }: {
-  step: Step; locale: Locale; fixtures: Fixture[]; saved?: string; disabled: boolean; onSave: (fixture: Fixture) => void;
+function StepSelection({ step, locale, fixtures, saved, editable, disabled, onSave }: {
+  step: Step; locale: Locale; fixtures: Fixture[]; saved?: string; editable: boolean; disabled: boolean; onSave: (fixture: Fixture) => void;
 }) {
   const [selection, select] = useState<string>();
   const copy = verificationMessages[locale];
@@ -85,17 +86,18 @@ function StepSelection({ step, locale, fixtures, saved, disabled, onSave }: {
   return <View style={styles.section}>
     <Text accessibilityRole="header" style={styles.stepTitle}>{copy.steps[step]}</Text>
     {saved && <Text style={styles.caption}>{copy.saved}: {fixtures.find(item => item.reference === saved)?.labels[locale]}</Text>}
-    {!disabled && <>
+    {editable && <>
       <Text style={styles.caption}>{copy.choose}</Text>
-      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio" accessibilityState={{ checked: selection === fixture.reference }}
-        onPress={() => select(fixture.reference)} style={[styles.option, selection === fixture.reference && styles.selected]}>
+      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio"
+        accessibilityState={{ checked: selection === fixture.reference, disabled }} disabled={disabled}
+        onPress={() => select(fixture.reference)} style={[styles.option, selection === fixture.reference && styles.selected, disabled && styles.dimmed]}>
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.radio}>
           {selection === fixture.reference && <View style={styles.radioDot} />}
         </View>
         <Text style={[styles.body, styles.optionLabel]}>{fixture.labels[locale]}</Text>
       </Pressable>)}
       {asset && <Image source={asset} accessibilityLabel={selected!.labels[locale]} resizeMode="contain" style={styles.image} />}
-      <Action label={copy.save} secondary disabled={!selected} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
+      <Action label={copy.save} secondary disabled={disabled || !selected} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
     </>}
   </View>;
 }
