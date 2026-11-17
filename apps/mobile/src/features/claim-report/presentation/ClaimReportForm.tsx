@@ -51,7 +51,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
   return <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
-    {preparationNotice && <Text style={ui.notice}>{preparationNotice}</Text>}
+    {preparationNotice && step === 'capture' && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
         <Text style={ui.body}>{draft.eventType ? copy.eventTypes[draft.eventType] : copy.eventTypes.other}</Text>

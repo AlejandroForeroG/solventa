@@ -48,6 +48,7 @@ function VerificationFlow({ locale }: { locale: Locale }) {
           <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>
         </>}
         {inactive && state.terms && <>
+          <Text style={styles.caption}>{copy.termsHelp}</Text>
           <View style={styles.terms}>{state.terms.wording.split(/(?<=[.!?])\s+/).map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}</View>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted, disabled }} disabled={disabled}
             onPress={() => setAccepted(value => !value)} style={styles.checkbox}>

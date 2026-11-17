@@ -98,7 +98,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
     <Text style={ui.caption}>{copy.unsent}</Text>
     {(failure ?? snapshot.failure) && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[(failure ?? snapshot.failure)!]}</Text>}
     {requestedPolicy && <Action label={copy.create} onPress={() => beginEdit({ id: randomUUID(), content: emptyDraft(requestedPolicy), baseRevision: 0 })} />}
-    {!requestedPolicy && <><Action label={copy.choosePolicy} onPress={() => router.push('/wallet')} />
+    {!requestedPolicy && <><Action label={copy.choosePolicy} onPress={() => router.push('/choose-draft-policy')} />
       <Text style={ui.caption}>{copy.choosePolicyHint}</Text></>}
     {!snapshot.entries.length && (opening ? <ActivityIndicator accessibilityLabel={copy.loading} />
       : !(failure ?? snapshot.failure) && <Text style={ui.body}>{copy.empty}</Text>)}

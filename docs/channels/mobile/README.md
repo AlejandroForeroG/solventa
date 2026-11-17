@@ -21,6 +21,8 @@ The signed-in shell has five bottom tabs: Home, Wallet, Claims, Notices and Prof
 
 Home and Claims also link directly to Claim drafts. Tabs and home shortcuts use SDK-compatible Ionicons with consistent size and tint; their text remains the accessible navigation name. The active tint follows the shared theme rather than giving Claims a permanent active appearance.
 
+Bottom-tab labels occupy the item width and can wrap instead of truncating inside a cached intrinsic text width after a live font-scale change. The bar reserves two scaled text lines and the device's bottom safe area; it retains the operating system's text scaling. Check both the initial render and 1.0 → 1.3 → 1.0 while switching tabs, including preferences, rather than checking Home alone.
+
 Secondary routes share a 48 dp Back control with a localized name and the native stack's theme. Report, draft and identity screens keep one primary heading in their content instead of repeating it in the top bar. Claim-report review keeps its separate Edit action, and the draft editor's Back to drafts action returns within that workspace. Profile uses the same left-aligned heading and content width as the other account screens. Access screens retain their separate sign-in card.
 
 Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
@@ -52,7 +54,7 @@ The local `plugins/with-android-font-scale.cjs` config plugin adds `fontScale` t
 
 Open Claim drafts from Home, or Prepare claim draft from a policy detail, including its protected offline copy. Choose Create draft, edit partial event data/notes, select existing received evidence references while online, and save. The action list shows pending, sending, confirmed, a required conflict choice or a specific failure. Local save requires the device prompt and verified encrypted persistence. Saved actions resume after restart and automatically send when the app is active with connectivity and the same verified owner session. Background/closed delivery is not guaranteed; reopening resumes it. Review both differing values before choosing local or server in a conflict. The choice remains pending until the server confirms it.
 
-Opening drafts without a selected policy offers Choose a policy and a short instruction to open its wallet detail. It does not read protected policy data before the wallet's device prompt or create a draft with an invented policy. A selected policy retains the direct Create draft action.
+Opening drafts without a selected policy offers Choose a policy. The separate `/choose-draft-policy` screen retains the draft heading and purpose, opens the protected wallet behind its device prompt and lists eligible active policies. Choosing a record returns directly to the selected policy's draft workspace. This context does not remain on the ordinary Wallet tab. A selected policy retains the direct Create draft action.
 
 Cancelling the shared device prompt leaves the workspace locked and offers unlocking again. It does not report an unconfirmed save or alter custody. Both the offline owner lookup and the draft store translate the shared prompt's locked failure into the draft contract; actual storage failures remain distinct.
 
@@ -289,7 +291,7 @@ The wallet represents the products and data Solventa has: `vida_hipotecario` (su
 | Deductible and limits | Not shown: the two products have none |
 | Holder name and masked document number | Not shown and never stored: the policy model has only a pseudonymous subject |
 | Emergency contacts | Not shown: no source defines them. They need a product decision and a data owner |
-| Certificate PDF | Not cached in the native app. Online detail links to My policies on the web, where the owner can inspect/download the available server documents. Web authentication is separate; no native credential or policy data is placed in the URL |
+| Certificate PDF | Not cached in the native app. Online detail opens the selected policy's Documents tab in the web portal, which authorizes the owner read. The URL fragment carries only an opaque policy locator; credentials, amounts, documents and hashes stay out of it. Web sign-in remains separate; see [web document destinations](../web/README.md#my-policies) for bounded sign-in resumption |
 | Valid / expired filters | Not implemented: the list is sorted by end date and each item carries its state |
 | Pending actions queue and conflicts | Synchronization of actions and conflict resolution belong to other stories |
 

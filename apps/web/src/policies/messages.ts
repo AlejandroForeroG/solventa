@@ -1,4 +1,7 @@
 export const policiesEs = {
+  'policies.reference': 'Referencia de póliza', 'policies.fullReference': 'Referencia completa de la póliza',
+  'policies.documentSignIn': 'Inicia sesión para abrir los documentos de la póliza seleccionada.', 'policies.openingDocuments': 'Abriendo los documentos de tu póliza…',
+  'policies.destinationFailed': 'El navegador no pudo conservar la selección. Puedes iniciar sesión y buscar tu póliza.', 'policies.signInWithoutSelection': 'Iniciar sesión sin conservar la selección',
   'policies.contractLanguage': 'Las condiciones originales se muestran en español.',
   'policies.lifecycle.submit.cancelled': 'Cancelar póliza', 'policies.lifecycle.submit.modified': 'Modificar póliza', 'policies.lifecycle.submit.renewed': 'Renovar póliza',
   'policies.open': 'Mis pólizas', 'policies.title': 'Mis pólizas', 'policies.label': 'Pólizas emitidas',
@@ -6,7 +9,7 @@ export const policiesEs = {
   'policies.loading': 'Consultando tus pólizas…', 'policies.unavailable': 'No se pudo consultar tus pólizas.', 'policies.retry': 'Reintentar',
   'policies.empty': 'Aún no tienes pólizas emitidas.', 'policies.truncated': 'Se muestran las primeras 6 pólizas emitidas. Hay más que este portal aún no lista.', 'policies.quote': 'Cotizar un seguro', 'policies.back': 'Mis pólizas',
   'policies.notFound': 'No encontramos esta póliza.', 'policies.unauthenticated': 'La sesión venció. Inicia sesión de nuevo.',
-  'policies.product.vida_hipotecario': 'Vida hipotecario', 'policies.product.flight_delay': 'Retraso de vuelo', 'policies.product.weather_event': 'Lluvia intensa',
+  'policies.product.vida_hipotecario': 'Seguro de vida hipotecario', 'policies.product.flight_delay': 'Retraso de vuelo', 'policies.product.weather_event': 'Lluvia intensa',
   'policies.state.active': 'Vigente', 'policies.state.upcoming': 'Por iniciar', 'policies.state.expired': 'Vencida',
   'policies.validity': '{from} a {until}', 'policies.open.detail': 'Ver detalle de {product}',
   'policies.tabs': 'Secciones de la póliza', 'policies.tab.info': 'Información', 'policies.tab.documents': 'Documentos', 'policies.tab.history': 'Historial',
@@ -53,6 +56,9 @@ export const policiesEs = {
 };
 
 export const policiesEn: Record<keyof typeof policiesEs, string> = {
+  'policies.reference': 'Policy reference', 'policies.fullReference': 'Full policy reference',
+  'policies.documentSignIn': 'Sign in to open the selected policy documents.', 'policies.openingDocuments': 'Opening your policy documents…',
+  'policies.destinationFailed': 'Your browser could not keep the selection. You can sign in and find your policy.', 'policies.signInWithoutSelection': 'Sign in without keeping the selection',
   'policies.contractLanguage': 'The original policy conditions are displayed in Spanish.',
   'policies.lifecycle.submit.cancelled': 'Cancel policy', 'policies.lifecycle.submit.modified': 'Modify policy', 'policies.lifecycle.submit.renewed': 'Renew policy',
   'policies.open': 'My policies', 'policies.title': 'My policies', 'policies.label': 'Issued policies',

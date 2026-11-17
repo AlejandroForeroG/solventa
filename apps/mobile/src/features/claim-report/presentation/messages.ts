@@ -33,7 +33,7 @@ const es: Copy = {
     gallery: 'No pudimos abrir la galería. Reintenta la selección. Tus datos siguen en este formulario.' },
   title: 'Reportar siniestro', back: 'Volver', retry: 'Reintentar', cancel: 'Cancelar', step: step => `Paso ${step} de 3`,
   policy: { heading: 'Elige la póliza', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
-    none: 'No tienes pólizas de Vida hipotecario vigentes para reportar un siniestro.', partial: 'Solo revisamos tus 6 pólizas más recientes. Si la póliza que buscas es más antigua, aún no podemos mostrarla aquí.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
+    none: 'No tienes pólizas vigentes de seguro de vida hipotecario para reportar un siniestro.', partial: 'Solo revisamos tus 6 pólizas más recientes. Si la póliza que buscas es más antigua, aún no podemos mostrarla aquí.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Hurto', damage: 'Daño', other: 'Evento de la póliza' },
@@ -58,7 +58,7 @@ const es: Copy = {
     unavailable: 'No pudimos completar el envío. Tu reporte todavía no está radicado. Inténtalo de nuevo.', invalid_response: 'El servicio respondió algo inesperado. Inténtalo más tarde.' },
   done: { heading: 'Reporte recibido', caseNumber: 'Número de caso', filedAt: 'Radicado', evidence: 'Evidencia', once: 'Un solo caso: volver a enviar no crea otro.', home: 'Volver al inicio' },
   resuming: 'Verificando tu sesión…',
-  continue: 'Continuar', products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
+  continue: 'Continuar', products: { vida_hipotecario: 'Seguro de vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
 };
 
 const en: Copy = {

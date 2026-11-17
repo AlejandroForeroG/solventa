@@ -6,7 +6,7 @@ import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { brandAssets } from '@solventa/assets/web';
 import { ChannelShell } from './navigation/ChannelShell';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
 import type { SessionStatus } from './api/auth';
 import { useIntl } from 'react-intl';
@@ -20,6 +20,7 @@ import { Landing } from './landing/Landing';
 import { PublicQuoteFlow } from './quote/PublicQuoteFlow';
 import { clearEstimateDraft, readEstimateDraft, saveEstimateDraft } from './quote/estimate-draft';
 import { invalidEstimateFields } from './quote/estimate-api';
+import { clearPolicyDocumentDestination, policyDocumentDestination, policyDocumentPath, readPolicyDocumentDestination, savePolicyDocumentDestination } from './policies/document-destination';
 
 type Session = 'loading' | SessionStatus;
 
@@ -30,6 +31,9 @@ function Shell() {
   const [busy, setBusy] = useState(false);
   const [estimateDraft, setEstimateDraft] = useState(readEstimateDraft);
   const [loginStorageFailed, setLoginStorageFailed] = useState(false);
+  const [policyDestination, setPolicyDestination] = useState(() => policyDocumentDestination()
+    ?? (window.location.pathname === '/' ? readPolicyDocumentDestination() : null));
+  const [policyDestinationFailed, setPolicyDestinationFailed] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [view, setView] = useState<'flow' | 'privacy'>('flow');
   const [consentUpdates, setConsentUpdates] = useState<Record<string, Consent>>({});
@@ -45,7 +49,8 @@ function Shell() {
   const isAudit = window.location.pathname === '/auditoria';
   const isClaims = window.location.pathname === '/siniestros';
   const isProviders = window.location.pathname === '/prestadores';
-  const isPolicies = window.location.pathname === '/polizas';
+  const isPolicies = window.location.pathname === '/polizas'
+    || (window.location.pathname === '/' && session === 'authenticated' && policyDestination !== null);
   const isAdvisor = window.location.pathname === '/asesor';
   const isPartnerPortal = window.location.pathname === '/socios';
   const isConsole = isAdvisor || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
@@ -56,12 +61,26 @@ function Shell() {
     setSession(await fetchSession());
   }
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (window.location.pathname !== '/' && window.location.pathname !== '/polizas') clearPolicyDocumentDestination();
+  }, []);
   useEffect(() => { if (session === 'authenticated') clearEstimateDraft(); }, [session]);
   useEffect(() => {
-    if (session === 'loading') announce(intl.formatMessage({ id: 'session.loading' }));
-    if (session === 'unavailable') announce(intl.formatMessage({ id: 'session.unavailable' }));
+    if (session === 'authenticated' && policyDestination) {
+      if (window.location.pathname === '/') window.location.replace(policyDocumentPath(policyDestination));
+      else if (window.location.pathname === '/polizas') clearPolicyDocumentDestination();
+    }
+  }, [session, policyDestination]);
+  useEffect(() => {
+    if (session === 'loading' || session === 'unavailable') {
+      announce(intl.formatMessage({ id: session === 'loading' ? 'session.loading' : 'session.unavailable' }));
+      return () => announce('');
+    }
   }, [session, announce, intl]);
   async function logout() {
+    clearPolicyDocumentDestination();
+    setPolicyDestination(null);
+    if (isPolicies && window.location.hash) window.history.replaceState(null, '', '/polizas');
     clearEstimateDraft();
     clearPurchaseDraft();
     setEstimateDraft(null);
@@ -74,19 +93,27 @@ function Shell() {
     finally { setBusy(false); }
   }
   const t = (id: string) => intl.formatMessage({ id });
-  return <ChannelShell authenticated={session === 'authenticated'} canLogin={session === 'anonymous'} busy={busy} onLogout={() => void logout()} onLogin={event => {
+  function prepareLogin(event: MouseEvent<HTMLAnchorElement>) {
+    const destination = policyDocumentDestination();
+    if (destination && !savePolicyDocumentDestination(destination)) { event.preventDefault(); setPolicyDestinationFailed(true); return; }
+    if (!destination) clearPolicyDocumentDestination();
     if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
-  }}>
-    {isConsole ? (session === 'authenticated' && !busy
-      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+  }
+  return <ChannelShell authenticated={session === 'authenticated'} canLogin={session === 'anonymous'} busy={busy} onLogout={() => void logout()} onLogin={prepareLogin}>
+    {isPolicies && session === 'authenticated' && window.location.pathname === '/'
+      ? <main className="access-panel"><p role="status">{t('policies.openingDocuments')}</p></main>
+      : isConsole ? (session === 'authenticated' && !busy
+      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(sectionTitle)}</h1>
+        {isPolicies && policyDocumentDestination() && <p>{t('policies.documentSignIn')}</p>}
+        {policyDestinationFailed && <div role="alert"><p>{t('policies.destinationFailed')}</p><a href="/auth/login" onClick={clearPolicyDocumentDestination}>{t('policies.signInWithoutSelection')}</a></div>}
         {sessionExpired && <p role="alert">{t('navigation.expired')}</p>}
         {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>
           : session === 'unavailable' ? <>
             <p role="alert">{t('session.unavailable')}</p>
             <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
-          </> : <a className="btn btn-primary" href="/auth/login">{t('session.title')}</a>}
+          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t('session.title')}</a>}
       </main>)
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>

@@ -71,8 +71,8 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
           if (value && !SEARCH.test(value)) { setSearchInvalid(true); return; }
           moveFocus.current = true; setSearchInvalid(false); setSearch(value.toLowerCase().startsWith('sin-') ? value.toUpperCase() : value.toLowerCase()); setBefore(undefined);
         }}>
-          <label htmlFor="claims-search" className="visually-hidden">{t('search')}</label>
-          <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} placeholder={t('search')} maxLength={64} autoComplete="off"
+          <label htmlFor="claims-search">{t('search')}</label>
+          <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} maxLength={64} autoComplete="off"
             aria-invalid={searchInvalid} aria-describedby={searchInvalid ? 'claims-search-error' : undefined} />
           <button className="btn btn-secondary" type="submit">{t('searchButton')}</button>
         </form>

@@ -4,7 +4,7 @@ import { useIntl } from 'react-intl';
 const Announce = createContext<(message: string) => void>(() => {});
 export const useAnnounce = () => useContext(Announce);
 
-// The only aria-live region in the application: every state change is announced here.
+// Journey announcements share this region; individual controls also expose their own status.
 export function LiveRegion({ children }: { children: ReactNode }) {
   const intl = useIntl();
   const locale = useRef(intl.locale);

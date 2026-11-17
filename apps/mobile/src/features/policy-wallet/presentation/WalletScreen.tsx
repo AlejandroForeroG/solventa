@@ -17,7 +17,7 @@ import { useNow } from './use-now';
 
 type Ready = Extract<WalletSnapshot, { status: 'ready' }>;
 
-export function WalletScreen() {
+export function WalletScreen({ draftSelection = false }: { draftSelection?: boolean } = {}) {
   const auth = useAuthentication();
   const locale: WalletLocale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   const copy = walletMessages[locale];
@@ -28,10 +28,10 @@ export function WalletScreen() {
   </SafeAreaView>;
   // A new owner or locale gets a new coordinator, so another account never sees the previous one's data.
   const key = access.mode === 'online' ? `${access.owner.clientId}:${access.owner.subjectToken}:${locale}` : `offline:${locale}`;
-  return <Wallet key={key} locale={locale} access={access} />;
+  return <Wallet key={key} locale={locale} access={access} draftSelection={draftSelection} />;
 }
 
-function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess }) {
+function Wallet({ locale, access, draftSelection }: { locale: WalletLocale; access: WalletAccess; draftSelection: boolean }) {
   const session = useAuthenticatedSession();
   const [wallet] = useState(() => createPolicyWallet(session.baseUrl, session, access.mode === 'online' ? access.owner : undefined));
   const state = useSyncExternalStore(wallet.subscribe, wallet.getSnapshot, wallet.getSnapshot);
@@ -49,7 +49,8 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.page}>
         {access.mode === 'offline' && <Action label={copy.back} secondary onPress={() => router.replace('/')} />}
-        <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{draftSelection ? copy.chooseDraftPolicy : copy.title}</Text>
+        {draftSelection && <Text style={styles.body}>{copy.chooseDraftHint}</Text>}
         {state.status === 'locked' && <Locked state={state} locale={locale} onUnlock={() => void wallet.unlock()} />}
         {state.status === 'loading' && <ActivityIndicator accessibilityLabel={copy.loading} color={theme.colors.primary} />}
         {state.status === 'failed' && <>
@@ -60,9 +61,15 @@ function Wallet({ locale, access }: { locale: WalletLocale; access: WalletAccess
           <SourceBanner state={state} locale={locale} unverified={access.mode === 'offline'} />
           {documentFailed && <Text accessibilityRole="alert" style={styles.notice}>{copy.documentFailed}</Text>}
           {policy ? <Detail policy={policy} state={state} locale={locale} now={now} onBack={() => select(undefined)} onOpenDocuments={() => {
-            setDocumentFailed(false); void Linking.openURL(new URL('/polizas', session.baseUrl).toString()).catch(() => setDocumentFailed(true));
+            setDocumentFailed(false);
+            const destination = new URL('/polizas', session.baseUrl);
+            destination.hash = new URLSearchParams({ policy: policy.policyId, section: 'documents' }).toString();
+            void Linking.openURL(destination.toString()).catch(() => setDocumentFailed(true));
           }} />
-            : <List state={state} locale={locale} now={now} onOpen={select} />}
+            : <List state={state} locale={locale} now={now} draftSelection={draftSelection} onOpen={policyId => {
+              if (draftSelection) router.replace({ pathname: '/claim-drafts', params: { policyId } });
+              else select(policyId);
+            }} />}
           {!policy && <Action label={copy.refresh} secondary onPress={() => void wallet.refresh()} />}
         </>}
       </View>
@@ -92,20 +99,21 @@ function SourceBanner({ state, locale, unverified }: { state: Ready; locale: Wal
   </View>;
 }
 
-function List({ state, locale, now, onOpen }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void }) {
+function List({ state, locale, now, onOpen, draftSelection }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void; draftSelection: boolean }) {
   const copy = walletMessages[locale];
   const [filter, setFilter] = useState<keyof typeof copy.filters>('all');
-  if (state.policies.length === 0) return <Text style={styles.body}>{copy.empty}</Text>;
-  const sorted = state.policies.filter(policy => filter === 'all' || validityAt(policy, now) === filter)
+  const available = draftSelection ? state.policies.filter(policy => isReportableProduct(policy.product) && validityAt(policy, now) === 'active') : state.policies;
+  if (available.length === 0) return <Text style={styles.body}>{draftSelection ? copy.noDraftPolicies : copy.empty}</Text>;
+  const sorted = available.filter(policy => draftSelection || filter === 'all' || validityAt(policy, now) === filter)
     .sort((a, b) => Date.parse(b.effectiveUntil) - Date.parse(a.effectiveUntil));
   return <View style={styles.section}>
-    <View style={styles.filters}>
+    {!draftSelection && <View style={styles.filters}>
       {(['active', 'expired', 'all'] as const).map(value => <Pressable key={value} accessibilityRole="button"
         accessibilityState={{ selected: value === filter }} onPress={() => setFilter(value)}
         style={[styles.filter, value === filter && styles.filterSelected]}>
         <Text style={[styles.filterText, value === filter && styles.filterTextSelected]}>{copy.filters[value]}</Text>
       </Pressable>)}
-    </View>
+    </View>}
     {sorted.length === 0 && <Text style={styles.body}>{copy.emptyFilter}</Text>}
     {sorted.map(policy => {
       const validity = validityAt(policy, now);

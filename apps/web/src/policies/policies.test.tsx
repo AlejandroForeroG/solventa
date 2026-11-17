@@ -31,9 +31,26 @@ function serve(routes: Record<string, () => Response | Promise<Response>>) {
   return fetch;
 }
 beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-09T12:00:00Z')); });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); window.history.replaceState(null, '', '/'); });
 
 describe('my policies', () => {
+  it('opens the requested documents through the authorized detail route without selecting the policy again', async () => {
+    window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=documents');
+    const fetch = serve({ [`/api/v1/policies/${policyId}/detail`]: () => json(detail), '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }) });
+    show();
+    expect(await screen.findByRole('tab', { name: 'Documentos', selected: true })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Descargar PDF: Póliza firmada' })).toBeVisible();
+    expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/policies/${policyId}/detail`, expect.objectContaining({ method: 'GET', cache: 'no-store' }));
+    expect(screen.queryByRole('heading', { name: 'Mis pólizas' })).toBeNull();
+  });
+  it('does not reveal a requested policy when the owner read refuses it', async () => {
+    window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=documents');
+    serve({ [`/api/v1/policies/${policyId}/detail`]: () => json({ error: 'not_found' }, 404) });
+    show();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No encontramos esta póliza.');
+    expect(screen.queryByRole('tab', { name: 'Documentos' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Descargar PDF: Póliza firmada' })).toBeNull();
+  });
   it('lists the issued policies with product, status, validity and premium, and opens one', async () => {
     const fetch = serve({ '/api/v1/policies/issued': () => json({ policies: [summary, flight], hasMore: false }), [`/api/v1/policies/${policyId}/detail`]: () => json(detail) });
     show(); const user = userEvent.setup();
@@ -41,13 +58,13 @@ describe('my policies', () => {
     expect(fetch).toHaveBeenCalledWith('/api/v1/policies/issued', expect.objectContaining({ method: 'GET', cache: 'no-store' }));
     const cards = screen.getAllByRole('button', { name: /^Ver detalle de/ });
     expect(cards).toHaveLength(2);
-    expect(within(cards[0]).getByText('Vida hipotecario')).toBeVisible();
+    expect(within(cards[0]).getByText('Seguro de vida hipotecario')).toBeVisible();
     expect(within(cards[0]).getByText('Vigente')).toBeVisible();
     expect(within(cards[0]).getByText(/86\.400/)).toBeVisible();
     expect(within(cards[1]).getByText('Retraso de vuelo')).toBeVisible();
     await user.click(cards[0]);
     expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Vida hipotecario' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Seguro de vida hipotecario' })).toHaveFocus();
   });
 
   it('tells the customer when there are more issued policies than the list shows', async () => {

@@ -10,7 +10,7 @@ export const auditEs = {
 
   'audit.all': 'Todos', 'audit.search': 'Buscar', 'audit.reset': 'Limpiar', 'audit.next': 'Siguientes', 'audit.back': 'Volver a decisiones',
 
-  'audit.accepted': 'Aceptada', 'audit.declined': 'Rechazada', 'audit.preliminary': 'Preliminar', 'audit.vida_hipotecario': 'Vida hipotecaria', 'audit.flight_delay': 'Retraso de vuelo',
+  'audit.accepted': 'Aceptada', 'audit.declined': 'Rechazada', 'audit.preliminary': 'Preliminar', 'audit.vida_hipotecario': 'Seguro de vida hipotecario', 'audit.flight_delay': 'Retraso de vuelo',
 
   'audit.decision': 'Decisión', 'audit.date': 'Fecha (Bogotá)', 'audit.rule': 'Regla aplicada', 'audit.version': 'Versión', 'audit.quote': 'Cotización', 'audit.trace': 'Correlación',
 

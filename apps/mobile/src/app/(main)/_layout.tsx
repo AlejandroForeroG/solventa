@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import { useNavigationMessages } from '@/features/navigation/presentation/navigation-messages';
@@ -10,15 +11,20 @@ import { theme } from '@/theme';
 export default function MainLayout() {
   const auth = useAuthentication();
   const copy = useNavigationMessages();
+  const { fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   return <Tabs screenOptions={{
     headerShown: false,
     sceneStyle: styles.scene,
-    tabBarStyle: auth.status === 'authenticated' ? styles.bar : styles.hidden,
+    tabBarStyle: auth.status === 'authenticated' ? [styles.bar, {
+      height: Math.max(64, 36 + 30 * fontScale) + insets.bottom,
+      paddingBottom: 6 + insets.bottom,
+    }] : styles.hidden,
     tabBarActiveTintColor: theme.colors.primaryDark,
     tabBarInactiveTintColor: theme.colors.muted,
     tabBarLabelPosition: 'below-icon',
-    tabBarLabelStyle: styles.label,
+    tabBarLabel: ({ color, children }) => <Text style={[styles.label, { color }]}>{children}</Text>,
     tabBarHideOnKeyboard: true,
   }}>
     <Tabs.Screen name="index" options={{ title: copy.home, tabBarIcon: icons.home }} />
@@ -42,5 +48,5 @@ const styles = StyleSheet.create({
   scene: { backgroundColor: theme.colors.background },
   bar: { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border, minHeight: 64, paddingTop: 6, paddingBottom: 6 },
   hidden: { display: 'none' },
-  label: { fontSize: 11, fontWeight: '600' },
+  label: { alignSelf: 'stretch', width: '100%', textAlign: 'center', fontSize: 11, lineHeight: 15, fontWeight: '600' },
 });

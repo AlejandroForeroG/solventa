@@ -34,7 +34,7 @@ export default function RootLayout() {
           headerTintColor: theme.colors.foreground,
           headerShadowVisible: false,
         }} />
-        {([['claim-report', copy.actions.reportClaim], ['claim-drafts', copy.actions.drafts], ['identity-verification', copy.actions.verifyIdentity]] as const).map(([name, title]) =>
+        {([['claim-report', copy.actions.reportClaim], ['claim-drafts', copy.actions.drafts], ['choose-draft-policy', copy.actions.drafts], ['identity-verification', copy.actions.verifyIdentity]] as const).map(([name, title]) =>
           <Stack.Screen key={name} name={name} options={{ headerShown: true, title, headerTitle: '', headerBackButtonDisplayMode: 'minimal',
             headerStyle: { backgroundColor: theme.colors.background }, headerTintColor: theme.colors.foreground, headerShadowVisible: false }} />)}
       </Stack>

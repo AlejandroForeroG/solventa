@@ -145,13 +145,14 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
         <span className="pill pill-ok">{t('issued.badge')}</span>
       </div>
       <dl className="facts">
-        <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
+        <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
         <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
         <div><dt>{t('issued.start')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveFrom))}</dd></div>
         <div><dt>{t('issued.end')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveUntil))}</dd></div>
       </dl>
-      <h2 className="section-label">{t('issued.proof')}</h2>
-      <p className="trace mono">{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+      <details className="document-verification"><summary>{t('issued.proof')}</summary>
+        <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+      </details>
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>

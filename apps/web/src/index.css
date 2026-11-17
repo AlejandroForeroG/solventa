@@ -94,7 +94,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .pill { display: inline-flex; align-items: center; height: fit-content; padding: 6px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .pill-ok { background: #e6f3ec; color: #175c3a; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 20px; margin: 0 0 20px; padding: 20px; background: #faf9f7; border: 1px solid #edebe6; border-radius: 12px; }
-.facts dt { font-size: 12.5px; color: #6b7583; }
+.facts dt { font-size: 14px; color: #485563; }
 .facts dd { margin: 4px 0 0; }
 .premium-value { font: 700 32px 'Space Grotesk', sans-serif; letter-spacing: -.03em; color: #12151a; }
 .mono-value { font: 500 17px 'IBM Plex Mono', ui-monospace, monospace; color: #12151a; }
@@ -104,14 +104,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .document-fields { display: grid; gap: 0; margin: 0; }
 .document-fields > div { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 1.5fr); gap: 18px; padding: 14px 0; border-bottom: 1px solid #e3e1dc; }
 .document-fields > div:last-child { border-bottom: 0; }
-.document-fields dt { color: #3a424e; font-size: 13px; line-height: 1.5; }
+.document-fields dt { color: #3a424e; font-size: 14px; line-height: 1.5; }
 .document-fields dd { margin: 0; color: #12151a; font-size: 14px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; }
 .document-fields > .document-fields-group { display: block; }
 .document-fields-group > dt { margin-bottom: 4px; font-weight: 600; color: #062f2a; }
 .document-fields-group .document-fields { padding-left: 14px; border-left: 2px solid #e4f1ee; }
 .document-verification { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e3e1dc; }
-.document-verification summary { padding: 8px 0; cursor: pointer; color: #0b6b5f; font-size: 13px; font-weight: 600; }
-.document-verification .document-fields dd { font: 400 13px/1.7 'IBM Plex Mono', ui-monospace, monospace; }
+.document-verification summary { display: list-item; min-height: 44px; padding: 10px 0; cursor: pointer; color: #0b6b5f; font-size: 14px; font-weight: 600; }
+.document-verification .document-fields dd { font: 400 14px/1.7 'IBM Plex Mono', ui-monospace, monospace; }
 .document-verification summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 3px; }
 
 .card-error { padding: 0; overflow: hidden; }

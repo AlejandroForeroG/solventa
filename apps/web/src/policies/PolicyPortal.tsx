@@ -5,6 +5,7 @@ import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, ty
 import './policies.css';
 import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
+import { policyDocumentDestination, type PolicyDocumentDestination } from './document-destination';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -73,7 +74,7 @@ function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void;
       const status = policyState(policy, now), product = t(`product.${policy.product}`);
       return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={t('open.detail', { product }) + ' · ' + policy.policyId.slice(0, 8)} onClick={() => onOpen(policy.policyId)}>
         <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
-        <span className="mono policy-id">{policy.policyId}</span>
+        <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
         <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
       </button></li>;
     })}</ul> : <div className="card policy-empty"><p>{t('empty')}</p><a className="btn btn-primary" href="/cotizar">{t('quote')}</a></div>)}
@@ -166,10 +167,10 @@ function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
     onClick={() => onChange(name)} onKeyDown={event => move(event, name)}>{t(`tab.${name}`)}</button>)}</div>;
 }
 
-function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: string; onBack(): void; onSessionLost(): void }) {
+function PolicyDetailView({ policyId, initialTab = 'info', onBack, onSessionLost }: { policyId: string; initialTab?: Tab; onBack(): void; onSessionLost(): void }) {
   const t = useTranslate();
   const heading = useHeading();
-  const [tab, setTab] = useState<Tab>('info');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const load = useCallback((signal: AbortSignal) => readPolicyDetail(policyId, signal), [policyId]);
   const { state, retry } = useLoad(load, onSessionLost);
   const [now] = useState(Date.now);
@@ -182,7 +183,8 @@ function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: strin
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
     {policy && status && <>
-      <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">{policy.policyId}</span></p>
+      <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></p>
+      <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>
       <Tabs tab={tab} onChange={setTab} />
       <div role="tabpanel" id={`policy-panel-${tab}`} aria-labelledby={`policy-tab-${tab}`}>
         {tab === 'info' && <Coverage policy={policy} />}
@@ -195,8 +197,11 @@ function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: strin
   </main>;
 }
 
-export function PolicyPortal({ onSessionLost }: { onSessionLost(): void }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  return selected ? <PolicyDetailView policyId={selected} onBack={() => setSelected(null)} onSessionLost={onSessionLost} />
+export function PolicyPortal({ onSessionLost, documentDestination }: { onSessionLost(): void; documentDestination?: PolicyDocumentDestination | null }) {
+  const [destination] = useState(() => documentDestination ?? policyDocumentDestination());
+  const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
+  return selected ? <PolicyDetailView policyId={selected} initialTab={selected === destination?.policyId ? 'documents' : 'info'} onBack={() => {
+    window.history.replaceState(null, '', '/polizas'); setSelected(null);
+  }} onSessionLost={onSessionLost} />
     : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} />;
 }

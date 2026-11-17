@@ -62,11 +62,12 @@ describe('audit route in the application', () => {
       return json(auditExamples.page);
     });
     render(<App />); const user = userEvent.setup();
-    await screen.findByRole('button', { name: auditExamples.detail.decision.decisionId });
+    const decisionLabel = `Decisión: ${auditExamples.detail.decision.quoteId ?? auditExamples.detail.decision.decisionId}`;
+    await screen.findByRole('button', { name: decisionLabel });
     await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
-    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
     await act(async () => failLogout());
-    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
   });
 });
@@ -91,6 +92,7 @@ describe('claims inbox route in the application', () => {
     });
     render(<App />); const user = userEvent.setup();
     expect(await screen.findByRole('table', { name: 'Bandeja de siniestros' })).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId('live-region')).toBeEmptyDOMElement());
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
     await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
@@ -115,7 +117,7 @@ describe('my policies route in the application', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true })
       : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' }));
     render(<App />);
-    expect(await screen.findByRole('button', { name: /^Ver detalle de Vida hipotecario/ })).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('href', '/polizas');
   });
 });

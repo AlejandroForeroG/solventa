@@ -1,6 +1,8 @@
 export type WalletLocale = 'es-CO' | 'en-US';
 
 const es = {
+  chooseDraftPolicy: 'Elige la póliza del borrador', chooseDraftHint: 'Selecciona una póliza vigente para preparar o continuar un borrador.',
+  noDraftPolicies: 'No hay pólizas vigentes disponibles para preparar un borrador.',
   title: 'Mis pólizas', back: 'Volver', backToList: 'Volver a mis pólizas', retry: 'Reintentar', refresh: 'Actualizar', unlock: 'Desbloquear',
   signedOut: 'Inicia sesión para ver tus pólizas.',
   locked: { title: 'Desbloquea para ver tu billetera',
@@ -22,18 +24,20 @@ const es = {
     invalid_response: 'El servicio respondió algo inesperado. Intenta más tarde.',
     integrity: 'Una de tus pólizas no pasó la verificación de integridad. No mostramos datos guardados. Intenta más tarde.',
     discard_pending: 'Tu sesión ya fue cerrada y falta borrar los datos guardados en este dispositivo. No los mostramos. Intenta de nuevo.' },
-  products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
+  products: { vida_hipotecario: 'Seguro de vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
   validity: { upcoming: 'Por iniciar', active: 'Vigente', expired: 'Vencida' },
-  fields: { reference: 'Póliza', validity: 'Vigencia', premium: 'Prima', until: 'Vence', status: 'Estado', product: 'Producto' },
+  fields: { reference: 'Póliza', validity: 'Vigencia', premium: 'Prima (pago único)', until: 'Vence', status: 'Estado', product: 'Producto' },
   credential: 'Credencial de asegurado', coverage: 'Coberturas',
   coverages: { mortgage_life: 'Vida deudor hipotecario', sumInsured: 'Suma asegurada', flight_delay: 'Retraso de vuelo',
     threshold: 'Retraso mínimo', minutes: 'min', payout: 'Pago', flight: 'Vuelo', rainThreshold: 'Lluvia mínima en 24 h', station: 'Estación' },
-  document: 'Los documentos se consultan en Mis pólizas de la web. Necesitas conexión y una sesión web.',
-  openDocuments: 'Abrir Mis pólizas en la web', documentFailed: 'No pudimos abrir el navegador. Intenta de nuevo.',
+  document: 'Abre los documentos de esta póliza en la web. Necesitas conexión e iniciar sesión si el navegador te lo pide.',
+  openDocuments: 'Ver documentos de esta póliza', documentFailed: 'No pudimos abrir el navegador. Intenta de nuevo.',
   reportClaim: 'Reportar siniestro', saveDraft: 'Preparar borrador de siniestro',
 };
 
 const en: typeof es = {
+  chooseDraftPolicy: 'Choose the policy for your draft', chooseDraftHint: 'Select an active policy to prepare or continue a draft.',
+  noDraftPolicies: 'No active policies are available for a draft.',
   title: 'My policies', back: 'Back', backToList: 'Back to my policies', retry: 'Retry', refresh: 'Refresh', unlock: 'Unlock',
   signedOut: 'Sign in to see your policies.',
   locked: { title: 'Unlock to see your wallet',
@@ -57,12 +61,12 @@ const en: typeof es = {
     discard_pending: 'Your session has ended and the data saved on this device still has to be removed. We are not showing it. Try again.' },
   products: { vida_hipotecario: 'Mortgage life', flight_delay: 'Flight delay', weather_event: 'Heavy rain' },
   validity: { upcoming: 'Starts soon', active: 'Active', expired: 'Expired' },
-  fields: { reference: 'Policy', validity: 'Validity', premium: 'Premium', until: 'Expires', status: 'Status', product: 'Product' },
+  fields: { reference: 'Policy', validity: 'Validity', premium: 'Premium (single payment)', until: 'Expires', status: 'Status', product: 'Product' },
   credential: 'Insured credential', coverage: 'Coverage',
   coverages: { mortgage_life: 'Mortgage debtor life', sumInsured: 'Sum insured', flight_delay: 'Flight delay',
     threshold: 'Minimum delay', minutes: 'min', payout: 'Payout', flight: 'Flight', rainThreshold: 'Minimum rainfall in 24 h', station: 'Station' },
-  document: 'View documents in My policies on the web. You need a connection and a web session.',
-  openDocuments: 'Open My policies on the web', documentFailed: 'We could not open your browser. Try again.',
+  document: 'Open this policy’s documents on the web. You need a connection and must sign in if your browser asks.',
+  openDocuments: 'View this policy’s documents', documentFailed: 'We could not open your browser. Try again.',
   reportClaim: 'Report a claim', saveDraft: 'Prepare a claim draft',
 };
 
