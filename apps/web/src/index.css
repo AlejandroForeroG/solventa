@@ -223,7 +223,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .status-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; font: 700 16px 'IBM Plex Mono', ui-monospace, monospace; }
 .status-icon-ok { background: #e6f3ec; color: #1f7a4d; }
 .status-icon-pending { background: #fbf0dc; color: #9a6206; }
-.facts-pairs { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.facts-pairs { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.facts-pairs > div { min-width: 0; }
 .trace + .note { margin-top: 12px; }
 .charge-key { color: #0b6b5f; overflow-wrap: anywhere; }
 .btn-primary[aria-disabled='true'], .btn-primary[aria-disabled='true']:hover { background: #edebe6; color: #6b7583; border-color: #edebe6; cursor: wait; }
