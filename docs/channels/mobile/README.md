@@ -25,7 +25,7 @@ Bottom-tab labels occupy the item width and can wrap instead of truncating insid
 
 Secondary routes share a 48 dp Back control with a localized name and the native stack's theme. Report, draft and identity screens keep one primary heading in their content instead of repeating it in the top bar. Claim-report review keeps its separate Edit action, and the draft editor's Back to drafts action returns within that workspace. Profile uses the same left-aligned heading and content width as the other account screens. Access screens retain their separate sign-in card.
 
-Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
+Wallet unmounts its content when its tab loses focus. Returning to Wallet starts a new device authentication prompt. An unsuccessful or cancelled unlock keeps it locked and asks to unlock the device; it does not report a failure of the separate identity-verification journey. Its Active, Expired and All filters apply to the policies already returned by the server or read from the authorized offline copy. Policies whose coverage has not started appear under All. The offline recovery entry remains on Home when the server cannot verify the session.
 
 ## Development
 
@@ -48,7 +48,7 @@ npm run build --workspace @solventa/mobile
 
 The current build exports for web. For native capability changes, validate the flow on a device/emulator; see [testing](../../testing.md).
 
-The local `plugins/with-android-font-scale.cjs` config plugin adds `fontScale` to the generated main Activity's existing configuration changes. React Native receives the configuration callback and scales text without destroying the live Activity and its media-picker registrations. Regenerate Android through `npx expo prebuild --platform android --no-install` and rebuild after changing this plugin; do not edit the generated manifest. Native verification must change the system font size while the app is open, check that content still scales, return to the default size and open the photo picker without restarting the process. Unit tests and web export do not establish that behavior.
+The local `plugins/with-android-font-scale.cjs` config plugin adds `fontScale` to the generated main Activity's existing configuration changes. React Native receives the configuration callback and scales text without destroying the live Activity and its media-picker registrations; it refreshes the JavaScript dimension metrics when the Activity resumes. Regenerate Android through `npx expo prebuild --platform android --no-install` and rebuild after changing this plugin; do not edit the generated manifest. Native verification must change the system font size while the app is open, check that content still scales, return from the system-settings/background lifecycle, switch tabs, return to the default size and open the photo picker without restarting the process. A foreground-only ADB setting change does not supply that resume event. Unit tests and web export do not establish that behavior.
 
 ## Offline claim drafts
 
