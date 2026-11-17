@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -15,6 +15,31 @@ const lost = vi.fn();
 const show = (english = false) => render(<I18n initial={english ? 'en-US' : 'es-CO'}><AuditWorkspace onSessionLost={lost} /></I18n>);
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); });
 describe('protected underwriting audit workspace', () => {
+  it('reveals retained results in groups without skipping records or changing the server cursor', async () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({ ...examples.page.items[0],
+      decisionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      quoteId: `COT-2026-${String(index + 1).padStart(5, '0')}` }));
+    const next = '00000000-0000-4000-8000-000000009999';
+    const fetch = vi.fn().mockImplementation(async () => response({ items, next, traceId }));
+    vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
+    await screen.findByRole('button', { name: 'Decisión: COT-2026-00001' });
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(5);
+    expect(screen.getByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
+    const row = screen.getByRole('button', { name: 'Decisión: COT-2026-00001' }).closest('tr')!;
+    expect(within(row).getByText(items[0].decisionId)).not.toBeVisible();
+    await user.click(within(row).getByText('Referencia técnica'));
+    expect(within(row).getByText(items[0].decisionId)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(10);
+    expect(screen.getByRole('button', { name: 'Decisión: COT-2026-00006' })).toHaveFocus();
+    expect(fetch).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: 'Mostrar más decisiones' })).toBeNull();
+    await user.click(screen.getAllByRole('button', { name: 'Siguientes' })[0]);
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(`/api/v1/underwriting-decisions?before=${next}`, expect.anything()));
+    expect(await screen.findByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
+  });
   it('lists decisions, applies filters, opens captured facts and rule checks and returns to the list', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) => response(url.includes('/' + id) ? examples.detail : examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();

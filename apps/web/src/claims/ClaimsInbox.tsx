@@ -87,7 +87,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
           <thead><tr>{['claim', 'policy', 'state', 'age', 'amount', 'evidence', 'priority'].map(key => <th key={key} scope="col" className={key === 'amount' ? 'claims-amount' : undefined}>{t(`col.${key}`)}</th>)}</tr></thead>
           <tbody>{page.items.map(item => <tr key={item.claimId}>
             <td data-label={t('col.claim')} className="mono claims-number">{item.claimNumber}</td>
-            <td data-label={t('col.policy')} className="mono audit-id">{item.policyId}</td>
+            <td data-label={t('col.policy')} className="mono audit-id"><details className="claims-policy-reference"><summary aria-label={`${t('fullPolicyId')}: POL-${item.policyId.slice(0, 8).toUpperCase()}`}>POL-{item.policyId.slice(0, 8).toUpperCase()}</summary><span>{item.policyId}</span></details></td>
             <td data-label={t('col.state')}><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
             <td data-label={t('col.age')} className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
             <td data-label={t('col.amount')} className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>

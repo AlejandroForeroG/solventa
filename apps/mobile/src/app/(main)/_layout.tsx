@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import { useNavigationMessages } from '@/features/navigation/presentation/navigation-messages';
+import { LargeTextTabBar } from '@/features/navigation/presentation/LargeTextTabBar';
 import { theme } from '@/theme';
 
 export default function MainLayout() {
@@ -14,7 +15,7 @@ export default function MainLayout() {
   const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  return <Tabs screenOptions={{
+  return <Tabs tabBar={fontScale > 1.4 ? props => auth.status === 'authenticated' ? <LargeTextTabBar {...props} /> : null : undefined} screenOptions={{
     headerShown: false,
     sceneStyle: styles.scene,
     tabBarStyle: auth.status === 'authenticated' ? [styles.bar, {

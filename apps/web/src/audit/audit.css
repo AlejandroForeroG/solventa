@@ -72,3 +72,10 @@
 .audit-section-links a { display: inline-flex; align-items: center; min-height: 44px; color: #0b6b5f; font-size: 14px; text-underline-offset: 4px; }
 .audit-section:target { outline: 2px solid #0b6b5f; outline-offset: 3px; }
 .audit-pagination-top { margin: 0 0 16px; }
+.audit-reference-details { margin-top: 6px; font-family: 'IBM Plex Sans', sans-serif; }
+.audit-reference-details summary { display: list-item; min-height: 44px; padding: 10px 0; color: #0b6b5f; cursor: pointer; font-size: 14px; }
+.audit-reference-details summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.audit-reference-details > span { display: block; overflow-wrap: anywhere; }
+@container (max-width: 500px) {
+  .audit-section .audit-card-table tbody td { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}

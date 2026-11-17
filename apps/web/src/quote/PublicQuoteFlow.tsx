@@ -64,6 +64,7 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
               clearEstimateDraft();
               const next = { ...values, [key]: event.target.value };
               setValues(next);
+              setInvalid(current => current.includes(key) && !invalidEstimateFields(next).includes(key) ? current.filter(field => field !== key) : current);
               onValuesChange?.(next);
             }}
             aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : undefined} />

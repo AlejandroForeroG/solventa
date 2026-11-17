@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import type { QuoteValues } from './api';
-import { fieldOrder, type FieldKey, type FieldProblem } from './fields';
+import { type FieldKey, type FieldProblem } from './fields';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
 
 type Props = {
   values: QuoteValues;
   problems: FieldProblem[];
+  focusRequest: { field: FieldKey } | null;
   banner: 'none' | 'fields' | 'unavailable' | 'conflict';
   busy: boolean;
   onChange: (key: FieldKey, value: string) => void;
@@ -24,14 +25,13 @@ const inputs: Record<FieldKey, { label: string; type: string; inputMode?: 'numer
 
 const fieldId = (key: FieldKey) => `quote-${key}`;
 
-export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }: Props) {
+export function QuoteForm({ values, problems, focusRequest, banner, busy, onChange, onSubmit }: Props) {
   const intl = useIntl();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   useEffect(() => {
-    const first = fieldOrder.find(key => problems.some(p => p.key === key));
-    if (first) document.getElementById(fieldId(first))?.focus();
-  }, [problems]);
+    if (focusRequest) document.getElementById(fieldId(focusRequest.field))?.focus();
+  }, [focusRequest]);
 
   const field = (key: FieldKey) => {
     const problem = problems.find(p => p.key === key);

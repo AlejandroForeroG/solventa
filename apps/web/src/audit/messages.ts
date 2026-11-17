@@ -1,4 +1,6 @@
 export const auditEs = {
+  'audit.technicalReference': 'Referencia técnica', 'audit.sourceKey': 'Clave de la fuente',
+  'audit.showingPage': 'Mostrando {count} de {total} decisiones de esta página.', 'audit.showMore': 'Mostrar más decisiones',
   'audit.sections': 'Secciones de la decisión', 'audit.paginationTop': 'Paginación antes de los resultados',
   'audit.sourceName.income': 'Ingresos y obligaciones (12 meses)', 'audit.sourceName.payments': 'Historial de pagos y puntaje',
   'audit.sourceName.affiliation': 'Afiliación y régimen', 'audit.sourceName.identity': 'Validación de identidad',
@@ -52,6 +54,8 @@ export const auditEs = {
 };
 
 export const auditEn: Record<keyof typeof auditEs, string> = {
+  'audit.technicalReference': 'Technical reference', 'audit.sourceKey': 'Source key',
+  'audit.showingPage': 'Showing {count} of {total} decisions on this page.', 'audit.showMore': 'Show more decisions',
   'audit.sections': 'Decision sections', 'audit.paginationTop': 'Pagination before results',
   'audit.sourceName.income': 'Income and obligations (12 months)', 'audit.sourceName.payments': 'Payment history and score',
   'audit.sourceName.affiliation': 'Affiliation and regime', 'audit.sourceName.identity': 'Identity validation',

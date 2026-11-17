@@ -63,6 +63,30 @@ describe('step 1: form', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('updates corrected errors and their count without moving focus during editing', async () => {
+    const request = vi.fn();
+    const { user } = setup(request);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    const name = screen.getByLabelText(/Nombre completo/);
+    await user.type(name, 'Ana');
+    expect(name).toHaveFocus();
+    expect(name).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByText(/Revisa 5 campos marcados/)).toBeVisible();
+    const document = screen.getByLabelText(/Documento/);
+    await user.type(document, 'A');
+    expect(document).toHaveFocus();
+    expect(document).toHaveAccessibleDescription(/6 y 10/);
+    await fill(user, valid, es);
+    expect(screen.queryByText('No pudimos calcular la cotización.')).toBeNull();
+    for (const label of Object.values(es)) expect(screen.getByLabelText(label)).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText(/Plazo/)).toHaveFocus();
+    expect(request).not.toHaveBeenCalled();
+    await user.clear(name);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    expect(name).toHaveFocus();
+    expect(name).toHaveAccessibleDescription('Este campo es obligatorio.');
+  });
+
   it('maps a server 400 (age out of range) to the birth date field with the calculated age', async () => {
     const request = vi.fn().mockResolvedValue({ kind: 'validation', errors: [{ field: 'customer.birthDate', code: 'age_out_of_range', params: { age: 74, min: 18, max: 70 } }] });
     const { user } = setup(request);

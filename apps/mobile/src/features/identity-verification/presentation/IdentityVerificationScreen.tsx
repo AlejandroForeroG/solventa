@@ -87,9 +87,12 @@ function StepSelection({ step, locale, fixtures, saved, disabled, onSave }: {
     {saved && <Text style={styles.caption}>{copy.saved}: {fixtures.find(item => item.reference === saved)?.labels[locale]}</Text>}
     {!disabled && <>
       <Text style={styles.caption}>{copy.choose}</Text>
-      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio" accessibilityState={{ selected: selection === fixture.reference }}
+      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio" accessibilityState={{ checked: selection === fixture.reference }}
         onPress={() => select(fixture.reference)} style={[styles.option, selection === fixture.reference && styles.selected]}>
-        <Text style={styles.body}>{fixture.labels[locale]}</Text>
+        <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.radio}>
+          {selection === fixture.reference && <View style={styles.radioDot} />}
+        </View>
+        <Text style={[styles.body, styles.optionLabel]}>{fixture.labels[locale]}</Text>
       </Pressable>)}
       {asset && <Image source={asset} accessibilityLabel={selected!.labels[locale]} resizeMode="contain" style={styles.image} />}
       <Action label={copy.save} secondary disabled={!selected} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
@@ -111,7 +114,9 @@ const styles = StyleSheet.create({
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, color: theme.colors.primaryDark, fontSize: 14, lineHeight: 21 },
   checkbox: { minHeight: 48, justifyContent: 'center' }, section: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 18, gap: 12 },
   stepTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.foreground },
-  option: { padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, minHeight: 48 }, selected: { borderColor: theme.colors.primaryDark, backgroundColor: theme.colors.mint },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, minHeight: 48 }, selected: { borderColor: theme.colors.primaryDark, backgroundColor: theme.colors.mint },
+  optionLabel: { flex: 1 }, radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primaryDark },
   image: { width: '100%', height: 195 }, button: { minHeight: 54, backgroundColor: theme.colors.primaryDark, borderRadius: 16, padding: 16, justifyContent: 'center' },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
   buttonText: { fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'center', color: theme.colors.onPrimary }, secondaryText: { color: theme.colors.primaryDark }, dimmed: { opacity: 0.5 },
