@@ -1,5 +1,6 @@
 import { AdvisorPortal } from './advisor/AdvisorActions';
 import { PartnerPortal } from './partner-portal/PartnerPortal';
+import { CustomerSalePortal } from './sale/CustomerSale';
 import { AuditWorkspace } from './audit/AuditWorkspace';
 import { ClaimsInbox } from './claims/ClaimsInbox';
 import { PolicyPortal } from './policies/PolicyPortal';
@@ -57,9 +58,10 @@ function Shell() {
   const isPolicies = window.location.pathname === '/polizas'
     || (window.location.pathname === '/' && policyDestination !== null && (session !== 'anonymous' || failed));
   const isAdvisor = window.location.pathname === '/asesor';
+  const isSale = window.location.pathname === '/venta-asistida';
   const isPartnerPortal = window.location.pathname === '/socios';
-  const isConsole = isAdvisor || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
-  const sectionTitle = isAdvisor ? 'advisor.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
+  const isConsole = isAdvisor || isSale || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
+  const sectionTitle = isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -110,7 +112,7 @@ function Shell() {
     {isPolicies && session === 'authenticated' && window.location.pathname === '/'
       ? <main className="access-panel"><p role="status">{t('policies.openingDocuments')}</p></main>
       : isConsole ? (session === 'authenticated' && !busy
-      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onBackToList={abandonPolicyDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onBackToList={abandonPolicyDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(isPolicies && failed && policyDestination ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
         {isPolicies && policyDestination && <><p>{t('policies.documentSignIn')}</p>

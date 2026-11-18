@@ -6,11 +6,11 @@ export class MemoryAdvisorSaleAuthorizations implements AdvisorSaleAuthorization
   rows: (AdvisorSaleAuthorization & { clientId: string; subjectToken: string })[] = [];
   events: string[] = [];
   // advisor reference -> the advisor's own client id
-  constructor(private readonly advisors: ReadonlyMap<string, string>, private readonly now: () => Date) {}
+  constructor(private readonly advisors: ReadonlyMap<string, string>, private readonly now: () => Date, private readonly newId: () => string = randomUUID) {}
   async grant(input: Parameters<AdvisorSaleAuthorizationStore['grant']>[0]) {
     const advisorClient = this.advisors.get(input.advisorReference);
     if (!advisorClient || advisorClient === input.principal.clientId) return null;
-    const row = { id: randomUUID(), advisorReference: input.advisorReference, operation: ADVISOR_SALE_OPERATION, grantedAt: input.grantedAt, expiresAt: input.expiresAt,
+    const row = { id: this.newId(), advisorReference: input.advisorReference, operation: ADVISOR_SALE_OPERATION, grantedAt: input.grantedAt, expiresAt: input.expiresAt,
       revokedAt: null, clientId: input.principal.clientId, subjectToken: input.principal.subjectToken };
     this.rows.push(row); this.events.push('granted');
     return row;
