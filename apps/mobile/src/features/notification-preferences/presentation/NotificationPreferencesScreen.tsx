@@ -59,8 +59,7 @@ export function NotificationPreferencesScreen() {
 
 function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   const text = copy[language];
-  const { width, fontScale } = useWindowDimensions();
-  const stacked = fontScale > 1.2 || width < 380;
+  const { fontScale } = useWindowDimensions();
   const session = useAuthenticatedSession();
   const [api] = useState(() => createPreferencesApi(session.baseUrl, session));
   const [saved, setSaved] = useState<Preferences>();
@@ -120,19 +119,17 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
       <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />
     </View>}
     {draft && <View style={styles.panel}>
-      {!stacked && <View style={styles.channelHeader}><View style={styles.categoryLabel} />{channels.map(channel =>
-        <Text key={channel} style={styles.channelLabel}>{text.channels[channel]}</Text>)}</View>}
-      {categories.map(category => <View key={category} style={[styles.row, stacked && styles.stackedRow]}>
-        <View style={!stacked && styles.categoryLabel}><Text style={styles.rowTitle}>{text.categories[category][0]}</Text>
+      {categories.map(category => <View key={category} style={styles.row}>
+        <View><Text style={styles.rowTitle}>{text.categories[category][0]}</Text>
           <Text style={styles.caption}>{text.categories[category][1]}</Text></View>
-        <View style={[styles.channelControls, stacked && styles.stackedControls]}>
+        <View style={styles.channelControls}>
         {channels.map(channel => <Pressable key={channel} style={[styles.switchCell,
-          stacked && { flexGrow: 1, flexBasis: Math.max(72, Math.ceil(36 * fontScale)), width: 'auto', gap: 8, paddingVertical: 8 }]}
+          { flexBasis: Math.max(72, Math.ceil(36 * fontScale)) }]}
           accessibilityRole="switch" accessibilityLabel={`${text.categories[category][0]} · ${text.channels[channel]}`}
           accessibilityState={{ checked: draft[category][channel], disabled: busy || !!pending }} disabled={busy || !!pending}
           onPress={() => void toggle(category, channel, !draft[category][channel])}>
-          {stacked && <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-            style={styles.stackedChannelLabel}>{text.channels[channel]}</Text>}
+          <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+            style={styles.channelLabel}>{text.channels[channel]}</Text>
           <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
             style={[styles.switchTrack, draft[category][channel] && styles.switchTrackOn, (busy || !!pending) && styles.dimmed]}>
             <View style={[styles.switchThumb, draft[category][channel] && styles.switchThumbOn]} />
@@ -161,17 +158,12 @@ const styles = StyleSheet.create({
   warning: { backgroundColor: theme.colors.warningSurface, padding: 16, borderRadius: 16 },
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },
-  channelHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8 },
-  categoryLabel: { flex: 1, minWidth: 0, paddingRight: 8 },
-  channelLabel: { width: 48, color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
-  stackedChannelLabel: { color: theme.colors.muted, fontSize: 11, fontWeight: '700', textAlign: 'center' },
-  channelControls: { flexDirection: 'row' },
-  stackedControls: { flexWrap: 'wrap', gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: theme.colors.border, minHeight: 82 },
-  stackedRow: { flexDirection: 'column', alignItems: 'stretch', paddingVertical: 14, gap: 12 },
+  channelLabel: { color: theme.colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  channelControls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  row: { borderTopWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, gap: 12 },
   rowTitle: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600' },
-  caption: { color: theme.colors.muted, fontSize: 11, lineHeight: 16, paddingTop: 3 },
-  switchCell: { width: 48, minHeight: 56, alignItems: 'center', justifyContent: 'center' },
+  caption: { color: theme.colors.muted, fontSize: 12, lineHeight: 18, paddingTop: 3 },
+  switchCell: { flexGrow: 1, minHeight: 56, gap: 8, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
   switchTrack: { width: 44, height: 28, borderRadius: 14, backgroundColor: theme.colors.muted, padding: 4 },
   switchTrackOn: { backgroundColor: theme.colors.primary },
   switchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.surface, alignSelf: 'flex-start' },

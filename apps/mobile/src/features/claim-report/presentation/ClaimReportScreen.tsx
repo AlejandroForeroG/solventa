@@ -7,6 +7,7 @@ import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
 import { createPoliciesApi } from '../../policy-wallet/adapters/policies-api';
 import { policyReference, validityAt } from '../../policy-wallet/domain/wallet';
+import { formatDate, formatMoney } from '../../policy-wallet/presentation/format';
 import { ActivePolicies } from '../application/active-policies';
 import { isReportableProduct } from '../domain/report';
 import { ClaimReportForm } from './ClaimReportForm';
@@ -59,9 +60,13 @@ function Authenticated({ copy, locale, requested, hidden, draftId }: { copy: Cla
       {options.length === 0 && <Text style={ui.body}>{copy.policy.none}</Text>}
       {load.partial && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.partial}</Text>}
       <View style={ui.section}>
-        {options.map(item => <Pressable key={item.policyId} accessibilityRole="button" onPress={() => choose(item.policyId)} style={({ pressed }) => [ui.card, pressed && ui.dimmed]}>
+        {options.map(item => <Pressable key={item.policyId} accessibilityRole="button"
+          accessibilityLabel={`${copy.products[item.product]} · ${policyReference(item.policyId)} · ${copy.policy.validity}: ${formatDate(item.effectiveFrom, locale)} – ${formatDate(item.effectiveUntil, locale)} · ${copy.policy.premium}: ${formatMoney(item.premium, locale)}`}
+          onPress={() => choose(item.policyId)} style={({ pressed }) => [ui.card, pressed && ui.dimmed]}>
           <Text style={ui.subtitle}>{copy.products[item.product]}</Text>
           <Text style={ui.caption}>{policyReference(item.policyId)}</Text>
+          <Text style={ui.body}>{copy.policy.validity}: {formatDate(item.effectiveFrom, locale)} – {formatDate(item.effectiveUntil, locale)}</Text>
+          <Text style={ui.caption}>{copy.policy.premium}: {formatMoney(item.premium, locale)}</Text>
         </Pressable>)}
       </View>
       <Action label={copy.back} secondary onPress={() => router.back()} />

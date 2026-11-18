@@ -94,7 +94,15 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
       </header>
       <div id="channel-content" tabIndex={-1} className="channel-content">{children}</div>
     </div>
-    {authenticated && <dialog id="channel-navigation-dialog" ref={dialog} className="navigation-dialog" aria-label={t('navigation.menu')}
+    {authenticated && <dialog id="channel-navigation-dialog" ref={dialog} className="navigation-dialog" aria-label={t('navigation.menu')} aria-modal="true"
+      onKeyDown={event => {
+        if (event.key !== 'Tab') return;
+        const controls = event.currentTarget.querySelectorAll<HTMLElement>('a[href]:not([aria-disabled="true"]), button:not([disabled])');
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}
       onClose={() => setMenuOpen(false)} onCancel={() => setMenuOpen(false)} onClick={event => { if (event.target === event.currentTarget) setMenuOpen(false); }}>
       <div className="navigation-dialog-panel"><button type="button" className="navigation-menu-close" aria-label={t('navigation.close')} onClick={() => setMenuOpen(false)}><Icon name="close" /></button>{navigation}</div>
     </dialog>}

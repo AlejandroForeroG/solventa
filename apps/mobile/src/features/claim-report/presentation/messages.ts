@@ -8,7 +8,7 @@ type Copy = {
   eventHint: string;
   captureFailure: Record<'photo' | 'video' | 'gallery', string>;
   title: string; back: string; retry: string; cancel: string; step: (step: number) => string;
-  policy: { heading: string; loading: string; failed: string; none: string; partial: string; signedOut: string; unknown: string }; resuming: string;
+  policy: { heading: string; loading: string; failed: string; none: string; partial: string; signedOut: string; unknown: string; validity: string; premium: string }; resuming: string;
   fields: { eventType: string; occurredAt: string; date: string; time: string; place: string; placeHint: string; description: string; descriptionHint: string;
     counter: (used: number, max: number) => string; minimum: (min: number) => string };
   eventTypes: Record<EventType, string>;
@@ -32,7 +32,7 @@ const es: Copy = {
     video: 'No pudimos abrir la grabación. Reintenta o elige un video de la galería. Tus datos siguen en este formulario.',
     gallery: 'No pudimos abrir la galería. Reintenta la selección. Tus datos siguen en este formulario.' },
   title: 'Reportar siniestro', back: 'Volver', retry: 'Reintentar', cancel: 'Cancelar', step: step => `Paso ${step} de 3`,
-  policy: { heading: 'Elige la póliza', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
+  policy: { heading: 'Elige la póliza', validity: 'Vigencia', premium: 'Prima (pago único)', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
     none: 'No tienes pólizas vigentes de seguro de vida hipotecario para reportar un siniestro.', partial: 'Solo revisamos tus 6 pólizas más recientes. Si la póliza que buscas es más antigua, aún no podemos mostrarla aquí.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
@@ -67,7 +67,7 @@ const en: Copy = {
     video: 'We could not open video recording. Retry or choose a gallery video. Your form data is still here.',
     gallery: 'We could not open the gallery. Retry the selection. Your form data is still here.' },
   title: 'Report a claim', back: 'Back', retry: 'Try again', cancel: 'Cancel', step: step => `Step ${step} of 3`,
-  policy: { heading: 'Choose the policy', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
+  policy: { heading: 'Choose the policy', validity: 'Coverage period', premium: 'Premium (single payment)', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
     none: 'You have no active mortgage life policy to report a claim on.', partial: 'We only checked your 6 most recent policies. If the one you need is older, it cannot be shown here yet.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
   fields: { eventType: 'Type of event', occurredAt: 'When it happened', date: 'Date', time: 'Time', place: 'Place (optional)', placeHint: 'Address or landmark',
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },

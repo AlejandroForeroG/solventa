@@ -28,7 +28,7 @@ Logo and favicon come from `packages/assets`; preserve the green identity and lo
 
 ### Channel navigation
 
-Signed-in pages share one contextual sidebar: customer routes (Home, My policies, Quote and Nearby providers) or the operational workspace (Claims, Audit, Advisor and Partner). The footer switches between these contexts; API permissions remain authoritative. Below 1080 px a compact header opens the same links in a native modal dialog, with Escape, a close action and browser focus containment. The active route has `aria-current="page"`. A keyboard skip link reaches the content. Unknown/unavailable sessions do not expose a sign-in shortcut as though they were confirmed anonymous sessions.
+Signed-in pages share one contextual sidebar: customer routes (Home, My policies, Quote and Nearby providers) or the operational workspace (Claims, Audit, Advisor and Partner). The footer switches between these contexts; API permissions remain authoritative. Below 1080 px a compact header opens the same links in a native modal dialog, with Escape, a close action and explicit Tab/Shift+Tab wrapping between the first and last available controls. The native modal keeps the background inert and returns focus on close. The active route has `aria-current="page"`. A keyboard skip link reaches the content. Unknown/unavailable sessions do not expose a sign-in shortcut as though they were confirmed anonymous sessions.
 
 The signed-in home offers issued policies and a new quote without repeating sign-in instructions. Partner overview uses this same shell, with its API-documentation link beside the heading. Navigation is inert while sign-out is pending. The mobile language controls have 44 px press areas.
 
@@ -160,3 +160,5 @@ Responses are validated before rendering and requests are aborted on navigation.
 The web test runner caps parallel workers at two to bound JSDOM memory and CPU use on developer machines and CI. This preserves assertions and timeouts; tests still run the complete selected suite.
 
 The policy detail includes explicit, document-bound advisor approvals and revocation. `/asesor` shows only approvals addressed to the current professionally enabled advisor; execution requires a separate confirmation. See [policy lifecycle](../../modules/policy-claims-payments/policy-lifecycle.md#explicit-advisor-authorization).
+
+The definitive offer keeps a one-payment summary beside the premium and its coverage dates. The complete explanation of the indicative monthly estimate remains in an About the monthly estimate disclosure. Policy review and signature group the unchanged document hash with verification details instead of placing it between coverage and the primary action. The original document download, reviewed bytes, hash binding and signature contracts are unchanged.

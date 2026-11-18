@@ -28,7 +28,10 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         </div>
         <p className="offer-caption">{t('offer.premium')}</p>
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
-        {offer.status === 'definitive' && <p className="offer-billing">{t('document.billing')}</p>}
+        {offer.status === 'definitive' && <>
+          <p className="offer-billing">{t('document.billing')}</p>
+          <details className="offer-verification"><summary>{t('document.estimateRelation')}</summary><p className="offer-billing">{t('document.billingDetail')}</p></details>
+        </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
           <div><dt>{t('offer.coverage')}</dt><dd>{t('offer.coverageValue')}</dd></div>
@@ -99,11 +102,12 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
             <div><dt>{t('offer.period')}</dt><dd className="mono">{t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) })}</dd></div>
             <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-value">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage && typeof document.coverage.sumInsured === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(document.coverage.sumInsured) ? copDecimal(document.coverage.sumInsured) : '—'}</dd></div>
           </dl>
-          <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          <details className="document-verification"><summary>{t('document.verification')}</summary>
+            <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          </details>
           </> : <>
           <h2 className="section-label">{t('policy.document')}</h2>
-          <DocumentFields document={document} />
-          <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          <DocumentFields document={document} verification={<p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>} />
           </>}
         </div>
       </div>

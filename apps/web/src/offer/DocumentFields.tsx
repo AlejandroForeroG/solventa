@@ -1,4 +1,5 @@
 import { useIntl } from 'react-intl';
+import type { ReactNode } from 'react';
 import { useFormatters } from '../i18n/I18n';
 
 const labels: Record<string, string> = {
@@ -10,7 +11,7 @@ const technical = new Set(['offerId', 'offerVersion', 'policyId', 'ruleVersion',
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
 // This is a readable projection of the original document; the download, hash and signature still bind its unchanged bytes.
-export function DocumentFields({ document }: { document: Record<string, unknown> }) {
+export function DocumentFields({ document, verification }: { document: Record<string, unknown>; verification?: ReactNode }) {
   const intl = useIntl();
   const { copDecimal, dateTime } = useFormatters();
   const t = (key: string) => intl.formatMessage({ id: `document.${key}` });
@@ -36,8 +37,9 @@ export function DocumentFields({ document }: { document: Record<string, unknown>
   const entries = Object.entries(document);
   return <>
     {fields(Object.fromEntries(entries.filter(([key]) => !technical.has(key))))}
-    {entries.some(([key]) => technical.has(key)) && <details className="document-verification"><summary>{t('verification')}</summary>
+    {(verification || entries.some(([key]) => technical.has(key))) && <details className="document-verification"><summary>{t('verification')}</summary>
       {fields(Object.fromEntries(entries.filter(([key]) => technical.has(key))))}
+      {verification}
     </details>}
   </>;
 }

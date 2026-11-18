@@ -3,7 +3,8 @@ import { useAppMessages } from '@/shared/i18n/use-app-messages';
 
 const es = {
   drafts: 'Borradores', draftsDetail: 'Prepara un reporte y retómalo, incluso sin conexión.',
-  home: 'Inicio', wallet: 'Billetera', claims: 'Siniestros', alerts: 'Avisos', profile: 'Perfil', preferences: 'Preferencias de avisos',
+  home: 'Inicio', wallet: 'Mis pólizas', claims: 'Siniestros', alerts: 'Avisos', profile: 'Perfil', preferences: 'Preferencias de avisos',
+  sections: 'Secciones', openNavigation: 'Abrir navegación', closeNavigation: 'Cerrar navegación',
   homeTitle: 'Inicio', walletDetail: 'Consulta tus pólizas y sus coberturas.',
   claimsDetail: 'Encuentra ayuda para tu siniestro.', alertsDetail: 'Consulta tus avisos.',
   reportClaim: 'Reportar siniestro', reportClaimDetail: 'Cuéntanos qué pasó y adjunta fotos o video como evidencia.',
@@ -13,7 +14,8 @@ const es = {
 
 const en: typeof es = {
   drafts: 'Drafts', draftsDetail: 'Prepare a report and resume it, even offline.',
-  home: 'Home', wallet: 'Wallet', claims: 'Claims', alerts: 'Notices', profile: 'Profile', preferences: 'Notification preferences',
+  home: 'Home', wallet: 'My policies', claims: 'Claims', alerts: 'Notices', profile: 'Profile', preferences: 'Notification preferences',
+  sections: 'Sections', openNavigation: 'Open navigation', closeNavigation: 'Close navigation',
   homeTitle: 'Home', walletDetail: 'View your policies and their coverage.',
   claimsDetail: 'Find help with your claim.', alertsDetail: 'View your notifications.',
   reportClaim: 'Report a claim', reportClaimDetail: 'Tell us what happened and attach photos or video as evidence.',

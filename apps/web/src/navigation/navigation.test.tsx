@@ -26,7 +26,14 @@ describe('channel navigation', () => {
     const trigger = screen.getByRole('button', { name: 'Abrir menú' }); fireEvent.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Menú de navegación' });
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cerrar menú' }));
+    const close = within(dialog).getByRole('button', { name: 'Cerrar menú' });
+    const logout = within(dialog).getByRole('button', { name: 'Cerrar sesión' });
+    logout.focus();
+    fireEvent.keyDown(logout, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+    expect(logout).toHaveFocus();
+    fireEvent.click(close);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog')).toBeNull();
     delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;

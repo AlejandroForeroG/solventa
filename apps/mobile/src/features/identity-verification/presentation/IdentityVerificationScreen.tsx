@@ -45,7 +45,7 @@ function VerificationFlow({ locale }: { locale: Locale }) {
         {state.traceId && <Text selectable style={styles.caption}>{copy.reference}: {state.traceId}</Text>}
         {verification && <>
           <Text accessibilityLiveRegion="polite" style={styles.body}>{copy.statuses[verification.status]}</Text>
-          <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>
+          {!inactive && <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>}
         </>}
         {inactive && state.terms && <>
           <Text style={styles.caption}>{copy.termsHelp}</Text>
@@ -89,15 +89,19 @@ function StepSelection({ step, locale, fixtures, saved, editable, disabled, onSa
     {editable && <>
       <Text style={styles.caption}>{copy.choose}</Text>
       {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio"
-        accessibilityState={{ checked: selection === fixture.reference, disabled }} disabled={disabled}
-        onPress={() => select(fixture.reference)} style={[styles.option, selection === fixture.reference && styles.selected, disabled && styles.dimmed]}>
+        accessibilityLabel={`${fixture.labels[locale]}${saved === fixture.reference ? ` · ${copy.savedOption}` : selection === fixture.reference ? ` · ${copy.pendingOption}` : ''}`}
+        accessibilityState={{ checked: (selection ?? saved) === fixture.reference, disabled }} disabled={disabled}
+        onPress={() => select(fixture.reference)} style={[styles.option, (selection ?? saved) === fixture.reference && styles.selected, disabled && styles.dimmed]}>
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.radio}>
-          {selection === fixture.reference && <View style={styles.radioDot} />}
+          {(selection ?? saved) === fixture.reference && <View style={styles.radioDot} />}
         </View>
-        <Text style={[styles.body, styles.optionLabel]}>{fixture.labels[locale]}</Text>
+        <View style={styles.optionLabel}><Text style={styles.body}>{fixture.labels[locale]}</Text>
+          {saved === fixture.reference && <Text style={styles.savedLabel}>{copy.savedOption}</Text>}
+          {selection === fixture.reference && selection !== saved && <Text style={styles.caption}>{copy.pendingOption}</Text>}
+        </View>
       </Pressable>)}
       {asset && <Image source={asset} accessibilityLabel={selected!.labels[locale]} resizeMode="contain" style={styles.image} />}
-      <Action label={copy.save} secondary disabled={disabled || !selected} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
+      <Action label={copy.save} secondary disabled={disabled || !selected || selected.reference === saved} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
     </>}
   </View>;
 }
@@ -118,6 +122,7 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.foreground },
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, minHeight: 48 }, selected: { borderColor: theme.colors.primaryDark, backgroundColor: theme.colors.mint },
   optionLabel: { flex: 1 }, radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+  savedLabel: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: theme.colors.onMint },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primaryDark },
   image: { width: '100%', height: 195 }, button: { minHeight: 54, backgroundColor: theme.colors.primaryDark, borderRadius: 16, padding: 16, justifyContent: 'center' },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
