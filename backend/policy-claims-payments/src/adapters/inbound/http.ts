@@ -10,6 +10,7 @@ import { mountClaimDrafts, type ClaimDraftHttpDependencies } from './claim-draft
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
 import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
+import { mountNotices, type NoticesHttpDependencies } from './notices-http';
 
 export type PolicyHttpDependencies = {
   claimDrafts?: ClaimDraftHttpDependencies;
@@ -19,6 +20,7 @@ export type PolicyHttpDependencies = {
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
   claimReport?: ClaimReportHttpDependencies;
+  notices?: NoticesHttpDependencies;
   finance: {
     changeLifecycle?(input: { actor: FinancialActor; policyId: string; action: import('../../domain/policy-lifecycle').LifecycleAction;
       replacementPolicyId: string | null; documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult>;
@@ -226,6 +228,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   }
   // The report routes share the list's path, so they register first and the list keeps the remaining methods.
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
+  if (deps?.notices) mountNotices(app, deps.notices);
   if (deps?.claims) mountClaims(app, deps.claims);
   if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));

@@ -12,6 +12,8 @@ import { SqlClaimDrafts } from './adapters/outbound/sql-claim-drafts';
 import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
 import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
 import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { Notices } from './application/notices';
+import { SqlNotices } from './adapters/outbound/sql-notices';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -37,6 +39,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
+      notices: { authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input), notices: new Notices(new SqlNotices(this.env.POLICY_DB.connectionString)) },
       claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
