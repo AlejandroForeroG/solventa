@@ -66,7 +66,7 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const app = new Hono<{ Bindings: AcquisitionEnv }>();
   mountOffers(app, { offers, authorizeFinancialAccess, denyResourceAccess });
   const finance: PolicyHttpDependencies['finance'] = {
-    listOwn: async input => { calls.push({ operation: 'policyList', input }); return { status: 'ok', policies: [summary], hasMore: false }; },
+    listOwn: async input => { calls.push({ operation: 'policyList', input }); return { status: 'ok', policies: [summary], hasMore: false, nextCursor: null }; },
     get: async input => { calls.push({ operation: 'policyGet', input }); return { status: 'ok', replayed: false, policy }; },
     detail: async input => { calls.push({ operation: 'policyDetail', input }); return { status: 'ok', detail }; },
     document: async input => { calls.push({ operation: 'policyDocument', input });
@@ -86,6 +86,30 @@ function setup(decision?: unknown, denialResult: unknown = { recorded: true }) {
   const run = (req: Request, policyRoute = false) => (policyRoute ? policyApp : app).fetch(req, { APP_ENV: 'local' } as never);
   return { calls, run, offers, finance };
 }
+
+test('both policy list routes authorize before validating or forwarding pagination', async () => {
+  for (const path of ['/policies', '/policies/issued']) {
+    const native = path === '/policies';
+    const headers = native ? { authorization: 'Bearer synthetic-token' } : {};
+    for (const query of [`cursor=${id}`, `policyId=${id}`]) {
+      const { calls, run } = setup(native ? nativeUser : undefined);
+      const response = await run(request(path + '?' + query, undefined, headers, 'GET'), true);
+      assert.equal(response.status, 200);
+      assert.deepEqual(calls.map(call => call.operation), ['authorize', 'policyList']);
+      const [key] = query.split('=');
+      assert.equal((calls[1].input as Record<string, unknown>)[key], id);
+      assert.equal((await contractual(response, 'policies', 'PolicyList')).nextCursor, null);
+    }
+    for (const query of ['cursor=bad', 'policyId=bad', `cursor=${id}&cursor=${id}`, `cursor=${id}&policyId=${id}`]) {
+      const { calls, run } = setup(native ? nativeUser : undefined);
+      assert.equal((await run(request(path + '?' + query, undefined, headers, 'GET'), true)).status, 400);
+      assert.deepEqual(calls.map(call => call.operation), ['authorize']);
+      const denied = setup({ allowed: false, status: 401, error: 'unauthorized' });
+      assert.equal((await denied.run(request(path + '?' + query, undefined, headers, 'GET'), true)).status, 401);
+      assert.equal(denied.calls.some(call => call.operation === 'policyList'), false);
+    }
+  }
+});
 
 test('offer creation uses one authorization, real Origin and server-derived actor/consent', async () => {
   const { calls, run } = setup();

@@ -8,7 +8,7 @@ import { financialApi, type FinancialApi } from '../offer/api';
 import { OfferJourney } from '../offer/OfferJourney';
 import { readPurchaseDraft } from '../offer/purchase-draft';
 import { newIdempotencyKey, requestQuote as defaultRequest, type Quote, type QuoteValues } from './api';
-import { checkLocally, fromServer, type FieldKey, type FieldProblem } from './fields';
+import { checkLocally, fieldOrder, fromServer, type FieldKey, type FieldProblem } from './fields';
 import { useAnnounce } from './Live';
 import { QuoteForm } from './QuoteForm';
 import { Denied, Loading, QuoteResult } from './QuoteResult';
@@ -37,6 +37,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
   const [phase, setPhase] = useState<Phase>(resume ? 'offer' : 'form');
   const [values, setValues] = useState<QuoteValues>(() => initialEstimate ? { ...empty, amount: initialEstimate.amount, termMonths: initialEstimate.termMonths } : empty);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
+  const [focusRequest, setFocusRequest] = useState<{ field: FieldKey } | null>(null);
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [granted, setGranted] = useState<Consent | null>(null);
@@ -49,13 +50,24 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
 
   function change(field: FieldKey, value: string) {
     key.current = newIdempotencyKey();
-    setValues(current => ({ ...current, [field]: value }));
+    const next = { ...values, [field]: value };
+    setValues(next);
+    setProblems(current => current.some(problem => problem.key === field)
+      ? [...current.filter(problem => problem.key !== field), ...checkLocally(next).filter(problem => problem.key === field)]
+      : current);
+    if (problems.length) announce('');
+  }
+
+  function showProblems(next: FieldProblem[]) {
+    setProblems(next);
+    const field = fieldOrder.find(key => next.some(problem => problem.key === key));
+    setFocusRequest(field ? { field } : null);
   }
 
   async function submit(next: 'result' | 'offer' = 'result') {
     const local = checkLocally(values);
-    if (local.length) { setProblems(local); setBanner('fields'); announce(intl.formatMessage({ id: 'live.quoteError' })); return; }
-    setProblems([]); setBanner('none'); setPhase('loading');
+    if (local.length) { showProblems(local); setBanner('fields'); announce(intl.formatMessage({ id: 'live.quoteError' })); return; }
+    setProblems([]); setFocusRequest(null); setBanner('none'); setPhase('loading');
     announce(intl.formatMessage({ id: 'live.calculating' }));
     pending.current?.abort();
     pending.current = new AbortController();
@@ -70,7 +82,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
         setDeniedTrace(outcome.traceId); setPhase('denied'); announce(intl.formatMessage({ id: 'live.authError' }));
       } else if (outcome.kind === 'validation') {
         const mapped = fromServer(outcome.errors);
-        setProblems(mapped); setBanner(mapped.length ? 'fields' : 'unavailable'); setPhase('form');
+        showProblems(mapped); setBanner(mapped.length ? 'fields' : 'unavailable'); setPhase('form');
         announce(intl.formatMessage({ id: mapped.length ? 'live.quoteError' : 'live.unavailable' }));
       } else {
         setBanner(outcome.kind === 'conflict' ? 'conflict' : 'unavailable'); setPhase('form');
@@ -90,7 +102,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
   return <>
     {phase !== 'offer' && <Stepper current={phase === 'form' || phase === 'loading' || phase === 'denied' ? 1 : phase === 'result' ? 2 : 3} available={3} />}
     {phase === 'form' && initialEstimate && !invalidEstimateFields(initialEstimate).length && <p className="banner banner-info">{intl.formatMessage({ id: 'estimate.resumed' }, { age: initialEstimate.ageYears })}</p>}
-    {(phase === 'form') && <QuoteForm values={values} problems={problems} banner={banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
+    {(phase === 'form') && <QuoteForm values={values} problems={problems} focusRequest={focusRequest} banner={banner === 'fields' && !problems.length ? 'none' : banner} busy={false} onChange={change} onSubmit={() => void submit()} />}
     {phase === 'loading' && <Loading />}
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}

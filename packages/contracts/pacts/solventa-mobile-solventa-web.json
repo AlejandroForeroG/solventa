@@ -2075,6 +2075,7 @@
       "response": {
         "body": {
           "hasMore": false,
+          "nextCursor": null,
           "policies": [
             {
               "coverage": {
@@ -2085,6 +2086,181 @@
               "effectiveFrom": "2026-10-15T00:00:00.000Z",
               "effectiveUntil": "2027-10-15T00:00:00.000Z",
               "policyId": "30000000-0000-4000-8000-000000000003",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy first page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies"
+      },
+      "response": {
+        "body": {
+          "hasMore": true,
+          "nextCursor": "30000000-0000-4000-8000-000000000003",
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000003",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy lookup page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies",
+        "query": {
+          "policyId": [
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "hasMore": false,
+          "nextCursor": null,
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000004",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy next page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies",
+        "query": {
+          "cursor": [
+            "30000000-0000-4000-8000-000000000003"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "hasMore": false,
+          "nextCursor": null,
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000004",
               "premium": "77760.0000",
               "product": "vida_hipotecario",
               "status": "issued"

@@ -27,6 +27,8 @@ test('financial examples match the public schemas and omit principal/provider cr
   validate('offers', 'Acceptance', examples.acceptance);
   validate('policies', 'Policy', examples.policy);
   validate('policies', 'Policy', examples.issuedPolicy);
+  validate('policies', 'PolicyList', examples.policyPage);
+  validate('policies', 'PolicyList', examples.lastPolicyPage);
   for (const body of [examples.offer, examples.acceptance, examples.policy, examples.issuedPolicy]) {
     assert.equal('subjectToken' in body, false);
     assert.equal('clientId' in body, false);
