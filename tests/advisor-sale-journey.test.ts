@@ -27,6 +27,7 @@ import { SEAL_KEY, MemoryConsents, ANA, LUIS, clock } from './support/consent-fa
 import { MemoryStore } from './support/quote-fakes';
 import { MemoryAdvisorSaleAuthorizations } from './support/advisor-sale-fakes';
 import { JourneyOffers, NoSnapshots } from './support/journey-offers';
+import { contractSchema } from './support/openapi-schemas';
 
 // The advisor's browser calls the real gateway, which routes to the real Identity and Acquisition HTTP adapters and use cases.
 // In memory: SQL stores and the WorkOS web sessions; mock: signal providers. Nothing here runs SQL or workerd.
@@ -37,6 +38,12 @@ const OTHER_ADVISOR = { clientId: randomUUID(), subjectToken: randomUUID() };
 const advisorReferences = { advisor: randomUUID(), other: randomUUID() };
 const sessions = new Map([['ana-session', ANA], ['luis-session', LUIS], ['advisor-session', ADVISOR], ['other-advisor-session', OTHER_ADVISOR]]);
 const references = new Map([['advisor-session', advisorReferences.advisor], ['other-advisor-session', advisorReferences.other]]);
+const contract = {
+  offer: contractSchema('partner-offers', 'PartnerOffer'), invalid: contractSchema('partner-offers', 'ValidationError'), offerError: contractSchema('advisor-offers', 'AccessError'),
+  authorization: contractSchema('advisor-sale-authorizations', 'Authorization'), list: contractSchema('advisor-sale-authorizations', 'AuthorizationList'), customerError: contractSchema('advisor-sale-authorizations', 'Error')
+};
+// Every response the journey sees must match the committed OpenAPI contract.
+const conforms = (check: ReturnType<typeof contractSchema>, body: unknown) => { const result = check(body); assert.equal(result.valid, true, result.errors); };
 const quote = { product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
   credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } };
 
@@ -85,7 +92,10 @@ async function world(options: { identityDown?: () => boolean } = {}) {
   const browser = async (session: string | null, path: string, body?: unknown, key?: string, extra: Record<string, string> = {}) => {
     const response = await gateway(new Request(ORIGIN + path, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body),
       headers: { ...(session ? { cookie: `solventa-session=${session}` } : {}), origin: ORIGIN, 'content-type': 'application/json', ...(key ? { 'idempotency-key': key } : {}), ...extra } }));
-    return { status: response.status, headers: response.headers, body: await response.json() as Record<string, any> };
+    const payload = await response.json() as Record<string, any>;
+    if (path.startsWith('/api/v1/me/advisor-sale-authorizations')) conforms(response.status >= 400 ? contract.customerError : payload.items ? contract.list : contract.authorization, payload);
+    if (path === '/api/v1/advisor/offers') conforms(response.status === 200 || response.status === 201 ? contract.offer : payload.error === 'validation_error' ? contract.invalid : contract.offerError, payload);
+    return { status: response.status, headers: response.headers, body: payload };
   };
   const authorizeAdvisor = async (session: string, advisorReference: string, validityDays?: number) => {
     const response = await browser(session, '/api/v1/me/advisor-sale-authorizations', { advisorReference, ...(validityDays ? { validityDays } : {}) });
