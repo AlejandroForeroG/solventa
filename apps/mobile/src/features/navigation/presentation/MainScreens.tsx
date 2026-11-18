@@ -30,9 +30,10 @@ export function AlertsScreen() {
   const auth = useAuthentication();
   const focused = useIsFocused();
   return <SafeAreaView style={styles.safe} edges={['top']}>
-    <View style={styles.preferencesHeading}><Text accessibilityRole="header" style={styles.title}>{copy.alerts}</Text></View>
-    {auth.status === 'authenticated' ? <ScrollView style={styles.notices} contentContainerStyle={styles.noticesContent}><NoticesList /></ScrollView> : null}
-    <View style={styles.preferencesHeading}><Text accessibilityRole="header" style={styles.title}>{copy.preferences}</Text></View>
+    {auth.status === 'authenticated' ? <ScrollView style={styles.notices} contentContainerStyle={styles.noticesContent}>
+      <Text accessibilityRole="header" style={styles.noticesTitle}>{copy.alerts}</Text>
+      <NoticesList />
+    </ScrollView> : null}
     {focused && <NotificationPreferencesScreen />}
   </SafeAreaView>;
 }
@@ -82,9 +83,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.xl, gap: 14,
     width: '100%', maxWidth: 520, alignSelf: 'center' },
-  preferencesHeading: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.xl, width: '100%', maxWidth: 520, alignSelf: 'center' },
   notices: { maxHeight: 260, width: '100%', maxWidth: 520, alignSelf: 'center', flexGrow: 0 },
-  noticesContent: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.lg },
+  noticesContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, gap: 12 },
+  noticesTitle: { color: theme.colors.foreground, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },
   title: { color: theme.colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -0.8, marginBottom: 6 },
   card: { padding: 18, borderRadius: 20, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 5 },
   tile: { flexDirection: 'row', alignItems: 'center', minHeight: 68, gap: 12 },

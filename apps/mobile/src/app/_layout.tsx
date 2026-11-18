@@ -31,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="notification-preferences" options={{
           headerShown: true,
           title: copy.actions.notificationPreferences,
+          headerTitle: '',
           headerBackButtonDisplayMode: 'minimal',
           headerStyle: { backgroundColor: theme.colors.background },
           headerTintColor: theme.colors.foreground,

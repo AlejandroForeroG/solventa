@@ -3,10 +3,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
-import { messages } from '@/shared/i18n/messages';
-import { useAppMessages } from '@/shared/i18n/use-app-messages';
-import { theme } from '@/theme';
+import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
+import { messages } from '../../../shared/i18n/messages';
+import { useAppMessages } from '../../../shared/i18n/use-app-messages';
+import { theme } from '../../../theme';
 import { createPreferencesApi, PreferencesApiFailure } from '../adapters/preferences-api';
 import { openPushSettings, pushPermission, requestPushPermission } from '../adapters/push-permission';
 import { categories, channels, withChannel } from '../domain/preferences';
@@ -47,17 +47,40 @@ const copy = {
 
 export function NotificationPreferencesScreen() {
   const auth = useAuthentication();
-  const language = useAppMessages() === messages.en ? 'en' : 'es';
+  const appCopy = useAppMessages();
+  const language = appCopy === messages.en ? 'en' : 'es';
   const text = copy[language];
-  if (auth.status !== 'authenticated' || !auth.principal) return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-    <View style={styles.content}><View style={styles.panel}>
-      <Text style={styles.description}>{text.signedOut}</Text>
-    </View></View>
+  const title = appCopy.actions.notificationPreferences;
+  const authenticated = auth.status === 'authenticated' && Boolean(auth.principal);
+  const [previousOwner, setPreviousOwner] = useState<string | null>(null);
+  const owner = authenticated && auth.principal
+    ? JSON.stringify([auth.principal.clientId, auth.principal.subjectToken])
+    : auth.status === 'loading' ? previousOwner : null;
+  if (owner !== previousOwner) setPreviousOwner(owner);
+
+  if (!owner) return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text><View style={styles.panel}>
+      <Text style={styles.description}>{auth.status === 'loading' ? appCopy.verifying : text.signedOut}</Text>
+    </View></ScrollView>
   </SafeAreaView>;
-  return <PreferencesFlow key={`${auth.principal.clientId}:${auth.principal.subjectToken}`} language={language} />;
+  // A system permission dialog can background the app. Keep the draft in memory while the same owner's session is checked.
+  return <>
+    {!authenticated && <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+        <ActivityIndicator accessibilityLabel={appCopy.verifying} color={theme.colors.primary} />
+        <Text accessibilityLiveRegion="polite" style={styles.description}>{appCopy.verifying}</Text>
+      </ScrollView>
+    </SafeAreaView>}
+    <View style={authenticated ? styles.visible : styles.hidden} pointerEvents={authenticated ? 'auto' : 'none'}
+      accessibilityElementsHidden={!authenticated} importantForAccessibility={authenticated ? 'auto' : 'no-hide-descendants'}>
+      <PreferencesFlow key={owner} language={language} title={title} />
+    </View>
+  </>;
 }
 
-function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
+function PreferencesFlow({ language, title }: { language: 'es' | 'en'; title: string }) {
   const text = copy[language];
   const { fontScale } = useWindowDimensions();
   const session = useAuthenticatedSession();
@@ -110,6 +133,7 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   const pushSelected = !!draft && categories.some(category => draft[category].push);
   const changed = !!saved && !!draft && JSON.stringify(saved.preferences) !== JSON.stringify(draft);
   return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}><ScrollView contentContainerStyle={styles.content}>
+    <Text accessibilityRole="header" style={styles.title}>{title}</Text>
     {busy && !draft && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
     {error === 'read' && <View accessibilityLiveRegion="polite" style={styles.warning}>
       <Text style={styles.warningText}>{text.readFailure}</Text></View>}
@@ -154,8 +178,11 @@ function Action({ label, onPress, disabled = false, secondary = false }: {
   <Text style={[styles.actionText, secondary && styles.secondaryText]}>{label}</Text></Pressable>; }
 
 const styles = StyleSheet.create({
+  visible: { flex: 1 },
+  hidden: { display: 'none' },
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 20, gap: 18, paddingBottom: 40 },
+  title: { color: theme.colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -0.8 },
   description: { color: theme.colors.muted, fontSize: 14, lineHeight: 21 },
   panel: { backgroundColor: theme.colors.surface, borderRadius: 22, padding: 16, gap: 10 },
   permission: { gap: 12 },
