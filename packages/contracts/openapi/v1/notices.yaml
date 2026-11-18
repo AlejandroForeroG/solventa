@@ -10,7 +10,8 @@ info:
     Every request requires a verified native session. Identity returns, with that same decision, what the customer chose
     for push by category; a notice whose choice is off is never offered. The category of a claim status change is not part
     of this contract. A notice carries no amount, document or personal data. The state of a notice belongs to the customer, not to a
-    device: with several devices signed in to one account, the first receipt decides for all of them.
+    device: with several devices signed in to one account, the first stored receipt decides the state for all of them, and
+    devices that collect a notice before any receipt exists may each present it, the second receipt being a conflict.
 servers:
   - url: /api/v1
 tags:
