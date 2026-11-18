@@ -49,7 +49,7 @@ function journey(api = stubs(), locale: Locale = 'es-CO', strict = false) {
 }
 
 async function signFromReview(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Continuar al cobro' }));
+  await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
   await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
   await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
   await user.click(screen.getByRole('checkbox'));
@@ -172,7 +172,7 @@ describe('definitive offer journey', () => {
 
   it('keeps review, confirmed payment and signature in steps 5, 6 and 7', async () => {
     const { api, user, container } = journey();
-    expect(await screen.findByText(/77\.760/, { selector: '.offer-premium' })).toHaveTextContent('COP / mes');
+    expect(await screen.findByText(/77\.760/, { selector: '.offer-premium' })).toHaveTextContent('COP · pago único');
     expect(screen.getByText(/academic-mortgage-1/)).toBeInTheDocument();
     expect(screen.getByText(/Vence el/)).toBeInTheDocument();
     expect(screen.getByText(/fuentes de datos simuladas/)).toBeInTheDocument();
@@ -183,7 +183,9 @@ describe('definitive offer journey', () => {
     expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
-    expect(screen.getByText(document)).toBeInTheDocument();
+    expect(screen.getByText('Moneda')).toBeInTheDocument();
+    expect(screen.getByText('Datos de verificación')).toBeInTheDocument();
+    expect(screen.queryByText(document)).toBeNull();
     expect(screen.getByText(new RegExp('a'.repeat(64)))).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Obtener código de prueba' })).toBeNull();
     expect(api.issuePolicy).not.toHaveBeenCalled();
@@ -194,9 +196,11 @@ describe('definitive offer journey', () => {
     expect(api.chargePolicy).toHaveBeenCalledWith(pending, expect.any(String), expect.any(AbortSignal));
     expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
     expect(await screen.findByRole('heading', { level: 1, name: 'Cobro confirmado' })).toBeInTheDocument();
+    expect(live()).toHaveTextContent('Cobro confirmado por');
     expect(screen.getByText(receipt)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continuar a la firma' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Firma electrónica' })).toBeInTheDocument();
+    expect(screen.getByText('Abre la página 2 del documento para habilitar la aceptación y solicitar el código.')).toBeVisible();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 7: Firma');
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
     await user.click(screen.getByRole('checkbox'));

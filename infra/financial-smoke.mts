@@ -294,7 +294,35 @@ try {
   const ownerList = await finance.listOwn({ actor: offer.payload, traceId: randomUUID() });
   assert.ok(ownerList.status === 'ok' && ownerList.policies.map(item => item.policyId).includes(policy.policyId) && !ownerList.policies.some(item => item.policyId === legacyPolicy.policyId));
   const unissuedList = await finance.listOwn({ actor: declinedOffer.payload, traceId: randomUUID() });
-  assert.deepEqual(unissuedList, { status: 'ok', policies: [], hasMore: false });
+  assert.deepEqual(unissuedList, { status: 'ok', policies: [], hasMore: false, nextCursor: null });
+  const pagedOwner = { clientId: randomUUID(), subjectToken: randomUUID() };
+  const issuedIds: string[] = [];
+  for (let index = 0; index < 8; index++) {
+    const event = await acceptedOffer();
+    Object.assign(event.payload, pagedOwner);
+    event.signature = await financialIntegrity.digest(eventContent(event));
+    const imported = await importOffer(event);
+    issuedIds.push(ok(await issue(finance, event, imported)).policy.policyId);
+  }
+  const beforePaging = await counts(['payments', 'policy_signatures', 'mock_gateway_operations', 'audit_events', 'outbox_events']);
+  const firstPage = await finance.listOwn({ actor: pagedOwner, traceId: randomUUID() });
+  assert.ok(firstPage.status === 'ok' && firstPage.hasMore && firstPage.nextCursor);
+  assert.equal(firstPage.policies.length, 6);
+  const olderPage = await finance.listOwn({ actor: pagedOwner, cursor: firstPage.nextCursor, traceId: randomUUID() });
+  assert.ok(olderPage.status === 'ok' && !olderPage.hasMore && olderPage.nextCursor === null);
+  assert.deepEqual([...firstPage.policies, ...olderPage.policies].map(item => item.policyId), issuedIds.sort(),
+    'equal validity dates use the UUID tie-breaker without losing or repeating a policy');
+  for (const selectedId of [legacyPolicy.policyId, randomUUID()]) {
+    for (const query of [{ cursor: selectedId }, { policyId: selectedId }]) {
+      assert.deepEqual(await finance.listOwn({ actor: pagedOwner, ...query, traceId: randomUUID() }),
+        { status: 'ok', policies: [], hasMore: false, nextCursor: null }, 'missing and foreign cursors or filters reveal no owner data');
+    }
+  }
+  const selectedOlder = await finance.listOwn({ actor: pagedOwner, policyId: olderPage.policies[1].policyId, traceId: randomUUID() });
+  assert.ok(selectedOlder.status === 'ok' && !selectedOlder.hasMore && selectedOlder.nextCursor === null);
+  assert.deepEqual(selectedOlder.policies, [olderPage.policies[1]]);
+  assert.deepEqual(await counts(['payments', 'policy_signatures', 'mock_gateway_operations', 'audit_events', 'outbox_events']), beforePaging,
+    'paging and exact lookup do not create financial or audit side effects');
   // The web portal reads the same SQL record: the premium keeps the date of its last stored change, a pending or foreign policy is not readable.
   const portal = await finance.detail({ actor: offer.payload, policyId: policy.policyId, traceId: randomUUID() });
   assert.ok(portal.status === 'ok');

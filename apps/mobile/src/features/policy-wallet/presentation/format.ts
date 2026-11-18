@@ -6,7 +6,7 @@ export function formatMoney(amount: string, locale: WalletLocale): string {
 }
 
 export function formatDate(value: string | number, locale: WalletLocale): string {
-  return new Date(value).toLocaleDateString(locale, { dateStyle: 'medium', timeZone: 'UTC' });
+  return new Date(value).toLocaleDateString(locale, { dateStyle: 'medium', timeZone: 'America/Bogota' });
 }
 
 export function formatDateTime(value: number, locale: WalletLocale): string {

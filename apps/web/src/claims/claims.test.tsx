@@ -19,8 +19,13 @@ describe('protected claims inbox', () => {
     show();
     const table = await screen.findByRole('table', { name: 'Bandeja de siniestros' });
     const rows = within(table).getAllByRole('row').slice(1);
+    expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText('SIN-2026-01187')).toBeVisible();
+    expect(within(rows[0]).getByText(first.policyId)).not.toBeVisible();
+    await userEvent.click(within(rows[0]).getByText(`POL-${first.policyId.slice(0, 8).toUpperCase()}`));
+    expect(within(rows[0]).getByText(first.policyId)).toBeVisible();
+    expect(within(rows[0]).getByText(`POL-${first.policyId.slice(0, 8).toUpperCase()}`)).toHaveFocus();
     expect(within(rows[0]).getByText('En análisis')).toBeVisible();
     expect(within(rows[0]).getByText('9 días')).toHaveClass('claims-overdue');
     expect(within(rows[0]).getByText(/148\.000\.000 COP$/)).toBeVisible();
@@ -31,7 +36,6 @@ describe('protected claims inbox', () => {
     expect(within(rows[2]).getByText('1 día')).toBeVisible();
     expect(within(rows[2]).getByText('Baja')).toBeVisible();
     expect(screen.getByText('Mostrando 3 siniestros')).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
   });
 
   it('shows a claim without an estimate as pending, in both languages, instead of a zero amount', async () => {
@@ -64,7 +68,7 @@ describe('protected claims inbox', () => {
     const fetch = vi.fn().mockImplementation(async () => response(examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await screen.findByRole('table');
-    const input = screen.getByLabelText('Buscar por N.º de siniestro o póliza');
+    const input = screen.getByLabelText('Buscar por N.º de siniestro o ID completo de póliza');
     const calls = fetch.mock.calls.length;
     await user.type(input, 'siniestro uno'); await user.click(screen.getByRole('button', { name: 'Buscar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('SIN-AAAA-NNNNN');
@@ -146,7 +150,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await screen.findByRole('table');
     expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
-    const input = screen.getByLabelText('Buscar por N.º de siniestro o póliza');
+    const input = screen.getByLabelText('Buscar por N.º de siniestro o ID completo de póliza');
     await user.click(input); await user.type(input, 'SIN-2026');
     const before = fetch.mock.calls.length;
     await act(async () => { window.dispatchEvent(new Event('focus')); });

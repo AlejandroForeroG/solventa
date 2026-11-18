@@ -5,8 +5,10 @@ import type { EventType, Issue, RejectedCandidate } from '../domain/report';
 export type ClaimReportLocale = 'es-CO' | 'en-US';
 
 type Copy = {
+  eventHint: string;
+  captureFailure: Record<'photo' | 'video' | 'gallery', string>;
   title: string; back: string; retry: string; cancel: string; step: (step: number) => string;
-  policy: { heading: string; loading: string; failed: string; none: string; partial: string; signedOut: string; unknown: string }; resuming: string;
+  policy: { heading: string; loading: string; failed: string; none: string; chooseAnother: string; signedOut: string; unknown: string; validity: string; premium: string }; resuming: string;
   fields: { eventType: string; occurredAt: string; date: string; time: string; place: string; placeHint: string; description: string; descriptionHint: string;
     counter: (used: number, max: number) => string; minimum: (min: number) => string };
   eventTypes: Record<EventType, string>;
@@ -28,12 +30,16 @@ type Copy = {
 };
 
 const es: Copy = {
+  eventHint: 'Describe el hecho. La cobertura se revisará según las condiciones de tu póliza.',
+  captureFailure: { photo: 'No pudimos abrir la cámara. Reintenta o elige un archivo de la galería. Tus datos siguen en este formulario.',
+    video: 'No pudimos abrir la grabación. Reintenta o elige un video de la galería. Tus datos siguen en este formulario.',
+    gallery: 'No pudimos abrir la galería. Reintenta la selección. Tus datos siguen en este formulario.' },
   title: 'Reportar siniestro', back: 'Volver', retry: 'Reintentar', cancel: 'Cancelar', step: step => `Paso ${step} de 3`,
-  policy: { heading: 'Elige la póliza', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
-    none: 'No tienes pólizas de Vida hipotecario vigentes para reportar un siniestro.', partial: 'Solo revisamos tus 6 pólizas más recientes. Si la póliza que buscas es más antigua, aún no podemos mostrarla aquí.', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
+  policy: { heading: 'Elige la póliza', validity: 'Vigencia', premium: 'Prima (pago único)', loading: 'Cargando tus pólizas…', failed: 'No pudimos cargar tus pólizas. Intenta de nuevo.',
+    none: 'No hay pólizas vigentes de seguro de vida hipotecario en esta página.', chooseAnother: 'Elegir otra póliza', signedOut: 'Inicia sesión para reportar un siniestro.', unknown: 'No encontramos esa póliza entre las que admiten un reporte.' },
   fields: { eventType: 'Tipo de evento', occurredAt: 'Cuándo ocurrió', date: 'Fecha', time: 'Hora', place: 'Lugar (opcional)', placeHint: 'Dirección o referencia',
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
-  eventTypes: { collision: 'Colisión', theft: 'Robo', damage: 'Daño', other: 'Otro' },
+  eventTypes: { collision: 'Colisión', theft: 'Hurto', damage: 'Daño', other: 'Evento de la póliza' },
   evidence: { heading: 'Evidencia', empty: 'Agrega al menos una foto, un video o un documento.', takePhoto: 'Tomar foto', recordVideo: 'Grabar video', choose: 'Elegir de la galería',
     counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} archivos · ${megabytes} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video', previewing: 'Preparando vista previa', noPreview: 'Sin vista previa',
     remove: (kind, position) => `Quitar ${kind} ${position}` },
@@ -64,16 +70,20 @@ const es: Copy = {
     unavailable: 'No pudimos completar el envío. Tu reporte todavía no está radicado. Inténtalo de nuevo.', invalid_response: 'El servicio respondió algo inesperado. Inténtalo más tarde.' },
   done: { heading: 'Reporte recibido', caseNumber: 'Número de caso', filedAt: 'Radicado', evidence: 'Evidencia', once: 'Un solo caso: volver a enviar no crea otro.', home: 'Volver al inicio' },
   resuming: 'Verificando tu sesión…',
-  continue: 'Continuar', products: { vida_hipotecario: 'Vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
+  continue: 'Continuar', products: { vida_hipotecario: 'Seguro de vida hipotecario', flight_delay: 'Retraso de vuelo', weather_event: 'Lluvia intensa' },
 };
 
 const en: Copy = {
+  eventHint: 'Describe what happened. Coverage will be reviewed against your policy conditions.',
+  captureFailure: { photo: 'We could not open the camera. Retry or choose a gallery file. Your form data is still here.',
+    video: 'We could not open video recording. Retry or choose a gallery video. Your form data is still here.',
+    gallery: 'We could not open the gallery. Retry the selection. Your form data is still here.' },
   title: 'Report a claim', back: 'Back', retry: 'Try again', cancel: 'Cancel', step: step => `Step ${step} of 3`,
-  policy: { heading: 'Choose the policy', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
-    none: 'You have no active mortgage life policy to report a claim on.', partial: 'We only checked your 6 most recent policies. If the one you need is older, it cannot be shown here yet.', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
+  policy: { heading: 'Choose the policy', validity: 'Coverage period', premium: 'Premium (single payment)', loading: 'Loading your policies…', failed: 'We could not load your policies. Try again.',
+    none: 'No active mortgage life policies are on this page.', chooseAnother: 'Choose another policy', signedOut: 'Sign in to report a claim.', unknown: 'We did not find that policy among the ones that accept a report.' },
   fields: { eventType: 'Type of event', occurredAt: 'When it happened', date: 'Date', time: 'Time', place: 'Place (optional)', placeHint: 'Address or landmark',
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
-  eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Other' },
+  eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Policy event' },
   evidence: { heading: 'Evidence', empty: 'Add at least one photo, video or document.', takePhoto: 'Take a photo', recordVideo: 'Record a video', choose: 'Choose from gallery',
     counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} files · ${megabytes} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video', previewing: 'Preparing preview', noPreview: 'No preview',
     remove: (kind, position) => `Remove ${kind} ${position}` },

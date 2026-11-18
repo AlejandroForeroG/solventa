@@ -3,20 +3,22 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
+import { usePageFocus } from '@/shared/presentation/use-page-focus';
 
-export function Action({ label, onPress, secondary, disabled }: { label: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
+export function Action({ label, accessibilityLabel, onPress, secondary, disabled }: { label: string; accessibilityLabel?: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [ui.button, secondary && ui.secondary, (pressed || disabled) && ui.dimmed]}>
     <Text style={[ui.buttonText, secondary && ui.secondaryText]}>{label}</Text>
   </Pressable>;
 }
 
-export function Page({ title, subtitle, children }: PropsWithChildren<{ title: string; subtitle?: string }>) {
-  return <SafeAreaView style={ui.safe} edges={['top', 'left', 'right']}>
-    <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+export function Page({ title, subtitle, children, focusKey }: PropsWithChildren<{ title: string; subtitle?: string; focusKey?: string | number }>) {
+  const { scrollRef, headingRef } = usePageFocus(focusKey);
+  return <SafeAreaView style={ui.safe} edges={['left', 'right', 'bottom']}>
+    <ScrollView ref={scrollRef} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
       <View style={ui.page}>
         {subtitle && <Text style={ui.caption}>{subtitle}</Text>}
-        <Text accessibilityRole="header" style={ui.title}>{title}</Text>
+        <Text ref={headingRef} accessible accessibilityRole="header" style={ui.title}>{title}</Text>
         {children}
       </View>
     </ScrollView>
@@ -48,7 +50,7 @@ export const ui = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: theme.colors.surface, borderRadius: 16 },
   thumb: { width: 56, height: 56, borderRadius: 12, backgroundColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   thumbText: { fontSize: 11, fontWeight: '700', color: theme.colors.muted, letterSpacing: 0.6 },
-  remove: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }, removeText: { fontSize: 22, color: theme.colors.muted },
+  remove: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, removeText: { fontSize: 22, color: theme.colors.muted },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderColor: theme.colors.border },
   summaryValue: { fontSize: 15, lineHeight: 22, fontWeight: '600', color: theme.colors.foreground, flexShrink: 1, textAlign: 'right' },
   banner: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, gap: 4 },
