@@ -47,17 +47,20 @@ const copy = {
 
 export function NotificationPreferencesScreen() {
   const auth = useAuthentication();
-  const language = useAppMessages() === messages.en ? 'en' : 'es';
+  const appCopy = useAppMessages();
+  const language = appCopy === messages.en ? 'en' : 'es';
   const text = copy[language];
+  const title = appCopy.actions.notificationPreferences;
   if (auth.status !== 'authenticated' || !auth.principal) return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-    <View style={styles.content}><View style={styles.panel}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text><View style={styles.panel}>
       <Text style={styles.description}>{text.signedOut}</Text>
-    </View></View>
+    </View></ScrollView>
   </SafeAreaView>;
-  return <PreferencesFlow key={`${auth.principal.clientId}:${auth.principal.subjectToken}`} language={language} />;
+  return <PreferencesFlow key={`${auth.principal.clientId}:${auth.principal.subjectToken}`} language={language} title={title} />;
 }
 
-function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
+function PreferencesFlow({ language, title }: { language: 'es' | 'en'; title: string }) {
   const text = copy[language];
   const { fontScale } = useWindowDimensions();
   const session = useAuthenticatedSession();
@@ -110,6 +113,7 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   const pushSelected = !!draft && categories.some(category => draft[category].push);
   const changed = !!saved && !!draft && JSON.stringify(saved.preferences) !== JSON.stringify(draft);
   return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}><ScrollView contentContainerStyle={styles.content}>
+    <Text accessibilityRole="header" style={styles.title}>{title}</Text>
     {busy && !draft && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
     {error === 'read' && <View accessibilityLiveRegion="polite" style={styles.warning}>
       <Text style={styles.warningText}>{text.readFailure}</Text></View>}
@@ -156,6 +160,7 @@ function Action({ label, onPress, disabled = false, secondary = false }: {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 20, gap: 18, paddingBottom: 40 },
+  title: { color: theme.colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -0.8 },
   description: { color: theme.colors.muted, fontSize: 14, lineHeight: 21 },
   panel: { backgroundColor: theme.colors.surface, borderRadius: 22, padding: 16, gap: 10 },
   permission: { gap: 12 },
