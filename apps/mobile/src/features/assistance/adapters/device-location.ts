@@ -4,15 +4,46 @@ export async function requestDeviceLocationPermission() {
   return permission.granted;
 }
 
+type Position = { latitude: number; longitude: number };
+type Subscription = { remove(): void };
+export type PositionWatcher = {
+  Accuracy: { Balanced: number };
+  watchPositionAsync(
+    options: { accuracy: number; timeInterval: number; distanceInterval: number; mayShowUserSettingsDialog: boolean },
+    callback: (reading: { coords: { latitude: number; longitude: number } }) => void,
+  ): Promise<Subscription>;
+};
+
+const DEADLINE_MS = 10_000;
+
+// Reads one position through a subscription, because a one-shot request cannot be cancelled: the device keeps acquiring a sensitive position after the customer withdrew the choice.
+// The system settings dialog is never offered: it would outlive a choice the customer withdrew.
+// The subscription is removed as soon as the first position arrives, the deadline passes or the signal aborts, including when the abort comes before the subscription has started.
+export function readPosition(location: PositionWatcher, signal: AbortSignal): Promise<Position | null> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { resolve(null); return; }
+    let subscription: Subscription | undefined;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = (finish: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      subscription?.remove();
+      finish();
+    };
+    const onAbort = () => settle(() => resolve(null));
+    signal.addEventListener('abort', onAbort, { once: true });
+    timer = setTimeout(() => settle(() => reject(new Error('location_deadline'))), DEADLINE_MS);
+    location.watchPositionAsync({ accuracy: location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0, mayShowUserSettingsDialog: false },
+      reading => settle(() => resolve({ latitude: reading.coords.latitude, longitude: reading.coords.longitude })))
+      .then(started => { if (settled) started.remove(); else subscription = started; },
+        error => settle(() => reject(error)));
+  });
+}
+
 export async function readDeviceLocation(signal: AbortSignal) {
   const location = await import('expo-location');
-  if (signal.aborted) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const reading = await Promise.race([location.getCurrentPositionAsync({
-      accuracy: location.Accuracy.Balanced, mayShowUserSettingsDialog: false,
-    }),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('location_deadline')), 10_000); })]);
-    return { latitude: reading.coords.latitude, longitude: reading.coords.longitude };
-  } finally { clearTimeout(timer); }
+  return readPosition(location, signal);
 }
