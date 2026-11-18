@@ -41,4 +41,6 @@ export interface EvidenceSource {
   takePhoto(): Promise<CaptureOutcome>;
   recordVideo(): Promise<CaptureOutcome>;
   choose(limit: number): Promise<CaptureOutcome>;
+  scanDocument(): Promise<CaptureOutcome>;
+  chooseDocument(): Promise<CaptureOutcome>;
 }

@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { policyReference } from '../../policy-wallet/domain/wallet';
@@ -10,6 +10,7 @@ import { useNow } from '../../policy-wallet/presentation/use-now';
 import { createClaimReport } from '../adapters/create-claim-report';
 import type { CaptureOutcome } from '../application/ports';
 import { descriptionLength, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
+import { DocumentReview } from './DocumentReview';
 import { issueText, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
 
@@ -34,23 +35,36 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
   const [pickerFailed, setPickerFailed] = useState<'photo' | 'video' | 'gallery' | null>(null);
+  const [picking, setPicking] = useState(false);
+  const pickerOpen = useRef(false);
   const now = useNow();
-  const { draft, issues, rejected, phase } = state;
+  const { draft, issues, rejected, phase, document } = state;
   const busy = phase.kind === 'sending';
   const header = `${copy.products[policy.product]} · ${policyReference(policy.policyId)}`;
 
   if (phase.kind === 'submitted') return <Result copy={copy} locale={locale} phase={phase} header={header} />;
-
-  const capture = async (action: 'photo' | 'video' | 'gallery') => {
+  const capture = async (action: 'photo' | 'video' | 'gallery' | 'scan' | 'document') => {
+    if (pickerOpen.current) return;
+    pickerOpen.current = true;
+    setPicking(true);
     setPermission(null); setPickerFailed(null);
-    const outcome: CaptureOutcome = await (action === 'photo' ? source.takePhoto() : action === 'video' ? source.recordVideo() : source.choose(LIMITS.files - draft.evidence.length));
-    if (outcome.status === 'ok') flow.add(outcome.candidates);
-    else if (outcome.status === 'permission') setPermission(outcome.canAskAgain ? 'ask' : 'settings');
-    else if (outcome.status === 'failed') setPickerFailed(action);
+    try {
+      if (action === 'scan' || action === 'document') await flow.pickDocument(action === 'scan' ? source.scanDocument : source.chooseDocument);
+      else {
+        flow.clearDocumentNotice();
+        const outcome: CaptureOutcome = await (action === 'photo' ? source.takePhoto() : action === 'video' ? source.recordVideo() : source.choose(LIMITS.files - draft.evidence.length));
+        if (outcome.status === 'ok') flow.add(outcome.candidates);
+        else if (outcome.status === 'permission') setPermission(outcome.canAskAgain ? 'ask' : 'settings');
+        else if (outcome.status === 'failed') setPickerFailed(action);
+      }
+    } finally {
+      pickerOpen.current = false;
+      setPicking(false);
+    }
   };
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
-  return <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
+  const report = <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
     {preparationNotice && step === 'capture' && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
@@ -78,9 +92,18 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
         <Text style={ui.caption}>{copy.evidence.counts(draft.evidence.length, LIMITS.files, megabytes(totalBytes(draft.evidence), locale), LIMITS.bytes / 1_048_576)}</Text>
         {draft.evidence.length === 0 && <Text style={ui.body}>{copy.evidence.empty}</Text>}
         {draft.evidence.map((item, index) => <Item key={item.id} item={item} copy={copy} locale={locale} position={index + 1} onRemove={() => flow.remove(item.id)} />)}
-        <Action label={copy.evidence.takePhoto} secondary onPress={() => void capture('photo')} />
-        <Action label={copy.evidence.recordVideo} secondary onPress={() => void capture('video')} />
-        <Action label={copy.evidence.choose} secondary onPress={() => void capture('gallery')} />
+        <Action label={copy.evidence.takePhoto} secondary disabled={picking} onPress={() => void capture('photo')} />
+        <Action label={copy.evidence.recordVideo} secondary disabled={picking} onPress={() => void capture('video')} />
+        <Action label={copy.evidence.choose} secondary disabled={picking} onPress={() => void capture('gallery')} />
+        <Action label={copy.document.scan} secondary disabled={picking} onPress={() => void capture('scan')} />
+        <Action label={copy.document.choose} secondary disabled={picking} onPress={() => void capture('document')} />
+        {document.kind === 'permission' && <View style={ui.group}>
+          <Text accessibilityRole="alert" style={ui.notice}>{copy.document.cameraDenied}</Text>
+          {!document.canAskAgain && <Action label={copy.permission.openSettings} secondary onPress={() => void Linking.openSettings()} />}
+        </View>}
+        {document.kind === 'failed' && <Text accessibilityRole="alert" style={ui.error}>
+          {document.reason === 'file_type' ? copy.document.fileType : document.reason === 'failed' ? copy.document.pickerFailed : copy.rejected[document.reason]}
+        </Text>}
         {permission && <View style={ui.group}>
           <Text accessibilityRole="alert" style={ui.notice}>{copy.permission.camera}</Text>
           {permission === 'settings' && <Action label={copy.permission.openSettings} secondary onPress={() => void Linking.openSettings()} />}
@@ -90,7 +113,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
           <Action label={copy.retry} secondary onPress={() => void capture(pickerFailed)} /></>}
       </Group>
 
-      <Action label={copy.review.next(draft.evidence.length)} onPress={() => { if (flow.review()) setStep('review'); }} />
+      <Action label={copy.review.next(draft.evidence.length)} disabled={picking} onPress={() => { if (!pickerOpen.current && flow.review()) setStep('review'); }} />
     </> : <>
       <View style={ui.card}>
         <Summary label={copy.review.policy} value={`${copy.products[policy.product]} · ${policyReference(policy.policyId)}`} />
@@ -117,6 +140,15 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
       <Action label={phase.kind === 'failed' && RETRYABLE.has(phase.failure) ? copy.retry : copy.review.send} disabled={busy} onPress={() => void flow.send()} />
     </>}
   </Page>;
+  const reviewingDocument = document.kind === 'review';
+  return <View style={ui.grow}>
+    <View style={ui.grow} accessibilityElementsHidden={reviewingDocument} importantForAccessibility={reviewingDocument ? 'no-hide-descendants' : 'auto'}>
+      {report}
+    </View>
+    {reviewingDocument && <View style={StyleSheet.absoluteFill}>
+      <DocumentReview key={document.item.id} uri={document.item.uri} copy={copy} onAttach={() => flow.attachDocument()} onCancel={() => flow.discardDocument()} />
+    </View>}
+  </View>;
 }
 
 function Group({ label, field, issues, copy, children }: { label: string; field: Issue['field']; issues: readonly Issue[]; copy: ClaimReportCopy; children: ReactNode }) {
@@ -132,7 +164,7 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 
 function Item({ item, copy, locale, position, onRemove }: { item: EvidenceItem; copy: ClaimReportCopy; locale: ClaimReportLocale; position: number; onRemove?: () => void }) {
-  const kind = item.kind === 'photo' ? copy.evidence.photo : copy.evidence.video;
+  const kind = item.document ? copy.document.item : item.kind === 'photo' ? copy.evidence.photo : copy.evidence.video;
   return <View style={ui.item}>
     <View style={ui.thumb} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {item.kind === 'photo' ? <Image source={{ uri: item.uri }} style={{ width: 56, height: 56 }} />
