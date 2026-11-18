@@ -28,7 +28,8 @@ export function NoticeProvider({ children }: PropsWithChildren) {
   useEffect(() => { showNoticesInForeground(); }, []);
   useEffect(() => {
     // Tapping a notice opens the alerts, which ask for the session again: a notice is not an authorization.
-    const open = () => { router.navigate('/alerts'); };
+    // The last tapped response survives a restart until it is cleared, so it is cleared as soon as it is attended: otherwise every start would reopen the alerts.
+    const open = () => { Notifications.clearLastNotificationResponse(); router.navigate('/alerts'); };
     const subscription = Notifications.addNotificationResponseReceivedListener(open);
     void Notifications.getLastNotificationResponseAsync().then(response => { if (response) open(); }).catch(() => undefined);
     return () => subscription.remove();

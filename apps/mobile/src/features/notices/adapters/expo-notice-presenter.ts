@@ -11,15 +11,14 @@ export function showNoticesInForeground() {
   });
 }
 
-// The lock screen may be seen by anyone: the text is generic and the Android channel hides its content until the device is unlocked.
+// The lock screen may be seen by anyone, so privacy rests on the text: it is generic and never names the policy, the amount or the person.
+// Android's channel option for lock-screen visibility was not applied by the emulator that was tested, so it is not relied on.
 // The identifier is the notice's own, so presenting it again replaces the earlier one instead of stacking a duplicate.
 export function createNoticePresenter(text: () => { title: string; body: string }): NoticePresenter {
   return {
     async present(notice) {
       if (Platform.OS === 'web') throw new Error('notices_unsupported');
-      if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync(CHANNEL, {
-        name: 'Solventa', importance: Notifications.AndroidImportance.DEFAULT, lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
-      });
+      if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync(CHANNEL, { name: 'Solventa', importance: Notifications.AndroidImportance.DEFAULT });
       const { title, body } = text();
       await Notifications.scheduleNotificationAsync({
         identifier: notice.eventId,
