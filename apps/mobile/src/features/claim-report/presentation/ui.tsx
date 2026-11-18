@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
+import { usePageFocus } from '@/shared/presentation/use-page-focus';
 
 export function Action({ label, accessibilityLabel, onPress, secondary, disabled }: { label: string; accessibilityLabel?: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
@@ -11,12 +12,13 @@ export function Action({ label, accessibilityLabel, onPress, secondary, disabled
   </Pressable>;
 }
 
-export function Page({ title, subtitle, children }: PropsWithChildren<{ title: string; subtitle?: string }>) {
+export function Page({ title, subtitle, children, focusKey }: PropsWithChildren<{ title: string; subtitle?: string; focusKey?: string | number }>) {
+  const { scrollRef, headingRef } = usePageFocus(focusKey);
   return <SafeAreaView style={ui.safe} edges={['left', 'right', 'bottom']}>
-    <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
       <View style={ui.page}>
         {subtitle && <Text style={ui.caption}>{subtitle}</Text>}
-        <Text accessibilityRole="header" style={ui.title}>{title}</Text>
+        <Text ref={headingRef} accessible accessibilityRole="header" style={ui.title}>{title}</Text>
         {children}
       </View>
     </ScrollView>

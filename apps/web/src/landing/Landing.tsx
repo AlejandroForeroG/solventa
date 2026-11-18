@@ -23,7 +23,8 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
         <p className="section-label">{t('prepareLabel')}</p>
         <h2 id="landing-prepare-title">{t('prepareTitle')}</h2>
         <ul>
-          <li>{t('age')}</li>
+          <li>{t(authenticated ? 'identityDetails' : 'age')}</li>
+          {authenticated && <li>{t('city')}</li>}
           <li>{t('amount')}</li>
           <li>{t('term')}</li>
         </ul>

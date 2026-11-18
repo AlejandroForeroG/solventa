@@ -48,8 +48,7 @@ function VerificationFlow({ locale }: { locale: Locale }) {
           {!inactive && <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>}
         </>}
         {inactive && state.terms && <>
-          <Text style={styles.caption}>{copy.termsHelp}</Text>
-          <View style={styles.terms}>{state.terms.wording.split(/(?<=[.!?])\s+/).map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}</View>
+          <ConsentTerms wording={state.terms.wording} locale={locale} />
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted, disabled }} disabled={disabled}
             onPress={() => setAccepted(value => !value)} style={styles.checkbox}>
             <Text style={styles.body}>{accepted ? '☑' : '☐'} {copy.consent}</Text>
@@ -74,6 +73,23 @@ function VerificationFlow({ locale }: { locale: Locale }) {
       </View>
     </ScrollView>
   </SafeAreaView>;
+}
+function ConsentTerms({ wording, locale }: { wording: string; locale: Locale }) {
+  const [expanded, setExpanded] = useState(false);
+  const copy = verificationMessages[locale];
+  const sentences = wording.split(/(?<=[.!?])\s+/);
+  // Keep the server wording verbatim. Only the explicit retention sentence is grouped with the definitions.
+  const isRetention = (sentence: string) => /^(Solo se conservan|Only references, hashes)/.test(sentence);
+  const retained = sentences.filter(isRetention);
+  return <View style={styles.terms}>
+    {sentences.filter(sentence => !isRetention(sentence)).map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
+      onPress={() => setExpanded(value => !value)} style={styles.termsToggle}>
+      <Text style={styles.body}>{copy.termsDetails} {expanded ? '−' : '+'}</Text>
+    </Pressable>
+    {expanded && <View style={styles.terms}>{retained.map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}
+      <Text style={styles.caption}>{copy.termsHelp}</Text></View>}
+  </View>;
 }
 function StepSelection({ step, locale, fixtures, saved, editable, disabled, onSave }: {
   step: Step; locale: Locale; fixtures: Fixture[]; saved?: string; editable: boolean; disabled: boolean; onSave: (fixture: Fixture) => void;
@@ -117,6 +133,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 30, lineHeight: 38, color: theme.colors.foreground, fontWeight: '700', letterSpacing: -0.6 },
   body: { fontSize: 15, lineHeight: 23, color: theme.colors.foreground }, caption: { fontSize: 12, lineHeight: 18, color: theme.colors.muted },
   terms: { gap: 12 },
+  termsToggle: { minHeight: 48, justifyContent: 'center', borderBottomWidth: 1, borderColor: theme.colors.border },
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, color: theme.colors.primaryDark, fontSize: 14, lineHeight: 21 },
   checkbox: { minHeight: 48, justifyContent: 'center' }, section: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 18, gap: 12 },
   stepTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.foreground },

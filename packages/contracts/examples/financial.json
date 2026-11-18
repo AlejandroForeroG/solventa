@@ -92,5 +92,31 @@
     },
     "signature": "0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "signatureNotice": "The signature is an intentionally invalid schema example, not an authentic HMAC."
+  "signatureNotice": "The signature is an intentionally invalid schema example, not an authentic HMAC.",
+  "policyPage": {
+    "policies": [
+      {
+        "product": "vida_hipotecario",
+        "premium": "77760.0000",
+        "currency": "COP",
+        "coverage": {
+          "kind": "mortgage_life",
+          "sumInsured": "320000000.0000"
+        },
+        "effectiveFrom": "2026-10-15T00:00:00.000Z",
+        "effectiveUntil": "2027-10-15T00:00:00.000Z",
+        "policyId": "10000000-0000-4000-8000-000000000001",
+        "status": "issued"
+      }
+    ],
+    "hasMore": true,
+    "nextCursor": "10000000-0000-4000-8000-000000000001",
+    "traceId": "50000000-0000-4000-8000-000000000001"
+  },
+  "lastPolicyPage": {
+    "policies": [],
+    "hasMore": false,
+    "nextCursor": null,
+    "traceId": "50000000-0000-4000-8000-000000000001"
+  }
 }

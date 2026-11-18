@@ -1,4 +1,5 @@
 export const claimsEs = {
+  'claims.details': 'Ver detalles', 'claims.hideDetails': 'Ocultar detalles',
   'claims.fullPolicyId': 'ID completo de la póliza',
   'claims.open': 'Siniestros', 'claims.nav': 'Siniestros', 'claims.console': 'Consola operativa', 'claims.title': 'Bandeja de siniestros',
   'claims.subtitle': 'Siniestros abiertos · ordenados por prioridad de atención',
@@ -27,6 +28,7 @@ export const claimsEs = {
 };
 
 export const claimsEn: Record<keyof typeof claimsEs, string> = {
+  'claims.details': 'View details', 'claims.hideDetails': 'Hide details',
   'claims.fullPolicyId': 'Full policy ID',
   'claims.open': 'Claims', 'claims.nav': 'Claims', 'claims.console': 'Operations console', 'claims.title': 'Claims inbox',
   'claims.subtitle': 'Open claims · sorted by handling priority',

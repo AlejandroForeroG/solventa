@@ -1,5 +1,6 @@
 const es = {
   termsHelp: 'KYC/AML significa identificación del cliente y controles contra el lavado de activos. Una huella o hash identifica un archivo sin conservar su contenido.',
+  termsDetails: 'Conservación de datos y definiciones',
   title: 'Verificar identidad', simulated: 'Verificación simulada · Solo archivos de prueba',
   back: 'Volver', refresh: 'Actualizar', consent: 'Acepto este consentimiento para el intento de 24 horas.',
   begin: 'Iniciar verificación', newAttempt: 'Iniciar un nuevo intento', expires: 'Válido hasta',
@@ -24,6 +25,7 @@ const es = {
 };
 const en: typeof es = {
   termsHelp: 'KYC/AML means customer identification and anti-money-laundering checks. A fingerprint or hash identifies a file without retaining its contents.',
+  termsDetails: 'Data retention and definitions',
   title: 'Verify identity', simulated: 'Simulated verification · Test files only', back: 'Back', refresh: 'Refresh',
   consent: 'I accept this consent for the 24-hour attempt.', begin: 'Start verification', newAttempt: 'Start a new attempt', expires: 'Valid until',
   steps: { document: 'Document', selfie: 'Selfie', liveness: 'Liveness' }, choose: 'Choose a test file', save: 'Save selection', saved: 'Step saved',

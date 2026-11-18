@@ -31,6 +31,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<{ view: string; state: State } | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(true);
   const view = [filter, search, before ?? ''].join('|');
@@ -85,13 +86,16 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
       {page && (page.items.length ? <>
         <div className="audit-table-wrap audit-card-wrap"><table className="audit-table claims-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['claim', 'policy', 'state', 'age', 'amount', 'evidence', 'priority'].map(key => <th key={key} scope="col" className={key === 'amount' ? 'claims-amount' : undefined}>{t(`col.${key}`)}</th>)}</tr></thead>
-          <tbody>{page.items.map(item => <tr key={item.claimId}>
-            <td data-label={t('col.claim')} className="mono claims-number">{item.claimNumber}</td>
-            <td data-label={t('col.policy')} className="mono audit-id"><details className="claims-policy-reference"><summary aria-label={`${t('fullPolicyId')}: POL-${item.policyId.slice(0, 8).toUpperCase()}`}>POL-{item.policyId.slice(0, 8).toUpperCase()}</summary><span>{item.policyId}</span></details></td>
+          <tbody>{page.items.map(item => <tr key={item.claimId} className={`compact-record ${expanded[item.claimId] ? 'record-expanded' : ''}`}>
+            <td data-label={t('col.claim')} className="mono claims-number"><div>{item.claimNumber}<button type="button" className="record-toggle"
+              aria-expanded={!!expanded[item.claimId]} aria-label={`${t('details')}: ${item.claimNumber}`}
+              aria-controls={['policy', 'age', 'amount', 'evidence'].map(key => `claim-${item.claimId}-${key}`).join(' ')}
+              onClick={() => setExpanded(current => ({ ...current, [item.claimId]: !current[item.claimId] }))}>{t(expanded[item.claimId] ? 'hideDetails' : 'details')}</button></div></td>
+            <td id={`claim-${item.claimId}-policy`} data-secondary data-label={t('col.policy')} className="mono audit-id"><details className="claims-policy-reference"><summary aria-label={`${t('fullPolicyId')}: POL-${item.policyId.slice(0, 8).toUpperCase()}`}>POL-{item.policyId.slice(0, 8).toUpperCase()}</summary><span>{item.policyId}</span></details></td>
             <td data-label={t('col.state')}><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
-            <td data-label={t('col.age')} className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
-            <td data-label={t('col.amount')} className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
-            <td data-label={t('col.evidence')}>{t('evidence', { provided: item.evidence.provided, required: item.evidence.required, status: t(`evidenceStatus.${item.evidence.status}`) })}</td>
+            <td id={`claim-${item.claimId}-age`} data-secondary data-label={t('col.age')} className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
+            <td id={`claim-${item.claimId}-amount`} data-secondary data-label={t('col.amount')} className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
+            <td id={`claim-${item.claimId}-evidence`} data-secondary data-label={t('col.evidence')}>{t('evidence', { provided: item.evidence.provided, required: item.evidence.required, status: t(`evidenceStatus.${item.evidence.status}`) })}</td>
             <td data-label={t('col.priority')}><span className={`claims-badge claims-priority-${item.priority}`}>{t(`priority.${item.priority}`)}</span></td>
           </tr>)}</tbody></table></div>
         <div className="claims-footer"><p role="status" className="note">{t('showing', { count: page.items.length })}</p>

@@ -50,7 +50,7 @@ function Shell() {
   const isClaims = window.location.pathname === '/siniestros';
   const isProviders = window.location.pathname === '/prestadores';
   const isPolicies = window.location.pathname === '/polizas'
-    || (window.location.pathname === '/' && session === 'authenticated' && policyDestination !== null);
+    || (window.location.pathname === '/' && policyDestination !== null && (session !== 'anonymous' || failed));
   const isAdvisor = window.location.pathname === '/asesor';
   const isPartnerPortal = window.location.pathname === '/socios';
   const isConsole = isAdvisor || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
@@ -94,7 +94,9 @@ function Shell() {
   }
   const t = (id: string) => intl.formatMessage({ id });
   function prepareLogin(event: MouseEvent<HTMLAnchorElement>) {
-    const destination = policyDocumentDestination();
+    const destination = policyDocumentDestination()
+      ?? (window.location.pathname === '/' && failed ? readPolicyDocumentDestination() : null);
+    if (!destination && isPolicies && policyDestination) { event.preventDefault(); setPolicyDestinationFailed(true); return; }
     if (destination && !savePolicyDocumentDestination(destination)) { event.preventDefault(); setPolicyDestinationFailed(true); return; }
     if (!destination) clearPolicyDocumentDestination();
     if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
@@ -105,15 +107,18 @@ function Shell() {
       : isConsole ? (session === 'authenticated' && !busy
       ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
-        <h1>{t(sectionTitle)}</h1>
-        {isPolicies && policyDocumentDestination() && <p>{t('policies.documentSignIn')}</p>}
+        <h1>{t(isPolicies && failed && policyDestination ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
+        {isPolicies && policyDestination && <><p>{t('policies.documentSignIn')}</p>
+          {failed && <p className="mono">POL-{policyDestination.policyId.slice(0, 8).toUpperCase()}</p>}</>}
+        {failed && <p className="banner banner-error" role="alert">{t('session.failed')}</p>}
         {policyDestinationFailed && <div role="alert"><p>{t('policies.destinationFailed')}</p><a href="/auth/login" onClick={clearPolicyDocumentDestination}>{t('policies.signInWithoutSelection')}</a></div>}
         {sessionExpired && <p role="alert">{t('navigation.expired')}</p>}
         {session === 'loading' || busy ? <p role="status">{t('session.loading')}</p>
           : session === 'unavailable' ? <>
             <p role="alert">{t('session.unavailable')}</p>
             <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
-          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t('session.title')}</a>}
+          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t(failed && isPolicies && policyDestination ? 'policies.retrySignIn' : 'session.title')}</a>}
+        {failed && isPolicies && policyDestination && <p><a href="/" onClick={clearPolicyDocumentDestination}>{t('policies.backHome')}</a></p>}
       </main>)
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>

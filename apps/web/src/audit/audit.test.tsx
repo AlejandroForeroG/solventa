@@ -45,6 +45,9 @@ describe('protected underwriting audit workspace', () => {
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: buttonLabel }));
     expect(await screen.findByRole('heading', { name: 'Entradas de la decisión' })).toBeVisible();
+    expect(screen.getByText('8.000.000')).not.toBeVisible();
+    await user.click(screen.getByRole('link', { name: 'Entradas de la decisión' }));
+    expect(document.getElementById('audit-inputs')).toHaveFocus();
     expect(screen.getByText('8.000.000')).toBeVisible(); expect(screen.getByText('Puntaje mínimo de 600')).toBeVisible();
     expect(screen.getByText('No se utilizó modelo')).toBeVisible();
     expect(screen.getByText('CNS-2026-00001 / 1')).toBeVisible();
@@ -91,6 +94,7 @@ describe('protected underwriting audit workspace', () => {
     ] } };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response(detail)));
     show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Entradas de la decisión' }));
     expect(await screen.findByRole('heading', { name: 'Origen de las entradas recuperadas' })).toBeVisible();
     expect(screen.getByRole('cell', { name: 'Perfil conservado' })).toBeVisible();
     expect(screen.getByRole('cell', { name: 'Artefacto simulado histórico' })).toBeVisible();

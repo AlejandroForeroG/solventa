@@ -97,7 +97,7 @@ No fingerprint, face template, device passcode or biometric sensor data enters t
 
 ## Policy wallet and protected local data
 
-Two capabilities cooperate. `policy-wallet` reads the customer's own issued policies and presents them; `policy-cache` is the only place where business data rests on the device. Both depend on ports, with real adapters injected in the composition (`adapters/create-policy-wallet.ts`).
+Two capabilities cooperate. `policy-wallet` reads the customer's own issued policies and presents them; `policy-cache` is the only place where business data rests on the device. Online pagination retains cursor history in memory only; each page replaces the bounded protected snapshot, so offline access represents the last viewed page and has no pagination. A requested report policy uses the owner-scoped list filter. Both depend on ports, with real adapters injected in the composition (`adapters/create-policy-wallet.ts`).
 
 | Layer | Wallet (`policy-wallet`) | Cache (`policy-cache`) |
 |---|---|---|

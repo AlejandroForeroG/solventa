@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme } from '@/theme';
+import { usePageFocus } from '@/shared/presentation/use-page-focus';
 import { messages } from '@/shared/i18n/messages';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
@@ -14,8 +15,10 @@ import { policyReference, validityAt, walletAccessFor, type WalletAccess, type W
 import { formatDate, formatDateTime, formatMoney } from './format';
 import { walletMessages, type WalletLocale } from './messages';
 import { useNow } from './use-now';
+import { PolicyPages } from './PolicyPages';
 
 type Ready = Extract<WalletSnapshot, { status: 'ready' }>;
+type PolicyFilter = keyof (typeof walletMessages)['es-CO']['filters'];
 
 export function WalletScreen({ draftSelection = false }: { draftSelection?: boolean } = {}) {
   const auth = useAuthentication();
@@ -35,10 +38,12 @@ function Wallet({ locale, access, draftSelection }: { locale: WalletLocale; acce
   const session = useAuthenticatedSession();
   const [wallet] = useState(() => createPolicyWallet(session.baseUrl, session, access.mode === 'online' ? access.owner : undefined));
   const state = useSyncExternalStore(wallet.subscribe, wallet.getSnapshot, wallet.getSnapshot);
+  const { scrollRef, headingRef } = usePageFocus(state.status === 'ready' && state.page !== null ? state.page : undefined);
   const [selected, select] = useState<string>();
   const [documentFailed, setDocumentFailed] = useState(false);
   const copy = walletMessages[locale];
   const now = useNow();
+  const [filter, setFilter] = useState<PolicyFilter>('all');
   useEffect(() => {
     void wallet.unlock();
     const lifecycle = AppState.addEventListener('change', next => { if (next !== 'active') { select(undefined); wallet.lock(); } });
@@ -46,10 +51,10 @@ function Wallet({ locale, access, draftSelection }: { locale: WalletLocale; acce
   }, [wallet]);
   const policy = state.status === 'ready' ? state.policies.find(item => item.policyId === selected) : undefined;
   return <SafeAreaView style={styles.safe}>
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
       <View style={styles.page}>
         {access.mode === 'offline' && <Action label={copy.back} secondary onPress={() => router.replace('/')} />}
-        <Text accessibilityRole="header" style={styles.title}>{draftSelection ? copy.chooseDraftPolicy : copy.title}</Text>
+        <Text ref={headingRef} accessible accessibilityRole="header" style={styles.title}>{draftSelection ? copy.chooseDraftPolicy : copy.title}</Text>
         {draftSelection && <Text style={styles.body}>{copy.chooseDraftHint}</Text>}
         {state.status === 'locked' && <Locked state={state} locale={locale} onUnlock={() => void wallet.unlock()} />}
         {state.status === 'loading' && <ActivityIndicator accessibilityLabel={copy.loading} color={theme.colors.primary} />}
@@ -66,10 +71,12 @@ function Wallet({ locale, access, draftSelection }: { locale: WalletLocale; acce
             destination.hash = new URLSearchParams({ policy: policy.policyId, section: 'documents' }).toString();
             void Linking.openURL(destination.toString()).catch(() => setDocumentFailed(true));
           }} />
-            : <List state={state} locale={locale} now={now} draftSelection={draftSelection} onOpen={policyId => {
+            : <List state={state} locale={locale} now={now} draftSelection={draftSelection} filter={filter} onFilter={setFilter} onOpen={policyId => {
               if (draftSelection) router.replace({ pathname: '/claim-drafts', params: { policyId } });
               else select(policyId);
             }} />}
+          {!policy && state.source === 'online' && state.page !== null && <PolicyPages page={state.page} hasMore={state.hasMore} locale={locale}
+            onPrevious={() => void wallet.previousPage()} onNext={() => void wallet.nextPage()} />}
           {!policy && <Action label={copy.refresh} secondary onPress={() => void wallet.refresh()} />}
         </>}
       </View>
@@ -96,20 +103,21 @@ function SourceBanner({ state, locale, unverified }: { state: Ready; locale: Wal
     {stored && <Text style={styles.caption}>{copy.stored.lastSync}: {formatDateTime(state.syncedAt, locale)}</Text>}
     {unverified && <Text style={styles.caption}>{copy.unverified}</Text>}
     {!stored && !state.stored && <Text style={styles.caption}>{copy.notSaved}</Text>}
+    {!stored && state.stored && <Text style={styles.caption}>{copy.offlinePage}</Text>}
   </View>;
 }
 
-function List({ state, locale, now, onOpen, draftSelection }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void; draftSelection: boolean }) {
+function List({ state, locale, now, onOpen, draftSelection, filter, onFilter }: { state: Ready; locale: WalletLocale; now: number; onOpen: (policyId: string) => void;
+  draftSelection: boolean; filter: PolicyFilter; onFilter(value: PolicyFilter): void }) {
   const copy = walletMessages[locale];
-  const [filter, setFilter] = useState<keyof typeof copy.filters>('all');
   const available = draftSelection ? state.policies.filter(policy => isReportableProduct(policy.product) && validityAt(policy, now) === 'active') : state.policies;
-  if (available.length === 0) return <Text style={styles.body}>{draftSelection ? copy.noDraftPolicies : copy.empty}</Text>;
+  if (available.length === 0) return <Text style={styles.body}>{draftSelection ? copy.noDraftPolicies : (state.page ?? 1) > 1 ? copy.emptyPage : copy.empty}</Text>;
   const sorted = available.filter(policy => draftSelection || filter === 'all' || validityAt(policy, now) === filter)
     .sort((a, b) => Date.parse(b.effectiveUntil) - Date.parse(a.effectiveUntil));
   return <View style={styles.section}>
     {!draftSelection && <View style={styles.filters}>
       {(['active', 'expired', 'all'] as const).map(value => <Pressable key={value} accessibilityRole="button"
-        accessibilityState={{ selected: value === filter }} onPress={() => setFilter(value)}
+        accessibilityState={{ selected: value === filter }} onPress={() => onFilter(value)}
         style={[styles.filter, value === filter && styles.filterSelected]}>
         <Text style={[styles.filterText, value === filter && styles.filterTextSelected]}>{copy.filters[value]}</Text>
       </Pressable>)}
@@ -131,7 +139,6 @@ function List({ state, locale, now, onOpen, draftSelection }: { state: Ready; lo
         {state.stored && <Text style={styles.caption}>{copy.availableOffline}</Text>}
       </Pressable>;
     })}
-    {state.hasMore && <Text style={styles.caption}>{copy.hasMore}</Text>}
   </View>;
 }
 
@@ -204,7 +211,7 @@ const styles = StyleSheet.create({
   bannerStored: { backgroundColor: theme.colors.warningSurface },
   bannerLabel: { fontSize: 12, lineHeight: 18, fontWeight: '700', letterSpacing: 0.6, color: theme.colors.onMint },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  filter: { paddingHorizontal: 16, minHeight: 44, borderRadius: 22, backgroundColor: theme.colors.border, justifyContent: 'center' },
+  filter: { paddingHorizontal: 16, minHeight: 48, borderRadius: 24, backgroundColor: theme.colors.border, justifyContent: 'center' },
   filterSelected: { backgroundColor: theme.colors.primaryDark },
   filterText: { fontSize: 14, color: theme.colors.foreground, fontWeight: '600' },
   filterTextSelected: { color: theme.colors.onPrimary },

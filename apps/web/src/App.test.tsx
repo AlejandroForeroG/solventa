@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
+import { clearPolicyDocumentDestination, readPolicyDocumentDestination, savePolicyDocumentDestination } from './policies/document-destination';
 import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
@@ -106,6 +107,33 @@ describe('claims inbox route in the application', () => {
 describe('my policies route in the application', () => {
   const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+  afterEach(clearPolicyDocumentDestination);
+  it('keeps the selected policy and a contextual retry after a failed sign-in', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', '/?auth=failed'); serve(401);
+    const { container } = render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Documentos de la póliza' })).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('No se completó el acceso.');
+    expect(screen.getByText('POL-10000000')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    const retry = await screen.findByRole('link', { name: 'Reintentar acceso' });
+    expect(retry).toHaveAttribute('href', '/auth/login');
+    await userEvent.click(retry);
+    expect(readPolicyDocumentDestination()).toEqual({ policyId: policy.policyId });
+    expect(await axe(container)).toHaveNoViolations();
+    await userEvent.click(screen.getByRole('link', { name: 'Ir al inicio' }));
+    expect(readPolicyDocumentDestination()).toBeNull();
+  });
+  it('does not silently retain an expired locator when retrying sign-in', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', '/?auth=failed'); serve(401); render(<App />);
+    const retry = await screen.findByRole('link', { name: 'Reintentar acceso' });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 15 * 60 * 1000);
+    await userEvent.click(retry);
+    expect(readPolicyDocumentDestination()).toBeNull();
+    expect(screen.getByText(/El navegador no pudo conservar la selección/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Iniciar sesión sin conservar la selección' })).toHaveAttribute('href', '/auth/login');
+  });
   it('requires sign-in and does not render the public calculator on the policies route', async () => {
     window.history.replaceState(null, '', '/polizas'); serve(401); render(<App />);
     await screen.findByRole('heading', { name: 'Mis pólizas' });

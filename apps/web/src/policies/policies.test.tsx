@@ -67,10 +67,29 @@ describe('my policies', () => {
     expect(screen.getByRole('heading', { name: 'Seguro de vida hipotecario' })).toHaveFocus();
   });
 
-  it('tells the customer when there are more issued policies than the list shows', async () => {
+  it('opens older pages and preserves the page when returning from a policy detail', async () => {
+    serve({ '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: true, nextCursor: policyId }),
+      [`/api/v1/policies/issued?cursor=${policyId}`]: () => json({ policies: [flight], hasMore: false, nextCursor: null }),
+      [`/api/v1/policies/${flightId}/detail`]: () => json({ ...detail, ...flight }) });
+    show(); const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Siguiente' }));
+    expect(await screen.findByText('Página 2')).toBeVisible();
+    const older = await screen.findByRole('button', { name: /^Ver detalle de Retraso de vuelo/ });
+    expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Mis pólizas' })).toHaveFocus();
+    await user.click(older);
+    await user.click(await screen.findByRole('button', { name: /‹ Mis pólizas/i }));
+    expect(await screen.findByText('Página 2')).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Retraso de vuelo/ })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect(await screen.findByText('Página 1')).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ })).toBeVisible();
+  });
+
+  it('rejects an incomplete pagination response instead of hiding older policies', async () => {
     serve({ '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: true }) });
     show();
-    expect(await screen.findByText(/Hay más que este portal aún no lista/)).toBeVisible();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo consultar tus pólizas.');
   });
 
   it.each(['2026', '01/02/2026', '2026-10-15', '2026-10-15T00:00:00', '2026-02-30T00:00:00Z', '2026-01-01T24:00:00Z', '2026-13-01T00:00:00Z'])('rejects the policy list when a date is not RFC 3339: %s', async badDate => {

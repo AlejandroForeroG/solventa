@@ -79,3 +79,16 @@
 @container (max-width: 500px) {
   .audit-section .audit-card-table tbody td { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
+
+.record-toggle { display: none; width: fit-content; min-height: 44px; padding: 8px 0; background: transparent; border: 0; color: #0b6b5f; text-decoration: underline; text-underline-offset: 3px; font: 500 14px/1.5 'IBM Plex Sans', sans-serif; cursor: pointer; }
+.record-toggle:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+@container (max-width: 1040px) {
+  .compact-record .record-toggle { display: block; }
+  .compact-record:not(.record-expanded) [data-secondary] { display: none; }
+  .audit-card-table .compact-record td { padding-block: 10px; }
+}
+
+.audit-disclosure > summary { cursor: pointer; min-height: 44px; color: #12151a; }
+.audit-disclosure > summary h2 { display: inline; line-height: 44px; margin: 0; }
+.audit-disclosure[open] > summary { margin-bottom: 20px; }
+.audit-disclosure > summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 3px; }

@@ -58,11 +58,15 @@ function Validity({ policy }: { policy: PolicySummary }) {
   return <>{t('validity', { from: format.dayMonthYear(new Date(policy.effectiveFrom)), until: format.dayMonthYear(new Date(policy.effectiveUntil)) })}</>;
 }
 
-function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void; onSessionLost(): void }) {
+function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyId: string): void; onSessionLost(): void;
+  cursors: (string | undefined)[]; onPage(cursors: (string | undefined)[]): void }) {
   const t = useTranslate();
   const format = useFormatters();
   const heading = useHeading();
-  const { state, retry } = useLoad(listPolicies, onSessionLost);
+  const cursor = cursors.at(-1);
+  const readPage = useCallback((signal: AbortSignal) => listPolicies(signal, { cursor }), [cursor]);
+  const { state, retry } = useLoad(readPage, onSessionLost);
+  const changePage = (next: (string | undefined)[]) => { retry(); onPage(next); heading.current?.focus(); };
   const [now] = useState(Date.now);
   return <main className="content policies">
     <p className="section-label">{t('label')}</p>
@@ -77,8 +81,15 @@ function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void;
         <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
         <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
       </button></li>;
-    })}</ul> : <div className="card policy-empty"><p>{t('empty')}</p><a className="btn btn-primary" href="/cotizar">{t('quote')}</a></div>)}
-    {state.kind === 'ready' && state.value.hasMore && <p className="note" role="status">{t('truncated')}</p>}
+    })}</ul> : <div className="card policy-empty"><p>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</p>
+      {cursors.length === 1 && <a className="btn btn-primary" href="/cotizar">{t('quote')}</a>}</div>)}
+    {(cursors.length > 1 || state.kind === 'ready' && state.value.hasMore) && <nav className="actions" aria-label={t('pagination')}>
+      <button type="button" className="btn btn-secondary" disabled={state.kind === 'loading' || cursors.length === 1}
+        onClick={() => changePage(cursors.slice(0, -1))}>{t('previousPage')}</button>
+      <span className="note" role="status">{t('page', { number: cursors.length })}</span>
+      <button type="button" className="btn btn-secondary" disabled={state.kind !== 'ready' || !state.value.nextCursor}
+        onClick={() => { if (state.kind === 'ready' && state.value.nextCursor) changePage([...cursors, state.value.nextCursor]); }}>{t('nextPage')}</button>
+    </nav>}
   </main>;
 }
 
@@ -200,8 +211,9 @@ function PolicyDetailView({ policyId, initialTab = 'info', onBack, onSessionLost
 export function PolicyPortal({ onSessionLost, documentDestination }: { onSessionLost(): void; documentDestination?: PolicyDocumentDestination | null }) {
   const [destination] = useState(() => documentDestination ?? policyDocumentDestination());
   const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
+  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   return selected ? <PolicyDetailView policyId={selected} initialTab={selected === destination?.policyId ? 'documents' : 'info'} onBack={() => {
     window.history.replaceState(null, '', '/polizas'); setSelected(null);
   }} onSessionLost={onSessionLost} />
-    : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} />;
+    : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;
 }

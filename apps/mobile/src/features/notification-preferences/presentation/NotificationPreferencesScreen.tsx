@@ -14,7 +14,7 @@ import type { Category, Channel, Matrix, Preferences } from '../domain/preferenc
 
 const copy = {
   es: {
-    save: 'Guardar preferencias', saved: 'Preferencias guardadas.',
+    save: 'Guardar preferencias', saved: 'Preferencias guardadas.', unsaved: 'Cambios sin guardar.',
     retry: 'Reintentar', reload: 'Actualizar', loading: 'Cargando preferencias…',
     signedOut: 'Inicia sesión para consultar tus preferencias.',
     blocked: 'Push no está autorizado por el dispositivo. Actívalo en Ajustes para recibir avisos por este canal.',
@@ -29,7 +29,7 @@ const copy = {
       commercial: ['Novedades comerciales', 'Productos y beneficios'] },
   },
   en: {
-    save: 'Save preferences', saved: 'Preferences saved.',
+    save: 'Save preferences', saved: 'Preferences saved.', unsaved: 'Unsaved changes.',
     retry: 'Retry', reload: 'Refresh', loading: 'Loading preferences…',
     signedOut: 'Sign in to view your preferences.',
     blocked: 'Push is blocked by your device. Enable notifications in Settings to receive this channel.',
@@ -140,6 +140,7 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
     {(error === 'save' || error === 'conflict') && <View accessibilityLiveRegion="polite" style={styles.warning}>
       <Text style={styles.warningText}>{error === 'conflict' ? text.conflict : text.failure}</Text></View>}
     {notice && <Text accessibilityLiveRegion="polite" style={styles.success}>{text.saved}</Text>}
+    {changed && !notice && <Text accessibilityLiveRegion="polite" style={styles.description}>{text.unsaved}</Text>}
     {pending && error === 'save' ? <Action label={text.retry} disabled={busy} onPress={() => void save(pending)} />
       : <Action label={text.save} disabled={busy || !changed || !!pending} onPress={() => void save()} />}
     <Action label={text.reload} secondary disabled={busy} onPress={() => void refresh()} />
