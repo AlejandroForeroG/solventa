@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { PolicyCacheFailure } from '../apps/mobile/src/features/policy-cache/domain/cached-policy';
-import { DraftFailure } from '../apps/mobile/src/features/claim-drafts/domain/draft';
+import { createRequire } from 'node:module';
+
+// The mocked native adapters load through CommonJS; use the same class identities in this ESM harness.
+const require = createRequire(import.meta.url);
+const { PolicyCacheFailure } = require('../apps/mobile/src/features/policy-cache/domain/cached-policy') as typeof import('../apps/mobile/src/features/policy-cache/domain/cached-policy');
+const { DraftFailure } = require('../apps/mobile/src/features/claim-drafts/domain/draft') as typeof import('../apps/mobile/src/features/claim-drafts/domain/draft');
 
 const adapter = new URL('../apps/mobile/src/features/claim-drafts/adapters/', import.meta.url);
 const metadata = 'solventa.claim-drafts.v1', marker = 'solventa.claim-drafts.discard.v1';
