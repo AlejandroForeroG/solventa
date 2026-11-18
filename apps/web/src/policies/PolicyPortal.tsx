@@ -208,12 +208,14 @@ function PolicyDetailView({ policyId, initialTab = 'info', onBack, onSessionLost
   </main>;
 }
 
-export function PolicyPortal({ onSessionLost, documentDestination }: { onSessionLost(): void; documentDestination?: PolicyDocumentDestination | null }) {
-  const [destination] = useState(() => documentDestination ?? policyDocumentDestination());
+export function PolicyPortal({ onSessionLost, documentDestination, onBackToList }: {
+  onSessionLost(): void; documentDestination?: PolicyDocumentDestination | null; onBackToList?(): void;
+}) {
+  const [destination, setDestination] = useState(() => documentDestination ?? policyDocumentDestination());
   const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   return selected ? <PolicyDetailView policyId={selected} initialTab={selected === destination?.policyId ? 'documents' : 'info'} onBack={() => {
-    window.history.replaceState(null, '', '/polizas'); setSelected(null);
+    window.history.replaceState(null, '', '/polizas'); setDestination(null); setSelected(null); onBackToList?.();
   }} onSessionLost={onSessionLost} />
     : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;
 }
