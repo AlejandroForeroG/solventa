@@ -101,7 +101,7 @@ const activeSessionProvider: AuthenticationCollaborators = {
   sessions: () => ({
     find: async () => ({ clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() }),
     revoke: async () => {},
-    open: async () => { throw new Error('unexpected_session_registration'); },
+    register: async () => { throw new Error('unexpected_session_registration'); },
   }),
 };
 

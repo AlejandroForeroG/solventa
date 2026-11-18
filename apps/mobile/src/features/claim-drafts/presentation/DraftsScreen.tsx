@@ -184,7 +184,9 @@ function Editor({ content, copy, online, session, locale, onSave, onBack, failur
     <Text style={ui.label}>{copy.description}</Text>
     <TextInput accessibilityLabel={copy.description} value={draft.description} onChangeText={description => setDraft(d => ({ ...d, description }))}
       editable={!busy} multiline maxLength={600} style={[ui.field, ui.multiline]} />
-    <Text style={ui.label}>{copy.evidence} ({draft.evidence.length}/10)</Text>
+    <Text style={ui.label}>{copy.evidence}</Text>
+    <Text style={ui.caption}>{copy.evidenceSelected(draft.evidence.length)}</Text>
+    {online && !evidenceFailed && evidence.length > 0 && <Text style={ui.caption}>{copy.evidenceAvailable(evidence.length)}</Text>}
     {(!online || evidenceFailed) && <Text style={ui.caption}>{copy.evidenceOffline}</Text>}
     {online && !evidenceFailed && !evidence.length && <Text style={ui.caption}>{copy.noEvidence}</Text>}
     {[...draft.evidence.filter(ref => !evidence.some(e => e.claimId === ref.claimId && e.fileId === ref.fileId)).map(ref => ({ ...ref, createdAt: '', contentType: '' })), ...evidence].map((ref, i) => {

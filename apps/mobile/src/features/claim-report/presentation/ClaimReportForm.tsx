@@ -14,7 +14,11 @@ import { DocumentReview } from './DocumentReview';
 import { issueText, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
 
-const megabytes = (bytes: number, locale: ClaimReportLocale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 1_048_576);
+const evidenceSize = (bytes: number, locale: ClaimReportLocale) => {
+  const unit = bytes >= 1_048_576 ? 'MB' : bytes >= 1024 ? 'KB' : 'B';
+  const divisor = unit === 'MB' ? 1_048_576 : unit === 'KB' ? 1024 : 1;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / divisor)} ${unit}`;
+};
 const RETRYABLE = new Set(['unavailable', 'incomplete', 'invalid_response']);
 
 export function ClaimReportForm({ policy, copy, locale, session, initial, preparationNotice }: { policy: CachedPolicy; copy: ClaimReportCopy; locale: ClaimReportLocale; session: AuthenticatedSession & { baseUrl: string };
@@ -89,7 +93,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
       </Group>
 
       <Group label={copy.evidence.heading} issues={issues} field="evidence" copy={copy}>
-        <Text style={ui.caption}>{copy.evidence.counts(draft.evidence.length, LIMITS.files, megabytes(totalBytes(draft.evidence), locale), LIMITS.bytes / 1_048_576)}</Text>
+        <Text style={ui.caption}>{copy.evidence.counts(draft.evidence.length, LIMITS.files, evidenceSize(totalBytes(draft.evidence), locale), LIMITS.bytes / 1_048_576)}</Text>
         {draft.evidence.length === 0 && <Text style={ui.body}>{copy.evidence.empty}</Text>}
         {draft.evidence.map((item, index) => <Item key={item.id} item={item} copy={copy} locale={locale} position={index + 1} onRemove={() => flow.remove(item.id)} />)}
         <Action label={copy.evidence.takePhoto} secondary disabled={picking} onPress={() => void capture('photo')} />
@@ -126,7 +130,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
       </View>
       <View style={ui.group}>
         <Text style={ui.label}>{copy.evidence.heading}</Text>
-        <Text style={ui.caption}>{copy.review.files(draft.evidence.length, megabytes(totalBytes(draft.evidence), locale))}</Text>
+        <Text style={ui.caption}>{copy.review.files(draft.evidence.length, evidenceSize(totalBytes(draft.evidence), locale))}</Text>
         {draft.evidence.map((item, index) => <Item key={item.id} item={item} copy={copy} locale={locale} position={index + 1} />)}
       </View>
       <Text style={ui.caption}>{copy.review.note}</Text>
@@ -173,12 +177,12 @@ function Item({ item, copy, locale, position, onRemove }: { item: EvidenceItem; 
         : <ActivityIndicator color="#0B6B5F" />}
     </View>
     <View style={ui.grow}>
-      <Text style={ui.body}>{`${kind} ${position}`}</Text>
-      <Text style={ui.caption}>{`${megabytes(item.byteSize, locale)} MB`}</Text>
+      <Text style={ui.body}>{item.fileName ?? `${kind} ${position}`}</Text>
+      <Text style={ui.caption}>{evidenceSize(item.byteSize, locale)}</Text>
       {item.preview?.status === 'failed' && <Text accessibilityRole="alert" style={ui.caption}>{copy.evidence.noPreview}</Text>}
       {item.preview?.status === 'pending' && <Text accessibilityLiveRegion="polite" style={ui.caption}>{copy.evidence.previewing}</Text>}
     </View>
-    {onRemove && <Pressable accessibilityRole="button" accessibilityLabel={copy.evidence.remove(kind.toLowerCase(), position)} onPress={onRemove} style={ui.remove}><Text style={ui.removeText}>×</Text></Pressable>}
+    {onRemove && <Pressable accessibilityRole="button" accessibilityLabel={`${copy.evidence.remove(kind.toLowerCase(), position)}${item.fileName ? `: ${item.fileName}` : ''}`} onPress={onRemove} style={ui.remove}><Text style={ui.removeText}>×</Text></Pressable>}
   </View>;
 }
 
@@ -210,7 +214,7 @@ function Result({ copy, locale, phase, header }: { copy: ClaimReportCopy; locale
     </View>
     <View style={ui.card}>
       <Summary label={copy.done.filedAt} value={new Date(phase.submittedAt).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })} />
-      <Summary label={copy.done.evidence} value={copy.review.files(phase.files, megabytes(phase.bytes, locale))} />
+      <Summary label={copy.done.evidence} value={copy.review.files(phase.files, evidenceSize(phase.bytes, locale))} />
     </View>
     <Text style={ui.caption}>{copy.done.once}</Text>
     <Action label={copy.done.home} onPress={() => router.replace('/')} />

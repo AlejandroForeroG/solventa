@@ -36,7 +36,8 @@ describe('step 1: form', () => {
   it('labels every field and marks the required ones', () => {
     setup(vi.fn());
     for (const label of Object.values(es)) expect(screen.getByLabelText(label)).toBeRequired();
-    expect(screen.getByLabelText(/Producto/)).toHaveAttribute('readonly');
+    expect(screen.getByText('Producto')).toBeVisible();
+    expect(screen.getByText(messages['es-CO']['form.productValue'])).toBeVisible();
     expect(screen.getByText('Los campos marcados con * son obligatorios.')).toBeInTheDocument();
   });
 

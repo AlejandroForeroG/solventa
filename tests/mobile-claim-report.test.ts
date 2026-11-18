@@ -25,6 +25,10 @@ test('picked files are normalized, and every limit is enforced before anything i
   assert.equal(contentTypeOf({ uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 1 }), null);
   assert.equal(contentTypeOf({ uri: 'file:///a', mimeType: null, byteSize: 1 }), null);
   const none: EvidenceItem[] = [];
+  const named = admit(none, { uri: 'file:///copy.png', mimeType: 'image/png', byteSize: 34387,
+    fileName: '  Synthetic\u202e\u0000 document.png  ' }, 'named');
+  assert.ok('item' in named);
+  assert.equal(named.item.fileName, 'Synthetic document.png');
   assert.deepEqual(admit(none, { uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 5 }, 'x'), { rejected: 'file_type' });
   assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: 0 }, 'x'), { rejected: 'empty' });
   assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: null }, 'x'), { rejected: 'unreadable' });
@@ -51,10 +55,12 @@ test('the declaration needs a type, an exact time inside the policy dates, a rea
 });
 
 test('the declaration sent to the server is exact, trimmed and carries no device path', () => {
-  const manifest = manifestOf({ ...draft({ place: '  Calle 116  ', description: `  ${description}  ` }), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
+  const manifest = manifestOf({ ...draft({ place: '  Calle 116  ', description: `  ${description}  `,
+    evidence: [{ ...photo('a'), fileName: 'Synthetic document.png' }] }), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
   assert.deepEqual(manifest, { policyId, eventType: 'collision', occurredAt: '2026-11-10T15:00:00.000Z', place: 'Calle 116', description,
     evidence: [{ fileId: 'a', contentType: 'image/jpeg', byteSize: 2_000_000, sha256: 'f'.repeat(64) }] });
   assert.equal(JSON.stringify(manifest).includes('file:///'), false);
+  assert.equal(JSON.stringify(manifest).includes('Synthetic document.png'), false);
   assert.equal('place' in manifestOf({ ...draft(), eventType: 'collision' }, new Map()), false);
 });
 

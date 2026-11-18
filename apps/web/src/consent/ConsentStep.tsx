@@ -42,7 +42,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   }, [api, announce, intl, onSessionLost]);
 
   useEffect(() => { void fetchTerms(); return () => pending.current?.abort(); }, [fetchTerms]);
-  useEffect(() => { if (load !== 'loading') heading.current?.focus(); }, [load]);
+  useEffect(() => { heading.current?.focus(); }, [load, busy]);
   useEffect(() => { key.current = newIdempotencyKey(); }, [locale]);
 
   function reload() { setLoad('loading'); void fetchTerms(); }
@@ -50,6 +50,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   async function authorize() {
     if (!terms || !checked || busy !== 'idle') return;
     setBusy('authorizing'); setProblem('none');
+    announce(intl.formatMessage({ id: 'consent.submitting' }));
     const outcome = await api.grantConsent({ textVersion: SUPPORTED_TEXT_VERSION, locale, ...(quoteRef ? { quoteRef } : {}) }, key.current);
     setBusy('idle');
     if (outcome.kind === 'ok') {
