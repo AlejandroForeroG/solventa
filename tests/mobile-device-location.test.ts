@@ -7,11 +7,12 @@ type Reading = { coords: { latitude: number; longitude: number } };
 // A watcher whose subscription can be answered by the test, so the order of events is under control.
 function fakeWatcher(options: { startsAfter?: Promise<void> } = {}) {
   let deliver: ((reading: Reading) => void) | undefined;
-  const state = { started: 0, removed: 0 };
+  const state = { started: 0, removed: 0, dialog: undefined as boolean | undefined };
   const watcher: PositionWatcher = {
     Accuracy: { Balanced: 3 },
-    async watchPositionAsync(_options, callback) {
+    async watchPositionAsync(watchOptions, callback) {
       state.started++;
+      state.dialog = watchOptions.mayShowUserSettingsDialog;
       deliver = callback;
       await options.startsAfter;
       return { remove: () => { state.removed++; } };
@@ -29,6 +30,16 @@ test('the first position is returned and the subscription is removed', async () 
   fake.deliver(reading(4.711, -74.0721));
   assert.deepEqual(await pending, { latitude: 4.711, longitude: -74.0721 });
   assert.equal(fake.state.removed, 1);
+});
+
+test('the system settings dialog is never offered while the position is read', async () => {
+  const fake = fakeWatcher();
+  const controller = new AbortController();
+  const pending = readPosition(fake.watcher, controller.signal);
+  await tick();
+  assert.equal(fake.state.dialog, false);
+  controller.abort();
+  await pending;
 });
 
 test('aborting while the device searches stops the acquisition and returns nothing', async () => {

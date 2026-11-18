@@ -9,7 +9,7 @@ type Subscription = { remove(): void };
 export type PositionWatcher = {
   Accuracy: { Balanced: number };
   watchPositionAsync(
-    options: { accuracy: number; timeInterval: number; distanceInterval: number },
+    options: { accuracy: number; timeInterval: number; distanceInterval: number; mayShowUserSettingsDialog: boolean },
     callback: (reading: { coords: { latitude: number; longitude: number } }) => void,
   ): Promise<Subscription>;
 };
@@ -17,6 +17,7 @@ export type PositionWatcher = {
 const DEADLINE_MS = 10_000;
 
 // Reads one position through a subscription, because a one-shot request cannot be cancelled: the device keeps acquiring a sensitive position after the customer withdrew the choice.
+// The system settings dialog is never offered: it would outlive a choice the customer withdrew.
 // The subscription is removed as soon as the first position arrives, the deadline passes or the signal aborts, including when the abort comes before the subscription has started.
 export function readPosition(location: PositionWatcher, signal: AbortSignal): Promise<Position | null> {
   return new Promise((resolve, reject) => {
@@ -35,7 +36,7 @@ export function readPosition(location: PositionWatcher, signal: AbortSignal): Pr
     const onAbort = () => settle(() => resolve(null));
     signal.addEventListener('abort', onAbort, { once: true });
     timer = setTimeout(() => settle(() => reject(new Error('location_deadline'))), DEADLINE_MS);
-    location.watchPositionAsync({ accuracy: location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0 },
+    location.watchPositionAsync({ accuracy: location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0, mayShowUserSettingsDialog: false },
       reading => settle(() => resolve({ latitude: reading.coords.latitude, longitude: reading.coords.longitude })))
       .then(started => { if (settled) started.remove(); else subscription = started; },
         error => settle(() => reject(error)));
