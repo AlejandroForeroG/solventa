@@ -38,12 +38,14 @@ export function LocaleSwitch() {
 const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/', label: 'navigation.home', icon: 'home' },
   { href: '/polizas', label: 'policies.open', icon: 'policy' },
+  { href: '/mis-siniestros', label: 'claims.customerCases', icon: 'claims' },
   { href: '/cotizar', label: 'navigation.quote', icon: 'quote' },
   { href: '/prestadores', label: 'assistance.title', icon: 'location' },
 ];
 const workspaceLinks: typeof customerLinks = [
   { href: '/siniestros', label: 'claims.open', icon: 'claims' },
   { href: '/auditoria', label: 'audit.open', icon: 'audit' },
+  { href: '/reportes', label: 'reports.open', icon: 'audit' },
   { href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];
@@ -54,10 +56,10 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const path = window.location.pathname;
-  const workspace = workspaceLinks.some(item => item.href === path);
+  const workspace = workspaceLinks.some(item => (item.href === path || item.href !== '/' && path.startsWith(item.href + '/')));
   const area = t(workspace ? 'navigation.workspace' : 'navigation.account');
   const links = workspace ? workspaceLinks : customerLinks;
-  const current = links.find(item => item.href === path);
+  const current = links.find(item => (item.href === path || item.href !== '/' && path.startsWith(item.href + '/')));
   const dialog = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const stopBusyNavigation = (event: MouseEvent<HTMLAnchorElement>) => { if (busy) event.preventDefault(); };
