@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
 import { createNoticesApi } from '../apps/mobile/src/features/notices/adapters/notices-api';
+import { waitUntilShown } from '../apps/mobile/src/features/notices/adapters/wait-until-shown';
 import { NoticeCenter } from '../apps/mobile/src/features/notices/application/notice-center';
 import type { NoticesApi } from '../apps/mobile/src/features/notices/application/ports';
 import { NoticeFailure, parseNotices, type Notice, type ReceiptOutcome } from '../apps/mobile/src/features/notices/domain/notice';
@@ -155,4 +156,32 @@ test('the client tells a refused session, an outage, a rejection and a malformed
   assert.equal(((await failure(() => json({ simulated: true, notices: 'x', traceId: trace }))) as NoticeFailure).code, 'invalid_response');
   assert.equal(((await failure(() => json(wire([])), api => api.receipt('not-a-uuid', 'presented'))) as NoticeFailure).code, 'rejected');
   assert.equal(((await failure(() => json({ eventId: event(2), state: 'presented', replayed: false, traceId: trace }), api => api.receipt(event(1), 'presented'))) as NoticeFailure).code, 'invalid_response');
+});
+
+// ---- A notice is presented only when the system shows it, not when it merely accepted to schedule it.
+const listing = (...ids: string[]) => ids.map(id => ({ request: { identifier: id } }));
+const noWait = { attempts: 4, delayMs: 0, sleep: async () => {} };
+
+test('a notification the system lists as shown is confirmed, even if it appears after a first empty look', async () => {
+  const reads: string[][] = [[], [], [event(1)]];
+  await waitUntilShown(async () => listing(...(reads.shift() ?? [event(1)])), event(1), noWait);
+  assert.equal(reads.length, 0);
+});
+
+test('a notification that was only scheduled, or suppressed, is never confirmed', async () => {
+  let looks = 0;
+  await assert.rejects(waitUntilShown(async () => { looks++; return listing(event(2)); }, event(1), noWait), /notice_not_shown/);
+  assert.equal(looks, 4, 'it looked as many times as allowed and then gave up');
+  await assert.rejects(waitUntilShown(async () => { throw new Error('system unavailable'); }, event(1), noWait), /system unavailable/);
+});
+
+test('the coordinator reports nothing for a notice the system did not show, and tries it again on the next collection', async () => {
+  const w = world();
+  w.presenting(async () => { throw new Error('notice_not_shown'); });
+  await w.center.refresh();
+  assert.deepEqual(w.received, []);
+  assert.equal(w.center.getSnapshot().notices[0]?.state, 'offered');
+  w.presenting(async item => { w.shown.push(item.eventId); });
+  await w.center.refresh();
+  assert.deepEqual(w.received, [[event(1), 'presented']]);
 });
