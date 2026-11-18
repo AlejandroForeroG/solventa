@@ -9,7 +9,7 @@ import type { AuthenticatedSession } from '../../policy-wallet/application/ports
 import { useNow } from '../../policy-wallet/presentation/use-now';
 import { createClaimReport } from '../adapters/create-claim-report';
 import type { CaptureOutcome } from '../application/ports';
-import { descriptionLength, EVENT_TYPES, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
+import { descriptionLength, LIMITS, totalBytes, type EvidenceItem, type Issue } from '../domain/report';
 import { DocumentReview } from './DocumentReview';
 import { issueText, type ClaimReportCopy, type ClaimReportLocale } from './messages';
 import { Action, Page, ui } from './ui';
@@ -21,6 +21,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   initial?: { eventType: 'collision' | 'theft' | 'damage' | 'other' | null; occurredAt: string | null; place: string; description: string }; preparationNotice?: string }) {
   const [{ flow, source }] = useState(() => {
     const created = createClaimReport(session.baseUrl, session, policy);
+    created.flow.setEventType('other');
     if (initial) {
       if (initial.eventType) created.flow.setEventType(initial.eventType);
       if (initial.occurredAt) created.flow.setOccurredAt(new Date(initial.occurredAt));
@@ -33,7 +34,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   useEffect(() => { flow.open(); return () => { void flow.dispose(); }; }, [flow]);
   const [step, setStep] = useState<'capture' | 'review'>('capture');
   const [permission, setPermission] = useState<'ask' | 'settings' | null>(null);
-  const [pickerFailed, setPickerFailed] = useState(false);
+  const [pickerFailed, setPickerFailed] = useState<'photo' | 'video' | 'gallery' | null>(null);
   const [picking, setPicking] = useState(false);
   const pickerOpen = useRef(false);
   const now = useNow();
@@ -42,19 +43,19 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   const header = `${copy.products[policy.product]} · ${policyReference(policy.policyId)}`;
 
   if (phase.kind === 'submitted') return <Result copy={copy} locale={locale} phase={phase} header={header} />;
-  const capture = async (open: () => Promise<CaptureOutcome>, isDocument = false) => {
+  const capture = async (action: 'photo' | 'video' | 'gallery' | 'scan' | 'document') => {
     if (pickerOpen.current) return;
     pickerOpen.current = true;
     setPicking(true);
-    setPermission(null); setPickerFailed(false);
+    setPermission(null); setPickerFailed(null);
     try {
-      if (isDocument) await flow.pickDocument(open);
+      if (action === 'scan' || action === 'document') await flow.pickDocument(action === 'scan' ? source.scanDocument : source.chooseDocument);
       else {
         flow.clearDocumentNotice();
-        const outcome = await open();
+        const outcome: CaptureOutcome = await (action === 'photo' ? source.takePhoto() : action === 'video' ? source.recordVideo() : source.choose(LIMITS.files - draft.evidence.length));
         if (outcome.status === 'ok') flow.add(outcome.candidates);
         else if (outcome.status === 'permission') setPermission(outcome.canAskAgain ? 'ask' : 'settings');
-        else if (outcome.status === 'failed') setPickerFailed(true);
+        else if (outcome.status === 'failed') setPickerFailed(action);
       }
     } finally {
       pickerOpen.current = false;
@@ -64,15 +65,11 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
   const report = <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
-    {preparationNotice && <Text style={ui.notice}>{preparationNotice}</Text>}
+    {preparationNotice && step === 'capture' && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
-        <View style={ui.chips}>
-          {EVENT_TYPES.map(type => <Pressable key={type} accessibilityRole="button" accessibilityState={{ selected: draft.eventType === type }}
-            onPress={() => flow.setEventType(type)} style={[ui.chip, draft.eventType === type && ui.chipSelected]}>
-            <Text style={[ui.chipText, draft.eventType === type && ui.chipTextSelected]}>{copy.eventTypes[type]}</Text>
-          </Pressable>)}
-        </View>
+        <Text style={ui.body}>{draft.eventType ? copy.eventTypes[draft.eventType] : copy.eventTypes.other}</Text>
+        <Text style={ui.caption}>{copy.eventHint}</Text>
       </Group>
 
       <Group label={copy.fields.occurredAt} issues={issues} field="occurredAt" copy={copy}>
@@ -95,11 +92,11 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
         <Text style={ui.caption}>{copy.evidence.counts(draft.evidence.length, LIMITS.files, megabytes(totalBytes(draft.evidence), locale), LIMITS.bytes / 1_048_576)}</Text>
         {draft.evidence.length === 0 && <Text style={ui.body}>{copy.evidence.empty}</Text>}
         {draft.evidence.map((item, index) => <Item key={item.id} item={item} copy={copy} locale={locale} position={index + 1} onRemove={() => flow.remove(item.id)} />)}
-        <Action label={copy.evidence.takePhoto} secondary disabled={picking} onPress={() => void capture(source.takePhoto)} />
-        <Action label={copy.evidence.recordVideo} secondary disabled={picking} onPress={() => void capture(source.recordVideo)} />
-        <Action label={copy.evidence.choose} secondary disabled={picking} onPress={() => void capture(() => source.choose(LIMITS.files - draft.evidence.length))} />
-        <Action label={copy.document.scan} secondary disabled={picking} onPress={() => void capture(source.scanDocument, true)} />
-        <Action label={copy.document.choose} secondary disabled={picking} onPress={() => void capture(source.chooseDocument, true)} />
+        <Action label={copy.evidence.takePhoto} secondary disabled={picking} onPress={() => void capture('photo')} />
+        <Action label={copy.evidence.recordVideo} secondary disabled={picking} onPress={() => void capture('video')} />
+        <Action label={copy.evidence.choose} secondary disabled={picking} onPress={() => void capture('gallery')} />
+        <Action label={copy.document.scan} secondary disabled={picking} onPress={() => void capture('scan')} />
+        <Action label={copy.document.choose} secondary disabled={picking} onPress={() => void capture('document')} />
         {document.kind === 'permission' && <View style={ui.group}>
           <Text accessibilityRole="alert" style={ui.notice}>{copy.document.cameraDenied}</Text>
           {!document.canAskAgain && <Action label={copy.permission.openSettings} secondary onPress={() => void Linking.openSettings()} />}
@@ -112,11 +109,11 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
           {permission === 'settings' && <Action label={copy.permission.openSettings} secondary onPress={() => void Linking.openSettings()} />}
         </View>}
         {rejected.map((reason, index) => <Text key={`${reason}-${index}`} accessibilityRole="alert" style={ui.error}>{copy.rejected[reason]}</Text>)}
-        {pickerFailed && <Text accessibilityRole="alert" style={ui.error}>{copy.rejected.failed}</Text>}
+        {pickerFailed && <><Text accessibilityRole="alert" style={ui.error}>{copy.captureFailure[pickerFailed]}</Text>
+          <Action label={copy.retry} secondary onPress={() => void capture(pickerFailed)} /></>}
       </Group>
 
       <Action label={copy.review.next(draft.evidence.length)} disabled={picking} onPress={() => { if (!pickerOpen.current && flow.review()) setStep('review'); }} />
-      <Action label={copy.back} secondary onPress={goBack} />
     </> : <>
       <View style={ui.card}>
         <Summary label={copy.review.policy} value={`${copy.products[policy.product]} · ${policyReference(policy.policyId)}`} />
@@ -141,7 +138,6 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
         {phase.failure === 'incomplete' ? copy.failures.incomplete(phase.missing) : copy.failures[phase.failure]}</Text>}
       {__DEV__ && phase.kind === 'failed' && phase.cause && <Text selectable style={ui.caption}>{`dev: ${phase.cause}`}</Text>}
       <Action label={phase.kind === 'failed' && RETRYABLE.has(phase.failure) ? copy.retry : copy.review.send} disabled={busy} onPress={() => void flow.send()} />
-      <Action label={copy.back} secondary disabled={busy} onPress={goBack} />
     </>}
   </Page>;
   const reviewingDocument = document.kind === 'review';
@@ -199,9 +195,9 @@ function When({ value, from, now, copy, locale, onChange }: { value: Date; from:
     return <DateTimePicker value={value} mode="datetime" minimumDate={from} maximumDate={new Date(now)} onChange={(_, picked) => { if (picked) onChange(picked); }} />;
   }
   return <View style={ui.row}>
-    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.date} onPress={() => open('date')} style={[ui.picker, ui.grow]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.date} accessibilityValue={{ text: value.toLocaleDateString(locale, { dateStyle: 'medium' }) }} onPress={() => open('date')} style={[ui.picker, ui.grow]}>
       <Text style={ui.pickerText}>{value.toLocaleDateString(locale, { dateStyle: 'medium' })}</Text></Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.time} onPress={() => open('time')} style={[ui.picker, ui.grow]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={copy.fields.time} accessibilityValue={{ text: value.toLocaleTimeString(locale, { timeStyle: 'short' }) }} onPress={() => open('time')} style={[ui.picker, ui.grow]}>
       <Text style={ui.pickerText}>{value.toLocaleTimeString(locale, { timeStyle: 'short' })}</Text></Pressable>
   </View>;
 }

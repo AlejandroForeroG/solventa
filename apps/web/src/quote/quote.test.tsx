@@ -24,7 +24,8 @@ async function fill(user: ReturnType<typeof userEvent.setup>, values: QuoteValue
   for (const key of Object.keys(values) as (keyof QuoteValues)[]) {
     const input = screen.getByLabelText(labels[key]);
     await user.clear(input);
-    await user.type(input, values[key]);
+    const date = key === 'birthDate' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(values[key]) : null;
+    await user.type(input, date ? `${input.getAttribute('placeholder') === 'MM/DD/YYYY' ? date[2] : date[3]}/${input.getAttribute('placeholder') === 'MM/DD/YYYY' ? date[3] : date[2]}/${date[1]}` : values[key]);
   }
 }
 const es = { fullName: /Nombre completo/, documentNumber: /Documento/, birthDate: /Fecha de nacimiento/, city: /Ciudad/, amount: /Monto/, termMonths: /Plazo/ };
@@ -62,6 +63,30 @@ describe('step 1: form', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('updates corrected errors and their count without moving focus during editing', async () => {
+    const request = vi.fn();
+    const { user } = setup(request);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    const name = screen.getByLabelText(/Nombre completo/);
+    await user.type(name, 'Ana');
+    expect(name).toHaveFocus();
+    expect(name).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByText(/Revisa 5 campos marcados/)).toBeVisible();
+    const document = screen.getByLabelText(/Documento/);
+    await user.type(document, 'A');
+    expect(document).toHaveFocus();
+    expect(document).toHaveAccessibleDescription(/6 y 10/);
+    await fill(user, valid, es);
+    expect(screen.queryByText('No pudimos calcular la cotización.')).toBeNull();
+    for (const label of Object.values(es)) expect(screen.getByLabelText(label)).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText(/Plazo/)).toHaveFocus();
+    expect(request).not.toHaveBeenCalled();
+    await user.clear(name);
+    await user.click(screen.getByRole('button', { name: 'Calcular cotización' }));
+    expect(name).toHaveFocus();
+    expect(name).toHaveAccessibleDescription('Este campo es obligatorio.');
+  });
+
   it('maps a server 400 (age out of range) to the birth date field with the calculated age', async () => {
     const request = vi.fn().mockResolvedValue({ kind: 'validation', errors: [{ field: 'customer.birthDate', code: 'age_out_of_range', params: { age: 74, min: 18, max: 70 } }] });
     const { user } = setup(request);
@@ -70,7 +95,7 @@ describe('step 1: form', () => {
     const dob = await screen.findByLabelText(/Fecha de nacimiento/);
     expect(dob).toHaveAttribute('aria-invalid', 'true');
     expect(dob).toHaveFocus();
-    expect(document.getElementById(dob.getAttribute('aria-describedby')!)).toHaveTextContent('Edad calculada: 74 años. El rango asegurable es de 18 a 70 años.');
+    expect(dob).toHaveAccessibleDescription(/Edad calculada: 74 años\. El rango asegurable es de 18 a 70 años\./);
     expect(screen.getByLabelText(/Nombre completo/)).not.toHaveAttribute('aria-invalid');
   });
 

@@ -108,6 +108,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
       <header className="consent-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'consent.title' })}</h1>
         <p className="note">{intl.formatMessage({ id: 'consent.subtitle' })}</p>
+        <p className="banner banner-info">{intl.formatMessage({ id: 'consent.simulated' })}</p>
       </header>
       <div className="consent-body">
         <div>

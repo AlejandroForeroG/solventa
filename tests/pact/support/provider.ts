@@ -173,7 +173,7 @@ const binding = (app: { request: (request: Request, init: undefined, env: unknow
 
 function financeFixtures(imported: boolean): PolicyHttpDependencies['finance'] {
   return {
-    listOwn: async () => ({ status: 'ok', policies: [nativePolicy], hasMore: false }),
+    listOwn: async () => ({ status: 'ok', policies: [nativePolicy], hasMore: false, nextCursor: null }),
     get: async () => ({ status: 'ok', replayed: false, policy: financialPolicy }),
     getByAcceptance: async input => imported ? { status: 'ok', replayed: false, policy: financialPolicy } : { status: 'denied', error: 'policy_pending', httpStatus: 404, traceId: input.traceId },
     beginSignatureChallenge: async () => ({ status: 'ok', replayed: false, policy: financialPolicy,
@@ -208,13 +208,20 @@ function financialWorld(state: FinancialState): Partial<World> {
 }
 
 // Identity's decision for a native user is simulated by the bearer token; the real policy route and its response shape are exercised.
-function nativePolicyWorld(): Partial<World> {
+function nativePolicyWorld(paged = false): Partial<World> {
   const authorizeFinancialAccess = async (input: unknown) => {
     const request = input as { kind: string; token: string; operation: string };
     if (request.kind !== 'mobile' || request.token !== 'synthetic.jwt.token') return { allowed: false, status: 401, error: 'unauthorized' };
     return { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [request.operation] } };
   };
-  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess: async () => ({ recorded: true }), finance: financeFixtures(true) });
+  const finance = financeFixtures(true);
+  if (paged) finance.listOwn = async input => {
+    const older = { ...nativePolicy, policyId: '30000000-0000-4000-8000-000000000004' };
+    if (input.policyId) return { status: 'ok', policies: input.policyId === older.policyId ? [older] : [], hasMore: false, nextCursor: null };
+    return input.cursor === nativePolicy.policyId ? { status: 'ok', policies: [older], hasMore: false, nextCursor: null }
+      : { status: 'ok', policies: [nativePolicy], hasMore: true, nextCursor: nativePolicy.policyId };
+  };
+  const policy = createPolicyHttp({ authorizeFinancialAccess, denyResourceAccess: async () => ({ recorded: true }), finance });
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
@@ -273,7 +280,8 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
     },
   ])),
   'a native session with its installation binding': nativeWorld,
-  'a native session with an issued policy': nativePolicyWorld,
+  'a native session with an issued policy': () => nativePolicyWorld(),
+  'a native session with multiple policy pages': () => nativePolicyWorld(true),
   ...Object.fromEntries((['ready', 'conflict', 'resolved', 'unavailable'] as const).map(mode => [`native claim drafts ${mode}`, () => ({ policy: draftPactWorld(mode) })])),
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
   'a native session with a stored notice': () => nativeNoticesWorld('stored'),

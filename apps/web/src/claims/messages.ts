@@ -1,9 +1,11 @@
 export const claimsEs = {
+  'claims.details': 'Ver detalles', 'claims.hideDetails': 'Ocultar detalles',
+  'claims.fullPolicyId': 'ID completo de la póliza',
   'claims.open': 'Siniestros', 'claims.nav': 'Siniestros', 'claims.console': 'Consola operativa', 'claims.title': 'Bandeja de siniestros',
   'claims.subtitle': 'Siniestros abiertos · ordenados por prioridad de atención',
 
   'claims.filterGroup': 'Estado', 'claims.filter.all': 'Todos', 'claims.filter.unassigned': 'Sin asignar', 'claims.filter.pending_information': 'Pendiente info', 'claims.filter.overdue': 'Vencidos',
-  'claims.search': 'Buscar por N.º de siniestro o póliza', 'claims.searchButton': 'Buscar', 'claims.searchInvalid': 'Escribe un N.º de siniestro (SIN-AAAA-NNNNN) o el ID de la póliza.',
+  'claims.search': 'Buscar por N.º de siniestro o ID completo de póliza', 'claims.searchButton': 'Buscar', 'claims.searchInvalid': 'Escribe un N.º de siniestro (SIN-AAAA-NNNNN) o el ID completo de la póliza.',
 
   'claims.col.claim': 'Siniestro', 'claims.col.policy': 'Póliza', 'claims.col.state': 'Estado', 'claims.col.age': 'Antigüedad', 'claims.col.amount': 'Monto estimado',
   'claims.col.evidence': 'Evidencia', 'claims.col.priority': 'Prioridad',
@@ -26,11 +28,13 @@ export const claimsEs = {
 };
 
 export const claimsEn: Record<keyof typeof claimsEs, string> = {
+  'claims.details': 'View details', 'claims.hideDetails': 'Hide details',
+  'claims.fullPolicyId': 'Full policy ID',
   'claims.open': 'Claims', 'claims.nav': 'Claims', 'claims.console': 'Operations console', 'claims.title': 'Claims inbox',
   'claims.subtitle': 'Open claims · sorted by handling priority',
 
   'claims.filterGroup': 'Status', 'claims.filter.all': 'All', 'claims.filter.unassigned': 'Unassigned', 'claims.filter.pending_information': 'Pending info', 'claims.filter.overdue': 'Overdue',
-  'claims.search': 'Search by claim number or policy', 'claims.searchButton': 'Search', 'claims.searchInvalid': 'Enter a claim number (SIN-YYYY-NNNNN) or the policy ID.',
+  'claims.search': 'Search by claim number or full policy ID', 'claims.searchButton': 'Search', 'claims.searchInvalid': 'Enter a claim number (SIN-YYYY-NNNNN) or the full policy ID.',
 
   'claims.col.claim': 'Claim', 'claims.col.policy': 'Policy', 'claims.col.state': 'Status', 'claims.col.age': 'Age', 'claims.col.amount': 'Estimated amount',
   'claims.col.evidence': 'Evidence', 'claims.col.priority': 'Priority',

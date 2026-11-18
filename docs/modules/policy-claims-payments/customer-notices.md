@@ -6,7 +6,7 @@ The transport is simulated. No push provider, device token or push service exist
 
 ## What is stored and what is not
 
-A notice carries the policy identifier, its kind and the moment it was stored. It carries no amount, document, payment data or personal data. The owner is the client named inside the stored event, and the response never returns it. A notice has one of these states:
+A notice carries the policy identifier, its kind and the moment it was stored. It carries no amount, document, payment data or personal data. The owner is the client named inside the stored event, and the response never returns it. The state of a notice belongs to the customer, not to a device: there is no registry of notification devices, token or push provider yet, so the delivery decision and the receipt carry no installation. With several devices signed in to one account, the first receipt decides for all of them: if one reports `permission_denied`, the others do not present that notice even with permission, and if one reports `presented`, the others do not receive it. A per-device state needs a registered device identity, which arrives with a real push provider, and is not part of this increment. A notice has one of these states:
 
 | State | Meaning |
 |---|---|
@@ -56,4 +56,4 @@ Push permission stays device-local and is never inferred from the stored choice,
 
 Run `npm run check` and `npm run test:financial:sql`. Then, in a native development build, check the permission dialog, a presented notice, the lock screen, a tap that opens the alerts, a denied permission and a signed-out tap. The web export cannot establish any of them.
 
-Limits: the transport is simulated and a closed app collects nothing until it is opened; no claim-status or commercial notice exists; a notice offered to a device that never reports back stays `unconfirmed`; the notice read has no dedicated index; and iOS and a physical device are not exercised.
+Limits: the transport is simulated and a closed app collects nothing until it is opened; the state of a notice is per customer and the first receipt decides across devices; no claim-status or commercial notice exists; a notice offered to a device that never reports back stays `unconfirmed`; the notice read has no dedicated index; and iOS and a physical device are not exercised.

@@ -50,11 +50,13 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
   const network = Network.useNetworkState();
   const [editing, edit] = useState<{ id: string; content: DraftContent; baseRevision: number } | null>(null);
   const [failure, fail] = useState<DraftFailureKind>();
+  const [opening, setOpening] = useState(true);
   const releaseEdit = useRef<(() => void) | null>(null);
   const current = useRef({ auth, network });
   useEffect(() => { current.current = { auth, network }; }, [auth, network]);
   const online = auth.status === 'authenticated' && !!auth.principal && network.isConnected !== false && network.isInternetReachable !== false;
   const open = useCallback(async () => {
+    setOpening(true);
     releaseEdit.current?.(); releaseEdit.current = null;
     edit(null); fail(undefined);
     try {
@@ -65,6 +67,7 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
         await sync.sync(owner); await sync.refresh(owner);
       }
     } catch (error) { fail(error instanceof DraftFailure ? error.kind : 'storage'); }
+    finally { setOpening(false); }
   }, [sync]);
   useFocusEffect(useCallback(() => { void open(); return () => { releaseEdit.current?.(); releaseEdit.current = null; sync.lock(); }; }, [open, sync]));
   const beginEdit = (value: NonNullable<typeof editing>) => {
@@ -87,7 +90,6 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
   if (snapshot.status !== 'ready') return <Page title={copy.title}>
     {snapshot.status === 'loading' ? <ActivityIndicator accessibilityLabel={copy.loading} /> : <Action label={copy.unlock} onPress={() => void open()} />}
     {(failure ?? snapshot.failure) && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[(failure ?? snapshot.failure)!]}</Text>}
-    <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;
   if (editing) return <Editor key={editing.id} content={editing.content} copy={copy} online={online}
     session={session} locale={locale} onSave={content => act(() => sync.save(editing.id, content, editing.baseRevision))} onBack={closeEditor} failure={failure} />;
@@ -96,7 +98,10 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
     <Text style={ui.caption}>{copy.unsent}</Text>
     {(failure ?? snapshot.failure) && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[(failure ?? snapshot.failure)!]}</Text>}
     {requestedPolicy && <Action label={copy.create} onPress={() => beginEdit({ id: randomUUID(), content: emptyDraft(requestedPolicy), baseRevision: 0 })} />}
-    {!snapshot.entries.length && <Text style={ui.body}>{copy.empty}</Text>}
+    {!requestedPolicy && <><Action label={copy.choosePolicy} onPress={() => router.push('/choose-draft-policy')} />
+      <Text style={ui.caption}>{copy.choosePolicyHint}</Text></>}
+    {!snapshot.entries.length && (opening ? <ActivityIndicator accessibilityLabel={copy.loading} />
+      : !(failure ?? snapshot.failure) && <Text style={ui.body}>{copy.empty}</Text>)}
     {snapshot.entries.map(entry => <View key={entry.draftId} style={ui.card}>
       <Text style={ui.subtitle}>{policyReference(entry.content.policyId)}</Text>
       <Text accessibilityLiveRegion="polite" style={ui.label}>{copy.states[entry.status]}</Text>
@@ -104,16 +109,17 @@ function Workspace({ requestedPolicy, copy, locale }: { requestedPolicy?: string
       <Text style={ui.caption}>{copy.savedAt}: {new Date(entry.savedAt).toLocaleString(locale)}</Text>
       {entry.confirmed && <Text style={ui.caption}>{copy.lastSync}: {new Date(entry.confirmed.updatedAt).toLocaleString(locale)}</Text>}
       {entry.failure && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[entry.failure]}</Text>}
-      {online && entry.status === 'confirmed' && !entry.command && <Action label={copy.continueReport}
-        onPress={() => router.push({ pathname: '/claim-report', params: { policyId: entry.content.policyId, draftId: entry.draftId } })} />}
+      {online && entry.status === 'confirmed' && !entry.command && <><Action label={copy.continueReport}
+        accessibilityLabel={`${copy.continueReport} · ${policyReference(entry.content.policyId)} · ${entry.draftId.slice(0, 8)}`}
+        onPress={() => router.push({ pathname: '/claim-report', params: { policyId: entry.content.policyId, draftId: entry.draftId } })} />
+        <Text style={ui.caption}>{copy.completeHint}</Text></>}
       {entry.status === 'conflict' && entry.conflict ? <Conflict entry={entry} copy={copy} locale={locale}
         choose={keep => void act(() => sync.resolve(entry.draftId, keep))} />
         : entry.command && (entry.attempted || entry.command.resolution) && !(entry.status === 'failed' && entry.failure === 'rejected') ? <>
           <Text style={ui.caption}>{copy.immutable}</Text>
           {entry.status !== 'sending' && <Action label={copy.retry} onPress={() => void act(() => sync.retry(entry.draftId))} />}
-        </> : <Action secondary label={copy.edit} onPress={() => beginEdit({ id: entry.draftId, content: entry.content, baseRevision: entry.command?.baseRevision ?? entry.confirmed?.revision ?? 0 })} />}
+        </> : <Action secondary label={copy.edit} accessibilityLabel={`${copy.edit} · ${policyReference(entry.content.policyId)} · ${entry.draftId.slice(0, 8)}`} onPress={() => beginEdit({ id: entry.draftId, content: entry.content, baseRevision: entry.command?.baseRevision ?? entry.confirmed?.revision ?? 0 })} />}
     </View>)}
-    <Action secondary label={copy.back} onPress={() => router.back()} />
   </Page>;
 }
 
@@ -161,7 +167,7 @@ function Editor({ content, copy, online, session, locale, onSave, onBack, failur
   };
   return <Page title={copy.title} subtitle={policyReference(draft.policyId)}>
     <Text style={ui.label}>{copy.eventType}</Text>
-    <View style={ui.chips}>{(Object.keys(copy.types) as (keyof typeof copy.types)[]).map(type => <Pressable key={type}
+    <View style={ui.chips}>{(['other', ...(draft.eventType && draft.eventType !== 'other' ? [draft.eventType] : [])] as (keyof typeof copy.types)[]).map(type => <Pressable key={type}
       accessibilityRole="button" accessibilityState={{ selected: draft.eventType === type, disabled: busy }} disabled={busy}
       style={[ui.chip, draft.eventType === type && ui.chipSelected]} onPress={() => setDraft(d => ({ ...d, eventType: d.eventType === type ? null : type }))}>
       <Text style={[ui.chipText, draft.eventType === type && ui.chipTextSelected]}>{copy.types[type]}</Text>
@@ -193,6 +199,6 @@ function Editor({ content, copy, online, session, locale, onSave, onBack, failur
     {failure && <Text accessibilityRole="alert" style={ui.notice}>{copy.failures[failure]}</Text>}
     <Text style={ui.caption}>{copy.unsent}</Text>
     <Action disabled={busy} label={copy.save} onPress={() => { setBusy(true); void onSave(draft).finally(() => setBusy(false)); }} />
-    <Action secondary disabled={busy} label={copy.back} onPress={onBack} />
+    <Action secondary disabled={busy} label={copy.backToDrafts} onPress={onBack} />
   </Page>;
 }
