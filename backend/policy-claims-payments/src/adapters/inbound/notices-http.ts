@@ -48,14 +48,14 @@ export function mountNotices(app: Hono<{ Bindings: PolicyEnv }>, deps: NoticesHt
     finally { clearTimeout(timer); }
   };
 
-  app.all('/api/v1/mobile/notices', route('GET', 'notices:read', async (_c, owner, decision, traceId, reply) => {
+  app.all('/api/v1/notices', route('GET', 'notices:read', async (_c, owner, decision, traceId, reply) => {
     // Without the caller's choices nothing is offered: the stored matrix alone is never assumed.
     const choices = choicesOf(decision.pushChoices);
     if (!choices) return reply({ error: 'access_unavailable' }, 503);
     return reply({ simulated: true, notices: await deps.notices.list(owner, choices, traceId) }, 200);
   }));
 
-  app.all('/api/v1/mobile/notices/:eventId/receipt', route('POST', 'notices:receipt', async (c, owner, _decision, traceId, reply) => {
+  app.all('/api/v1/notices/:eventId/receipt', route('POST', 'notices:receipt', async (c, owner, _decision, traceId, reply) => {
     const eventId = c.req.param('eventId') ?? '';
     if (!UUID.test(eventId)) return reply({ error: 'not_found' }, 404);
     if (!/^application\/json(\s*;|$)/i.test(c.req.header('content-type') ?? '')) return reply({ error: 'unsupported_media_type' }, 415);

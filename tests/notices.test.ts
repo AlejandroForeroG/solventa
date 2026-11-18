@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 import { Hono } from 'hono';
+import { parse } from 'yaml';
 import { mountNotices } from '../backend/policy-claims-payments/src/adapters/inbound/notices-http';
 import { Notices, type PushChoices } from '../backend/policy-claims-payments/src/application/notices';
 import type { NoticeRecord, NoticeStore } from '../backend/policy-claims-payments/src/application/ports/notice';
@@ -137,7 +141,7 @@ function http(options: { decide?: (input: { operation: string; token: string }) 
 
 test('the native list answers with the offered notices, marks the transport as simulated and hides the owner', async () => {
   const { request, calls } = http();
-  const response = await request('/api/v1/mobile/notices');
+  const response = await request('/api/v1/notices');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const body = await response.json() as { simulated: boolean; notices: Record<string, unknown>[]; traceId: string };
@@ -148,17 +152,17 @@ test('the native list answers with the offered notices, marks the transport as s
 
 test('without a bearer token, with a cookie only or with the wrong method nothing is read', async () => {
   const { request, calls } = http();
-  assert.equal((await request('/api/v1/mobile/notices', { headers: { authorization: '' } })).status, 401);
-  assert.equal((await request('/api/v1/mobile/notices', { method: 'POST' })).status, 405);
-  assert.equal((await request(`/api/v1/mobile/notices/${event(1)}/receipt`)).status, 405);
+  assert.equal((await request('/api/v1/notices', { headers: { authorization: '' } })).status, 401);
+  assert.equal((await request('/api/v1/notices', { method: 'POST' })).status, 405);
+  assert.equal((await request(`/api/v1/notices/${event(1)}/receipt`)).status, 405);
   assert.deepEqual(calls, []);
 });
 
 test('the list needs the choices of the same decision: without them nothing is offered', async () => {
   const withoutChoices = http({ decide: input => ({ allowed: true, actor: { kind: 'user', channel: 'mobile', principal: { clientId: A, subjectToken: '20000000-0000-4000-8000-00000000000a' }, operations: [input.operation] } }) });
-  assert.equal((await withoutChoices.request('/api/v1/mobile/notices')).status, 503);
+  assert.equal((await withoutChoices.request('/api/v1/notices')).status, 503);
   const malformed = http({ decide: input => ({ allowed: true, actor: { kind: 'user', channel: 'mobile', principal: { clientId: A, subjectToken: '20000000-0000-4000-8000-00000000000a' }, operations: [input.operation] }, pushChoices: { policy: true } }) });
-  assert.equal((await malformed.request('/api/v1/mobile/notices')).status, 503);
+  assert.equal((await malformed.request('/api/v1/notices')).status, 503);
 });
 
 test('a denied, unavailable or inconsistent access decision never reaches the notices', async () => {
@@ -166,21 +170,21 @@ test('a denied, unavailable or inconsistent access decision never reaches the no
     [{ allowed: true, actor: { kind: 'user', channel: 'web', principal: { clientId: A }, operations: ['notices:read'] }, pushChoices: on }, 503],
     [{ allowed: true, actor: { kind: 'user', channel: 'mobile', principal: { clientId: 'not-a-uuid' }, operations: ['notices:read'] }, pushChoices: on }, 503]] as const) {
     const { request } = http({ decide: () => decision });
-    assert.equal((await request('/api/v1/mobile/notices')).status, status, JSON.stringify(decision));
+    assert.equal((await request('/api/v1/notices')).status, status, JSON.stringify(decision));
   }
 });
 
 test('the receipt takes exactly one known outcome, records it once and answers a repeat as a replay', async () => {
   const { request, calls } = http();
-  await request('/api/v1/mobile/notices');
-  const send = (body: unknown, path = `/api/v1/mobile/notices/${event(1)}/receipt`, type = 'application/json') =>
+  await request('/api/v1/notices');
+  const send = (body: unknown, path = `/api/v1/notices/${event(1)}/receipt`, type = 'application/json') =>
     request(path, { method: 'POST', headers: { 'content-type': type }, body: typeof body === 'string' ? body : JSON.stringify(body) });
   assert.equal((await send({ outcome: 'bogus' })).status, 400);
   assert.equal((await send({ outcome: 'presented', extra: true })).status, 400);
   assert.equal((await send('{ not json')).status, 400);
   assert.equal((await send({ outcome: 'presented' }, undefined, 'text/plain')).status, 415);
-  assert.equal((await send({ outcome: 'presented' }, '/api/v1/mobile/notices/not-a-uuid/receipt')).status, 404);
-  assert.equal((await send({ outcome: 'presented' }, `/api/v1/mobile/notices/${event(9)}/receipt`)).status, 404);
+  assert.equal((await send({ outcome: 'presented' }, '/api/v1/notices/not-a-uuid/receipt')).status, 404);
+  assert.equal((await send({ outcome: 'presented' }, `/api/v1/notices/${event(9)}/receipt`)).status, 404);
   const first = await send({ outcome: 'presented' });
   assert.equal(first.status, 200);
   assert.deepEqual({ ...(await first.json() as object), traceId: undefined }, { eventId: event(1), state: 'presented', replayed: false, traceId: undefined });
@@ -192,6 +196,33 @@ test('the receipt takes exactly one known outcome, records it once and answers a
 test('a receipt larger than its limit is refused before it is read', async () => {
   const { request } = http();
   const big = JSON.stringify({ outcome: 'presented', pad: 'x'.repeat(400) });
-  const response = await request(`/api/v1/mobile/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': String(big.length) }, body: big });
+  const response = await request(`/api/v1/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': String(big.length) }, body: big });
   assert.equal(response.status, 400);
+});
+
+// ---- The contract and the answers agree.
+const spec = parse(readFileSync('packages/contracts/openapi/v1/notices.yaml', 'utf8'));
+const examples = JSON.parse(readFileSync('packages/contracts/examples/notices.json', 'utf8'));
+const ajv = new Ajv({ strict: false });
+addFormats(ajv);
+const schema = (name: string) => ajv.compile({ ...spec.components.schemas[name], components: spec.components });
+const validateList = schema('NoticeList');
+const validateReceipt = schema('NoticeReceipt');
+const validateBody = schema('NoticeReceiptBody');
+const validateError = schema('Error');
+
+test('the published examples and every answer of the handler match the OpenAPI schemas', async () => {
+  assert.ok(validateList(examples.list.value), JSON.stringify(validateList.errors));
+  assert.ok(validateBody(examples.receipt.value), JSON.stringify(validateBody.errors));
+  assert.ok(validateReceipt(examples.receiptResult.value), JSON.stringify(validateReceipt.errors));
+  const { request } = http({ records: [{ owner: A, notice: notice(1) }, { owner: A, notice: notice(2, 'policy_lifecycle_changed') }] });
+  const list = await request('/api/v1/notices');
+  assert.ok(validateList(await list.json()), JSON.stringify(validateList.errors));
+  const receipt = await request(`/api/v1/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ outcome: 'presented' }) });
+  assert.ok(validateReceipt(await receipt.json()), JSON.stringify(validateReceipt.errors));
+  for (const response of [await request('/api/v1/notices', { method: 'POST' }), await request(`/api/v1/notices/${event(9)}/receipt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"outcome":"presented"}' }),
+    await request(`/api/v1/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"outcome":"permission_denied"}' }),
+    await request(`/api/v1/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x' })]) {
+    assert.ok(validateError(await response.json()), JSON.stringify(validateError.errors));
+  }
 });
