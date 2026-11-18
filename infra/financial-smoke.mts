@@ -6,6 +6,10 @@ import addFormats from 'ajv-formats';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
+import { Notices } from '../backend/policy-claims-payments/src/application/notices';
+import { SqlNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-notices';
+import { ExpiryNotices } from '../backend/policy-claims-payments/src/application/expiry-notices';
+import { SqlExpiryNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-expiry-notices';
 import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
 import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
 import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
@@ -691,6 +695,36 @@ try {
   const replayedRain = await received(new PolicyFinance(base), rainEvent);
   assert.ok(replayedRain.status === 'ok' && replayedRain.replayed);
   assert.equal((await notices(rainPolicy.policyId)).length, 1, 'a replay never announces the payment twice');
+  // The customer notice reaches the device through the delivery service, with the real runtime grants: offered once, confirmed once, private to its owner.
+  const noticeService = new Notices(new SqlNotices(runtime.toString()), { now: financialNow });
+  const everyChoice = { policy: true, payments: true, claims: false, commercial: false };
+  const noticeOwner = { clientId: rain.payload.clientId };
+  const offered = (await noticeService.list(noticeOwner, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId);
+  assert.deepEqual(offered.map(item => [item.kind, item.category, item.state]), [['parametric_payment_confirmed', 'payments', 'offered']]);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID() }, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId), [], 'another customer sees nothing of it');
+  await noticeService.list(noticeOwner, everyChoice, randomUUID());
+  const noticeRows = async () => (await db!.query<{ consumer: string; outcome: string }>("SELECT consumer,outcome FROM policy.inbox_events WHERE event_id=$1 ORDER BY consumer", [rainNotices[0].paymentId])).rows;
+  assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }], 'listing again records no second decision');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'presented', randomUUID())).status, 'recorded');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'presented', randomUUID())).status, 'replayed');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'permission_denied', randomUUID())).status, 'conflict');
+  assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }, { consumer: 'notice.receipt.v1', outcome: 'presented' }]);
+  assert.deepEqual(await noticeService.receipt({ clientId: randomUUID() }, offered[0].eventId, 'presented', randomUUID()), { status: 'not_found' });
+  // A policy about to expire is announced once for its expiry date, only inside the window, and only to its own owner.
+  const expiresAt = (await db.query<{ effective_until: Date }>('SELECT effective_until FROM policy.policies WHERE id=$1', [rainPolicy.policyId])).rows[0].effective_until;
+  const expiryRows = async () => (await db!.query<{ event_id: string; payload: Record<string, unknown> }>("SELECT event_id,payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='policy.expiry.notice'", [rainPolicy.policyId])).rows;
+  assert.equal(await new ExpiryNotices(new SqlExpiryNotices(runtime.toString()), { now: () => new Date(expiresAt.getTime() - 30 * 24 * 3600 * 1000) }).run() >= 0, true);
+  assert.deepEqual(await expiryRows(), [], 'thirty days before the end nothing is announced for it');
+  const nearExpiry = new ExpiryNotices(new SqlExpiryNotices(runtime.toString()), { now: () => new Date(expiresAt.getTime() - 3 * 24 * 3600 * 1000) });
+  assert.ok(await nearExpiry.run() >= 1);
+  const announced = await expiryRows();
+  assert.equal(announced.length, 1);
+  assert.deepEqual(announced[0].payload, { category: 'policy_expiring', clientId: rain.payload.clientId, policyId: rainPolicy.policyId, expiresAt: expiresAt.toISOString() });
+  await nearExpiry.run();
+  assert.equal((await expiryRows()).length, 1, 'a second run announces nothing again');
+  const expiryView = (await noticeService.list(noticeOwner, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId && item.kind === 'policy_expiring');
+  assert.deepEqual(expiryView.map(item => [item.category, item.state]), [['policy', 'offered']]);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID() }, everyChoice, randomUUID())).filter(item => item.kind === 'policy_expiring'), [], 'another customer sees no expiry notice');
   const sameIdentity = await providerEvent(rainPolicy.policyId, { ...rainReading, precipitationMm: 80 }, { ...observed, providerEventId: rainEvent.providerEventId });
   const conflict = await received(finance, sameIdentity);
   assert.ok(conflict.status === 'denied' && conflict.error === 'event_conflict', JSON.stringify(conflict));
@@ -862,7 +896,7 @@ try {
     assert.ok([lifecycleOffer.payload.clientId, endedFlight.payload.clientId].includes(notice.payload.clientId)); assert.equal(notice.event_id, notice.payload.changeId);
   }
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
-  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice')")).rows;
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice','policy.expiry.notice')")).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'indemnity.declined', 'signature.challenge_created',
     'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'policy.lifecycle.changed', 'financial.denied'];
