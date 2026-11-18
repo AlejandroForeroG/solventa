@@ -1,6 +1,5 @@
 export const auditEs = {
   'audit.details': 'Ver detalles', 'audit.hideDetails': 'Ocultar detalles',
-  'audit.details': 'Ver detalles', 'audit.hideDetails': 'Ocultar detalles',
   'audit.technicalReference': 'Referencia técnica', 'audit.sourceKey': 'Clave de la fuente',
   'audit.showingPage': 'Mostrando {count} de {total} decisiones de esta página.', 'audit.showMore': 'Mostrar más decisiones',
   'audit.sections': 'Secciones de la decisión', 'audit.paginationTop': 'Paginación antes de los resultados',
@@ -56,7 +55,6 @@ export const auditEs = {
 };
 
 export const auditEn: Record<keyof typeof auditEs, string> = {
-  'audit.details': 'View details', 'audit.hideDetails': 'Hide details',
   'audit.details': 'View details', 'audit.hideDetails': 'Hide details',
   'audit.technicalReference': 'Technical reference', 'audit.sourceKey': 'Source key',
   'audit.showingPage': 'Showing {count} of {total} decisions on this page.', 'audit.showMore': 'Show more decisions',
