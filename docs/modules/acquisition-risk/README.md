@@ -270,6 +270,7 @@ npm run test:integrations   # both provider corpora, failures and logs, deadline
 - [Historical mortgage reconstruction and its current limits](data.md#historical-mortgage-reconstruction).
 - [Data, historical capture and offer revisions](data.md).
 - [Partner offers](#partner-offers) and [partner authorizations](../identity-consent-ecosystem/partner-authorizations.md).
+- [Advisor offers](../identity-consent-ecosystem/advisor-sale.md): `POST /api/v1/advisor/offers`, the same offer prepared by an authorized advisor for the customer.
 - [Contracts and decision capture](../../shared/contracts/README.md).
 - [Boundaries and communication](../../architecture.md).
 - [Operations](../../infrastructure/README.md).
