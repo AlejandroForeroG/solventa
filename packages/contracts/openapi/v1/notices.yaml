@@ -9,7 +9,8 @@ info:
     presents them itself, and no push provider is contacted, so an offer is never evidence that the notice was seen.
     Every request requires a verified native session. Identity returns, with that same decision, what the customer chose
     for push by category; a notice whose choice is off is never offered. The category of a claim status change is not part
-    of this contract. A notice carries no amount, document or personal data.
+    of this contract. A notice carries no amount, document or personal data. The state of a notice belongs to the customer, not to a
+    device: with several devices signed in to one account, the first receipt decides for all of them.
 servers:
   - url: /api/v1
 tags:
