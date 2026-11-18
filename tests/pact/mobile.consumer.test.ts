@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
 import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
+import { createNoticesApi } from '../../apps/mobile/src/features/notices/adapters/notices-api';
+import { contractNotice } from './support/notices-contract';
 import { createClaimReportApi, type EvidenceUploader } from '../../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { claimIds, evidenceBytes, evidenceFile, idempotencyKey, manifest } from './support/claim-report-contract';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
@@ -287,4 +289,26 @@ test('mobile submits a claim report whose files were received and gets its singl
     const receipt = await reportApi(server.url).submit(claimIds.claim);
     assert.deepEqual(receipt, { claimId: claimIds.claim, claimNumber: 'SIN-2026-00001', submittedAt: '2026-11-11T00:00:00.000Z' });
   });
+});
+
+const noticesApi = (serverUrl: string) => createNoticesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+  (url, options) => fetch(`${serverUrl}${new URL(String(url)).pathname}`, options));
+
+test('mobile reads the notices offered to its device through the shared contract', async () => {
+  pact.given('a native session with a stored notice').uponReceiving('mobile notices list')
+    .withRequest({ method: 'GET', path: '/api/v1/notices', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, notices: [{ ...contractNotice, state: 'offered' }], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    assert.deepEqual(await noticesApi(server.url).list(), [{ ...contractNotice, state: 'offered' }]);
+  });
+});
+
+test('mobile reports that its device presented a notice through the shared contract', async () => {
+  pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice receipt')
+    .withRequest({ method: 'POST', path: `/api/v1/notices/${contractNotice.eventId}/receipt`,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token' }, body: { outcome: 'presented' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { eventId: contractNotice.eventId, state: 'presented', replayed: false, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => { await noticesApi(server.url).receipt(contractNotice.eventId, 'presented'); });
 });

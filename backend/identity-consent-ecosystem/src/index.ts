@@ -157,7 +157,11 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
     try {
       shared = await SqlIdentitySessions.sharedConnection(this.env.IDENTITY_DB.connectionString);
       decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input, shared),
-        verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env) }, request);
+        verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env),
+        readPushChoices: async clientId => {
+          const matrix = await new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString).readForDelivery(clientId);
+          return { policy: matrix.policy.push, payments: matrix.payments.push, claims: matrix.claims.push, commercial: matrix.commercial.push };
+        } }, request);
     } catch { decision = { allowed: false, error: 'access_unavailable', status: 503 }; }
     finally { await shared?.close(); }
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
