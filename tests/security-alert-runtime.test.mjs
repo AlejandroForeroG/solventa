@@ -85,6 +85,7 @@ const aliases = {
   'identity-sessions': `export class SqlIdentitySessions { async find() { return null; } }`,
   'partner-access': `export class SqlPartnerAccess { async find() { return null; } }`,
   'sql-partner-authorizations': `export class SqlPartnerAuthorizations { async find() { throw Error('unexpected_partner_authorization_lookup'); } }`,
+  'sql-advisor-sale-authorizations': `export class SqlAdvisorSaleAuthorizations { async find() { throw Error('unexpected_advisor_sale_lookup'); } }`,
   'registered-devices': `export class SqlRegisteredDevices { async execute() { throw Error('unexpected_device_access'); } }`,
   'database-probe': `export async function databaseProbe() { throw Error('unexpected_database_probe'); }`,
   'workos-authentication': `export class WorkosAuthentication { async authenticate() { throw Error('unexpected_provider_access'); } }`,
@@ -115,7 +116,7 @@ test('workerd executes real Identity security composition with explicit local SQ
     entryPoints: ['backend/identity-consent-ecosystem/src/index.ts'], bundle: true, write: false,
     format: 'esm', platform: 'neutral', external: ['cloudflare:*', 'node:*'],
     plugins: [{ name: 'explicit-local-owner-and-provider-collaborators', setup(builder) {
-      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|sql-notification-preferences|underwriting-audit-grants|claims-access-grants|partner-portal-grants|policy-advisor-grants|partner-quotas|identity-sessions|partner-access|sql-partner-authorizations|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
+      builder.onResolve({ filter: /outbound\/(sql-security-decisions|security-alert-outbox|sql-consents|sql-identity-verifications|sql-notification-preferences|underwriting-audit-grants|claims-access-grants|partner-portal-grants|policy-advisor-grants|partner-quotas|identity-sessions|partner-access|sql-partner-authorizations|sql-advisor-sale-authorizations|registered-devices|database-probe|workos-authentication|workos-partner-authentication|workos-mobile-authentication)$/ }, args => (
         { path: args.path.split('/').at(-1), namespace: 'composition-collaborator' }
       ));
       builder.onLoad({ filter: /.*/, namespace: 'composition-collaborator' }, args => ({ contents: aliases[args.path], loader: 'js' }));
