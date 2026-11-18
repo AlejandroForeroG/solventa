@@ -44,6 +44,11 @@ function Shell() {
   }, []);
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
   const sessionLost = useCallback(() => { setSessionExpired(true); setSession('anonymous'); }, []);
+  const abandonPolicyDestination = useCallback(() => {
+    clearPolicyDocumentDestination();
+    setPolicyDestination(null);
+    setPolicyDestinationFailed(false);
+  }, []);
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   const [purchaseInProgress] = useState(() => readPurchaseDraft() !== null);
   const isAudit = window.location.pathname === '/auditoria';
@@ -105,7 +110,7 @@ function Shell() {
     {isPolicies && session === 'authenticated' && window.location.pathname === '/'
       ? <main className="access-panel"><p role="status">{t('policies.openingDocuments')}</p></main>
       : isConsole ? (session === 'authenticated' && !busy
-      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onBackToList={abandonPolicyDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(isPolicies && failed && policyDestination ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
         {isPolicies && policyDestination && <><p>{t('policies.documentSignIn')}</p>

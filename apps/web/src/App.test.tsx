@@ -108,6 +108,37 @@ describe('my policies route in the application', () => {
   const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
   afterEach(clearPolicyDocumentDestination);
+  it('allows both normal sign-in links after leaving document detail and losing the session', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=documents`);
+    let expired = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: !expired }, expired ? 401 : 200);
+      if (input === `/api/v1/policies/${policy.policyId}/detail`) return json({ ...policy,
+        exclusions: [], conditionsVersion: 'academic-conditions-1', documents: [], payments: [],
+        traceId: '50000000-0000-4000-8000-000000000001' });
+      if (input === '/api/v1/policies/issued') return expired ? json({}, 401)
+        : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' });
+      return json({}, 404);
+    });
+    render(<App />);
+    await screen.findByRole('tab', { name: 'Documentos', selected: true });
+    expired = true;
+    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    await screen.findByText('Tu sesión terminó. Inicia sesión para continuar.');
+    expect(window.location.hash).toBe('');
+    expect(readPolicyDocumentDestination()).toBeNull();
+    expect(screen.queryByText('Inicia sesión para abrir los documentos de la póliza seleccionada.')).toBeNull();
+    const links = screen.getAllByRole('link', { name: 'Ingresa a Solventa' });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      act(() => { link.dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(false);
+      expect(link).toHaveAttribute('href', '/auth/login');
+    }
+    expect(screen.queryByRole('link', { name: 'Iniciar sesión sin conservar la selección' })).toBeNull();
+  });
   it('keeps the selected policy and a contextual retry after a failed sign-in', async () => {
     savePolicyDocumentDestination({ policyId: policy.policyId });
     window.history.replaceState(null, '', '/?auth=failed'); serve(401);

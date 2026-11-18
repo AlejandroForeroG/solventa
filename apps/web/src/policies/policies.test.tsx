@@ -34,7 +34,7 @@ beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); window.history.replaceState(null, '', '/'); });
 
 describe('my policies', () => {
-  it('opens the requested documents through the authorized detail route without selecting the policy again', async () => {
+  it('opens the requested documents and abandons that selection when returning to the list', async () => {
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=documents');
     const fetch = serve({ [`/api/v1/policies/${policyId}/detail`]: () => json(detail), '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }) });
     show();
@@ -42,6 +42,9 @@ describe('my policies', () => {
     expect(screen.getByRole('button', { name: 'Descargar PDF: Póliza firmada' })).toBeVisible();
     expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/policies/${policyId}/detail`, expect.objectContaining({ method: 'GET', cache: 'no-store' }));
     expect(screen.queryByRole('heading', { name: 'Mis pólizas' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ }));
+    expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
   });
   it('does not reveal a requested policy when the owner read refuses it', async () => {
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=documents');
