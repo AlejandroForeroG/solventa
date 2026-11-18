@@ -7,8 +7,9 @@ import { Hono } from 'hono';
 import { parse } from 'yaml';
 import { mountNotices } from '../backend/policy-claims-payments/src/adapters/inbound/notices-http';
 import { Notices, type PushChoices } from '../backend/policy-claims-payments/src/application/notices';
-import type { NoticeRecord, NoticeStore } from '../backend/policy-claims-payments/src/application/ports/notice';
-import { dispatchConsumer, noticeFrom, receiptConsumer, type Notice } from '../backend/policy-claims-payments/src/domain/notice';
+import type { NoticeStore } from '../backend/policy-claims-payments/src/application/ports/notice';
+import { dispatchConsumer, noticeFrom, type Notice } from '../backend/policy-claims-payments/src/domain/notice';
+import { memoryNoticeStore } from './support/notice-fakes';
 
 const A = '10000000-0000-4000-8000-00000000000a';
 const B = '10000000-0000-4000-8000-00000000000b';
@@ -18,23 +19,7 @@ const event = (n: number) => `70000000-0000-4000-8000-${String(n).padStart(12, '
 const on: PushChoices = { policy: true, payments: true, claims: false, commercial: false };
 const off: PushChoices = { policy: false, payments: false, claims: false, commercial: false };
 
-// A faithful copy of the store: the notices of an owner, and an inbox keyed by event and consumer.
-function memoryStore(seed: { owner: string; notice: Notice }[]) {
-  const inbox = new Map<string, { outcome: string; at: Date }>();
-  const key = (eventId: string, consumer: string) => `${eventId}|${consumer}`;
-  const writes: string[] = [];
-  const view = (notice: Notice): NoticeRecord => ({ notice, dispatch: (inbox.get(key(notice.eventId, dispatchConsumer))?.outcome ?? null) as NoticeRecord['dispatch'],
-    dispatchedAt: inbox.get(key(notice.eventId, dispatchConsumer))?.at.toISOString() ?? null, receipt: (inbox.get(key(notice.eventId, receiptConsumer))?.outcome ?? null) as NoticeRecord['receipt'] });
-  const store: NoticeStore = {
-    recent: async (clientId, since) => seed.filter(row => row.owner === clientId && Date.parse(row.notice.occurredAt) > since.getTime()).map(row => view(row.notice)),
-    find: async (clientId, eventId) => { const row = seed.find(item => item.owner === clientId && item.notice.eventId === eventId); return row ? view(row.notice) : null; },
-    record: async (eventId, _type, consumer, outcome) => {
-      if (inbox.has(key(eventId, consumer))) return 'exists';
-      inbox.set(key(eventId, consumer), { outcome, at: clock.current }); writes.push(`${consumer}:${outcome}`); return 'recorded';
-    },
-  };
-  return { store, inbox, writes };
-}
+const memoryStore = (seed: { owner: string; notice: Notice }[]) => memoryNoticeStore(seed, clock);
 const clock = { current: new Date('2026-11-18T12:00:00.000Z'), now() { return this.current; } };
 const notice = (n: number, kind: Notice['kind'] = 'parametric_payment_confirmed'): Notice => ({ eventId: event(n), kind, category: kind === 'parametric_payment_confirmed' ? 'payments' : 'policy', policyId, occurredAt: '2026-11-18T11:00:00.000Z' });
 
