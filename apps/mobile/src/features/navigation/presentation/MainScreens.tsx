@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
+import { NoticesList } from '@/features/notices/presentation/NoticesList';
 import { WelcomeScreen } from '@/features/welcome/presentation/WelcomeScreen';
 import { theme } from '@/theme';
 import { useNavigationMessages } from './navigation-messages';
@@ -27,9 +28,7 @@ export function AlertsScreen() {
   const copy = useNavigationMessages();
 
   return <Page title={copy.alerts}>
-    {auth.status === 'authenticated' ? <View style={styles.card}>
-      <Text style={styles.detail}>{copy.alertsUnavailable}</Text>
-    </View> : <Tile title={copy.signIn} detail={copy.back} href="/" />}
+    {auth.status === 'authenticated' ? <NoticesList /> : <Tile title={copy.signIn} detail={copy.back} href="/" />}
   </Page>;
 }
 
