@@ -6,6 +6,7 @@ import addFormats from 'ajv-formats';
 import { Hono } from 'hono';
 import { parse } from 'yaml';
 import { mountNotices } from '../backend/policy-claims-payments/src/adapters/inbound/notices-http';
+import { ExpiryNotices, EXPIRY_WINDOW_MS } from '../backend/policy-claims-payments/src/application/expiry-notices';
 import { Notices, type PushChoices } from '../backend/policy-claims-payments/src/application/notices';
 import type { NoticeStore } from '../backend/policy-claims-payments/src/application/ports/notice';
 import { dispatchConsumer, noticeFrom, type Notice } from '../backend/policy-claims-payments/src/domain/notice';
@@ -210,4 +211,24 @@ test('the published examples and every answer of the handler match the OpenAPI s
     await request(`/api/v1/notices/${event(1)}/receipt`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x' })]) {
     assert.ok(validateError(await response.json()), JSON.stringify(validateError.errors));
   }
+});
+
+test('the expiry trigger asks for the policies ending within seven days, with its clock, and reports how many it announced', async () => {
+  const asked: [Date, number][] = [];
+  const notices = new ExpiryNotices({ announceExpiring: async (now, windowMs) => { asked.push([now, windowMs]); return 3; } }, { now: () => new Date('2026-11-18T12:00:00.000Z') });
+  assert.equal(await notices.run(), 3);
+  assert.deepEqual(asked, [[new Date('2026-11-18T12:00:00.000Z'), 7 * 24 * 3600 * 1000]]);
+  assert.equal(EXPIRY_WINDOW_MS, 7 * 24 * 3600 * 1000);
+});
+
+test('an expiry notice follows the policy choice, and only a stored notice with the expiry identity becomes a view', async () => {
+  const base = { eventId: event(5), createdAt: new Date('2026-11-18T11:00:00.000Z') };
+  const payload = { category: 'policy_expiring', clientId: A, policyId, expiresAt: '2026-11-25T11:00:00.000Z' };
+  const stored = noticeFrom({ ...base, eventType: 'policy.expiry.notice', payload });
+  assert.deepEqual([stored?.kind, stored?.category], ['policy_expiring', 'policy']);
+  assert.equal(noticeFrom({ ...base, eventType: 'policy.expiry.notice', payload: { ...payload, category: 'policy_lifecycle_changed' } }), null);
+  const { store } = memoryStore([{ owner: A, notice: stored! }]);
+  const service = new Notices(store, clock);
+  assert.deepEqual(await service.list({ clientId: A }, { ...on, policy: false }, trace), []);
+  assert.deepEqual((await new Notices(memoryStore([{ owner: A, notice: stored! }]).store, clock).list({ clientId: A }, on, trace)).map(item => item.kind), ['policy_expiring']);
 });

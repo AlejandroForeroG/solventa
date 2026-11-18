@@ -101,6 +101,7 @@ test('ending the session clears the notices and nothing started before it reache
 
 test('the server list is accepted only with exactly the contract fields, kinds and states', () => {
   assert.deepEqual(parseNotices(wire([notice(1)])).map(item => item.eventId), [event(1)]);
+  assert.equal(parseNotices(wire([notice(2, 'offered', 'policy_expiring')]))[0]?.category, 'policy');
   const bad = (change: (item: Record<string, unknown>) => void) => {
     const item: Record<string, unknown> = { ...notice(1) }; change(item);
     assert.throws(() => parseNotices({ simulated: true, notices: [item], traceId: trace }), NoticeFailure);

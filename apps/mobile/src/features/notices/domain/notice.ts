@@ -1,4 +1,4 @@
-export type NoticeKind = 'parametric_payment_confirmed' | 'policy_lifecycle_changed';
+export type NoticeKind = 'parametric_payment_confirmed' | 'policy_lifecycle_changed' | 'policy_expiring';
 export type NoticeCategory = 'payments' | 'policy';
 // offered: handed to this device and not confirmed; unconfirmed: offered long ago without a receipt, so its presentation is uncertain.
 export type NoticeState = 'offered' | 'unconfirmed' | 'presented' | 'permission_denied';
@@ -13,9 +13,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export const uuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
 export const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
-const kinds: readonly NoticeKind[] = ['parametric_payment_confirmed', 'policy_lifecycle_changed'];
+const kinds: readonly NoticeKind[] = ['parametric_payment_confirmed', 'policy_lifecycle_changed', 'policy_expiring'];
 const states: readonly NoticeState[] = ['offered', 'unconfirmed', 'presented', 'permission_denied'];
-const categoryOf: Record<NoticeKind, NoticeCategory> = { parametric_payment_confirmed: 'payments', policy_lifecycle_changed: 'policy' };
+const categoryOf: Record<NoticeKind, NoticeCategory> = { parametric_payment_confirmed: 'payments', policy_lifecycle_changed: 'policy', policy_expiring: 'policy' };
 const FIELDS = ['category', 'eventId', 'kind', 'occurredAt', 'policyId', 'state'];
 
 // The server's list is untrusted: a notice is shown only when it has exactly the fields, kinds and states of the contract.

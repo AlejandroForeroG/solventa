@@ -3,8 +3,8 @@ info:
   title: Solventa API - Customer notices
   version: 1.0.0
   description: >-
-    The native customer's notices about their own policy: a confirmed parametric payment and a change of policy
-    (modification, renewal or cancellation). Policy stores each notice with its business effect; this contract offers it to the
+    The native customer's notices about their own policy: a confirmed parametric payment, a change of policy
+    (modification, renewal or cancellation) and a policy that is about to expire (at most seven days before its end). Policy stores each notice with its business effect; this contract offers it to the
     device and records what the device did with it. The transport is simulated: the app collects the notices and
     presents them itself, and no push provider is contacted, so an offer is never evidence that the notice was seen.
     Every request requires a verified native session. Identity returns, with that same decision, what the customer chose
@@ -119,7 +119,7 @@ components:
       required: [eventId, kind, category, policyId, occurredAt, state]
       properties:
         eventId: { type: string, format: uuid }
-        kind: { type: string, enum: [parametric_payment_confirmed, policy_lifecycle_changed] }
+        kind: { type: string, enum: [parametric_payment_confirmed, policy_lifecycle_changed, policy_expiring] }
         category:
           type: string
           enum: [payments, policy]

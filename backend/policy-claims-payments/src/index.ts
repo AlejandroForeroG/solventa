@@ -14,6 +14,8 @@ import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
 import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { Notices } from './application/notices';
 import { SqlNotices } from './adapters/outbound/sql-notices';
+import { ExpiryNotices } from './application/expiry-notices';
+import { SqlExpiryNotices } from './adapters/outbound/sql-expiry-notices';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -84,6 +86,11 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const staleBefore = new Date(Date.now() - RECONCILIATION_GRACE_MS);
     for (const { traceId, outcome, error } of await finance.reconcileIssuances(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'financial_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
+    }
+    // Expiry is measured in days, so ten minutes is plenty; a failure here never blocks the recoveries around it.
+    if (new Date().getUTCMinutes() % 10 === 0) {
+      try { console.log(JSON.stringify({ event: 'expiry_notices', environment: this.env.APP_ENV, announced: await new ExpiryNotices(new SqlExpiryNotices(this.env.POLICY_DB.connectionString)).run() })); }
+      catch { console.log(JSON.stringify({ event: 'expiry_notices', environment: this.env.APP_ENV, error: 'unavailable' })); }
     }
     for (const { traceId, outcome, error } of await finance.reconcileIndemnities(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'indemnity_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));

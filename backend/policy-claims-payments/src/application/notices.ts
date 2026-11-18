@@ -8,7 +8,7 @@ export type ReceiptResult = { status: 'recorded' | 'replayed'; state: NoticeStat
 
 const WINDOW_MS = 30 * 24 * 3600 * 1000;
 const UNCONFIRMED_AFTER_MS = 10 * 60 * 1000;
-const eventTypeOf = { parametric_payment_confirmed: 'policy.indemnity.notice', policy_lifecycle_changed: 'policy.lifecycle.notice' } as const;
+const eventTypeOf = { parametric_payment_confirmed: 'policy.indemnity.notice', policy_lifecycle_changed: 'policy.lifecycle.notice', policy_expiring: 'policy.expiry.notice' } as const;
 
 export class Notices {
   constructor(private readonly store: NoticeStore, private readonly clock: { now(): Date } = { now: () => new Date() }) {}
