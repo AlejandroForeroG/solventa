@@ -110,10 +110,9 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
   const pushSelected = !!draft && categories.some(category => draft[category].push);
   const changed = !!saved && !!draft && JSON.stringify(saved.preferences) !== JSON.stringify(draft);
   return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}><ScrollView contentContainerStyle={styles.content}>
-    {busy && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
-    {error && <View accessibilityLiveRegion="polite" style={styles.warning}><Text style={styles.warningText}>
-      {error === 'conflict' ? text.conflict : error === 'read' ? text.readFailure : text.failure}</Text></View>}
-    {notice && <Text accessibilityLiveRegion="polite" style={styles.success}>{text.saved}</Text>}
+    {busy && !draft && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
+    {error === 'read' && <View accessibilityLiveRegion="polite" style={styles.warning}>
+      <Text style={styles.warningText}>{text.readFailure}</Text></View>}
     {permission === false && <View style={[styles.warning, styles.permission]}>
       <Text style={styles.warningText}>{text.blocked}</Text>
       <Action label={text.openSettings} secondary onPress={() => void openPushSettings()} />
@@ -137,6 +136,10 @@ function PreferencesFlow({ language }: { language: 'es' | 'en' }) {
       </View>)}
     </View>}
     {pushSelected && permission === false && <Text accessibilityLiveRegion="polite" style={styles.warningText}>{text.pending}</Text>}
+    {busy && draft && <ActivityIndicator accessibilityLabel={text.loading} color={theme.colors.primary} />}
+    {(error === 'save' || error === 'conflict') && <View accessibilityLiveRegion="polite" style={styles.warning}>
+      <Text style={styles.warningText}>{error === 'conflict' ? text.conflict : text.failure}</Text></View>}
+    {notice && <Text accessibilityLiveRegion="polite" style={styles.success}>{text.saved}</Text>}
     {pending && error === 'save' ? <Action label={text.retry} disabled={busy} onPress={() => void save(pending)} />
       : <Action label={text.save} disabled={busy || !changed || !!pending} onPress={() => void save()} />}
     <Action label={text.reload} secondary disabled={busy} onPress={() => void refresh()} />
