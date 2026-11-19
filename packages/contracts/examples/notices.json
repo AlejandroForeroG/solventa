@@ -1,0 +1,35 @@
+{
+  "list": {
+    "summary": "A payment notice to present and a policy change already presented",
+    "value": {
+      "simulated": true,
+      "notices": [
+        {
+          "eventId": "70000000-0000-4000-8000-000000000001",
+          "kind": "parametric_payment_confirmed",
+          "category": "payments",
+          "policyId": "60000000-0000-4000-8000-000000000001",
+          "occurredAt": "2026-11-18T11:00:00.000Z",
+          "state": "offered"
+        },
+        {
+          "eventId": "70000000-0000-4000-8000-000000000002",
+          "kind": "policy_lifecycle_changed",
+          "category": "policy",
+          "policyId": "60000000-0000-4000-8000-000000000001",
+          "occurredAt": "2026-11-17T09:30:00.000Z",
+          "state": "presented"
+        }
+      ],
+      "traceId": "30000000-0000-4000-8000-000000000001"
+    }
+  },
+  "receipt": {
+    "summary": "The device presented the notice",
+    "value": { "outcome": "presented" }
+  },
+  "receiptResult": {
+    "summary": "The outcome was stored",
+    "value": { "eventId": "70000000-0000-4000-8000-000000000001", "state": "presented", "replayed": false, "traceId": "30000000-0000-4000-8000-000000000001" }
+  }
+}

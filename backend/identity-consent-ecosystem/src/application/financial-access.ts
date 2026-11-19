@@ -2,11 +2,15 @@ import type { AccessDecision, UserActor } from './api-access';
 import type { ConsentDecision, ConsentScopesCheck } from './consents';
 import type { SecurityDecisions } from './security-decisions';
 
+// What the customer chose for push, by category: the delivery service applies it before it offers a notice to the device.
+export type PushChoices = Record<'policy' | 'payments' | 'claims' | 'commercial', boolean>;
+
 export type FinancialAccessDecision =
-  | { allowed: true; actor: UserActor; consent?: { consentId: string; textVersion: number; expiresAt: string } }
+  | { allowed: true; actor: UserActor; consent?: { consentId: string; textVersion: number; expiresAt: string }; pushChoices?: PushChoices }
   | { allowed: false; error: 'invalid_request' | 'unauthorized' | 'forbidden' | 'access_unavailable' | 'consent_required'; status: 400 | 401 | 403 | 503 };
 
-const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated'];
+const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated', 'notices:read', 'notices:receipt'];
+const mobileOperations = ['policies:read', 'notices:read', 'notices:receipt'];
 const scopes = ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation'];
 
 // One RPC encloses Identity's own authentication and fresh consent checks; no remote fan-out is needed.
@@ -14,6 +18,7 @@ export async function authorizeFinancialAccess(deps: {
   authorize(input: unknown): Promise<AccessDecision>;
   verifyConsents(input: ConsentScopesCheck): Promise<ConsentDecision[]>;
   security?: Pick<SecurityDecisions, 'deny'>;
+  readPushChoices?(clientId: string): Promise<PushChoices>;
 }, input: unknown): Promise<FinancialAccessDecision> {
   if (!input || typeof input !== 'object' || !('operation' in input) || typeof input.operation !== 'string' || !operations.includes(input.operation)) {
     return { allowed: false, error: 'invalid_request', status: 400 };
@@ -25,8 +30,13 @@ export async function authorizeFinancialAccess(deps: {
     // Actual native/partner denials come from the audited operation policy above. The only native
     // financial permission is reading one's own policies; any other positive actor is an
     // inconsistent dependency response, never a business authorization.
-    const channel = input.kind === 'web' || (input.kind === 'mobile' && input.operation === 'policies:read') ? input.kind : null;
+    const channel = input.kind === 'web' || (input.kind === 'mobile' && mobileOperations.includes(input.operation)) ? input.kind : null;
     if (!channel || access.actor.kind !== 'user' || access.actor.channel !== channel) return { allowed: false, error: 'access_unavailable', status: 503 };
+    if (input.operation === 'notices:read') {
+      // The choices belong to the caller the access decision just named; no identifier comes from the request.
+      if (!deps.readPushChoices) return { allowed: false, error: 'access_unavailable', status: 503 };
+      return { allowed: true, actor: access.actor, pushChoices: await deps.readPushChoices(access.actor.principal.clientId) };
+    }
     if (input.operation !== 'offers:create' && input.operation !== 'offers:accept') return { allowed: true, actor: access.actor };
     // One fresh read covers every scope; no authorization is reused between requests.
     const decisions = await deps.verifyConsents({ subjectToken: access.actor.principal.subjectToken, purposeCode: 'risk_profiling', scopes });

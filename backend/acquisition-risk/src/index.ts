@@ -19,6 +19,8 @@ import type { PolicyImportService } from './adapters/outbound/financial-event-de
 import { HmacOfferIntegrity } from './adapters/outbound/hmac-offer-integrity';
 import { signalProviderFor } from './adapters/outbound/signal-providers';
 import { PartnerOffers } from './application/partner-offers';
+import { AdvisorOffers } from './application/advisor-offers';
+import { IdentityAdvisorSaleAccess } from './adapters/outbound/identity-advisor-sale-access';
 import { IdentityPartnerOfferAccess } from './adapters/outbound/identity-partner-offer-access';
 
 type Env = AcquisitionEnv & { QUOTE_HMAC_KEY?: string; FINANCIAL_EVENT_KEY?: string; POLICY_SERVICE?: PolicyImportService };
@@ -50,6 +52,7 @@ export default class extends WorkerEntrypoint<Env> {
     const offers = createOffers(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     return createHttp({ quotes,
       portal: { portal: new PartnerPortal(new SqlPartnerPortal(this.env.ACQUISITION_DB.connectionString)), authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), versions: apiVersions },
+      advisorOffers: new AdvisorOffers({ access: new IdentityAdvisorSaleAccess(this.env.IDENTITY_SERVICE), quotes, offers, protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '') }),
       partnerOffers: new PartnerOffers({ access: new IdentityPartnerOfferAccess(this.env.IDENTITY_SERVICE), quotes, offers, protector: new HmacProtector(this.env.QUOTE_HMAC_KEY ?? '') }),
       audit: { decisions: new AuditDecisions(new SqlAuditDecisions(this.env.ACQUISITION_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
