@@ -8,6 +8,8 @@ The operator uses `POST /api/v1/claims/{claimId}/disbursement` with only `{ "amo
 
 Amounts are positive canonical COP decimals with four fraction digits. The signed accepted-offer coverage and issuance evidence are verified before use. The approved amount cannot exceed the coverage remaining after other pending or paid indemnities. The policy and claim are locked in the authorization transaction, so two analysts' concurrent claims cannot reserve the same remaining coverage. The displayed claim estimate is never used as payment authorization.
 
+The same locked context includes the existing append-only policy lifecycle record. Its schema, policy/document binding, stored change identity/time and HMAC seal are verified. A new payment returns conflict if the occurrence is at or after the contractual end recorded by cancellation, modification or renewal; an earlier covered occurrence remains eligible. An already accepted intent retains its stable replay and recovery after a later lifecycle change. The cutoff is not reapplied as a cancellation of that durable financial obligation. Decision capture rule version 2 includes the actual lifecycle record or null; historical version 1 captures remain unchanged. Invalid lifecycle evidence fails closed before any provider call. No migration or extra runtime grant is needed.
+
 The immutable approval supplies the idempotency identity, `approved-claim:<decisionId>`. An identical amount reuses the same payment, including after a browser retry or restart; a different amount conflicts. No browser-provided idempotency identifier can create a second payment for the approval. Partial installments, amended approvals and a new authorization after a terminal decline are outside this increment.
 
 ## Durable intent and recovery
