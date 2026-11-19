@@ -5,12 +5,20 @@ import { claimsEs, claimsEn } from '../claims/messages';
 import { reportsEs, reportsEn } from '../reports/messages';
 import { policiesEs, policiesEn } from '../policies/messages';
 import { assistanceEs, assistanceEn } from '../assistance/messages';
+import { navigationEs, navigationEn } from '../navigation/messages';
+import { documentEs, documentEn } from '../offer/document-messages';
 // Catalogues for the commercial front end. Texts come from the approved prototype
 // dictionary; parameters use ICU placeholders. Currency is always COP in both locales.
 export const locales = ['es-CO', 'en-US'] as const;
 export type Locale = (typeof locales)[number];
 
 const esCO = {
+  'landing.accountHeading': 'Pólizas y cotizaciones',
+  'landing.accountIntro': 'Consulta tus pólizas emitidas o inicia una cotización.',
+  'consent.simulated': 'Simulación académica: las fuentes nombradas usan datos de prueba. No accedemos a cuentas bancarias ni registros reales.',
+  'policy.readBothPages': 'Abre la página 2 del documento para habilitar la aceptación y solicitar el código.',
+  'live.signatureReady': 'Revisa las dos páginas del documento antes de aceptar y solicitar el código de firma simulado.',
+  'form.dateFormat': 'Formato: {format}.',
   ...portalEs,
   ...advisorEs,
   'landing.home': 'Inicio de Solventa',
@@ -21,6 +29,8 @@ const esCO = {
   'landing.how': 'Cómo funciona',
   'landing.prepareLabel': 'Antes de empezar',
   'landing.prepareTitle': 'Ten estos datos a mano',
+  'landing.identityDetails': 'Nombre, documento y fecha de nacimiento',
+  'landing.city': 'Ciudad de residencia',
   'landing.age': 'Tu edad',
   'landing.amount': 'Monto del crédito en pesos colombianos',
   'landing.term': 'Plazo del crédito en meses',
@@ -31,8 +41,8 @@ const esCO = {
   'landing.accountDetail': 'Para guardar tu cotización, inicia sesión o crea una cuenta y confirma tus datos.',
   'landing.consentTitle': 'Decide sobre tus datos',
   'landing.consentDetail': 'Antes de autorizar consultas, revisa las fuentes, la finalidad y la vigencia. Iniciar sesión no concede esa autorización.',
-  'landing.footer': 'Vida hipotecario · Valores en COP',
-  'brand.product': 'Vida hipotecario',
+  'landing.footer': 'Seguro de vida hipotecario · Valores en COP',
+  'brand.product': 'Seguro de vida hipotecario',
   'locale.group': 'Idioma y región',
   'locale.es-CO': 'ES · CO',
   'locale.en-US': 'EN · US',
@@ -58,7 +68,7 @@ const esCO = {
   'form.amount': 'Monto del crédito (COP)',
   'form.term': 'Plazo (en meses)',
   'form.product': 'Producto',
-  'form.productValue': 'Vida hipotecario · Saldo deudor',
+  'form.productValue': 'Seguro de vida hipotecario',
   'form.requiredNote': 'Los campos marcados con * son obligatorios.',
   'form.submit': 'Calcular cotización',
   'field.required': 'Este campo es obligatorio.',
@@ -150,8 +160,8 @@ const esCO = {
   'offer.preliminaryTitle': 'Oferta preliminar',
   'offer.preliminaryDetail': 'Una fuente no respondió y se usaron datos de respaldo. Esta oferta no se puede aceptar. Solicita una nueva evaluación para consultar las fuentes otra vez.',
   'offer.reevaluate': 'Solicitar nueva evaluación',
-  'offer.premium': 'Prima mensual personalizada',
-  'offer.perMonth': 'COP / mes',
+  'offer.premium': 'Prima de la póliza',
+  'offer.perMonth': 'COP · pago único',
   'offer.sumInsured': 'Suma asegurada',
   'offer.coverage': 'Cobertura',
   'offer.coverageValue': 'Vida · saldo deudor',
@@ -202,7 +212,7 @@ const esCO = {
   'policy.signatureSubtitle': 'Revisa el documento completo antes de firmar. Te damos un código de prueba para esta versión.',
   'policy.continueToPayment': 'Continuar al cobro',
   'policy.document': 'Documento de la póliza',
-  'policy.download': 'Descargar documento',
+  'policy.download': 'Descargar original',
   'policy.hash': 'Huella del documento',
   'policy.check': 'Revisé el documento completo y acepto sus condiciones.',
   'policy.confirm': 'Firmar póliza',
@@ -222,7 +232,7 @@ const esCO = {
   'issued.title': 'Póliza emitida',
   'issued.badge': 'Emitida · cobrada y firmada',
   'issued.policy': 'N.º de póliza',
-  'issued.premium': 'Prima mensual',
+  'issued.premium': 'Prima (pago único)',
   'issued.start': 'Inicio de vigencia',
   'issued.end': 'Fin de vigencia',
   'issued.proof': 'Constancia auditable',
@@ -253,7 +263,7 @@ const esCO = {
   'financial.unavailableTitle': 'No pudimos completar la operación',
   'financial.unavailable': 'El servicio no respondió. Reintenta: la misma solicitud no se duplica.',
   'financial.retry': 'Reintentar',
-  'live.offerReady': 'Oferta definitiva lista: prima mensual {premium}.',
+  'live.offerReady': 'Oferta definitiva lista: prima de pago único {premium}.',
   'live.offerPreliminary': 'Oferta preliminar. No se puede aceptar. Puedes solicitar una nueva evaluación.',
   'live.offerDeclined': 'La suscripción no aprobó una oferta definitiva. No se emitió póliza ni cobro.',
   'live.offerExpired': 'La oferta expiró. No se emitió póliza ni se generó cobro.',
@@ -347,6 +357,12 @@ const esCO = {
 };
 
 const enUS: typeof esCO = {
+  'landing.accountHeading': 'Policies and quotes',
+  'landing.accountIntro': 'View your issued policies or start a quote.',
+  'consent.simulated': 'Academic simulation: the named sources use test data. We do not access real bank accounts or personal records.',
+  'policy.readBothPages': 'Open page 2 of the document to enable acceptance and request the code.',
+  'live.signatureReady': 'Review both pages of the document before accepting and requesting the simulated signature code.',
+  'form.dateFormat': 'Format: {format}.',
   ...portalEn,
   ...advisorEn,
   'landing.home': 'Solventa home',
@@ -357,6 +373,8 @@ const enUS: typeof esCO = {
   'landing.how': 'How it works',
   'landing.prepareLabel': 'Before you start',
   'landing.prepareTitle': 'Have these details ready',
+  'landing.identityDetails': 'Name, identity document and date of birth',
+  'landing.city': 'City of residence',
   'landing.age': 'Your age',
   'landing.amount': 'Loan amount in Colombian pesos',
   'landing.term': 'Loan term in months',
@@ -486,8 +504,8 @@ const enUS: typeof esCO = {
   'offer.preliminaryTitle': 'Preliminary offer',
   'offer.preliminaryDetail': 'A source did not respond and fallback data was used. This offer cannot be accepted. Request a new evaluation to query the sources again.',
   'offer.reevaluate': 'Request a new evaluation',
-  'offer.premium': 'Personalized monthly premium',
-  'offer.perMonth': 'COP / month',
+  'offer.premium': 'Policy premium',
+  'offer.perMonth': 'COP · single payment',
   'offer.sumInsured': 'Sum insured',
   'offer.coverage': 'Coverage',
   'offer.coverageValue': 'Life · outstanding balance',
@@ -538,7 +556,7 @@ const enUS: typeof esCO = {
   'policy.signatureSubtitle': 'Review the complete document before signing. We provide a demo code for this version.',
   'policy.continueToPayment': 'Continue to payment',
   'policy.document': 'Policy document',
-  'policy.download': 'Download document',
+  'policy.download': 'Download original',
   'policy.hash': 'Document fingerprint',
   'policy.check': 'I reviewed the complete document and accept its terms.',
   'policy.confirm': 'Sign policy',
@@ -558,7 +576,7 @@ const enUS: typeof esCO = {
   'issued.title': 'Policy issued',
   'issued.badge': 'Issued · charged and signed',
   'issued.policy': 'Policy no.',
-  'issued.premium': 'Monthly premium',
+  'issued.premium': 'Premium (single payment)',
   'issued.start': 'Coverage start',
   'issued.end': 'Coverage end',
   'issued.proof': 'Auditable confirmation',
@@ -589,7 +607,7 @@ const enUS: typeof esCO = {
   'financial.unavailableTitle': 'We could not complete the operation',
   'financial.unavailable': 'The service did not respond. Retry: the same request is not duplicated.',
   'financial.retry': 'Retry',
-  'live.offerReady': 'Definitive offer ready: monthly premium {premium}.',
+  'live.offerReady': 'Definitive offer ready: single premium {premium}.',
   'live.offerPreliminary': 'Preliminary offer. It cannot be accepted. You can request a new evaluation.',
   'live.offerDeclined': 'Underwriting did not approve a definitive offer. No policy or charge was issued.',
   'live.offerExpired': 'The offer expired. No policy was issued and no charge was made.',
@@ -683,6 +701,6 @@ const enUS: typeof esCO = {
 };
 
 export const messages: Record<Locale, Record<string, string>> = {
-  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs },
-  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn },
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs, ...navigationEs, ...documentEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn, ...navigationEn, ...documentEn },
 };

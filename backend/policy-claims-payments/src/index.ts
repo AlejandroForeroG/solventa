@@ -5,6 +5,10 @@ import { databaseProbe } from './adapters/outbound/database-probe';
 import { createPolicyFinance } from './adapters/composition';
 import { ClaimInbox } from './application/claim-inbox';
 import { SqlClaimInbox } from './adapters/outbound/sql-claim-inbox';
+import { ClaimReview } from './application/claim-review';
+import { SqlClaimReview } from './adapters/outbound/sql-claim-review';
+import { ClaimDecisions } from './application/claim-decisions';
+import { SqlClaimDecisions } from './adapters/outbound/sql-claim-decisions';
 import { ClaimReport } from './application/claim-report';
 import { SqlClaimReport } from './adapters/outbound/sql-claim-report';
 import { ClaimDrafts } from './application/claim-drafts';
@@ -15,7 +19,7 @@ import { Reports } from './application/reports';
 import { SqlReportStore } from './adapters/outbound/sql-report-store';
 import { SqlMockReportDestination } from './adapters/outbound/sql-mock-report-destination';
 import { TimerDeadline } from './adapters/outbound/timer-deadline';
-import { searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -30,6 +34,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
     // The destinations are explicit simulations; the fault switch exists only to show an unanswered delivery locally and defaults to none everywhere.
     const destinationFault = this.env.REPORT_DESTINATION_FAULT === 'timeout' ? 'timeout' : 'none';
+    const evidence = evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const response = await createHttp({ finance,
       claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
@@ -40,14 +45,17 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
-      claims: { inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+      claims: { decisions: new ClaimDecisions(new SqlClaimDecisions(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
+        review: new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString), evidence, listSyntheticExperts),
+        download: evidence && ((...args) => evidence.download(...args)),
+        inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       reports: { reports: new Reports(new SqlReportStore(this.env.POLICY_DB.connectionString), new Sha256ReportDigest(),
         { regulator: new SqlMockReportDestination('regulator', this.env.POLICY_DB.connectionString, destinationFault),
           reinsurer: new SqlMockReportDestination('reinsurer', this.env.POLICY_DB.connectionString, destinationFault) }, { now: () => new Date() }, new TimerDeadline()),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
-      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined, new Sha256ReportDigest(), { now: () => new Date() }),
+      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {

@@ -25,6 +25,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-android-font-scale.cjs",
       [
         "expo-secure-store",
         {

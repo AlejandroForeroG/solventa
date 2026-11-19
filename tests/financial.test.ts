@@ -721,7 +721,11 @@ async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay', owner?
 }
 const listFinance = (records: Awaited<ReturnType<typeof issuedRecord>>[], rejected: string[] = []) => new PolicyFinance({ enabled: true, environment: 'local',
   integrity: financialIntegrity, now: financialNow, newId: randomUUID,
-  store: { ...unusedStoreReads, async readOwnPolicies(_actor, limit) { return records.slice(0, limit); }, async rejection(_id, _trace, cause) { rejected.push(cause); } },
+  store: { ...unusedStoreReads, async readOwnPolicies(_actor, limit, _includeEnded, afterPolicyId, policyId) {
+    const after = afterPolicyId ? records.findIndex(record => record.policy.id === afterPolicyId) + 1 : 0;
+    const page = afterPolicyId && after === 0 ? [] : records.slice(after);
+    return page.filter(record => !policyId || record.policy.id === policyId).slice(0, limit);
+  }, async rejection(_id, _trace, cause) { rejected.push(cause); } },
   payments: { lookup: async () => { throw new Error('unexpected_provider_call'); }, settle: async () => { throw new Error('unexpected_provider_call'); }, refund: async () => { throw new Error('unexpected_provider_call'); } },
   signatures: { sign: async () => { throw new Error('unexpected_provider_call'); } } });
 
@@ -750,6 +754,15 @@ test('the native policy list is bounded and reports that more exist', async () =
   assert.ok(result.status === 'ok');
   assert.equal(result.policies.length, 6);
   assert.equal(result.hasMore, true);
+  assert.equal(result.nextCursor, rest[4].policy.id);
+  const next = await listFinance([first, ...rest]).listOwn({ actor, traceId: randomUUID(), cursor: result.nextCursor! });
+  assert.ok(next.status === 'ok');
+  assert.deepEqual(next.policies.map(policy => policy.policyId), [rest[5].policy.id]);
+  assert.equal(next.hasMore, false);
+  assert.equal(next.nextCursor, null);
+  const selected = await listFinance([first, ...rest]).listOwn({ actor, traceId: randomUUID(), policyId: rest[5].policy.id });
+  assert.ok(selected.status === 'ok');
+  assert.deepEqual(selected.policies.map(policy => policy.policyId), [rest[5].policy.id]);
 });
 
 test('the native policy list rejects a tampered or foreign record instead of listing it', async () => {
@@ -769,7 +782,7 @@ test('the native policy list validates the actor and fails closed when financial
   const invalid = await finance.listOwn({ actor: { clientId: 'x', subjectToken: 'y' }, traceId: randomUUID() });
   assert.ok(invalid.status === 'denied' && invalid.httpStatus === 400);
   const empty = await finance.listOwn({ actor: { clientId: randomUUID(), subjectToken: randomUUID() }, traceId: randomUUID() });
-  assert.deepEqual(empty, { status: 'ok', policies: [], hasMore: false });
+  assert.deepEqual(empty, { status: 'ok', policies: [], hasMore: false, nextCursor: null });
   const disabled = new PolicyFinance({ enabled: false, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID,
     store: { ...unusedStoreReads, async rejection() {} }, payments: { lookup: async () => { throw new Error('x'); }, settle: async () => { throw new Error('x'); }, refund: async () => { throw new Error('x'); } },
     signatures: { sign: async () => { throw new Error('x'); } } });

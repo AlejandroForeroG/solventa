@@ -7,6 +7,8 @@ import { ActivePolicies } from '../apps/mobile/src/features/claim-report/applica
 import { ClaimReportFlow } from '../apps/mobile/src/features/claim-report/application/claim-report-flow';
 import { ClaimReportFailure, type CaptureOutcome, type ClaimReportApi, type DraftReceipt, type EvidenceFiles, type SubmitReceipt } from '../apps/mobile/src/features/claim-report/application/ports';
 import { admit, contentTypeOf, isReportableProduct, LIMITS, manifestOf, validate, type Draft, type EvidenceItem } from '../apps/mobile/src/features/claim-report/domain/report';
+import type { CachedPolicy } from '../apps/mobile/src/features/policy-cache/domain/cached-policy';
+import type { PolicyPage } from '../apps/mobile/src/features/policy-wallet/application/ports';
 
 const baseUrl = 'https://dev.solventa.site';
 const policyId = '20000000-0000-4000-8000-000000000001';
@@ -23,6 +25,10 @@ test('picked files are normalized, and every limit is enforced before anything i
   assert.equal(contentTypeOf({ uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 1 }), null);
   assert.equal(contentTypeOf({ uri: 'file:///a', mimeType: null, byteSize: 1 }), null);
   const none: EvidenceItem[] = [];
+  const named = admit(none, { uri: 'file:///copy.png', mimeType: 'image/png', byteSize: 34387,
+    fileName: '  Synthetic\u202e\u0000 document.png  ' }, 'named');
+  assert.ok('item' in named);
+  assert.equal(named.item.fileName, 'Synthetic document.png');
   assert.deepEqual(admit(none, { uri: 'file:///a.pdf', mimeType: 'application/pdf', byteSize: 5 }, 'x'), { rejected: 'file_type' });
   assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: 0 }, 'x'), { rejected: 'empty' });
   assert.deepEqual(admit(none, { uri: 'file:///a.jpg', mimeType: 'image/jpeg', byteSize: null }, 'x'), { rejected: 'unreadable' });
@@ -49,10 +55,12 @@ test('the declaration needs a type, an exact time inside the policy dates, a rea
 });
 
 test('the declaration sent to the server is exact, trimmed and carries no device path', () => {
-  const manifest = manifestOf({ ...draft({ place: '  Calle 116  ', description: `  ${description}  ` }), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
+  const manifest = manifestOf({ ...draft({ place: '  Calle 116  ', description: `  ${description}  `,
+    evidence: [{ ...photo('a'), fileName: 'Synthetic document.png' }] }), eventType: 'collision' }, new Map([['a', 'f'.repeat(64)]]));
   assert.deepEqual(manifest, { policyId, eventType: 'collision', occurredAt: '2026-11-10T15:00:00.000Z', place: 'Calle 116', description,
     evidence: [{ fileId: 'a', contentType: 'image/jpeg', byteSize: 2_000_000, sha256: 'f'.repeat(64) }] });
   assert.equal(JSON.stringify(manifest).includes('file:///'), false);
+  assert.equal(JSON.stringify(manifest).includes('Synthetic document.png'), false);
   assert.equal('place' in manifestOf({ ...draft(), eventType: 'collision' }, new Map()), false);
 });
 
@@ -292,18 +300,57 @@ test('only a mortgage life policy can be reported, because flight delay pays on 
   assert.equal(isReportableProduct('anything_else'), false);
 });
 
-test('the policy list says when older policies were not read, so the screen never claims there are none', async () => {
+test('reportable policies preserve page navigation even when a page has no eligible records', async () => {
   const policy = (product: string) => ({ policyId, product }) as never;
   const read = async (hasMore: boolean) => {
-    const options = new ActivePolicies(async () => ({ policies: [policy('flight_delay'), policy('vida_hipotecario')], hasMore }), item => isReportableProduct((item as { product: string }).product), () => now.getTime());
+    const options = new ActivePolicies(async () => ({ policies: [policy('flight_delay'), policy('vida_hipotecario')], hasMore, nextCursor: hasMore ? policyId : null }), item => isReportableProduct((item as { product: string }).product), () => now.getTime());
     await options.refresh();
     return options.getSnapshot();
   };
-  assert.deepEqual(await read(true), { status: 'ready', policies: [policy('vida_hipotecario')], partial: true });
-  assert.deepEqual(await read(false), { status: 'ready', policies: [policy('vida_hipotecario')], partial: false });
+  assert.deepEqual(await read(true), { status: 'ready', policies: [policy('vida_hipotecario')], partial: true, page: 1, nextCursor: policyId });
+  assert.deepEqual(await read(false), { status: 'ready', policies: [policy('vida_hipotecario')], partial: false, page: 1, nextCursor: null });
   const failing = new ActivePolicies(async () => { throw new Error('offline'); }, () => true, () => now.getTime());
   await failing.refresh();
   assert.deepEqual(failing.getSnapshot(), { status: 'failed' });
+});
+
+test('the report selector reaches later eligible pages and resolves a requested older policy directly', async () => {
+  const older: CachedPolicy = { policyId, product: 'vida_hipotecario', premium: '86400.0000', currency: 'COP',
+    effectiveFrom: window.from.toISOString(), effectiveUntil: window.until.toISOString(), coverage: { kind: 'mortgage_life', sumInsured: '200000000.0000' } };
+  const boundary = '20000000-0000-4000-8000-000000000002';
+  const calls: unknown[] = [];
+  const options = new ActivePolicies(async query => {
+    calls.push(query);
+    return query?.cursor || query?.policyId ? { policies: [older], hasMore: false, nextCursor: null }
+      : { policies: [], hasMore: true, nextCursor: boundary };
+  }, () => true, () => now.getTime());
+  await options.refresh();
+  assert.deepEqual(options.getSnapshot(), { status: 'ready', policies: [], partial: true, page: 1, nextCursor: boundary });
+  await options.nextPage();
+  assert.deepEqual(options.getSnapshot(), { status: 'ready', policies: [older], partial: false, page: 2, nextCursor: null });
+  await options.previousPage();
+  await options.refresh(policyId);
+  assert.deepEqual(calls, [{ cursor: undefined }, { cursor: boundary }, { cursor: undefined }, { policyId }]);
+  assert.deepEqual(options.getSnapshot(), { status: 'ready', policies: [older], partial: false, page: 1, nextCursor: null });
+});
+
+test('a stale or cancelled selector response cannot replace a newer selection', async () => {
+  let release: (page: PolicyPage) => void = () => {};
+  let slow = true;
+  const options = new ActivePolicies(() => slow ? new Promise(resolve => { release = resolve; })
+    : Promise.resolve({ policies: [], hasMore: false, nextCursor: null }), () => true, () => now.getTime());
+  const pending = options.refresh();
+  slow = false;
+  await options.refresh(policyId);
+  release({ policies: [], hasMore: true, nextCursor: policyId });
+  await pending;
+  assert.deepEqual(options.getSnapshot(), { status: 'ready', policies: [], partial: false, page: 1, nextCursor: null });
+  slow = true;
+  const cancelled = options.refresh();
+  options.cancel();
+  release({ policies: [], hasMore: false, nextCursor: null });
+  await cancelled;
+  assert.deepEqual(options.getSnapshot(), { status: 'loading' });
 });
 
 // A report with nothing attached yet, so a test sees only the files it adds.

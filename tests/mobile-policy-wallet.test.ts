@@ -6,7 +6,7 @@ import { ProtectedPolicyCache } from '../apps/mobile/src/features/policy-cache/a
 import { PolicyCacheFailure } from '../apps/mobile/src/features/policy-cache/domain/cached-policy';
 import type { CachedPolicy } from '../apps/mobile/src/features/policy-cache/domain/cached-policy';
 import { PolicyWallet } from '../apps/mobile/src/features/policy-wallet/application/policy-wallet';
-import type { PoliciesApi } from '../apps/mobile/src/features/policy-wallet/application/ports';
+import type { PoliciesApi, PolicyPage } from '../apps/mobile/src/features/policy-wallet/application/ports';
 import { PolicyApiFailure, policyReference, validityAt } from '../apps/mobile/src/features/policy-wallet/domain/wallet';
 import type { WalletSnapshot } from '../apps/mobile/src/features/policy-wallet/domain/wallet';
 
@@ -20,7 +20,7 @@ const policy: CachedPolicy = {
 function fixture(options: { authentication?: 'pass' | 'deny' | 'no_lock'; storeWrites?: boolean } = {}) {
   let value: string | null = null;
   let clock = 1_800_000_000_000;
-  const state = { prompts: 0, listCalls: 0, listing: (): Promise<{ policies: CachedPolicy[]; hasMore: boolean }> => Promise.resolve({ policies: [policy], hasMore: false }) };
+  const state = { prompts: 0, listCalls: 0, listing: (_query?: Parameters<PoliciesApi['list']>[0]): Promise<PolicyPage> => Promise.resolve({ policies: [policy], hasMore: false, nextCursor: null }) };
   let flag = false;
   const cache = new ProtectedPolicyCache({
     discard: { raise: async () => { flag = true; }, pending: async () => flag, settle: async () => { flag = false; } },
@@ -32,7 +32,7 @@ function fixture(options: { authentication?: 'pass' | 'deny' | 'no_lock'; storeW
       if (options.authentication === 'no_lock') throw new PolicyCacheFailure('unavailable');
     } },
   });
-  const api: PoliciesApi = { list: () => { state.listCalls++; return state.listing(); } };
+  const api: PoliciesApi = { list: query => { state.listCalls++; return state.listing(query); } };
   const wallet = new PolicyWallet({ api, cache, owner, now: () => clock });
   const states: WalletSnapshot[] = [];
   wallet.subscribe(() => states.push(wallet.getSnapshot()));
@@ -57,7 +57,7 @@ test('online, the wallet shows the server data as current and keeps a protected 
   const f = fixture();
   await f.wallet.unlock();
   assert.deepEqual(f.states.map(item => item.status), ['loading', 'ready']);
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true, page: 1, nextCursor: null });
   assert.ok(f.stored() && !f.stored()!.includes('vida_hipotecario'), 'the copy rests in the compact protected encoding');
 });
 
@@ -69,7 +69,7 @@ test('without connection the wallet shows the last saved copy, labelled with its
   f.wallet.lock();
   await f.wallet.unlock();
   assert.equal(f.state.prompts, 2, 'each opening asks for the device authentication again');
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'stored', syncedAt: 1_800_000_000_000, policies: [policy], hasMore: false, stored: true, page: null, nextCursor: null });
 });
 
 test('without connection and without a copy the wallet says so instead of showing data', async () => {
@@ -110,9 +110,9 @@ test('a malformed or incompatible answer stays a failure and is never shown as l
 
 test('an owner with no policies gets an empty list and an empty copy', async () => {
   const f = fixture();
-  f.state.listing = () => Promise.resolve({ policies: [], hasMore: false });
+  f.state.listing = () => Promise.resolve({ policies: [], hasMore: false, nextCursor: null });
   await f.wallet.unlock();
-  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [], hasMore: false, stored: true });
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'ready', source: 'online', syncedAt: 1_800_000_000_000, policies: [], hasMore: false, stored: true, page: 1, nextCursor: null });
   f.state.listing = () => Promise.reject(new PolicyApiFailure('unavailable'));
   f.wallet.lock();
   await f.wallet.unlock();
@@ -122,13 +122,13 @@ test('an owner with no policies gets an empty list and an empty copy', async () 
 
 test('locking hides the data, locks the cache and discards a response that arrives afterwards', async () => {
   const f = fixture();
-  let release: (value: { policies: CachedPolicy[]; hasMore: boolean }) => void = () => {};
+  let release: (value: PolicyPage) => void = () => {};
   f.state.listing = () => new Promise(resolve => { release = resolve; });
   const opening = f.wallet.unlock();
   await Promise.resolve(); await Promise.resolve();
   assert.equal(f.wallet.getSnapshot().status, 'loading');
   f.wallet.lock();
-  release({ policies: [policy], hasMore: false });
+  release({ policies: [policy], hasMore: false, nextCursor: null });
   await opening;
   assert.deepEqual(f.wallet.getSnapshot(), { status: 'locked' });
   await assert.rejects(f.cache.read(owner), error => error instanceof PolicyCacheFailure && error.kind === 'locked');
@@ -142,6 +142,48 @@ test('refresh only reloads an unlocked wallet', async () => {
   await f.wallet.unlock();
   await f.wallet.refresh();
   assert.equal(f.state.listCalls, 2);
+});
+
+test('paging reaches older policies and stores only the last viewed page for offline use', async () => {
+  const f = fixture();
+  const older = { ...policy, policyId: '2a1b3c4d-0000-4000-8000-000000000002' };
+  const cursors: (string | undefined)[] = [];
+  f.state.listing = async query => {
+    cursors.push(query?.cursor);
+    return query?.cursor === policy.policyId ? { policies: [older], hasMore: false, nextCursor: null }
+      : { policies: [policy], hasMore: true, nextCursor: policy.policyId };
+  };
+  await f.wallet.unlock();
+  await f.wallet.nextPage();
+  let snapshot = f.wallet.getSnapshot();
+  assert.ok(snapshot.status === 'ready' && snapshot.page === 2 && snapshot.policies[0].policyId === older.policyId);
+  await f.wallet.refresh();
+  await f.wallet.previousPage();
+  assert.deepEqual(cursors, [undefined, policy.policyId, policy.policyId, undefined]);
+  await f.wallet.nextPage();
+  f.state.listing = async () => { throw new PolicyApiFailure('unavailable'); };
+  await f.wallet.refresh();
+  snapshot = f.wallet.getSnapshot();
+  assert.ok(snapshot.status === 'ready' && snapshot.source === 'stored' && snapshot.page === null && snapshot.nextCursor === null);
+  assert.deepEqual(snapshot.policies, [older]);
+  const calls = f.state.listCalls;
+  await f.wallet.nextPage();
+  assert.equal(f.state.listCalls, calls, 'an offline page cannot request the next page');
+});
+
+test('locking during an older-page request prevents its display and persistence', async () => {
+  const f = fixture();
+  f.state.listing = async () => ({ policies: [policy], hasMore: true, nextCursor: policy.policyId });
+  await f.wallet.unlock();
+  const saved = f.stored();
+  let release: (page: PolicyPage) => void = () => {};
+  f.state.listing = () => new Promise(resolve => { release = resolve; });
+  const pending = f.wallet.nextPage();
+  f.wallet.lock();
+  release({ policies: [], hasMore: false, nextCursor: null });
+  await pending;
+  assert.deepEqual(f.wallet.getSnapshot(), { status: 'locked' });
+  assert.equal(f.stored(), saved);
 });
 
 test('the policy validity follows the dates and the reference is the start of the identifier', () => {

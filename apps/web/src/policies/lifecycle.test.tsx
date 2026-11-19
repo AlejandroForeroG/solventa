@@ -22,11 +22,11 @@ it('retains a command identity after an uncertain cancellation and reports succe
   }); vi.stubGlobal('fetch', fetch);
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={changed} onSessionLost={lost} /></I18n>);
   const user = userEvent.setup();
-  expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Cancelar póliza' })).toBeDisabled();
   await user.click(screen.getByRole('checkbox', { name: 'Confirmo esta operación' }));
-  await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+  await user.click(screen.getByRole('button', { name: 'Cancelar póliza' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No se confirmó el cambio'); expect(changed).not.toHaveBeenCalled();
-  await user.click(screen.getByRole('button', { name: 'Cancelar' })); expect(changed).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole('button', { name: 'Cancelar póliza' })); expect(changed).toHaveBeenCalledOnce();
   const commands = fetch.mock.calls.filter(([url]) => url.endsWith('/lifecycle'));
   expect(commands[0][1]?.body).toBe(commands[1][1]?.body); expect(commands[0][1]?.headers).toEqual(commands[1][1]?.headers);
 });
@@ -36,7 +36,7 @@ it('explains renewal eligibility before offering a replacement purchase, in the 
   render(<I18n initial="en-US"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
   await userEvent.setup().selectOptions(screen.getByRole('combobox'), 'renewed');
   expect(screen.getByText(/You can renew after the previous policy expires/)).toBeVisible();
-  expect(screen.queryByRole('link', { name: 'Quote replacement' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Renew' })).toBeDisabled();
+  expect(screen.queryByRole('link', { name: 'Quote replacement' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Renew policy' })).toBeDisabled();
 });
 
 it.each([{ action: 'broken', at: '2026-11-11T12:00:00Z', reason: 'customer_request', replacementPolicyId: null },

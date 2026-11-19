@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import type { QuoteValues } from './api';
-import { fieldOrder, type FieldKey, type FieldProblem } from './fields';
+import { type FieldKey, type FieldProblem } from './fields';
+import { CalendarDateInput } from '../forms/CalendarDateInput';
 
 type Props = {
   values: QuoteValues;
   problems: FieldProblem[];
+  focusRequest: { field: FieldKey } | null;
   banner: 'none' | 'fields' | 'unavailable' | 'conflict';
   busy: boolean;
   onChange: (key: FieldKey, value: string) => void;
@@ -23,14 +25,13 @@ const inputs: Record<FieldKey, { label: string; type: string; inputMode?: 'numer
 
 const fieldId = (key: FieldKey) => `quote-${key}`;
 
-export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }: Props) {
+export function QuoteForm({ values, problems, focusRequest, banner, busy, onChange, onSubmit }: Props) {
   const intl = useIntl();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   useEffect(() => {
-    const first = fieldOrder.find(key => problems.some(p => p.key === key));
-    if (first) document.getElementById(fieldId(first))?.focus();
-  }, [problems]);
+    if (focusRequest) document.getElementById(fieldId(focusRequest.field))?.focus();
+  }, [focusRequest]);
 
   const field = (key: FieldKey) => {
     const problem = problems.find(p => p.key === key);
@@ -38,9 +39,11 @@ export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }
     const id = fieldId(key);
     return <div className="field" key={key}>
       <label htmlFor={id}>{intl.formatMessage({ id: spec.label })} <span className="required" aria-hidden="true">*</span></label>
-      <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
+      {key === 'birthDate' ? <CalendarDateInput id={id} name={key} className="mono-input" autoComplete="bday" required value={values[key]}
+        onChange={value => onChange(key, value)} aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
+      : <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
         value={values[key]} onChange={event => onChange(key, event.target.value)}
-        aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
+        aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />}
       {problem && <p className="field-error" id={`${id}-error`}>{intl.formatMessage({ id: problem.message }, problem.values)}</p>}
     </div>;
   };
@@ -63,8 +66,8 @@ export function QuoteForm({ values, problems, banner, busy, onChange, onSubmit }
       <div className="grid grid-3">
         {(['amount', 'termMonths'] as FieldKey[]).map(field)}
         <div className="field">
-          <label htmlFor="quote-product">{intl.formatMessage({ id: 'form.product' })}</label>
-          <input id="quote-product" type="text" readOnly value={intl.formatMessage({ id: 'form.productValue' })} />
+          <span className="field-label">{intl.formatMessage({ id: 'form.product' })}</span>
+          <p className="field-readonly">{intl.formatMessage({ id: 'form.productValue' })}</p>
         </div>
       </div>
       <div className="form-footer">

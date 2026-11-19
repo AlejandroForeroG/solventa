@@ -13,7 +13,7 @@ export const unexpectedAuthentication: AuthenticationCollaborators = {
   }),
   sessions: () => ({
     find: unexpected('session_lookup'),
-    open: unexpected('session_registration'),
+    register: unexpected('session_registration'),
     revoke: unexpected('session_revocation'),
   }),
 };

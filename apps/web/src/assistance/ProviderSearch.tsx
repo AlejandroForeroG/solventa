@@ -3,6 +3,7 @@ import type { AssistanceProviderMatch } from '@solventa/contracts';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useIntl } from 'react-intl';
+import { fetchWithSession } from '../session-fetch';
 
 type Results = { state: 'idle' | 'loading' | 'unavailable' } | { state: 'ready'; providers: AssistanceProviderMatch[] };
 
@@ -26,7 +27,7 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
     setResult({ state: 'loading' });
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
-      const response = await fetch(assistanceSearchPath, {
+      const response = await fetchWithSession(assistanceSearchPath, {
         method: 'POST', credentials: 'same-origin', signal: controller.signal,
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind: 'manual', query: query.trim() }),

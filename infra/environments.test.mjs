@@ -40,6 +40,17 @@ test('a staging consumer cannot call a production backend', async () => {
   assert.throws(() => validateEnvironments(configs));
 });
 
+test('claim evidence cannot use a missing, foreign or additional production bucket', async () => {
+  for (const bindings of [undefined, [], [{ binding: 'CLAIM_EVIDENCE', bucket_name: 'solventa-staging-claim-evidence' }],
+    [{ binding: 'CLAIM_EVIDENCE', bucket_name: 'solventa-prod-claim-evidence' }, { binding: 'OTHER_EVIDENCE', bucket_name: 'solventa-dev-claim-evidence' }]]) {
+    const configs = await configurations();
+    configs['policy-claims-payments'].env.prod.r2_buckets = bindings;
+    assert.throws(() => validateEnvironments(configs));
+  }
+  const valid = await configurations();
+  assert.doesNotThrow(() => validateEnvironments(valid));
+});
+
 test('an acquisition Worker cannot call identity in another environment', async () => {
   const configs = await configurations();
   configs['acquisition-risk'].env.prod.services[0].service = 'solventa-identity-consent-ecosystem-dev';

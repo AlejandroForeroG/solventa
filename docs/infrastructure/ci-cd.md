@@ -24,7 +24,7 @@ git push -u origin feat/quotes
 git push -u origin feat/quotes-validation
 ```
 
-Resolve integration conflicts in `feat/quotes-validation`. Open **`feat/quotes-validation` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy repeats CI, applies and verifies pending dev migrations in a dedicated job, then publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
+Resolve integration conflicts in `feat/quotes-validation`. Open **`feat/quotes-validation` → `dev`** with links to guides created/updated on that branch and test results. CI checks policy, architecture, tests, lint, types, builds and local SQL/RPC with TLS. Integrate through a normal merge after green checks and resolution of all review conversations. Deploy requires the reusable CI validation gate described below, applies and verifies pending dev migrations in a dedicated job, then publishes dev's four Workers and checks SQL/RPC/isolation. Validate the actual flow in dev.
 
 If functionality is corrected on the separate integration branch, cherry-pick relevant commits back to the base; never copy merges or unrelated dev work:
 
@@ -63,7 +63,7 @@ Keep the candidate and any separate integration branch until promotion is comple
 
 ## 4. Publishing a staging release to prod
 
-Staging Deploy reruns CI, automatically applies and verifies staging migrations, then publishes staging and validates infrastructure. Test the candidate and open **`staging` → `prod`** for each release. Link the successful Deploy of the exact staging SHA, release guides and checks. CI requires that deployment and a merge preserving the source tree. Use a normal merge and wait for successful prod Deploy.
+Staging Deploy requires CI validation, automatically applies and verifies staging migrations, then publishes staging and validates infrastructure. Test the candidate and open **`staging` → `prod`** for each release. Link the successful Deploy of the exact staging SHA, release guides and checks. CI requires that deployment and a merge preserving the source tree. Use a normal merge and wait for successful prod Deploy.
 
 If prod merge history needs to return to staging, use a maintenance base originating from staging and, when needed, a separate integration branch, following the same flow. Never push directly or copy all dev changes. `main` is a historical reference without deployment.
 
@@ -74,6 +74,18 @@ All three branches require PRs, `policy` and `validate` checks from GitHub Actio
 Use Codex feedback and check relevant technical criteria. Follow [change review](../change-review.md) to give the reviewer accessible context, record evidence and resolve findings or consult the user. Do not mark a thread resolved merely to unblock merging. There is no separate required Codex status, custom review workflow or GitHub App; conversation resolution is enforced natively. This setting does not prove that Codex finished a review or accepted every criterion. Review does not replace CI or required human approval; it also does not establish completion of an entire story.
 
 Use the [PR template](../../.github/pull_request_template.md). Each PR links its new/updated documents using GitHub URLs on its source branch and explains change, executed tests and limits in English. An internal fix with no documentation impact must justify it; every feature includes documentation. Do not create copies per branch/environment. Messages do not select environments: the target branch does.
+
+## Reusing complete validation
+
+The required `validate` job runs for every PR and Deploy. It can reuse a successful full validation only when the entire checked-out Git tree and execution fingerprint match: hosted Linux image/version and architecture, exact Node/npm versions, pulled CockroachDB image digest and hashes of the actual downloaded checkout/setup-node action code. The existing allowed v4 action references and repository action allowlist are preserved; a moved action tag changes the fingerprint. The tree includes workflows, dependency locks, application code, configuration and tests. Normal merge SHAs can differ while containing the same tree. Any changed file or execution condition requires the full suite again.
+
+After all full-validation steps, including local SQL/RPC checks and database shutdown, a trusted same-repository run uploads a data-only `validation.json` artifact with the pinned official `@actions/artifact` SDK through this repository's local JavaScript action. The wrapper receives the runner's scoped artifact credentials and invokes the validated Node version; it does not expose those credentials or add an external action to the allowlist. Each run/attempt has its own immutable artifact ID/name. Reuse verifies the archive SHA-256 against GitHub metadata, the exact repository and source repository, successful completed workflow and latest attempt, GitHub's tested commit/tree and PR merge parents, and successful full-validation job markers. Only CI pull-request runs from this repository or Deploy pushes to dev/staging/prod are eligible. Fork runs always execute full validation and cannot publish a reusable receipt. Reused jobs cannot issue another full-validation receipt, so evidence never becomes a chain of reused checks.
+
+Receipts are eligible for six hours and retained for one day. Lookup examines at most 100 recent repository artifacts and ten matching candidates. Missing, expired, oversized, malformed, digest-mismatched, failed, cancelled, obsolete-attempt or unavailable evidence cannot authorize reuse; the complete existing validation/SQL suite runs instead. Unsupported or unidentified runner conditions fail preparation rather than creating ambiguous proof. Artifacts contain validation metadata only: downloaded archives are read without extracting or executing files, and never contain remote environment credentials.
+
+The `policy` job always evaluates the current PR and deployment ancestry afresh. Approval, conversation resolution, environment selection, migration jobs, runtime permissions and post-publication SQL/RPC/isolation verification are unchanged. Environment-specific web/Worker publication remains built by its existing deployment commands; this increment reuses only validation receipts, not executable bundles or credentials. A receipt is neither a successful environment deployment nor business acceptance evidence.
+
+The first run of a new tree executes the full suite. Changes to the runner image, SQL image, dependencies, workflow or receipt contract also cause a full run. Review the source-run link in the `validate` job summary; measure completed full and reused job durations separately before claiming a time saving. GitHub [workflow artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts) and the [artifact API](https://docs.github.com/en/rest/actions/artifacts) describe the metadata/digest transport. As with the existing pipeline, executable workflow changes require trusted repository review; this is not an independent code attestation against malicious collaborators.
 
 ## GitHub configuration
 
