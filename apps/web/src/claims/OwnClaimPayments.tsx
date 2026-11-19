@@ -27,7 +27,7 @@ export function OwnClaimPayments({ onSessionLost }: { onSessionLost(): void }) {
     <h2 id="own-payments-title">{t('ownerTitle')}</h2>
     {hidden ? <p role="status">{t('hidden')}</p> : <>
       {!page && !error && <p role="status">{t('loading')}</p>}
-      {error && <p role="alert" className="claims-error">{t('error.' + error)}</p>}
+      {error && <p role="alert" className="claims-error">{t(error === 'unavailable' ? 'queryUnavailable' : 'error.' + error)}</p>}
       {page?.items.length === 0 && <p>{t('empty')}</p>}
       {page && <ul className="case-list">{page.items.map(item => {
         const [whole, fraction] = item.payment.amount.split('.');

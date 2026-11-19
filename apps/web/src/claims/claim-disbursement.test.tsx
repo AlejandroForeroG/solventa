@@ -97,9 +97,9 @@ it('preserves canonical decimal precision without grouping or floating point', (
   for (const input of ['0', '-1', '1e3', '1.000,00', '1,000.00', '1000000000000000', '0.00001']) expect(approvedAmount(input)).toBeNull();
 });
 
-it('shows only the customer receipt and clears it on a denied replacement read', async () => {
+it.each([403, 503])('clears the customer receipt after a failed replacement read with status %s', async status => {
   const user = userEvent.setup(); let denied = false;
-  vi.stubGlobal('fetch', vi.fn(async () => denied ? json({ error: 'forbidden', traceId }, 403) : json({
+  vi.stubGlobal('fetch', vi.fn(async () => denied ? json({ error: status === 403 ? 'forbidden' : 'service_unavailable', traceId }, status) : json({
     traceId, next: null, items: [{ claimId, claimNumber: 'SIN-2026-00001', updatedAt: '2026-11-19T15:00:00Z',
       payment: { ...receipt, status: 'confirmed', reference: 'MOCK-' + paymentId } }] })));
   render(<I18n initial="es-CO"><OwnClaimPayments onSessionLost={vi.fn()} /></I18n>);
@@ -107,6 +107,6 @@ it('shows only the customer receipt and clears it on a denied replacement read',
   expect(screen.getByRole('link', { name: 'SIN-2026-00001' })).toHaveAttribute('href', '/mis-siniestros/' + claimId);
   expect(screen.queryByRole('textbox')).toBeNull(); denied = true;
   await user.click(screen.getByRole('button', { name: 'Consultar estado' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('ya no tiene permiso');
+  expect(await screen.findByRole('alert')).toHaveTextContent(status === 403 ? 'ya no tiene permiso' : 'No pudimos consultar tus indemnizaciones');
   expect(screen.queryByText(new RegExp('MOCK-' + paymentId))).toBeNull();
 });

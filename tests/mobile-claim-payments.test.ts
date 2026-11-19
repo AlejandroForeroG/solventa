@@ -6,9 +6,18 @@ import { ClaimPaymentFailure } from '../apps/mobile/src/features/claim-payments/
 import { parseClaimPaymentPage } from '../packages/contracts/src/claim-payments';
 import examples from '../packages/contracts/examples/claim-payments.json';
 import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
+import { formatPaymentAmount } from '../apps/mobile/src/features/claim-payments/presentation/format';
 
 const owner = { clientId: '11111111-1111-4111-8111-111111111114', subjectToken: '11111111-1111-4111-8111-111111111115' };
 const page = parseClaimPaymentPage(examples.confirmedPage)!;
+
+test('native receipts preserve every decimal at the contract limits in both locales', () => {
+  assert.equal(formatPaymentAmount('1250.1234', 'es-CO'), '1.250,1234 COP');
+  assert.equal(formatPaymentAmount('1250.1234', 'en-US'), '1,250.1234 COP');
+  assert.equal(formatPaymentAmount('999999999999999.9999', 'es-CO'), '999.999.999.999.999,9999 COP');
+  assert.equal(formatPaymentAmount('999999999999999.9999', 'en-US'), '999,999,999,999,999.9999 COP');
+  assert.equal(formatPaymentAmount('0.0001', 'es-CO'), '0,0001 COP');
+});
 
 test('native unauthorized responses reach session handling before the screen receives a safe failure', async () => {
   let unauthorized = false;

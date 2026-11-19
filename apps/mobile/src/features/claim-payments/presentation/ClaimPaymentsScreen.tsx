@@ -9,6 +9,8 @@ import { Page, Action, ui } from '../../claim-report/presentation/ui';
 import { ClaimPayments } from '../application/claim-payments';
 import { createClaimPaymentsApi } from '../adapters/payments-api';
 import { paymentMessages } from './messages';
+import { formatPaymentAmount } from './format';
+import { ReceiptPrivacy } from './ReceiptPrivacy';
 
 export function ClaimPaymentsScreen() {
   const auth = useAuthentication(); const focused = useIsFocused();
@@ -16,7 +18,9 @@ export function ClaimPaymentsScreen() {
   const locale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   if (auth.status !== 'authenticated' || !auth.principal) return <WelcomeScreen />;
   if (!focused) return <Page title={paymentMessages[locale].title} />;
-  return <Payments key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale} owner={auth.principal} />;
+  return <ReceiptPrivacy key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale}>
+    <Payments locale={locale} owner={auth.principal} />
+  </ReceiptPrivacy>;
 }
 
 function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clientId: string; subjectToken: string } }) {
@@ -25,7 +29,7 @@ function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clien
   const state = useSyncExternalStore(payments.subscribe, payments.getSnapshot, payments.getSnapshot);
   const copy = paymentMessages[locale];
   useEffect(() => {
-    void payments.refresh();
+    if (AppState.currentState === 'active') void payments.refresh(); else payments.lock();
     const lifecycle = AppState.addEventListener('change', next => { if (next !== 'active') payments.lock(); else void payments.refresh(); });
     return () => { lifecycle.remove(); payments.lock(); };
   }, [payments]);
@@ -36,8 +40,7 @@ function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clien
     {state.status === 'ready' && <>
       {state.page.items.length === 0 && <Text style={ui.body}>{copy.empty}</Text>}
       {state.page.items.map(item => {
-        const [whole, fraction] = item.payment.amount.split('.');
-        const amount = new Intl.NumberFormat(locale).format(BigInt(whole)) + (locale === 'es-CO' ? ',' : '.') + fraction + ' COP';
+        const amount = formatPaymentAmount(item.payment.amount, locale);
         return <View key={item.claimId} style={ui.card}>
           <Text accessibilityRole="header" style={ui.subtitle}>{item.claimNumber}</Text>
           <View style={item.payment.status === 'confirmed' ? ui.banner : ui.group}>

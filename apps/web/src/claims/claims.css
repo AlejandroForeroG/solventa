@@ -64,6 +64,7 @@
 .claim-payment input:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
 .claim-payment > .btn { margin-top: 1rem; }
 .claim-payment-amount { font-size: 1.35rem; font-weight: 600; overflow-wrap: anywhere; }
+.claim-payment .case-list .claims-badge { align-self: flex-start; }
 .claim-payment-confirmed { background: #e6f3ec; color: #1f7a4d; }
 .claim-payment-pending { background: #fbf0dc; color: #7a4e05; }
 .claim-payment-declined { background: #fbe9e7; color: #8a241c; }
