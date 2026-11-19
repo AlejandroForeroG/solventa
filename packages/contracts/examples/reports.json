@@ -1,0 +1,214 @@
+{
+  "page": {
+    "items": [
+      {
+        "reportId": "90000000-0000-4000-8000-000000000001",
+        "period": "2026-11",
+        "destination": "regulator",
+        "revision": 1,
+        "formatVersion": "regulator-portfolio.v1",
+        "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+        "manifest": {
+          "formatVersion": "regulator-portfolio.v1",
+          "ruleVersion": "academic-report-1",
+          "synthetic": true,
+          "period": "2026-11",
+          "destination": "regulator",
+          "revision": 1,
+          "generatedAt": "2026-11-30T12:00:00.000Z",
+          "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+          "rowCount": 9,
+          "records": {
+            "policy_issued": 2,
+            "policy_modified": 1,
+            "policy_cancelled": 1,
+            "claim_total": 2,
+            "payment_total": 3
+          },
+          "totals": [
+            {
+              "group": "claim:in_review",
+              "currency": "COP",
+              "count": 1,
+              "amount": "15000000.0000"
+            },
+            {
+              "group": "claim:paid",
+              "currency": "COP",
+              "count": 1,
+              "amount": "0.0000"
+            },
+            {
+              "group": "payment:indemnity:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "100000.0000"
+            },
+            {
+              "group": "payment:premium:confirmed",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            },
+            {
+              "group": "payment:premium:refunded",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_cancelled",
+              "currency": "COP",
+              "count": 1,
+              "amount": "410000.0001"
+            },
+            {
+              "group": "policy_issued",
+              "currency": "COP",
+              "count": 2,
+              "amount": "2230000.7500"
+            },
+            {
+              "group": "policy_modified",
+              "currency": "COP",
+              "count": 1,
+              "amount": "1250000.5000"
+            }
+          ]
+        },
+        "generatedAt": "2026-11-30T12:00:00.000Z",
+        "delivery": {
+          "id": "90000000-0000-4000-8000-0000000000d1",
+          "status": "acknowledged",
+          "attempts": 1,
+          "reference": "MOCK-RPT-90000000-0000-4000-8000-0000000000d1",
+          "rejectionCode": null,
+          "updatedAt": "2026-11-30T12:05:00.000Z"
+        }
+      }
+    ],
+    "next": null,
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "emptyPage": {
+    "items": [],
+    "next": null,
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "generated": {
+    "report": {
+      "reportId": "90000000-0000-4000-8000-000000000001",
+      "period": "2026-11",
+      "destination": "regulator",
+      "revision": 1,
+      "formatVersion": "regulator-portfolio.v1",
+      "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+      "manifest": {
+        "formatVersion": "regulator-portfolio.v1",
+        "ruleVersion": "academic-report-1",
+        "synthetic": true,
+        "period": "2026-11",
+        "destination": "regulator",
+        "revision": 1,
+        "generatedAt": "2026-11-30T12:00:00.000Z",
+        "contentHash": "aa391ce90f361f3d8e68bf539e45b5087d7024f78b89e6221d05c7aea03ed3ff",
+        "rowCount": 9,
+        "records": {
+          "policy_issued": 2,
+          "policy_modified": 1,
+          "policy_cancelled": 1,
+          "claim_total": 2,
+          "payment_total": 3
+        },
+        "totals": [
+          {
+            "group": "claim:in_review",
+            "currency": "COP",
+            "count": 1,
+            "amount": "15000000.0000"
+          },
+          {
+            "group": "claim:paid",
+            "currency": "COP",
+            "count": 1,
+            "amount": "0.0000"
+          },
+          {
+            "group": "payment:indemnity:confirmed",
+            "currency": "COP",
+            "count": 1,
+            "amount": "100000.0000"
+          },
+          {
+            "group": "payment:premium:confirmed",
+            "currency": "COP",
+            "count": 1,
+            "amount": "1250000.5000"
+          },
+          {
+            "group": "payment:premium:refunded",
+            "currency": "COP",
+            "count": 1,
+            "amount": "410000.0001"
+          },
+          {
+            "group": "policy_cancelled",
+            "currency": "COP",
+            "count": 1,
+            "amount": "410000.0001"
+          },
+          {
+            "group": "policy_issued",
+            "currency": "COP",
+            "count": 2,
+            "amount": "2230000.7500"
+          },
+          {
+            "group": "policy_modified",
+            "currency": "COP",
+            "count": 1,
+            "amount": "1250000.5000"
+          }
+        ]
+      },
+      "generatedAt": "2026-11-30T12:00:00.000Z"
+    },
+    "created": true,
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "uncertainDelivery": {
+    "reportId": "90000000-0000-4000-8000-000000000001",
+    "delivery": {
+      "id": "90000000-0000-4000-8000-0000000000d1",
+      "status": "uncertain",
+      "attempts": 1,
+      "reference": null,
+      "rejectionCode": null,
+      "updatedAt": "2026-11-30T12:05:00.000Z"
+    },
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "rejectedDelivery": {
+    "reportId": "90000000-0000-4000-8000-000000000001",
+    "delivery": {
+      "id": "90000000-0000-4000-8000-0000000000d1",
+      "status": "rejected",
+      "attempts": 1,
+      "reference": null,
+      "rejectionCode": "totals_mismatch",
+      "updatedAt": "2026-11-30T12:05:00.000Z"
+    },
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "invalidRequest": {
+    "error": "invalid_request",
+    "fields": [
+      "period"
+    ],
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  },
+  "forbidden": {
+    "error": "forbidden",
+    "traceId": "7f3c2a9e-1b4d-4c8e-9a52-0d6e8f1a3b47"
+  }
+}

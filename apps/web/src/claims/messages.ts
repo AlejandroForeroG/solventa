@@ -1,4 +1,6 @@
 export const claimsEs = {
+  'claims.details': 'Ver detalles', 'claims.hideDetails': 'Ocultar detalles',
+  'claims.fullPolicyId': 'ID completo de la póliza',
   "claims.customerCases": "Mis siniestros",
   "claims.customerEmpty": "Todavía no tienes siniestros radicados.",
   "claims.caseBack": "Volver a siniestros",
@@ -61,8 +63,6 @@ export const claimsEs = {
   "claims.response": "Tu respuesta",
   "claims.selectFiles": "Adjuntar imágenes o videos (máximo 3, 50 MB en total)",
   "claims.sendResponse": "Enviar respuesta",
-  'claims.details': 'Ver detalles', 'claims.hideDetails': 'Ocultar detalles',
-  'claims.fullPolicyId': 'ID completo de la póliza',
   'claims.open': 'Siniestros', 'claims.nav': 'Siniestros', 'claims.console': 'Consola operativa', 'claims.title': 'Bandeja de siniestros',
   'claims.subtitle': 'Siniestros abiertos · ordenados por prioridad de atención',
 
@@ -90,6 +90,8 @@ export const claimsEs = {
 };
 
 export const claimsEn: Record<keyof typeof claimsEs, string> = {
+  'claims.details': 'View details', 'claims.hideDetails': 'Hide details',
+  'claims.fullPolicyId': 'Full policy ID',
   "claims.customerCases": "My claims",
   "claims.customerEmpty": "You have no filed claims yet.",
   "claims.caseBack": "Back to claims",
@@ -152,8 +154,6 @@ export const claimsEn: Record<keyof typeof claimsEs, string> = {
   "claims.response": "Your response",
   "claims.selectFiles": "Attach images or videos (up to 3, 50 MB total)",
   "claims.sendResponse": "Send response",
-  'claims.details': 'View details', 'claims.hideDetails': 'Hide details',
-  'claims.fullPolicyId': 'Full policy ID',
   'claims.open': 'Claims', 'claims.nav': 'Claims', 'claims.console': 'Operations console', 'claims.title': 'Claims inbox',
   'claims.subtitle': 'Open claims · sorted by handling priority',
 

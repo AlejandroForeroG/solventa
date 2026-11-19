@@ -15,7 +15,18 @@ import { ClaimDrafts } from './application/claim-drafts';
 import { SqlClaimDrafts } from './adapters/outbound/sql-claim-drafts';
 import { R2ClaimEvidence } from './adapters/outbound/r2-claim-evidence';
 import { Sha256ReportDigest } from './adapters/outbound/sha256-report-digest';
-import { listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { Reports } from './application/reports';
+import { SqlReportStore } from './adapters/outbound/sql-report-store';
+import { SqlMockReportDestination } from './adapters/outbound/sql-mock-report-destination';
+import { TimerDeadline } from './adapters/outbound/timer-deadline';
+import { AssistanceRequests } from './application/assistance-requests';
+import { SqlAssistanceRequests } from './adapters/outbound/sql-assistance-requests';
+import { newAssistanceReference } from './adapters/outbound/random-assistance-reference';
+import { findSyntheticProvider, listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { Notices } from './application/notices';
+import { SqlNotices } from './adapters/outbound/sql-notices';
+import { ExpiryNotices } from './application/expiry-notices';
+import { SqlExpiryNotices } from './adapters/outbound/sql-expiry-notices';
 import { object, UUID } from './domain/financial';
 
 export { createPolicyFinance } from './adapters/composition';
@@ -24,10 +35,12 @@ const RECONCILIATION_GRACE_MS = 120_000;
 const RECONCILIATION_BATCH = 25;
 
 // Composition root: platform wiring and operational probes stay outside the core.
-export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string }> {
+export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?: string; REPORT_DESTINATION_FAULT?: string }> {
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
     const evidenceBucket: R2Bucket | undefined = this.env.CLAIM_EVIDENCE;
+    // The destinations are explicit simulations; the fault switch exists only to show an unanswered delivery locally and defaults to none everywhere.
+    const destinationFault = this.env.REPORT_DESTINATION_FAULT === 'timeout' ? 'timeout' : 'none';
     const evidence = evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const disbursements = createClaimDisbursements(this.env);
@@ -40,6 +53,8 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
+      assistanceRequests: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input),
+        requests: new AssistanceRequests(new SqlAssistanceRequests(this.env.POLICY_DB.connectionString), { find: id => findSyntheticProvider(id) }, new Sha256ReportDigest(), newAssistanceReference) },
       claims: { decisions: new ClaimDecisions(new SqlClaimDecisions(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         disbursements, dispatchDisbursement: paymentId => this.ctx.waitUntil(disbursements.recoverPayment(paymentId).then(outcome => {
           console.log(JSON.stringify({ event: 'claim_disbursement_recovery', environment: this.env.APP_ENV, ...outcome }));
@@ -48,7 +63,12 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
         download: evidence && ((...args) => evidence.download(...args)),
         inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
+      reports: { reports: new Reports(new SqlReportStore(this.env.POLICY_DB.connectionString), new Sha256ReportDigest(),
+        { regulator: new SqlMockReportDestination('regulator', this.env.POLICY_DB.connectionString, destinationFault),
+          reinsurer: new SqlMockReportDestination('reinsurer', this.env.POLICY_DB.connectionString, destinationFault) }, { now: () => new Date() }, new TimerDeadline()),
+        authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
+      notices: { authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input), notices: new Notices(new SqlNotices(this.env.POLICY_DB.connectionString)) },
       claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
@@ -93,6 +113,11 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const staleBefore = new Date(Date.now() - RECONCILIATION_GRACE_MS);
     for (const { traceId, outcome, error } of await finance.reconcileIssuances(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'financial_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));
+    }
+    // Expiry is measured in days, so ten minutes is plenty; a failure here never blocks the recoveries around it.
+    if (new Date().getUTCMinutes() % 10 === 0) {
+      try { console.log(JSON.stringify({ event: 'expiry_notices', environment: this.env.APP_ENV, announced: await new ExpiryNotices(new SqlExpiryNotices(this.env.POLICY_DB.connectionString)).run() })); }
+      catch { console.log(JSON.stringify({ event: 'expiry_notices', environment: this.env.APP_ENV, error: 'unavailable' })); }
     }
     for (const { traceId, outcome, error } of await finance.reconcileIndemnities(staleBefore, RECONCILIATION_BATCH)) {
       console.log(JSON.stringify({ event: 'indemnity_reconciliation', environment: this.env.APP_ENV, traceId, outcome, ...(error ? { error } : {}) }));

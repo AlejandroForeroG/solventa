@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Customer notices
+  version: 1.0.0
+  description: >-
+    The native customer's notices about their own policy: a confirmed parametric payment, a change of policy
+    (modification, renewal or cancellation) and a policy that is about to expire (at most seven days before its end). Policy stores each notice with its business effect; this contract offers it to the
+    device and records what the device did with it. The transport is simulated: the app collects the notices and
+    presents them itself, and no push provider is contacted, so an offer is never evidence that the notice was seen.
+    Every request requires a verified native session. Identity returns, with that same decision, what the customer chose
+    for push by category; a notice whose choice is off is never offered. The category of a claim status change is not part
+    of this contract. A notice carries no amount, document or personal data. The state of a notice belongs to the customer, not to a
+    device: with several devices signed in to one account, the first stored receipt decides the state for all of them, and
+    devices that collect a notice before any receipt exists may each present it, the second receipt being a conflict.
+servers:
+  - url: /api/v1
+tags:
+  - name: Notices
+    description: Read the owner's notices and confirm their presentation.
+security:
+  - MobileBearer: []
+paths:
+  /notices:
+    get:
+      operationId: listOwnNotices
+      summary: Read the notices to present on this device
+      description: >-
+        At most 20 notices of the last 30 days, newest first. Reading applies the customer's current push choices
+        before anything is offered. A notice whose choice was off is recorded once and never offered later, even if the
+        choice is turned on. A notice already offered but not presented is withdrawn while its choice is off.
+      tags: [Notices]
+      responses:
+        '200':
+          description: The notices the device may present or has already confirmed.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeList' }
+              examples:
+                offered: { $ref: '../../examples/notices.json#/list' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /notices/{eventId}/receipt:
+    post:
+      operationId: confirmNoticeReceipt
+      summary: Report what the device did with an offered notice
+      description: >-
+        One outcome per notice. The same outcome again is a replay and changes nothing; a different one is a conflict.
+        A notice that was never offered, or that belongs to another customer, cannot be confirmed: the second is the same
+        as one that does not exist. The outcome permission_denied means the operating system did not allow the notice.
+      tags: [Notices]
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoticeReceiptBody' }
+            examples:
+              presented: { $ref: '../../examples/notices.json#/receipt' }
+      responses:
+        '200':
+          description: The outcome is stored, or was already stored.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeReceipt' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    MobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: WorkOS access token of a registered native session; verified by Identity on every request.
+  responses:
+    Error:
+      description: >-
+        Nothing is offered or recorded. Read error and traceId for the refusal.
+        Responses carry Cache-Control no-store and X-Trace-Id; 405 also carries Allow.
+      headers:
+        Cache-Control: { schema: { type: string, enum: [no-store] } }
+        X-Trace-Id: { schema: { type: string, format: uuid } }
+        Allow: { schema: { type: string }, description: Present for method_not_allowed. }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, unauthorized, forbidden, not_found, method_not_allowed, conflict, unsupported_media_type, access_unavailable, service_unavailable]
+        fields:
+          type: array
+          items: { type: string, enum: [body, outcome] }
+        traceId: { type: string, format: uuid }
+    Notice:
+      type: object
+      additionalProperties: false
+      required: [eventId, kind, category, policyId, occurredAt, state]
+      properties:
+        eventId: { type: string, format: uuid }
+        kind: { type: string, enum: [parametric_payment_confirmed, policy_lifecycle_changed, policy_expiring] }
+        category:
+          type: string
+          enum: [payments, policy]
+          description: The preference category this notice answers to.
+        policyId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        state:
+          type: string
+          enum: [offered, unconfirmed, presented, permission_denied]
+          description: >-
+            offered was handed to the device and is not confirmed yet; unconfirmed was offered more than ten minutes ago without a
+            receipt, so its presentation is uncertain; presented and permission_denied are what the device reported.
+    NoticeList:
+      type: object
+      additionalProperties: false
+      required: [simulated, notices, traceId]
+      properties:
+        simulated: { type: boolean, enum: [true] }
+        notices:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/Notice' }
+        traceId: { type: string, format: uuid }
+    NoticeReceiptBody:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: { type: string, enum: [presented, permission_denied] }
+    NoticeReceipt:
+      type: object
+      additionalProperties: false
+      required: [eventId, state, replayed, traceId]
+      properties:
+        eventId: { type: string, format: uuid }
+        state: { type: string, enum: [presented, permission_denied] }
+        replayed: { type: boolean }
+        traceId: { type: string, format: uuid }

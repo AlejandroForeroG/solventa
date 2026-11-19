@@ -76,7 +76,15 @@
   "claims_access_grants": [
     "SELECT"
   ],
+  "report_access_grants": [
+    "SELECT"
+  ],
   "partner_authorizations": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
+  "advisor_sale_authorizations": [
     "SELECT",
     "INSERT",
     "UPDATE"
