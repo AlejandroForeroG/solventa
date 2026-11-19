@@ -7,6 +7,7 @@ import type { FinancialDecisionCapture } from '../backend/policy-claims-payments
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { Notices } from '../backend/policy-claims-payments/src/application/notices';
+import { addClaimNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-notices';
 import { SqlNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-notices';
 import { ExpiryNotices } from '../backend/policy-claims-payments/src/application/expiry-notices';
 import { SqlExpiryNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-expiry-notices';
@@ -710,6 +711,27 @@ try {
   assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'permission_denied', randomUUID())).status, 'conflict');
   assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }, { consumer: 'notice.receipt.v1', outcome: 'presented' }]);
   assert.deepEqual(await noticeService.receipt({ clientId: randomUUID() }, offered[0].eventId, 'presented', randomUUID()), { status: 'not_found' });
+  // The customer's claim notice is the one the claim decision stores for them, addressed to their subject: it is offered by the claims choice, only to them, and carries only the policy.
+  const claimOwner = { clientId: rain.payload.clientId, subjectToken: rain.payload.subjectToken };
+  const noticedClaimId = randomUUID(), claimDecisionId = randomUUID();
+  await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
+    VALUES($1,$2,'claim-notice',$3,'approved',$4,$5)`, [noticedClaimId, rainPolicy.policyId, '1'.repeat(64), financialNow().toISOString(), randomUUID()]);
+  await addClaimNotices(db as never, claimDecisionId, noticedClaimId, 'approve', rain.payload.subjectToken, randomUUID());
+  const claimsChoice = { ...everyChoice, claims: true };
+  const claimViews = (await noticeService.list(claimOwner, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed');
+  assert.deepEqual(claimViews.map(item => [item.eventId, item.category, item.policyId, item.state]), [[claimDecisionId, 'claims', rainPolicy.policyId, 'offered']]);
+  assert.deepEqual(Object.keys(claimViews[0]).sort(), ['category', 'eventId', 'kind', 'occurredAt', 'policyId', 'state']);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID(), subjectToken: randomUUID() }, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed'), [], 'another customer sees nothing of it');
+  assert.deepEqual((await noticeService.list({ clientId: claimOwner.clientId }, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed'), [], 'without the subject nothing addressed to it is read');
+  assert.equal((await noticeService.receipt(claimOwner, claimDecisionId, 'presented', randomUUID())).status, 'recorded');
+  assert.equal((await noticeService.receipt(claimOwner, claimDecisionId, 'presented', randomUUID())).status, 'replayed');
+  assert.deepEqual(await noticeService.receipt({ clientId: randomUUID(), subjectToken: randomUUID() }, claimDecisionId, 'presented', randomUUID()), { status: 'not_found' });
+  assert.equal((await noticeService.list(claimOwner, claimsChoice, randomUUID())).find(item => item.eventId === claimDecisionId)?.state, 'presented');
+  const mutedClaimId = randomUUID(), mutedDecisionId = randomUUID();
+  await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
+    VALUES($1,$2,'claim-notice-muted',$3,'rejected',$4,$5)`, [mutedClaimId, rainPolicy.policyId, '2'.repeat(64), financialNow().toISOString(), randomUUID()]);
+  await addClaimNotices(db as never, mutedDecisionId, mutedClaimId, 'reject', rain.payload.subjectToken, randomUUID());
+  assert.equal((await noticeService.list(claimOwner, everyChoice, randomUUID())).some(item => item.eventId === mutedDecisionId), false, 'a claims choice that is off offers nothing');
   // A policy about to expire is announced once for its expiry date, only inside the window, and only to its own owner.
   const expiresAt = (await db.query<{ effective_until: Date }>('SELECT effective_until FROM policy.policies WHERE id=$1', [rainPolicy.policyId])).rows[0].effective_until;
   const expiryRows = async () => (await db!.query<{ event_id: string; payload: Record<string, unknown> }>("SELECT event_id,payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='policy.expiry.notice'", [rainPolicy.policyId])).rows;
