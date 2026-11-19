@@ -49,6 +49,13 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
     }).catch(() => { if (!abort.signal.aborted) setResult({ view, state: { kind: 'unavailable' } }); });
     return () => abort.abort();
   }, [view, filter, before, refresh, onSessionLost]);
+  // A report opened in a background tab loads when the window comes back, as the claims inbox does.
+  useEffect(() => {
+    const reload = () => setRefresh(value => value + 1);
+    document.addEventListener('visibilitychange', reload);
+    window.addEventListener('focus', reload);
+    return () => { document.removeEventListener('visibilitychange', reload); window.removeEventListener('focus', reload); };
+  }, []);
   const state: State = result?.view === view ? result.state : { kind: document.hidden ? 'hidden' : 'loading' };
   const page = state.kind === 'ready' ? state.page : null;
 
