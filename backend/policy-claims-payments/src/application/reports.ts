@@ -64,6 +64,8 @@ export class Reports {
     const started = this.clock.now().getTime();
     const message: ReportDelivery = { formatVersion: report.formatVersion, destination: report.destination, deliveryId: opened.delivery.id, manifest: report.manifest, csv: report.content };
     let outcome = await this.attempt(destination.lookup(message.deliveryId));
+    // A lookup that failed or timed out sent nothing, so nothing is written under an authorization that has meanwhile expired.
+    if (outcome === 'uncertain') this.active(actor);
     if (outcome === null) {
       // The lookup may have outlived the lease: nothing is sent once authorization has expired, while an answer already in flight is still recorded below.
       this.active(actor);
