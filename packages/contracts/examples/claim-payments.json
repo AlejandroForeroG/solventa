@@ -1,0 +1,14 @@
+{
+  "pendingReceipt": {
+    "payment": { "paymentId": "11111111-1111-4111-8111-111111111112", "amount": "1000.0000", "currency": "COP", "status": "pending", "reference": null, "simulated": true },
+    "replayed": false,
+    "traceId": "11111111-1111-4111-8111-111111111113"
+  },
+  "confirmedPage": {
+    "items": [{ "claimId": "11111111-1111-4111-8111-111111111111", "claimNumber": "SIN-2026-00001", "updatedAt": "2026-11-19T15:00:00.000Z",
+      "payment": { "paymentId": "11111111-1111-4111-8111-111111111112", "amount": "1000.0000", "currency": "COP", "status": "confirmed", "reference": "MOCK-11111111-1111-4111-8111-111111111112", "simulated": true } }],
+    "next": null,
+    "traceId": "11111111-1111-4111-8111-111111111113"
+  },
+  "emptyPage": { "items": [], "next": null, "traceId": "11111111-1111-4111-8111-111111111113" }
+}

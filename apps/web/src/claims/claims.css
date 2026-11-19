@@ -55,3 +55,15 @@
 .claim-actions textarea, .requirement-form textarea { min-height: 6rem; width: 100%; resize: vertical; font: inherit; }
 .claim-confirmation { padding: .8rem 1rem; border-radius: .6rem; background: var(--mint, #e2f3eb); }
 @media (max-width: 49rem) { .claim-case-grid { grid-template-columns: minmax(0, 1fr); } }
+.claims-policy-reference summary { display: list-item; min-height: 44px; padding: 12px 0; color: #0b6b5f; cursor: pointer; }
+.claims-policy-reference summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.claims-policy-reference > span { display: block; padding-bottom: 8px; white-space: normal; overflow-wrap: anywhere; }
+.claim-payment form { display: grid; gap: .75rem; }
+.claim-payment label { display: grid; gap: .5rem; }
+.claim-payment input { min-width: 0; width: 100%; padding: .75rem; border: 1px solid var(--line, #e0ded9); border-radius: .6rem; background: var(--white, #fff); font: inherit; }
+.claim-payment input:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.claim-payment > .btn { margin-top: 1rem; }
+.claim-payment-amount { font-size: 1.35rem; font-weight: 600; overflow-wrap: anywhere; }
+.claim-payment-confirmed { background: #e6f3ec; color: #1f7a4d; }
+.claim-payment-pending { background: #fbf0dc; color: #7a4e05; }
+.claim-payment-declined { background: #fbe9e7; color: #8a241c; }

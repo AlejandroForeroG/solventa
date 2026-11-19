@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Claims inbox
-  version: 1.0.0
+  version: 1.1.0
   description: Operational inbox of open claims for explicitly granted web analysts. A session alone is insufficient. Partners and native clients are excluded. Identity verifies an active, expiring, revocable claims:read grant on each request; the Policy owner records each successful read in its own SQL transaction before releasing data. Responses and errors are no-store. The inbox lists claims of every client; this is an operational permission, not customer ownership access. It carries no insured name, document or contact data, because the policy model holds none. Unknown, duplicate and empty query parameters are rejected. Ages use calendar days in America/Bogota. This specification also defines the claim components that the claim detail and decision contracts reference. Web analysts can take and evaluate cases; web customers may respond only on their own policies. The same specification defines the customer's claim report from the native app, which is a separate, owner-scoped flow made of a draft with its evidence manifest, one upload per file and a submission that assigns the case number. Reporting needs the native user's access token and confers no inbox permission.
 servers:
   - url: /api/v1
@@ -11,6 +11,145 @@ tags:
   - name: Claim report
     description: The customer's own report of a claim, with its evidence.
 paths:
+  /claims/customer/disbursements:
+    get:
+      tags: [Claims inbox]
+      operationId: listOwnWebClaimDisbursements
+      summary: Read the web customer's own disbursements
+      description: Uses the sealed web session and claims:respond ownership operation, without an analyst grant. Only the verified client and subject's submitted approved or paid manual claims with an authorized payment are returned. Every payment is integrity checked. This route never authorizes or retries settlement. Results are ordered by claim UUID, with at most six items and a nullable next cursor. A supplied cursor naming a missing or foreign claim returns an empty page. Unknown, duplicate or malformed query parameters are rejected. Authorization precedes query validation. No bank account or deductible is invented.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentCursor'
+      responses:
+        '200':
+          description: Current owner-only payment page, including pending and terminal results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnClaimPaymentPage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /claims/native/disbursements:
+    get:
+      tags: [Claims inbox]
+      operationId: listOwnNativeClaimDisbursements
+      summary: Read the native customer's own disbursements
+      description: Requires the registered native user bearer session with claims:report, already allowed by Identity. Cookies confer no native access. Uses the same owner-scoped, integrity-checked page as the web customer route; only client/subject-owned payments are returned. It never authorizes payment, retries settlement or grants analyst access. At most six items, ordered by claim UUID; next is an opaque owned boundary. Missing or foreign boundaries return an empty page. Unknown, duplicate or malformed query parameters are rejected after authentication. Receipts identify the simulated payment provider and updatedAt is the actual stored payment-state update time, not a bank credit timestamp.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentCursor'
+      responses:
+        '200':
+          description: Current owner-only payment page. Pending never means paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnClaimPaymentPage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /claims/{claimId}/disbursement:
+    parameters:
+      - name: claimId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: ./common.yaml#/components/parameters/TraceId
+    get:
+      tags: [Claims inbox]
+      operationId: readClaimDisbursement
+      summary: Read the assigned approved claim's disbursement
+      description: Requires a fresh claims:read operator grant and the case assignment. Self-owned and foreign cases return 404. Results are never cached. This operator endpoint is not a native customer tracking API.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      responses:
+        '200':
+          description: The durable payment status; a pending payment is not a confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No accessible approved case or no authorized payment intent.
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      tags: [Claims inbox]
+      operationId: requestClaimDisbursement
+      summary: Authorize an approved amount within the remaining policy coverage
+      description: Requires a fresh claims:decide grant, the assigned mortgage-life case and a persisted approval. Parametric coverages retain their separate automatic engine and return conflict here. The amount is canonical COP with four decimals, validated against the signed policy coverage and other reserved indemnities. Intent, audit and capture commit before background settlement. The immutable approval owns the server-side idempotency identity; an identical amount reuses the original payment and a different amount returns 409. There is one complete payment per approval in this increment; no partial installments or second authorization after a decline. Both external payment settlement and its reference are explicit simulations.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amount]
+              properties:
+                amount:
+                  type: string
+                  pattern: '^(0|[1-9][0-9]{0,14})\.[0-9]{4}$'
+                  description: Positive COP amount. Zero is rejected.
+      responses:
+        '202':
+          description: The payment intent is durably accepted and remains pending confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '200':
+          description: Replay of the original terminal payment; no new provider effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No accessible assigned approved case.
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          description: Changed amount, invalid state or amount exceeding the available coverage.
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /claims:
     get:
       tags:
@@ -844,6 +983,15 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 components:
+  parameters:
+    PaymentCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Previous page's next value; repeated, empty or malformed UUIDs are invalid.
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     MobileBearer:
       type: http
@@ -1543,6 +1691,8 @@ components:
                   - approve
                   - reject
                   - extend_requirement
+                  - disbursement_confirmed
+                  - disbursement_declined
               at: *a2
           maxItems: 25
         traceId: *a1
@@ -1693,6 +1843,40 @@ components:
         - properties:
             evidenceIds:
               minItems: 1
+    ClaimDisbursementReceipt:
+      type: object
+      additionalProperties: false
+      required: [payment, traceId]
+      properties:
+        traceId:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+          description: Present on authorization and replay responses.
+        payment:
+          type: object
+          additionalProperties: false
+          required: [paymentId, amount, currency, status, reference, simulated]
+          properties:
+            paymentId:
+              type: string
+              format: uuid
+            amount:
+              type: string
+              pattern: '^(0|[1-9][0-9]{0,14})\.[0-9]{4}$'
+            currency:
+              type: string
+              enum: [COP]
+            status:
+              type: string
+              enum: [pending, confirmed, declined]
+            reference:
+              type: string
+              nullable: true
+            simulated:
+              type: boolean
+              enum: [true]
     ClaimActionReceipt:
       type: object
       additionalProperties: false
@@ -1710,3 +1894,34 @@ components:
         replayed:
           type: boolean
         traceId: *a1
+    OwnClaimPaymentPage:
+      type: object
+      additionalProperties: false
+      required: [items, next, traceId]
+      properties:
+        traceId:
+          type: string
+          format: uuid
+        next:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            required: [claimId, claimNumber, updatedAt, payment]
+            properties:
+              claimId:
+                type: string
+                format: uuid
+              claimNumber:
+                type: string
+                pattern: '^SIN-[0-9]{4}-[0-9]{5}$'
+              updatedAt:
+                type: string
+                format: date-time
+              payment:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt/properties/payment'
