@@ -1,5 +1,6 @@
 const es = {
   title: 'Mis indemnizaciones', empty: 'Aún no hay desembolsos autorizados.', loading: 'Consultando desembolsos…',
+  privacyUnavailable: 'No pudimos proteger esta pantalla. Vuelve a abrirla.',
   back: 'Volver', next: 'Siguientes', previous: 'Anteriores', refresh: 'Consultar estado', simulated: 'Pago simulado',
   pending: 'Pendiente de confirmación', confirmed: 'Pago confirmado', declined: 'Pago rechazado', reference: 'Referencia', updated: 'Actualizado',
   pendingHelp: 'El desembolso está registrado, pero todavía no está confirmado.', locked: 'Vuelve a la app para consultar el estado.',
@@ -8,6 +9,7 @@ const es = {
 };
 const en: typeof es = {
   title: 'My indemnities', empty: 'There are no authorized disbursements yet.', loading: 'Loading disbursements…',
+  privacyUnavailable: 'We could not protect this screen. Open it again.',
   back: 'Back', next: 'Next', previous: 'Previous', refresh: 'Check status', simulated: 'Simulated payment',
   pending: 'Awaiting confirmation', confirmed: 'Payment confirmed', declined: 'Payment declined', reference: 'Reference', updated: 'Updated',
   pendingHelp: 'The disbursement is recorded, but it is not yet confirmed.', locked: 'Return to the app to check the status.',

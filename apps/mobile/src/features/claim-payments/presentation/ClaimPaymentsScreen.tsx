@@ -10,6 +10,7 @@ import { ClaimPayments } from '../application/claim-payments';
 import { createClaimPaymentsApi } from '../adapters/payments-api';
 import { paymentMessages } from './messages';
 import { formatPaymentAmount } from './format';
+import { ReceiptPrivacy } from './ReceiptPrivacy';
 
 export function ClaimPaymentsScreen() {
   const auth = useAuthentication(); const focused = useIsFocused();
@@ -17,7 +18,9 @@ export function ClaimPaymentsScreen() {
   const locale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
   if (auth.status !== 'authenticated' || !auth.principal) return <WelcomeScreen />;
   if (!focused) return <Page title={paymentMessages[locale].title} />;
-  return <Payments key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale} owner={auth.principal} />;
+  return <ReceiptPrivacy key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale}>
+    <Payments locale={locale} owner={auth.principal} />
+  </ReceiptPrivacy>;
 }
 
 function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clientId: string; subjectToken: string } }) {
@@ -26,7 +29,7 @@ function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clien
   const state = useSyncExternalStore(payments.subscribe, payments.getSnapshot, payments.getSnapshot);
   const copy = paymentMessages[locale];
   useEffect(() => {
-    void payments.refresh();
+    if (AppState.currentState === 'active') void payments.refresh(); else payments.lock();
     const lifecycle = AppState.addEventListener('change', next => { if (next !== 'active') payments.lock(); else void payments.refresh(); });
     return () => { lifecycle.remove(); payments.lock(); };
   }, [payments]);
