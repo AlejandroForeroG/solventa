@@ -74,7 +74,7 @@ The access check does not refresh the cookie and never registers a session: if t
 
 ## Responses
 
-Reporting a claim uses the mobile-only `claims:report` operation, authorized through the same `ApiAccess.mobileUser` policy for the customer's own session. The web channel is denied it, and it confers no analyst permission: `claims:read` and `claims:decide` remain explicit grants. The [claim report](../policy-claims-payments/claim-report.md) checks ownership of the policy itself.
+Reading the notices of a policy and confirming their presentation use the mobile-only `notices:read` and `notices:receipt` operations through the same `authorizeFinancialAccessV1` RPC; the web channel is denied both. For `notices:read` the allowed decision also carries the customer's push choices by category, read for the client the decision named. Reporting a claim uses the mobile-only `claims:report` operation, authorized through the same `ApiAccess.mobileUser` policy for the customer's own session. The web channel is denied it, and it confers no analyst permission: `claims:read` and `claims:decide` remain explicit grants. The [claim report](../policy-claims-payments/claim-report.md) checks ownership of the policy itself.
 
 Native onboarding uses separate mobile-only `identity-verifications:read` and `identity-verifications:write` operations. The [verification routes](identity-verification.md) call the same `ApiAccess.mobileUser` policy after WorkOS verification and check the current owned session again inside each business transaction. Web and partner policies exclude these operations. The original `/access/mobile` probe remains compatible and advertises only `quotes:create`; a KYC outcome changes neither that session nor business permissions.
 

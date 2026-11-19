@@ -340,16 +340,20 @@ export class PolicyFinance {
     return { status: 'ok', policyId: change.policyId, changeId: change.changeId, action: change.action, changedAt: change.at, replayed: result.replayed };
   }
 
-  listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult> {
+  listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean; cursor?: string; policyId?: string }): Promise<PolicyListResult> {
     return this.run<PolicyListResult>(input.traceId, async () => {
       if (!validActor(input.actor)) return reject('invalid_request', 400);
-      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1, input.includeEnded ?? true);
+      if (input.policyId !== undefined && (!UUID.test(input.policyId) || input.cursor !== undefined)) return reject('invalid_request', 400);
+      if (input.cursor !== undefined && !UUID.test(input.cursor)) return reject('invalid_request', 400);
+      const records = await this.deps.store.readOwnPolicies(input.actor, MAX_LISTED_POLICIES + 1, input.includeEnded ?? true, input.cursor, input.policyId);
       const policies: PolicySummary[] = [];
       for (const record of records.slice(0, MAX_LISTED_POLICIES)) {
         const { policy } = await this.checked(record, input.actor);
         policies.push(summary(policy));
       }
-      return { status: 'ok', policies, hasMore: records.length > MAX_LISTED_POLICIES };
+      const hasMore = records.length > MAX_LISTED_POLICIES;
+      const last = policies.at(-1);
+      return { status: 'ok', policies, hasMore, nextCursor: hasMore && last ? last.policyId : null };
     });
   }
 

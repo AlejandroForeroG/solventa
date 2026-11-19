@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
 import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
+import { createNoticesApi } from '../../apps/mobile/src/features/notices/adapters/notices-api';
+import { contractNotice } from './support/notices-contract';
 import { createClaimReportApi, type EvidenceUploader } from '../../apps/mobile/src/features/claim-report/adapters/claim-report-api';
 import { claimIds, evidenceBytes, evidenceFile, idempotencyKey, manifest } from './support/claim-report-contract';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
@@ -165,13 +167,33 @@ test('mobile lists its own issued policies through the public gateway', async ()
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
   pact.given('a native session with an issued policy').uponReceiving('mobile own policy list')
     .withRequest({ method: 'GET', path: '/api/v1/policies', headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
-    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { policies: [policy], hasMore: false, traceId: MatchersV3.uuid(traceId) } });
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { policies: [policy], hasMore: false, nextCursor: null, traceId: MatchersV3.uuid(traceId) } });
   await pact.executeTest(async server => {
     const api = createPoliciesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') }, (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
     const { status: _status, ...kept } = policy;
-    assert.deepEqual(await api.list(), { policies: [kept], hasMore: false });
+    assert.deepEqual(await api.list(), { policies: [kept], hasMore: false, nextCursor: null });
   });
 });
+
+for (const mode of ['first', 'next', 'lookup'] as const) {
+  test(`mobile policy ${mode} page agrees with the public gateway`, async () => {
+    const first = '30000000-0000-4000-8000-000000000003', older = '30000000-0000-4000-8000-000000000004';
+    const query = mode === 'next' ? { cursor: first } : mode === 'lookup' ? { policyId: older } : undefined;
+    const policy = { policyId: mode === 'first' ? first : older, product: 'vida_hipotecario', status: 'issued', premium: '77760.0000', currency: 'COP',
+      effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2027-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+    pact.given('a native session with multiple policy pages').uponReceiving(`mobile policy ${mode} page`)
+      .withRequest({ method: 'GET', path: '/api/v1/policies', ...(query ? { query } : {}), headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { policies: [policy], hasMore: mode === 'first', nextCursor: mode === 'first' ? first : null, traceId: MatchersV3.uuid(traceId) } });
+    await pact.executeTest(async server => {
+      const api = createPoliciesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') }, (url, options) => {
+        const target = new URL(String(url));
+        return fetch(server.url + target.pathname + target.search, options);
+      });
+      const { status: _status, ...kept } = policy;
+      assert.deepEqual(await api.list(query), { policies: [kept], hasMore: mode === 'first', nextCursor: mode === 'first' ? first : null });
+    });
+  });
+}
 
 test('mobile finds a simulated provider through the shared search contract', async () => {
   const provider = { id: 'demo-med-roadside', kind: 'roadside', name: 'Asistencia de prueba Medellín', city: 'Medellín',
@@ -267,4 +289,26 @@ test('mobile submits a claim report whose files were received and gets its singl
     const receipt = await reportApi(server.url).submit(claimIds.claim);
     assert.deepEqual(receipt, { claimId: claimIds.claim, claimNumber: 'SIN-2026-00001', submittedAt: '2026-11-11T00:00:00.000Z' });
   });
+});
+
+const noticesApi = (serverUrl: string) => createNoticesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+  (url, options) => fetch(`${serverUrl}${new URL(String(url)).pathname}`, options));
+
+test('mobile reads the notices offered to its device through the shared contract', async () => {
+  pact.given('a native session with a stored notice').uponReceiving('mobile notices list')
+    .withRequest({ method: 'GET', path: '/api/v1/notices', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, notices: [{ ...contractNotice, state: 'offered' }], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    assert.deepEqual(await noticesApi(server.url).list(), [{ ...contractNotice, state: 'offered' }]);
+  });
+});
+
+test('mobile reports that its device presented a notice through the shared contract', async () => {
+  pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice receipt')
+    .withRequest({ method: 'POST', path: `/api/v1/notices/${contractNotice.eventId}/receipt`,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token' }, body: { outcome: 'presented' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { eventId: contractNotice.eventId, state: 'presented', replayed: false, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => { await noticesApi(server.url).receipt(contractNotice.eventId, 'presented'); });
 });

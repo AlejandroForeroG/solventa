@@ -19,7 +19,7 @@ const api = (respond: (url: string, init: RequestInit) => Response | Promise<Res
 
 test('the list is requested with the bearer token only, without cookies, and the response keeps just the minimum fields', async () => {
   let seen: { url: string; init: RequestInit } | undefined;
-  const result = await api((url, init) => { seen = { url, init }; return json({ policies: [summary({ document: 'secret', documentHash: 'x'.repeat(64) })], hasMore: true, traceId }); }).list();
+  const result = await api((url, init) => { seen = { url, init }; return json({ policies: [summary({ document: 'secret', documentHash: 'x'.repeat(64) })], hasMore: true, nextCursor: summary().policyId, traceId }); }).list();
   assert.equal(seen?.url, `${baseUrl}/api/v1/policies`);
   assert.equal(seen?.init.method, 'GET');
   assert.equal(seen?.init.credentials, 'omit');
@@ -67,10 +67,32 @@ test('only a pinned Solventa gateway is accepted as the API origin', () => {
   assert.throws(() => createPoliciesApi('https://attacker.example', session));
 });
 
-test('money is shown as whole pesos and dates in UTC so the stored copy reads the same everywhere', () => {
+test('pagination and exact lookup forward only their owner-scoped query and reject loops or mismatches', async () => {
+  const id = summary().policyId as string;
+  const older = '20000000-0000-4000-8000-000000000002';
+  const seen: string[] = [];
+  const client = api(url => { seen.push(url); return json({ policies: [summary({ policyId: older })], hasMore: false, nextCursor: null, traceId }); });
+  assert.equal((await client.list({ cursor: id })).policies[0].policyId, older);
+  assert.equal((await client.list({ policyId: older })).policies[0].policyId, older);
+  assert.deepEqual(seen, [`${baseUrl}/api/v1/policies?cursor=${id}`, `${baseUrl}/api/v1/policies?policyId=${older}`]);
+  for (const body of [
+    { policies: [summary()], hasMore: true, nextCursor: id, traceId },
+    { policies: [summary()], hasMore: true, traceId },
+    { policies: [summary()], hasMore: true, nextCursor: older, traceId },
+  ]) await assert.rejects(api(() => json(body)).list({ cursor: id }), error => error instanceof PolicyApiFailure && error.kind === 'invalid_response');
+  await assert.rejects(api(() => json({ policies: [summary()], hasMore: false, nextCursor: null, traceId })).list({ policyId: older }), error => error instanceof PolicyApiFailure && error.kind === 'invalid_response');
+  for (const query of [{ cursor: 'bad' }, { policyId: 'bad' }, { cursor: id, policyId: older }]) {
+    await assert.rejects(client.list(query));
+  }
+  assert.equal(seen.length, 2, 'invalid query input never leaves the device');
+});
+
+test('policy dates use the same Bogota calendar as web, including instants after UTC midnight', () => {
   assert.match(formatMoney('86400.0000', 'es-CO'), /86[.,\s]?400/);
   assert.match(formatMoney('320000000.0000', 'en-US'), /320,000,000/);
-  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'en-US'), /Oct 16, 2027/);
+  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'en-US'), /Oct 15, 2027/);
+  assert.match(formatDate('2027-10-16T02:00:00.000Z', 'es-CO'), /15/);
+  assert.match(formatDate('2027-10-16T05:00:00.000Z', 'en-US'), /Oct 16, 2027/);
   assert.match(formatDateTime(Date.parse('2026-10-16T02:00:00.000Z'), 'en-US'), /2026/);
 });
 

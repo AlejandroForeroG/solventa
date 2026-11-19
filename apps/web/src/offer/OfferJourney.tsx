@@ -54,6 +54,8 @@ const SETTLED: readonly Phase['name'][] = ['declined', 'expired', 'chargeDecline
 export function OfferJourney(props: {
   quote: Pick<Quote, 'quoteId'>;
   resume?: PurchaseDraft;
+  // An offer prepared for the customer, such as by an advisor: the journey starts at its review instead of creating one.
+  initialOffer?: Offer;
   api?: FinancialApi;
   poll?: PollSchedule;
   onRequote: () => void;
@@ -137,6 +139,12 @@ export function OfferJourney(props: {
   // After a reload the journey resumes from the stored acceptance and command key instead of creating another offer.
   const start = useRef((current: AbortSignal) => {
     const resume = latest.current.props.resume;
+    const initial = latest.current.props.initialOffer;
+    if (!resume && initial) {
+      setPhase({ name: 'offer', offer: initial, accepting: false });
+      say(initial.status === 'preliminary' ? 'live.offerPreliminary' : 'live.offerReady', { premium: latest.current.copDecimal(initial.premium) });
+      return Promise.resolve();
+    }
     if (!resume) return create(current);
     if (resume.issue) issueKeys.current.set(`${resume.issue.policyId}:${resume.issue.documentHash}`, resume.issue.key);
     if (resume.charge) chargeKeys.current.set(`${resume.charge.policyId}:${resume.charge.documentHash}`, resume.charge.key);
@@ -179,8 +187,9 @@ export function OfferJourney(props: {
           else if (outcome.value.status === 'charged' && outcome.value.payment?.status === 'confirmed') {
             if (signatureRecoveryRequired.current) {
               setPhase({ name: 'recovering', policy: outcome.value, busy: false }); say('live.refunding');
-            } else setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
+            } else { setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
               : { name: 'charged', policy: outcome.value });
+              say(sentKey ? 'live.issueUncertain' : 'live.chargeConfirmed', sentKey ? undefined : { amount: latest.current.copDecimal(outcome.value.premium) }); }
           }
           else if (outcome.value.payment?.status === 'pending' && chargeKeys.current.has(`${outcome.value.policyId}:${outcome.value.documentHash}`)) {
             setPhase({ name: 'charging', policy: outcome.value, busy: false, uncertain: true,
@@ -287,6 +296,7 @@ export function OfferJourney(props: {
     if (accepted.current) savePurchaseDraft({ quoteId: quote.quoteId, acceptance: accepted.current, issue: null,
       charge: { policyId: policy.policyId, documentHash: policy.documentHash, key } });
     setPhase({ name: 'charging', policy, busy: true, uncertain: false, key });
+    say('live.chargePending');
     try {
       const outcome = await api().chargePolicy(policy, key, current);
       if (current.aborted) return;
@@ -295,7 +305,7 @@ export function OfferJourney(props: {
         setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); return;
       }
       if (outcome.kind === 'ok' && outcome.value.documentHash === policy.documentHash && outcome.value.status === 'charged'
-        && outcome.value.payment?.status === 'confirmed') { setPhase({ name: 'charged', policy: outcome.value }); return; }
+        && outcome.value.payment?.status === 'confirmed') { setPhase({ name: 'charged', policy: outcome.value }); say('live.chargeConfirmed', { amount: latest.current.copDecimal(outcome.value.premium) }); return; }
       if (outcome.kind === 'ok' || outcome.kind === 'unavailable') {
         setPhase({ name: 'charging', policy, busy: false, uncertain: true, key }); return;
       }
@@ -410,7 +420,7 @@ export function OfferJourney(props: {
       <div className="actions"><button type="button" className="btn btn-primary" onClick={() => accepted.current && void waitForPolicy(accepted.current, false, true)}>{t('policy.refresh')}</button></div>
     </section>}
     {phase.name === 'charged' && <ChargeConfirmed heading={heading} policy={phase.policy}
-      onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); }} />}
+      onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); say('live.signatureReady'); }} />}
     {phase.name === 'signing' && <>
       <PolicyDocument heading={heading} policy={phase.policy} stage="sign" checked={checked} documentChanged={false}
         challenge={challenge} code={code} busy={challengeBusy || phase.busy || phase.uncertain} error={challengeError}

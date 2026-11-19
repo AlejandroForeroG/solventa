@@ -13,6 +13,7 @@ export class PolicyWallet {
   private snapshot: WalletSnapshot = { status: 'locked' };
   private listeners = new Set<() => void>();
   private generation = 0;
+  private cursors: (string | undefined)[] = [undefined];
 
   constructor(private readonly deps: Dependencies) {}
 
@@ -38,6 +39,7 @@ export class PolicyWallet {
       return;
     }
     if (generation !== this.generation) return;
+    this.cursors = [undefined];
     if (this.deps.owner) await this.load(generation, this.deps.owner);
     else await this.showStoredCopy(generation);
   };
@@ -49,14 +51,27 @@ export class PolicyWallet {
     else await this.showStoredCopy(this.generation);
   };
 
+  nextPage = async () => {
+    if (this.snapshot.status !== 'ready' || this.snapshot.source !== 'online' || !this.snapshot.nextCursor || !this.deps.owner) return;
+    this.cursors = [...this.cursors, this.snapshot.nextCursor];
+    await this.load(this.generation, this.deps.owner);
+  };
+
+  previousPage = async () => {
+    if (this.snapshot.status !== 'ready' || this.snapshot.source !== 'online' || this.cursors.length <= 1 || !this.deps.owner) return;
+    this.cursors = this.cursors.slice(0, -1);
+    await this.load(this.generation, this.deps.owner);
+  };
+
   private async load(generation: number, owner: CacheOwner) {
     this.publish({ status: 'loading' });
     try {
-      const { policies, hasMore } = await this.deps.api.list();
+      const { policies, hasMore, nextCursor } = await this.deps.api.list({ cursor: this.cursors.at(-1) });
       if (generation !== this.generation) return;
       let stored = true;
       try { await this.deps.cache.save(owner, policies); } catch { stored = false; }
-      if (generation === this.generation) this.publish({ status: 'ready', source: 'online', syncedAt: this.deps.now(), policies, hasMore, stored });
+      if (generation === this.generation) this.publish({ status: 'ready', source: 'online', syncedAt: this.deps.now(), policies, hasMore, stored,
+        page: this.cursors.length, nextCursor });
     } catch (error) {
       if (generation !== this.generation) return;
       if (error instanceof AuthFailure) { this.publish({ status: 'failed', failure: 'unauthorized' }); return; }
@@ -72,7 +87,8 @@ export class PolicyWallet {
       const { owner } = this.deps;
       const copy = owner ? await this.deps.cache.read(owner) : (await this.deps.cache.readLatest())?.snapshot ?? null;
       if (generation !== this.generation) return;
-      this.publish(copy ? { status: 'ready', source: 'stored', syncedAt: copy.syncedAt, policies: copy.policies, hasMore: false, stored: true }
+      this.cursors = [undefined];
+      this.publish(copy ? { status: 'ready', source: 'stored', syncedAt: copy.syncedAt, policies: copy.policies, hasMore: false, stored: true, page: null, nextCursor: null }
         : { status: 'failed', failure: 'no_copy' });
     } catch (error) {
       if (generation !== this.generation) return;
@@ -85,6 +101,7 @@ export class PolicyWallet {
   // Leaving the screen or backgrounding the app hides the data and requires the device authentication again.
   lock = () => {
     this.generation++;
+    this.cursors = [undefined];
     this.deps.cache.lock();
     this.publish({ status: 'locked' });
   };

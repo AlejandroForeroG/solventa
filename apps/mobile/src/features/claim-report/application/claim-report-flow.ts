@@ -136,6 +136,7 @@ export class ClaimReportFlow {
     this.attempt = null;
     this.reading?.abort();
     this.reading = null;
+    // Neither the files nor the position of an abandoned report are kept.
     if (evidence.length || document.kind !== 'idle' || draft.location.state !== 'off') {
       this.emit({ ...this.snapshot, draft: { ...draft, evidence: [], location: { state: 'off' } }, issues: [], rejected: [], document: { kind: 'idle' } });
     }

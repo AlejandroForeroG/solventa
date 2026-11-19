@@ -12,6 +12,7 @@ export function WelcomeScreen({ profile = false }: { profile?: boolean } = {}) {
   const copy = useAppMessages();
   const busy = auth.status === 'loading' || auth.status === 'authorizing' || auth.status === 'biometricPrompt';
   const authenticated = auth.status === 'authenticated';
+  const profileView = profile && authenticated;
   const heading = authenticated ? (profile ? copy.headings.profile : copy.headings.authenticated) : auth.status === 'locked' ? copy.headings.locked
     : auth.status === 'blocked' ? copy.headings.blocked : auth.status === 'logoutPending' ? copy.headings.logoutPending
       : auth.status === 'signedOut' ? copy.headings.signedOut : copy.headings.signIn;
@@ -20,19 +21,19 @@ export function WelcomeScreen({ profile = false }: { profile?: boolean } = {}) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View pointerEvents="none" accessible={false} accessibilityElementsHidden
+      {!profileView && <View pointerEvents="none" accessible={false} accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants" style={styles.backgroundShapes}>
         <View style={styles.topSquare} />
         <View style={styles.topOutline} />
         <View style={styles.bottomSquare} />
         <View style={styles.bottomOutline} />
         <View style={styles.smallSquare} />
-      </View>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          <View style={styles.card}>
-            <View style={styles.cardHeading}>
-              <Text accessibilityRole="header" style={styles.cardTitle}>{heading}</Text>
+      </View>}
+      <ScrollView contentContainerStyle={[styles.scrollContent, profileView && styles.profileScroll]}>
+        <View style={[styles.content, profileView && styles.profileContent]}>
+          <View style={profileView ? styles.profilePanel : styles.card}>
+            <View style={profileView ? styles.profileHeading : styles.cardHeading}>
+              <Text accessibilityRole="header" style={profileView ? styles.profileTitle : styles.cardTitle}>{heading}</Text>
             </View>
 
             {auth.status === 'signedOut' && <Text style={styles.introduction}>
@@ -117,6 +118,9 @@ const styles = StyleSheet.create({
     borderRadius: 12, backgroundColor: theme.colors.primary, opacity: 0.06, transform: [{ rotate: '-18deg' }] },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingVertical: 40 },
   content: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: 32 },
+  profileScroll: { justifyContent: 'flex-start', paddingVertical: 32 },
+  profileContent: { maxWidth: 520 }, profilePanel: { gap: 18 }, profileHeading: { paddingBottom: 6 },
+  profileTitle: { color: theme.colors.foreground, fontSize: 32, lineHeight: 40, fontWeight: '700', letterSpacing: -0.8 },
   card: { padding: 24, gap: 18, backgroundColor: theme.colors.surface, borderRadius: 28,
     boxShadow: '0 6px 24px rgba(6, 47, 42, 0.04)' },
   cardHeading: { alignItems: 'center', paddingBottom: 6 },

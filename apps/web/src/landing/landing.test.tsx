@@ -38,7 +38,7 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
     expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: 'Conoce el seguro de vida de tu crédito.' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Pólizas y cotizaciones' })).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
   });
@@ -47,6 +47,8 @@ describe('product landing and quote entry', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(sessionResponse(401));
     const user = userEvent.setup();
     render(<App />);
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Ir al contenido' })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('link', { name: 'Inicio de Solventa' })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));

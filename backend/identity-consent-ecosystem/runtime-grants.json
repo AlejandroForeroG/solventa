@@ -84,6 +84,11 @@
     "INSERT",
     "UPDATE"
   ],
+  "advisor_sale_authorizations": [
+    "SELECT",
+    "INSERT",
+    "UPDATE"
+  ],
   "partner_portal_grants": [
     "SELECT"
   ],

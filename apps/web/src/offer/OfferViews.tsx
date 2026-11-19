@@ -1,7 +1,8 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Offer, Policy, SignatureChallenge } from './api';
+import { DocumentFields } from './DocumentFields';
 
 // Offers the exact reviewed bytes as a file; nothing is reformatted or re-signed in the browser.
 function downloadDocument(policy: Policy) {
@@ -24,16 +25,22 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
       <div className="offer-card">
         <div className="offer-head">
           <h1 ref={heading} tabIndex={-1} className="offer-label">{t(offer.status === 'preliminary' ? 'offer.preliminaryTitle' : 'offer.label')}</h1>
-          <span className="offer-id">{offer.offerId}</span>
         </div>
         <p className="offer-caption">{t('offer.premium')}</p>
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
+        {offer.status === 'definitive' && <>
+          <p className="offer-billing">{t('document.billing')}</p>
+          <details className="offer-verification"><summary>{t('document.estimateRelation')}</summary><p className="offer-billing">{t('document.billingDetail')}</p></details>
+        </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
           <div><dt>{t('offer.coverage')}</dt><dd>{t('offer.coverageValue')}</dd></div>
           <div><dt>{t('offer.period')}</dt><dd className="mono-light">{t('offer.periodValue', { from: dayMonthYear(new Date(offer.effectiveFrom)), until: dayMonthYear(new Date(offer.effectiveUntil)) })}</dd></div>
-          <div><dt>{t('offer.rule')}</dt><dd className="mono-light">{offer.ruleVersion}</dd></div>
         </dl>
+        <details className="offer-verification"><summary>{t('document.verification')}</summary>
+          <dl className="offer-facts"><div><dt>{t('document.offerId')}</dt><dd className="offer-id">{offer.offerId}</dd></div>
+            <div><dt>{t('offer.rule')}</dt><dd className="mono-light">{offer.ruleVersion}</dd></div></dl>
+        </details>
       </div>
       <div className="card offer-side">
         <h2 className="section-label">{t('offer.basis')}</h2>
@@ -63,6 +70,12 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const intl = useIntl();
   const { copDecimal, dayMonthYear } = useFormatters();
   const [page, setPage] = useState(1);
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const previousPage = useRef(page);
+  useEffect(() => {
+    if (previousPage.current !== page) pageHeading.current?.focus();
+    previousPage.current = page;
+  }, [page]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
@@ -70,10 +83,14 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   return <section className="step">
     {documentChanged && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t('policy.documentChanged')}</p></div>}
+    <header className="review-heading"><h1 ref={heading} tabIndex={-1} className="h-card">{t(stage === 'sign' ? 'policy.signatureTitle' : 'policy.reviewTitle')}</h1>
+      <p className="note">{t(stage === 'sign' ? 'policy.signatureSubtitle' : 'policy.reviewSubtitle')}</p>
+      {stage === 'sign' && page !== 2 && !challenge && <p id="policy-page-instruction" className="banner banner-info">{t('policy.readBothPages')}</p>}
+    </header>
     <div className="review-grid">
       <div className="card document-card">
         <div className="document-bar">
-          <span className="mono">{`poliza-${policy.policyId}.json`}</span>
+          <span className="document-name">{t('policy.document')}</span>
           <div className="document-navigation">
             <button type="button" className="btn btn-secondary btn-small" disabled={page === 1} onClick={() => setPage(1)} aria-label={t('policy.previousPage')}>‹</button>
             <span className="mono">{t('policy.page', { current: String(page), total: '2' })}</span>
@@ -83,30 +100,29 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
         </div>
         <div className="document-body document-sheet">
           {page === 1 ? <>
-          <h2 className="document-title">{t('policy.conditions')}</h2>
+          <h2 ref={pageHeading} tabIndex={-1} className="document-title">{t('policy.conditions')}</h2>
           <p className="mono note">{t('policy.version', { version: String(document.offerVersion ?? 1) })}</p>
           <dl className="facts">
             <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
             <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
             <div><dt>{t('offer.period')}</dt><dd className="mono">{t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) })}</dd></div>
-            <div><dt>{t('offer.sumInsured')}</dt><dd className="mono">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage ? String(document.coverage.sumInsured) : '—'}</dd></div>
+            <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-value">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage && typeof document.coverage.sumInsured === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(document.coverage.sumInsured) ? copDecimal(document.coverage.sumInsured) : '—'}</dd></div>
           </dl>
-          <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          <details className="document-verification"><summary>{t('document.verification')}</summary>
+            <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          </details>
           </> : <>
-          <h2 className="section-label">{t('policy.document')}</h2>
-          <pre className="document-text" tabIndex={0} aria-label={t('policy.document')}>{policy.document}</pre>
-          <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
+          <h2 ref={pageHeading} tabIndex={-1} className="section-label">{t('policy.document')}</h2>
+          <DocumentFields document={document} verification={<p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>} />
           </>}
         </div>
       </div>
       <div className="card review-panel">
-        <h1 ref={heading} tabIndex={-1} className="h-card">{t(stage === 'sign' ? 'policy.signatureTitle' : 'policy.reviewTitle')}</h1>
-        <p className="note">{t(stage === 'sign' ? 'policy.signatureSubtitle' : 'policy.reviewSubtitle')}</p>
         {stage === 'review' ? <button type="button" className="btn btn-primary review-confirm" onClick={onContinue}>
           {t('policy.continueToPayment')}
         </button> : <>
         <div className="check review-check">
-          <input id="policy-review-cb" type="checkbox" checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
+          <input id="policy-review-cb" type="checkbox" aria-describedby={page !== 2 && !challenge ? 'policy-page-instruction' : undefined} checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
           <label htmlFor="policy-review-cb">{t('policy.check')}</label>
         </div>
         {!challenge && <button type="button" className="btn btn-secondary review-confirm" onClick={onBegin} disabled={!checked || busy}>{t('policy.requestCode')}</button>}
@@ -139,16 +155,18 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
         <span className="pill pill-ok">{t('issued.badge')}</span>
       </div>
       <dl className="facts">
-        <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
+        <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
         <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
         <div><dt>{t('issued.start')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveFrom))}</dd></div>
         <div><dt>{t('issued.end')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveUntil))}</dd></div>
       </dl>
-      <h2 className="section-label">{t('issued.proof')}</h2>
-      <p className="trace mono">{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+      <details className="document-verification"><summary>{t('issued.proof')}</summary>
+        <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+      </details>
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
+        <a className="btn btn-primary" href="/polizas">{t('policies.open')}</a>
       </div>
     </div>
   </section>;

@@ -358,3 +358,30 @@ test('a native user reads policies through the combined RPC without any consent 
   const webActor = await authorizeFinancialAccess(build(async () => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: ['policies:read'] } })), { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
   assert.deepEqual(webActor, { allowed: false, error: 'access_unavailable', status: 503 });
 });
+
+test('the notices operations belong to the native customer: reads return their own push choices, receipts return none, and the web has neither', async () => {
+  const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
+  const application = new ApiAccess({ find: async () => assert.fail('partner storage is not used') }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
+  const choices = { policy: true, payments: false, claims: false, commercial: false };
+  const asked: string[] = [];
+  const build = (readPushChoices?: (clientId: string) => Promise<typeof choices>) => ({
+    authorize: (input: unknown) => authorizeApiAccess({ application, web: null,
+      mobile: { authenticate: async () => identity, authorize: (verified: typeof identity, operation: string) => application.mobileUser(verified, operation) }, partner: null }, input),
+    verifyConsents: async (): Promise<ConsentDecision[]> => assert.fail('notices need no risk consent'),
+    readPushChoices,
+  });
+  const traceId = '50000000-0000-4000-8000-000000000002';
+  const read = await authorizeFinancialAccess(build(async clientId => { asked.push(clientId); return choices; }), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId });
+  assert.ok(read.allowed && read.pushChoices);
+  assert.deepEqual(read.allowed && read.pushChoices, choices);
+  // The client is the one the access decision named, never a value of the request.
+  assert.deepEqual(asked, [principal.clientId]);
+  const receipt = await authorizeFinancialAccess(build(async () => assert.fail('a receipt needs no choices')), { kind: 'mobile', operation: 'notices:receipt', token: 'synthetic-token', traceId });
+  assert.ok(receipt.allowed && receipt.pushChoices === undefined);
+  // Without a reader the read cannot be answered, and it is never allowed without the choices.
+  assert.deepEqual(await authorizeFinancialAccess(build(), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId }), { allowed: false, error: 'access_unavailable', status: 503 });
+  assert.deepEqual(await authorizeFinancialAccess(build(async () => { throw new Error('store down'); }), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId }), { allowed: false, error: 'access_unavailable', status: 503 });
+  // A web session reaches neither operation.
+  const web = await authorizeFinancialAccess(build(async () => choices), { kind: 'web', operation: 'notices:read', cookie: 'synthetic-sealed', method: 'GET', origin: 'https://web.example' });
+  assert.ok(!web.allowed);
+});

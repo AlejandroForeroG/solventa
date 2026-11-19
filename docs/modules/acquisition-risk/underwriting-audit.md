@@ -18,6 +18,8 @@ Filters are optional: exact `reference` (decision UUID, offer UUID from immutabl
 
 ## Historical explanation
 
+When a partner or an advisor requested the decision for a customer who authorized them, the detail also carries `channel` with the partner or advisor reference and the authorization id, projected only when it matches the contract; a decision taken in the customer's own journey has none. See [assisted sale](../identity-consent-ecosystem/advisor-sale.md#traceability).
+
 `AuditDecisions` coordinates an audited lookup through a port. `explainDecision` projects only recognized decision fields, omitting arbitrary stored JSON, client identity and provider credentials. Summaries report the original rule/contract versions, outcome, decision time and correlation, plus the quote reference. Product is derived only from the captured rule ID; unknown rules have no inferred product. Detail includes normalized inputs, source capture/quality/degradation/confidence, historical consent ID/version and immutable offer prices/revisions. It never reconstructs from today's `offers` projection or refetches providers/current consent. The consent reference explains the past and does not authorize a new use of source data.
 
 ### Recovery of omitted historical inputs

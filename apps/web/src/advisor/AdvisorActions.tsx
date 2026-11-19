@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
+import { AdvisorSale } from '../sale/AdvisorSale';
 import '../policies/policies.css';
 
 export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSessionLost():void}) {
@@ -40,13 +41,13 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     return grantApproval(policy.policyId,payload,command.current.key);
   });
   return <section className="card policy-section" aria-labelledby="advisor-heading">
-    <h2 id="advisor-heading" className="h-card">{t(policy?'authorizations':'title')}</h2>
-    {page?.advisorReference&&<p className="mono">{t('reference')}: {page.advisorReference}</p>}
+    {policy ? <h2 id="advisor-heading" className="h-card">{t('authorizations')}</h2> : <h1 id="advisor-heading" className="h-card">{t('title')}</h1>}
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
     <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
     {page&&<>
       {!page.authorizations.length&&<p>{t('empty')}</p>}
+      {page.advisorReference&&<details className="document-verification"><summary>{t('reference')}</summary><p className="mono audit-id">{page.advisorReference}</p></details>}
       <ul className="policy-documents">{page.authorizations.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
         {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}
@@ -70,5 +71,5 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
   </section>;
 }
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
-  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/></main>;
+  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/><AdvisorSale onSessionLost={onSessionLost}/></main>;
 }

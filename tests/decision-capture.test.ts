@@ -32,6 +32,12 @@ test('a partner channel is optional, identifies only the partner and its authori
   for (const bad of [{ ...channel, kind: 'web' }, { ...channel, partnerId: 'acme' }, { kind: 'partner', partnerId: channel.partnerId }]) assert.equal(validate({ ...profiled, channel: bad }), false);
 });
 
+test('an advisor channel identifies only the advisor reference and its authorization, and rejects anything else', () => {
+  const channel = { kind: 'advisor', advisorReference: '10000000-0000-4000-8000-000000000002', authorizationId: '60000000-0000-4000-8000-000000000002' };
+  assert.equal(validate({ ...profiled, channel }), true);
+  for (const bad of [{ ...channel, kind: 'web' }, { ...channel, advisorReference: 'maria' }, { kind: 'advisor', advisorReference: channel.advisorReference }, { ...channel, clientId: '1' }, { ...channel, partnerId: channel.advisorReference }]) assert.equal(validate({ ...profiled, channel: bad }), false);
+});
+
 test('new optional fields do not break a v1 capture', () => {
   assert.equal(validate({ ...minimum, futureField: { any: 'value' } }), true);
 });

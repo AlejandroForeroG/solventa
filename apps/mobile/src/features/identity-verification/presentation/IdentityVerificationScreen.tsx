@@ -35,10 +35,9 @@ function VerificationFlow({ locale }: { locale: Locale }) {
   const disabled = state.busy || state.retryPending || !state.loaded;
   const canEdit = !inactive && verification.retryAllowed && !disabled;
   const error = state.error ? copy.errors[state.error as keyof typeof copy.errors] ?? copy.errors.other : null;
-  return <SafeAreaView style={styles.safe}>
+  return <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.card}>
-        <Action label={copy.back} secondary disabled={state.busy} onPress={() => router.replace('/')} />
         <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
         <Text style={styles.notice}>{copy.simulated}</Text>
         {state.busy && <ActivityIndicator accessibilityLabel={copy.working} color={theme.colors.primary} />}
@@ -46,10 +45,10 @@ function VerificationFlow({ locale }: { locale: Locale }) {
         {state.traceId && <Text selectable style={styles.caption}>{copy.reference}: {state.traceId}</Text>}
         {verification && <>
           <Text accessibilityLiveRegion="polite" style={styles.body}>{copy.statuses[verification.status]}</Text>
-          <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>
+          {!inactive && <Text style={styles.caption}>{copy.expires}: {new Date(verification.expiresAt).toLocaleString(locale)}</Text>}
         </>}
         {inactive && state.terms && <>
-          <Text style={styles.body}>{state.terms.wording}</Text>
+          <ConsentTerms wording={state.terms.wording} locale={locale} />
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted, disabled }} disabled={disabled}
             onPress={() => setAccepted(value => !value)} style={styles.checkbox}>
             <Text style={styles.body}>{accepted ? '☑' : '☐'} {copy.consent}</Text>
@@ -59,7 +58,8 @@ function VerificationFlow({ locale }: { locale: Locale }) {
         </>}
         {!inactive && verification && <>
           {verificationSteps.map(step => <StepSelection key={step} step={step} locale={locale} fixtures={state.fixtures.filter(item => item.step === step)}
-            saved={verification.steps.find(item => item.step === step)?.reference} disabled={!canEdit} onSave={fixture => void flow.save(step, fixture)} />)}
+            saved={verification.steps.find(item => item.step === step)?.reference} editable={verification.retryAllowed}
+            disabled={disabled} onSave={fixture => void flow.save(step, fixture)} />)}
           <Action label={copy.evaluate} disabled={!canEdit || verification.steps.length !== 3} onPress={() => void flow.evaluate()} />
           {(verification.assistanceAllowed || verification.assistance) && <>
             {verification.assistance ? <View style={styles.section}><Text style={styles.body}>{copy.assistance}</Text>
@@ -74,8 +74,25 @@ function VerificationFlow({ locale }: { locale: Locale }) {
     </ScrollView>
   </SafeAreaView>;
 }
-function StepSelection({ step, locale, fixtures, saved, disabled, onSave }: {
-  step: Step; locale: Locale; fixtures: Fixture[]; saved?: string; disabled: boolean; onSave: (fixture: Fixture) => void;
+function ConsentTerms({ wording, locale }: { wording: string; locale: Locale }) {
+  const [expanded, setExpanded] = useState(false);
+  const copy = verificationMessages[locale];
+  const sentences = wording.split(/(?<=[.!?])\s+/);
+  // Keep the server wording verbatim. Only the explicit retention sentence is grouped with the definitions.
+  const isRetention = (sentence: string) => /^(Solo se conservan|Only references, hashes)/.test(sentence);
+  const retained = sentences.filter(isRetention);
+  return <View style={styles.terms}>
+    {sentences.filter(sentence => !isRetention(sentence)).map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
+      onPress={() => setExpanded(value => !value)} style={styles.termsToggle}>
+      <Text style={styles.body}>{copy.termsDetails} {expanded ? '−' : '+'}</Text>
+    </Pressable>
+    {expanded && <View style={styles.terms}>{retained.map((sentence, index) => <Text key={index} style={styles.body}>{sentence}</Text>)}
+      <Text style={styles.caption}>{copy.termsHelp}</Text></View>}
+  </View>;
+}
+function StepSelection({ step, locale, fixtures, saved, editable, disabled, onSave }: {
+  step: Step; locale: Locale; fixtures: Fixture[]; saved?: string; editable: boolean; disabled: boolean; onSave: (fixture: Fixture) => void;
 }) {
   const [selection, select] = useState<string>();
   const copy = verificationMessages[locale];
@@ -85,14 +102,22 @@ function StepSelection({ step, locale, fixtures, saved, disabled, onSave }: {
   return <View style={styles.section}>
     <Text accessibilityRole="header" style={styles.stepTitle}>{copy.steps[step]}</Text>
     {saved && <Text style={styles.caption}>{copy.saved}: {fixtures.find(item => item.reference === saved)?.labels[locale]}</Text>}
-    {!disabled && <>
+    {editable && <>
       <Text style={styles.caption}>{copy.choose}</Text>
-      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio" accessibilityState={{ selected: selection === fixture.reference }}
-        onPress={() => select(fixture.reference)} style={[styles.option, selection === fixture.reference && styles.selected]}>
-        <Text style={styles.body}>{fixture.labels[locale]}</Text>
+      {fixtures.map(fixture => <Pressable key={fixture.reference} accessibilityRole="radio"
+        accessibilityLabel={`${fixture.labels[locale]}${saved === fixture.reference ? ` · ${copy.savedOption}` : selection === fixture.reference ? ` · ${copy.pendingOption}` : ''}`}
+        accessibilityState={{ checked: (selection ?? saved) === fixture.reference, disabled }} disabled={disabled}
+        onPress={() => select(fixture.reference)} style={[styles.option, (selection ?? saved) === fixture.reference && styles.selected, disabled && styles.dimmed]}>
+        <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.radio}>
+          {(selection ?? saved) === fixture.reference && <View style={styles.radioDot} />}
+        </View>
+        <View style={styles.optionLabel}><Text style={styles.body}>{fixture.labels[locale]}</Text>
+          {saved === fixture.reference && <Text style={styles.savedLabel}>{copy.savedOption}</Text>}
+          {selection === fixture.reference && selection !== saved && <Text style={styles.caption}>{copy.pendingOption}</Text>}
+        </View>
       </Pressable>)}
       {asset && <Image source={asset} accessibilityLabel={selected!.labels[locale]} resizeMode="contain" style={styles.image} />}
-      <Action label={copy.save} secondary disabled={!selected} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
+      <Action label={copy.save} secondary disabled={disabled || !selected || selected.reference === saved} onPress={() => { if (selected) { onSave(selected); select(undefined); } }} />
     </>}
   </View>;
 }
@@ -104,13 +129,18 @@ function Action({ label, disabled = false, secondary = false, onPress }: { label
 }
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background }, content: { padding: 24, paddingVertical: 32 },
-  card: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: 24, borderRadius: 28, backgroundColor: theme.colors.surface, gap: 18 },
-  title: { fontSize: 23, lineHeight: 30, color: theme.colors.foreground, fontWeight: '600' },
+  card: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 18 },
+  title: { fontSize: 30, lineHeight: 38, color: theme.colors.foreground, fontWeight: '700', letterSpacing: -0.6 },
   body: { fontSize: 15, lineHeight: 23, color: theme.colors.foreground }, caption: { fontSize: 12, lineHeight: 18, color: theme.colors.muted },
+  terms: { gap: 12 },
+  termsToggle: { minHeight: 48, justifyContent: 'center', borderBottomWidth: 1, borderColor: theme.colors.border },
   notice: { padding: 14, borderRadius: 14, backgroundColor: theme.colors.mint, color: theme.colors.primaryDark, fontSize: 14, lineHeight: 21 },
   checkbox: { minHeight: 48, justifyContent: 'center' }, section: { borderTopWidth: 1, borderColor: theme.colors.border, paddingTop: 18, gap: 12 },
   stepTitle: { fontSize: 18, fontWeight: '600', color: theme.colors.foreground },
-  option: { padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, minHeight: 48 }, selected: { borderColor: theme.colors.primaryDark, backgroundColor: theme.colors.mint },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, minHeight: 48 }, selected: { borderColor: theme.colors.primaryDark, backgroundColor: theme.colors.mint },
+  optionLabel: { flex: 1 }, radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+  savedLabel: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: theme.colors.onMint },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primaryDark },
   image: { width: '100%', height: 195 }, button: { minHeight: 54, backgroundColor: theme.colors.primaryDark, borderRadius: 16, padding: 16, justifyContent: 'center' },
   secondary: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
   buttonText: { fontSize: 15, lineHeight: 22, fontWeight: '600', textAlign: 'center', color: theme.colors.onPrimary }, secondaryText: { color: theme.colors.primaryDark }, dimmed: { opacity: 0.5 },

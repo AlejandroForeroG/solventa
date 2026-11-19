@@ -8,13 +8,14 @@ import { fetchService } from './service-fetch';
 const quotesPath = /^\/api\/v1\/(?:(me\/)?quotes|quote-estimates)(\/|$)/;
 const isQuotesPath = (path: string) => quotesPath.test(path);
 const offersPath = /^\/api\/v1\/offers(\/|$)/;
-const partnerOffersPath = /^\/api\/v1\/partner\/offers(\/|$)/;
+const partnerOffersPath = /^\/api\/v1\/(?:partner|advisor)\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
 const claimsPath = /^\/api\/v1\/claims(\/|$)/;
 const claimDraftsPath = /^\/api\/v1\/claim-drafts(\/|$)/;
 const assistanceRequestsPath = /^\/api\/v1\/assistance\/requests(?:\/[^/]+)?$/;
 const requirementEvidencePath = /^\/api\/v1\/claims\/[^/]+\/requirements\/[^/]+\/files\/[^/]+$/;
 const reportsPath = /^\/api\/v1\/reports(\/|$)/;
+const noticesPath = /^\/api\/v1\/notices(\/|$)/;
 const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
 // One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
@@ -62,14 +63,14 @@ async function route(request: Request, env: WebEnv): Promise<Response> {
     if (path.startsWith('/api/')) {
       const gate = gateApiVersion(path, new Date(), apiVersions);
       if (gate.response) return gate.response;
-      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile|me\/partner-authorizations)(\/|$)/.test(path)) {
+      if (path === '/api/v1/access/partner' || path === '/api/v1/access/web' || path === '/api/v1/access/mobile' || /^\/api\/v1\/(consents|mobile|me\/(?:partner|advisor-sale)-authorizations)(\/|$)/.test(path)) {
         try { return withHeaders(await fetchService(request, env.IDENTITY), gate.headers); }
         catch { return withHeaders(unavailable(request, headers, 'access_unavailable'), gate.headers); }
       }
       const response = /^\/api\/v[12]\/partner-portal$/.test(path) || isQuotesPath(path) || offersPath.test(path) || partnerOffersPath.test(path) || /^\/api\/v1\/underwriting-decisions(\/|$)/.test(path) ? await forwardToAcquisition(request, env, headers)
         : policiesPath.test(path) || /^\/api\/v1\/advisor-authorizations(\/|$)/.test(path) ? await forwardToPolicy(request, env, headers)
         : (claimEvidencePath.test(path) || requirementEvidencePath.test(path)) && request.method === 'PUT' ? await forwardEvidence(request, env, headers)
-        : claimsPath.test(path) || claimDraftsPath.test(path) || reportsPath.test(path) || path === assistanceSearchPath || assistanceRequestsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
+        : claimsPath.test(path) || claimDraftsPath.test(path) || reportsPath.test(path) || noticesPath.test(path) || path === assistanceSearchPath || assistanceRequestsPath.test(path) ? await forwardToPolicy(request, env, headers, 'service_unavailable')
         : Response.json({ error: 'not_implemented' }, { status: 404, headers });
       return withHeaders(response, gate.headers);
     }
