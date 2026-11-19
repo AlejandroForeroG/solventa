@@ -1,11 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Text } from 'react-native';
-import { allowScreenCaptureAsync, disableAppSwitcherProtectionAsync, enableAppSwitcherProtectionAsync, preventScreenCaptureAsync } from 'expo-screen-capture';
+import { allowScreenCaptureAsync, enableAppSwitcherProtectionAsync, preventScreenCaptureAsync } from 'expo-screen-capture';
 import { Page, ui } from '../../claim-report/presentation/ui';
 import { paymentMessages } from './messages';
 
-const owners = new Set<string>();
 let nextLease = 0;
+let sessionProtection: Promise<void> | undefined;
+
+function protectReceiptSession() {
+  sessionProtection ??= preventScreenCaptureAsync('claim-receipts-session').catch(error => {
+    sessionProtection = undefined;
+    throw error;
+  });
+  return sessionProtection;
+}
 
 export function ReceiptPrivacy({ locale, children }: { locale: 'es-CO' | 'en-US'; children: ReactNode }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -13,17 +21,16 @@ export function ReceiptPrivacy({ locale, children }: { locale: 'es-CO' | 'en-US'
   useEffect(() => {
     const key = 'claim-receipts-' + ++nextLease;
     let mounted = true;
-    owners.add(key);
     const protection = preventScreenCaptureAsync(key).then(async () => {
-      if (Platform.OS === 'ios') await enableAppSwitcherProtectionAsync();
+      // Keep native protection through blur, backgrounding and late frame commits.
+      await protectReceiptSession();
+      if (Platform.OS === 'ios') await enableAppSwitcherProtectionAsync(1);
     });
     void protection.then(() => { if (mounted) setStatus('ready'); }, () => { if (mounted) setStatus('failed'); });
     return () => {
       mounted = false;
-      // Finish a late acquisition before releasing only this mount's protection.
+      // Release this mount only; the session guard remains until process restart.
       void protection.catch(() => undefined).then(async () => {
-        owners.delete(key);
-        if (Platform.OS === 'ios' && owners.size === 0) await disableAppSwitcherProtectionAsync();
         await allowScreenCaptureAsync(key);
       }).catch(() => { console.warn('claim_receipt_privacy_release_failed'); });
     };
