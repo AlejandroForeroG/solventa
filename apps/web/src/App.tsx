@@ -2,6 +2,8 @@ import { AdvisorPortal } from './advisor/AdvisorActions';
 import { PartnerPortal } from './partner-portal/PartnerPortal';
 import { CustomerSalePortal } from './sale/CustomerSale';
 import { AuditWorkspace } from './audit/AuditWorkspace';
+import { ClaimCase, CustomerClaims } from './claims/ClaimCase';
+import { uuid } from './claims/case-api';
 import { ClaimsInbox } from './claims/ClaimsInbox';
 import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
@@ -53,7 +55,11 @@ function Shell() {
   const failed = new URLSearchParams(window.location.search).get('auth') === 'failed';
   const [purchaseInProgress] = useState(() => readPurchaseDraft() !== null);
   const isAudit = window.location.pathname === '/auditoria';
-  const isClaims = window.location.pathname === '/siniestros';
+  const path = window.location.pathname;
+  const isCustomerClaims = path === '/mis-siniestros' || path.startsWith('/mis-siniestros/');
+  const isClaims = path === '/siniestros' || path.startsWith('/siniestros/') || isCustomerClaims;
+  const caseId = path.split('/')[2];
+  const caseAudience = isCustomerClaims ? 'customer' : 'case';
   const isProviders = window.location.pathname === '/prestadores';
   const isPolicies = window.location.pathname === '/polizas'
     || (window.location.pathname === '/' && policyDestination !== null && (session !== 'anonymous' || failed));
@@ -61,7 +67,7 @@ function Shell() {
   const isSale = window.location.pathname === '/venta-asistida';
   const isPartnerPortal = window.location.pathname === '/socios';
   const isConsole = isAdvisor || isSale || isPartnerPortal || isAudit || isClaims || isProviders || isPolicies;
-  const sectionTitle = isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? 'claims.open' : 'audit.open';
+  const sectionTitle = isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? isCustomerClaims ? 'claims.customerCases' : 'claims.open' : 'audit.open';
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -112,7 +118,7 @@ function Shell() {
     {isPolicies && session === 'authenticated' && window.location.pathname === '/'
       ? <main className="access-panel"><p role="status">{t('policies.openingDocuments')}</p></main>
       : isConsole ? (session === 'authenticated' && !busy
-      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onBackToList={abandonPolicyDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal documentDestination={policyDestination ?? policyDocumentDestination()} onBackToList={abandonPolicyDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? uuid(caseId) ? <ClaimCase key={path} claimId={caseId} audience={caseAudience} onSessionLost={sessionLost} /> : isCustomerClaims ? <CustomerClaims onSessionLost={sessionLost} /> : <ClaimsInbox onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(isPolicies && failed && policyDestination ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
         {isPolicies && policyDestination && <><p>{t('policies.documentSignIn')}</p>

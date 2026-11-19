@@ -20,6 +20,8 @@ const copy = {
     blocked: 'Push no está autorizado por el dispositivo. Actívalo en Ajustes para recibir avisos por este canal.',
     openSettings: 'Abrir Ajustes',
     pending: 'Push está elegido, pero no operará hasta que autorices las notificaciones en el dispositivo.',
+    pushBlocked: 'Sin permiso', pushChecking: 'Verificando permiso',
+    selectedBlocked: 'Elegido; bloqueado en este dispositivo', selectedChecking: 'Elegido; verificando permiso del dispositivo',
     conflict: 'Las preferencias cambiaron en otra sesión. Actualiza antes de guardar.',
     failure: 'No pudimos guardar las preferencias. Reintenta con la misma solicitud o actualiza.',
     readFailure: 'No pudimos cargar tus preferencias.',
@@ -35,6 +37,8 @@ const copy = {
     blocked: 'Push is blocked by your device. Enable notifications in Settings to receive this channel.',
     openSettings: 'Open Settings',
     pending: 'Push is selected but cannot operate until you allow notifications on this device.',
+    pushBlocked: 'Permission blocked', pushChecking: 'Checking permission',
+    selectedBlocked: 'Selected; blocked on this device', selectedChecking: 'Selected; checking device permission',
     conflict: 'Preferences changed in another session. Refresh before saving.',
     failure: 'We could not save your preferences. Retry the same request or refresh.',
     readFailure: 'We could not load your preferences.',
@@ -149,6 +153,8 @@ function PreferencesFlow({ language, title }: { language: 'es' | 'en'; title: st
         {channels.map(channel => <Pressable key={channel} style={[styles.switchCell,
           { flexBasis: Math.max(72, Math.ceil(36 * fontScale)) }]}
           accessibilityRole="switch" accessibilityLabel={`${text.categories[category][0]} · ${text.channels[channel]}`}
+          accessibilityValue={channel === 'push' && draft[category][channel] && permission !== true
+            ? { text: permission === false ? text.selectedBlocked : text.selectedChecking } : undefined}
           accessibilityState={{ checked: draft[category][channel], disabled: busy || !!pending }} disabled={busy || !!pending}
           onPress={() => void toggle(category, channel, !draft[category][channel])}>
           <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
@@ -156,7 +162,11 @@ function PreferencesFlow({ language, title }: { language: 'es' | 'en'; title: st
           <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
             style={[styles.switchTrack, draft[category][channel] && styles.switchTrackOn, (busy || !!pending) && styles.dimmed]}>
             <View style={[styles.switchThumb, draft[category][channel] && styles.switchThumbOn]} />
-          </View></Pressable>)}</View>
+          </View>
+        </Pressable>)}</View>
+        {draft[category].push && permission !== true && <Text accessible={false}
+          accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.channelStatus}>
+          {text.channels.push} · {permission === false ? text.pushBlocked : text.pushChecking}</Text>}
       </View>)}
     </View>}
     {pushSelected && permission === false && <Text accessibilityLiveRegion="polite" style={styles.warningText}>{text.pending}</Text>}
@@ -190,6 +200,7 @@ const styles = StyleSheet.create({
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },
   channelLabel: { color: theme.colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  channelStatus: { color: theme.colors.warningText, fontSize: 12, lineHeight: 18 },
   channelControls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { borderTopWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, gap: 12 },
   rowTitle: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600' },

@@ -3,7 +3,7 @@ import type { Hono, Context } from 'hono';
 import { Authentication } from '../../application/authentication';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
-import type { IdentitySessions } from '../../application/authentication';
+import type { LoginSessions } from '../../application/authentication';
 import type { SecurityDecisions } from '../../application/security-decisions';
 import { canonicalSecurityId } from '../../domain/security-decision';
 
@@ -52,7 +52,7 @@ function writeCookie(c: Context<AuthEnv>, config: AuthConfiguration, value: stri
 
 export type AuthenticationCollaborators = {
   provider(config: AuthConfiguration): Pick<WorkosAuthentication, 'begin' | 'exchange' | 'authenticate' | 'revoke' | 'logoutUrl'>;
-  sessions(connectionString: string): IdentitySessions;
+  sessions(connectionString: string): LoginSessions;
 };
 
 export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators, security?: Pick<SecurityDecisions, 'deny'>) {

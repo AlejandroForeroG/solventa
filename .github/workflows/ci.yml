@@ -49,29 +49,72 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm run infra:up
-      - run: npm run test:schema
-      - run: npm run test:authentication:sql
-      - run: npm run test:identity-verification:sql
-      - run: npm run test:notification-preferences:sql
-      - run: npm run test:partner-access:sql
-      - run: npm run test:partner-authorizations:sql
-      - run: npm run test:advisor-sale-authorizations:sql
-      - run: npm run test:partner-portal:sql
-      - run: npm run test:partner-quota:sql
-      - run: npm run test:quotes:sql
-      - run: npm run test:consents:sql
-      - run: npm run test:offers:sql
-      - run: npm run test:audit:sql
-      - run: npm run test:claims:access:sql
-      - run: npm run test:claims:sql
-      - run: npm run test:claim-report:sql
-      - run: npm run test:claim-drafts:sql
-      - run: npm run test:financial:sql
-      - run: npm run test:security:sql
-      - run: npm run infra:local:schema-verify
-      - run: npm run test:infra
-      - if: always()
+      - id: context
+        name: Identify validation code and runner
+        env:
+          VALIDATION_REVISION: ${{ inputs.revision || github.sha }}
+        run: node tools/validation-reuse.mjs context "$RUNNER_TEMP/solventa-validation.json"
+      - id: reuse
+        name: Verify prior full validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/validation-reuse.mjs lookup "$RUNNER_TEMP/solventa-validation.json"
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm ci
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run check
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run infra:up
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:schema
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:authentication:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:identity-verification:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:notification-preferences:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:partner-access:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:partner-authorizations:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:advisor-sale-authorizations:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:partner-portal:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:partner-quota:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:quotes:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:consents:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:offers:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:audit:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:claims:access:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:claims:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:claim-report:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:claim-drafts:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:financial:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:security:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run infra:local:schema-verify
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:infra
+      - if: always() && steps.reuse.outputs.reused != 'true'
         run: npm run infra:down
+      - name: Write full validation receipt
+        if: steps.reuse.outputs.reused != 'true' && steps.context.outputs.trusted == 'true'
+        run: node tools/validation-reuse.mjs receipt "$RUNNER_TEMP/solventa-validation.json" "$RUNNER_TEMP/solventa-validation-receipt/validation.json"
+      - name: Publish validation receipt
+        if: steps.reuse.outputs.reused != 'true' && steps.context.outputs.trusted == 'true'
+        uses: ./.github/actions/publish-validation
+        with:
+          context: ${{ runner.temp }}/solventa-validation.json
+          receipt: ${{ runner.temp }}/solventa-validation-receipt/validation.json
