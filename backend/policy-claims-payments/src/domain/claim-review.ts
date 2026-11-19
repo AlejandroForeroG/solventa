@@ -50,3 +50,10 @@ export function parseRequirementFile(value: unknown): RequirementFile | null {
     || typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.sha256)) return null;
   return { fileId: value.fileId.toLowerCase(), contentType: value.contentType, byteSize: value.byteSize, sha256: value.sha256 };
 }
+
+export function parseRequirementSelection(value: unknown): string[] | null {
+  if (!object(value) || Object.keys(value).join(',') !== 'fileIds' || !Array.isArray(value.fileIds)
+    || value.fileIds.length > 3 || !value.fileIds.every(isUuid)) return null;
+  const ids = value.fileIds.map(id => id.toLowerCase());
+  return new Set(ids).size === ids.length ? ids : null;
+}
