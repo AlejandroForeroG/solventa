@@ -54,6 +54,8 @@ const SETTLED: readonly Phase['name'][] = ['declined', 'expired', 'chargeDecline
 export function OfferJourney(props: {
   quote: Pick<Quote, 'quoteId'>;
   resume?: PurchaseDraft;
+  // An offer prepared for the customer, such as by an advisor: the journey starts at its review instead of creating one.
+  initialOffer?: Offer;
   api?: FinancialApi;
   poll?: PollSchedule;
   onRequote: () => void;
@@ -137,6 +139,12 @@ export function OfferJourney(props: {
   // After a reload the journey resumes from the stored acceptance and command key instead of creating another offer.
   const start = useRef((current: AbortSignal) => {
     const resume = latest.current.props.resume;
+    const initial = latest.current.props.initialOffer;
+    if (!resume && initial) {
+      setPhase({ name: 'offer', offer: initial, accepting: false });
+      say(initial.status === 'preliminary' ? 'live.offerPreliminary' : 'live.offerReady', { premium: latest.current.copDecimal(initial.premium) });
+      return Promise.resolve();
+    }
     if (!resume) return create(current);
     if (resume.issue) issueKeys.current.set(`${resume.issue.policyId}:${resume.issue.documentHash}`, resume.issue.key);
     if (resume.charge) chargeKeys.current.set(`${resume.charge.policyId}:${resume.charge.documentHash}`, resume.charge.key);

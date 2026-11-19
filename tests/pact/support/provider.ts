@@ -40,6 +40,7 @@ import { Notices } from '../../../backend/policy-claims-payments/src/application
 import { dispatchConsumer } from '../../../backend/policy-claims-payments/src/domain/notice';
 import { memoryNoticeStore } from '../../support/notice-fakes';
 import { contractNotice } from './notices-contract';
+import { saleAcquisitionApp, saleIdentityApp, type SaleMode } from './sale';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -337,6 +338,13 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
       return { identity: { fetch: (request: Request) => Promise.resolve(world.app.request(request, undefined, identityEnv)) } };
     },
   ])),
+  ...Object.fromEntries((['empty', 'authorized', 'unavailable'] as SaleMode[]).map(mode => [
+    mode === 'empty' ? 'a customer who can authorize an advisor' : mode === 'authorized' ? 'a customer with an active advisor authorization' : 'the advisor authorization store is unavailable',
+    async () => {
+      const app = await saleIdentityApp(mode, { authorizeApiAccess: input => authorizeApiAccess(consentAccess, input), authentication: unexpectedAuthentication, consents: freshConsents().consents });
+      return { identity: binding(app, identityEnv), sessionCookie: consentCookie };
+    }])),
+  ...Object.fromEntries((['ready', 'forbidden', 'consent_required', 'unavailable'] as const).map(mode => [`an advisor sale ${mode}`, () => ({ sessionCookie: 'advisor-session', acquisition: binding(saleAcquisitionApp(mode), { APP_ENV: 'dev' }) })])),
   'a native session with its installation binding': nativeWorld,
   'a native session with an issued policy': () => nativePolicyWorld(),
   'a native session with multiple policy pages': () => nativePolicyWorld(true),
