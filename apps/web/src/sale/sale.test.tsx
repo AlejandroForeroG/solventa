@@ -5,6 +5,7 @@ import { axe } from 'vitest-axe';
 import { I18n } from '../i18n/I18n';
 import { AdvisorSale } from './AdvisorSale';
 import { CustomerSalePortal } from './CustomerSale';
+import { clearPurchaseDraft, savePurchaseDraft } from '../offer/purchase-draft';
 
 const traceId = '33333333-3333-4333-8333-333333333333';
 const reference = '22222222-2222-4222-8222-222222222222';
@@ -133,4 +134,15 @@ it('every refusal of the advisor operation is explained and consent is told apar
   await user.click(screen.getByRole('button', { name: 'Preparar oferta' }));
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('La solicitud ya se usó'));
   expect(screen.queryByText(/Entrega este código/)).not.toBeInTheDocument();
+});
+
+it('a reload during the purchase of an assisted offer resumes at its policy instead of the authorization screen', async () => {
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => { requests.push(url); return json({ error: 'policy_pending' }, 404); }));
+  expect(savePurchaseDraft({ quoteId: 'COT-2026-00001', issue: null, acceptance: { acceptanceId: '77777777-7777-4777-8777-777777777777', offerId, acceptedAt: '2026-11-11T00:00:00.000Z', traceId } })).toBe(true);
+  try {
+    render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
+    await waitFor(() => expect(requests.some(url => url.includes('/policies/by-acceptance/77777777-7777-4777-8777-777777777777/policy'))).toBe(true));
+    expect(screen.queryByLabelText('Referencia del asesor')).not.toBeInTheDocument();
+  } finally { clearPurchaseDraft(); }
 });

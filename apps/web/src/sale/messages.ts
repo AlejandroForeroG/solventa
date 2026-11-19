@@ -16,7 +16,7 @@ export const saleEs = {
   'sale.prepare': 'Preparar oferta', 'sale.preparing': 'Preparando…', 'sale.definitive': 'Oferta definitiva preparada', 'sale.preliminary': 'Oferta preliminar: no se puede contratar todavía',
   'sale.premium': 'Prima', 'sale.handoff': 'Entrega este código al cliente. El cliente continúa desde Venta asistida en su cuenta.',
   'sale.unauthenticated': 'Inicia sesión para continuar.', 'sale.forbidden': 'No tienes permiso vigente para esta operación.', 'sale.notFound': 'No se encontró el registro.',
-  'sale.invalid': 'Revisa los datos ingresados.', 'sale.conflict': 'La solicitud ya se usó con otros datos o el estado cambió. Revisa e inicia una nueva.',
+  'sale.invalid': 'Revisa los datos ingresados.', 'sale.conflict': 'La solicitud ya se usó con otros datos, el estado cambió o ya tienes 20 autorizaciones activas. Revisa y vuelve a intentar.',
   'sale.unavailable': 'No se confirmó la operación. Reintenta con los mismos datos.',
 };
 export const saleEn = {
@@ -37,6 +37,6 @@ export const saleEn = {
   'sale.prepare': 'Prepare offer', 'sale.preparing': 'Preparing…', 'sale.definitive': 'Definitive offer prepared', 'sale.preliminary': 'Preliminary offer: it cannot be contracted yet',
   'sale.premium': 'Premium', 'sale.handoff': 'Give this code to the customer. The customer continues from Assisted sale in their account.',
   'sale.unauthenticated': 'Sign in to continue.', 'sale.forbidden': 'You do not have current permission for this operation.', 'sale.notFound': 'The record was not found.',
-  'sale.invalid': 'Check the data entered.', 'sale.conflict': 'The request was already used with other data or the state changed. Check and start a new one.',
+  'sale.invalid': 'Check the data entered.', 'sale.conflict': 'The request was already used with other data, the state changed or you already have 20 active authorizations. Check and try again.',
   'sale.unavailable': 'The operation was not confirmed. Retry with the same data.',
 };

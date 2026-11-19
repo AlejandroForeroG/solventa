@@ -6,8 +6,8 @@ export type RevokeAdvisorSaleResult =
   | { kind: 'not_found' };
 
 export interface AdvisorSaleAuthorizationStore {
-  // Null when no current advisor has that reference, or the advisor is the customer.
-  grant(input: { principal: Principal; advisorReference: string; grantedAt: Date; expiresAt: Date; traceId: string }): Promise<AdvisorSaleAuthorization | null>;
+  // Null when no current advisor has that reference, or the advisor is the customer; 'limit_reached' when the customer already has the most active authorizations.
+  grant(input: { principal: Principal; advisorReference: string; grantedAt: Date; expiresAt: Date; traceId: string }): Promise<AdvisorSaleAuthorization | null | 'limit_reached'>;
   list(principal: Principal, limit: number): Promise<AdvisorSaleAuthorization[]>;
   revoke(principal: Principal, authorizationId: string, now: Date, traceId: string): Promise<RevokeAdvisorSaleResult>;
   // The customer behind an authorization held by this exact advisor, only while it is usable.

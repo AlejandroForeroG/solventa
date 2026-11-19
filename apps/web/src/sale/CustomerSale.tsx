@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { OfferJourney } from '../offer/OfferJourney';
 import { readOffer, type Offer } from '../offer/api';
+import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
 import '../policies/policies.css';
 
@@ -89,6 +90,13 @@ function Continuation({ onSessionLost }: { onSessionLost(): void }) {
 
 export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
+  // A purchase interrupted by a reload resumes at its policy: the draft keeps only server references and command keys.
+  const [resume, setResume] = useState(readPurchaseDraft);
+  const leave = useCallback(() => { clearPurchaseDraft(); setResume(null); }, []);
+  if (resume) {
+    return <main className="content policies"><OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} onRequote={leave} onBack={leave} onSessionLost={onSessionLost}
+      onConsentRequired={leave} /></main>;
+  }
   return <main className="content policies">
     <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>
     <Authorizations onSessionLost={onSessionLost} />

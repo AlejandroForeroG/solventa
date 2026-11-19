@@ -19,7 +19,7 @@ An authorization is not consent, and consent is not an authorization: either one
 
 The routes belong to the authenticated web customer and take no customer identifier from the body or the path ([contract](../../../packages/contracts/openapi/v1/advisor-sale-authorizations.yaml)).
 
-- `POST /api/v1/me/advisor-sale-authorizations` names the advisor by the reference that Solventa shows in the advisor workspace and the validity in days (one by default, at most seven). Each call creates a distinct authorization. An unknown reference, an advisor whose permission is revoked or expired, and the customer's own reference are one opaque `404 advisor_not_found`, so a reference cannot be probed.
+- `POST /api/v1/me/advisor-sale-authorizations` names the advisor by the reference that Solventa shows in the advisor workspace and the validity in days (one by default, at most seven). Each call creates a distinct authorization, and a customer can hold at most 20 active ones at once (`409 authorization_limit`), so the list, which shows the active ones first, always includes every authorization that still works. An unknown reference, an advisor whose permission is revoked or expired, and the customer's own reference are one opaque `404 advisor_not_found`, so a reference cannot be probed.
 - `GET /api/v1/me/advisor-sale-authorizations` lists the customer's own authorizations, at most 50, with a status computed on every read (`active`, `revoked`, `expired`).
 - `POST /api/v1/me/advisor-sale-authorizations/{id}/revoke` is effective on the advisor's next request, is idempotent and answers an opaque `404` for a foreign or unknown id. An expired authorization cannot be revoked (`409`).
 

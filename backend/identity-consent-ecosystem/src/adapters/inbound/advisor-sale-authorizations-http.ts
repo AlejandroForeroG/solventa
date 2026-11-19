@@ -16,6 +16,7 @@ export function mountAdvisorSaleAuthorizations(app: Hono<{ Bindings: IdentityEnv
     const result = await authorizations.grant({ principal, body: await readJson(c.req.raw), traceId });
     if (result.status === 'invalid') return reply({ error: 'invalid_request' }, 400);
     if (result.status === 'advisor_not_found') return reply({ error: 'advisor_not_found' }, 404);
+    if (result.status === 'limit_reached') return reply({ error: 'authorization_limit' }, 409);
     return reply(result.authorization, 201);
   }));
 
