@@ -34,15 +34,17 @@ export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
     <p className="note">{t('prepareScope')}</p>
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <label className="field">{t('code')}<input required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></label>
-      <label className="field">{t('fullName')}<input required value={form.fullName} disabled={busy} autoComplete="off" onChange={set('fullName')} /></label>
-      <label className="field">{t('documentNumber')}<input required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></label>
-      <label className="field">{t('birthDate')}<input required type="date" value={form.birthDate} disabled={busy} onChange={set('birthDate')} /></label>
-      <label className="field">{t('city')}<input required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></label>
-      <label className="field">{t('creditId')}<input required value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></label>
-      <label className="field">{t('amount')}<input required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></label>
-      <label className="field">{t('termMonths')}<input required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></label>
-      <button className="btn btn-primary" type="submit" disabled={busy || !ready}>{busy ? t('preparing') : t('prepare')}</button>
+      <div className="grid">
+      <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></div>
+      <div className="field"><label htmlFor="sale-adv-2">{t('fullName')}</label><input id="sale-adv-2" required value={form.fullName} disabled={busy} autoComplete="off" onChange={set('fullName')} /></div>
+      <div className="field"><label htmlFor="sale-adv-3">{t('documentNumber')}</label><input id="sale-adv-3" required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></div>
+      <div className="field"><label htmlFor="sale-adv-4">{t('birthDate')}</label><input id="sale-adv-4" required type="date" value={form.birthDate} disabled={busy} onChange={set('birthDate')} /></div>
+      <div className="field"><label htmlFor="sale-adv-5">{t('city')}</label><input id="sale-adv-5" required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></div>
+      <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" required value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></div>
+      <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>
+      <div className="field"><label htmlFor="sale-adv-8">{t('termMonths')}</label><input id="sale-adv-8" required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></div>
+      </div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !ready}>{busy ? t('preparing') : t('prepare')}</button></div>
     </form>
     {error && <p role="alert">{t(error)}</p>}
     {offer && <div role="status" className="card">
