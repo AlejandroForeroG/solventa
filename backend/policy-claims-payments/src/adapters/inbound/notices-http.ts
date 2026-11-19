@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import type { Notices, PushChoices } from '../../application/notices';
+import type { NoticeOwner, Notices, PushChoices } from '../../application/notices';
 import { UUID } from '../../domain/financial';
 
 type Operation = 'notices:read' | 'notices:receipt';
@@ -21,7 +21,7 @@ function choicesOf(value: unknown): PushChoices | null {
 // Only the native customer reads their notices and reports what the device did with them. The owner always comes from the verified session.
 export function mountNotices(app: Hono<{ Bindings: PolicyEnv }>, deps: NoticesHttpDependencies) {
   const route = (method: 'GET' | 'POST', operation: Operation,
-    work: (c: Context<{ Bindings: PolicyEnv }>, owner: { clientId: string }, decision: Record<string, unknown>, traceId: string, reply: Reply) => Promise<Response>) => async (c: Context<{ Bindings: PolicyEnv }>) => {
+    work: (c: Context<{ Bindings: PolicyEnv }>, owner: NoticeOwner, decision: Record<string, unknown>, traceId: string, reply: Reply) => Promise<Response>) => async (c: Context<{ Bindings: PolicyEnv }>) => {
     const supplied = c.req.header('x-trace-id') ?? '';
     const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
     const reply: Reply = (body, status) => c.json({ ...body, traceId }, status, { 'cache-control': 'no-store', 'x-trace-id': traceId, 'x-content-type-options': 'nosniff' });
@@ -42,8 +42,9 @@ export function mountNotices(app: Hono<{ Bindings: PolicyEnv }>, deps: NoticesHt
       }
       const { actor } = decision;
       if (!record(actor) || actor.kind !== 'user' || actor.channel !== 'mobile' || !Array.isArray(actor.operations) || !actor.operations.includes(operation)
-        || !record(actor.principal) || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)) return reply({ error: 'access_unavailable' }, 503);
-      return await work(c, { clientId: actor.principal.clientId.toLowerCase() }, decision, traceId, reply);
+        || !record(actor.principal) || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)
+        || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
+      return await work(c, { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, decision, traceId, reply);
     } catch { return reply({ error: 'service_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   };

@@ -7,7 +7,7 @@ const es = {
   notificationTitle: 'Solventa', notificationBody: 'Tienes un aviso nuevo. Ábrelo para verlo.',
   loading: 'Revisando tus avisos…', failed: 'No pudimos revisar tus avisos. Intenta de nuevo.', empty: 'No tienes avisos nuevos.',
   open: 'Ver mis pólizas', retry: 'Reintentar',
-  kind: { parametric_payment_confirmed: 'Se confirmó el pago de tu póliza', policy_lifecycle_changed: 'Cambió una de tus pólizas', policy_expiring: 'Una de tus pólizas vence pronto' } satisfies Record<NoticeKind, string>,
+  kind: { parametric_payment_confirmed: 'Se confirmó el pago de tu póliza', policy_lifecycle_changed: 'Cambió una de tus pólizas', policy_expiring: 'Una de tus pólizas vence pronto', claim_status_changed: 'Cambió el estado de uno de tus siniestros' } satisfies Record<NoticeKind, string>,
   state: { offered: 'Pendiente', unconfirmed: 'Sin confirmar', presented: 'Notificado', permission_denied: 'Notificaciones desactivadas en este dispositivo' } satisfies Record<NoticeState, string>,
 };
 
@@ -15,7 +15,7 @@ const en: typeof es = {
   notificationTitle: 'Solventa', notificationBody: 'You have a new notice. Open it to read it.',
   loading: 'Checking your notices…', failed: 'We could not check your notices. Try again.', empty: 'You have no new notices.',
   open: 'View my policies', retry: 'Try again',
-  kind: { parametric_payment_confirmed: 'The payment of your policy was confirmed', policy_lifecycle_changed: 'One of your policies changed', policy_expiring: 'One of your policies expires soon' },
+  kind: { parametric_payment_confirmed: 'The payment of your policy was confirmed', policy_lifecycle_changed: 'One of your policies changed', policy_expiring: 'One of your policies expires soon', claim_status_changed: 'The status of one of your claims changed' },
   state: { offered: 'Pending', unconfirmed: 'Unconfirmed', presented: 'Notified', permission_denied: 'Notifications are off on this device' },
 };
 

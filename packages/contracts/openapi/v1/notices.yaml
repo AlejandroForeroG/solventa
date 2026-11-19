@@ -8,8 +8,8 @@ info:
     device and records what the device did with it. The transport is simulated: the app collects the notices and
     presents them itself, and no push provider is contacted, so an offer is never evidence that the notice was seen.
     Every request requires a verified native session. Identity returns, with that same decision, what the customer chose
-    for push by category; a notice whose choice is off is never offered. The category of a claim status change is not part
-    of this contract. A notice carries no amount, document or personal data. The state of a notice belongs to the customer, not to a
+    for push by category; a notice whose choice is off is never offered. A change in the status of one of the customer's claims is
+    a notice of the claims category, which names the policy of the claim and nothing about the decision or its reason. A notice carries no amount, document or personal data. The state of a notice belongs to the customer, not to a
     device: with several devices signed in to one account, the first stored receipt decides the state for all of them, and
     devices that collect a notice before any receipt exists may each present it, the second receipt being a conflict.
 servers:
@@ -121,10 +121,10 @@ components:
       required: [eventId, kind, category, policyId, occurredAt, state]
       properties:
         eventId: { type: string, format: uuid }
-        kind: { type: string, enum: [parametric_payment_confirmed, policy_lifecycle_changed, policy_expiring] }
+        kind: { type: string, enum: [parametric_payment_confirmed, policy_lifecycle_changed, policy_expiring, claim_status_changed] }
         category:
           type: string
-          enum: [payments, policy]
+          enum: [payments, policy, claims]
           description: The preference category this notice answers to.
         policyId: { type: string, format: uuid }
         occurredAt: { type: string, format: date-time }

@@ -35,8 +35,9 @@ A cookie, a partner credential or a web session reaches neither route. Errors ca
 | Confirmed parametric payment | `payments` | The confirmation transaction of [parametric payouts](parametric-payouts.md#confirmation-and-the-customer-notice). |
 | Policy modified, renewed or cancelled | `policy` | The lifecycle transaction of [policy lifecycle](policy-lifecycle.md). |
 | Policy about to expire | `policy` | The scheduled trigger below. |
+| A claim decided by an analyst (approved or rejected) | `claims` | The claim decision transaction, which already stores the customer's claim notice in `claim_notices`, addressed to the customer's subject. The native notice reads that row: it names only the policy of the claim, never the decision, the reason or the evidence. |
 
-The `claims` category of the preferences has no notice yet: a change of claim status depends on the claim decisions, which are not part of this scope, and no producer exists for it. The `commercial` category has none either. Both stay in the preference matrix without delivering anything.
+The `claims` category follows the claims choice of the preferences. Its notices are read from `claim_notices` by the customer's subject, which Identity returns with the same access decision, so a customer never sees a claim notice addressed to someone else and a request without the subject reads none. The delivery decision and the receipt use the same inbox rows as every other notice, keyed by the claim decision's event identifier. The `commercial` category has no notice and stays in the preference matrix without delivering anything.
 
 ### Expiry trigger
 
@@ -56,4 +57,4 @@ Push permission stays device-local and is never inferred from the stored choice,
 
 Run `npm run check` and `npm run test:financial:sql`. Then, in a native development build, check the permission dialog, a presented notice, the lock screen, a tap that opens the alerts, a denied permission and a signed-out tap. The web export cannot establish any of them.
 
-Limits: the transport is simulated and a closed app collects nothing until it is opened; the state of a notice is per customer, the first stored receipt decides it across devices, and a notice collected by two devices before that receipt may be shown on both; no claim-status or commercial notice exists; a notice offered to a device that never reports back stays `unconfirmed`; the notice read has no dedicated index; and iOS and a physical device are not exercised.
+Limits: the transport is simulated and a closed app collects nothing until it is opened; the state of a notice is per customer, the first stored receipt decides it across devices, and a notice collected by two devices before that receipt may be shown on both; no commercial notice exists, and the claims notice reports a decision, not each step of a claim's review; a notice offered to a device that never reports back stays `unconfirmed`; the notice read has no dedicated index; and iOS and a physical device are not exercised.
