@@ -11,7 +11,7 @@ const policyId = '60000000-0000-4000-8000-000000000001';
 const trace = '30000000-0000-4000-8000-000000000001';
 const event = (n: number) => `70000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const notice = (n: number, state: Notice['state'] = 'offered', kind: Notice['kind'] = 'parametric_payment_confirmed'): Notice =>
-  ({ eventId: event(n), kind, category: kind === 'parametric_payment_confirmed' ? 'payments' : 'policy', policyId, occurredAt: '2026-11-18T11:00:00.000Z', state });
+  ({ eventId: event(n), kind, category: kind === 'parametric_payment_confirmed' ? 'payments' : kind === 'claim_status_changed' ? 'claims' : 'policy', policyId, occurredAt: '2026-11-18T11:00:00.000Z', state });
 const wire = (items: Notice[]) => ({ simulated: true, notices: items, traceId: trace });
 
 function world(options: { notices?: Notice[]; granted?: boolean } = {}) {
@@ -67,6 +67,42 @@ test('a presentation that fails reports nothing, so the notice is tried again, a
   assert.deepEqual(w.received, [[event(1), 'presented']]);
 });
 
+test('a receipt that could not be sent is retried without presenting the notice a second time', async () => {
+  const w = world();
+  // The server lists the notice as presented once it stored the receipt.
+  w.listing(async () => [notice(1, w.received.length ? 'presented' : 'offered')]);
+  w.receipts(async () => { throw new NoticeFailure('unavailable'); });
+  await w.center.refresh();
+  await w.center.refresh();
+  assert.deepEqual(w.shown, [event(1)], 'one event, one presentation, however many receipts fail');
+  w.receipts(async (eventId, outcome) => { w.received.push([eventId, outcome]); });
+  await w.center.refresh();
+  assert.deepEqual(w.shown, [event(1)]);
+  assert.deepEqual(w.received, [[event(1), 'presented']]);
+  await w.center.refresh();
+  assert.deepEqual(w.received, [[event(1), 'presented']], 'a delivered receipt is not sent again');
+  w.center.clear();
+  w.listing(async () => [notice(1)]);
+  w.receipts(async () => { throw new NoticeFailure('unavailable'); });
+  await w.center.refresh();
+  assert.deepEqual(w.shown, [event(1), event(1)], 'what was pending for a previous session is forgotten');
+});
+
+test('a session that ends while the permission is being read shows and reports nothing', async () => {
+  const w = world();
+  let answer!: (granted: boolean) => void;
+  const center = new NoticeCenter({ api: { list: async () => [notice(1)], receipt: async (eventId, outcome) => { w.received.push([eventId, outcome]); } },
+    presenter: { present: async item => { w.shown.push(item.eventId); } }, permission: { granted: () => new Promise<boolean>(resolve => { answer = resolve; }) } });
+  const refreshing = center.refresh();
+  while (!answer) await new Promise(resolve => setTimeout(resolve, 0));
+  center.clear();
+  answer(true);
+  await refreshing;
+  assert.deepEqual(w.shown, [], 'nothing is presented after the session ended');
+  assert.deepEqual(w.received, []);
+  assert.deepEqual(center.getSnapshot(), { status: 'idle', notices: [] });
+});
+
 test('an unconfirmed notice is offered to the device again', async () => {
   const w = world({ notices: [notice(1, 'unconfirmed')] });
   await w.center.refresh();
@@ -98,6 +134,13 @@ test('ending the session clears the notices and nothing started before it reache
   assert.deepEqual(w.shown, []);
   assert.deepEqual(w.received, []);
   assert.deepEqual(w.center.getSnapshot(), { status: 'idle', notices: [] });
+});
+
+test('a claim status notice is accepted only with the claims category', () => {
+  const claim = notice(9, 'offered', 'claim_status_changed');
+  assert.equal(claim.category, 'claims');
+  assert.deepEqual(parseNotices(wire([claim])).map(item => [item.kind, item.category]), [['claim_status_changed', 'claims']]);
+  assert.throws(() => parseNotices(wire([{ ...claim, category: 'policy' }])), NoticeFailure);
 });
 
 test('the server list is accepted only with exactly the contract fields, kinds and states', () => {

@@ -35,7 +35,7 @@ jobs:
         run: node tools/promotion-policy.mjs
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
@@ -79,6 +79,8 @@ jobs:
         run: npm run test:partner-authorizations:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:advisor-sale-authorizations:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:advisor-sale:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:partner-portal:sql
       - if: steps.reuse.outputs.reused != 'true'

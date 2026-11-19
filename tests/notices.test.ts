@@ -9,7 +9,7 @@ import { mountNotices } from '../backend/policy-claims-payments/src/adapters/inb
 import { ExpiryNotices, EXPIRY_WINDOW_MS } from '../backend/policy-claims-payments/src/application/expiry-notices';
 import { Notices, type PushChoices } from '../backend/policy-claims-payments/src/application/notices';
 import type { NoticeStore } from '../backend/policy-claims-payments/src/application/ports/notice';
-import { dispatchConsumer, noticeFrom, type Notice } from '../backend/policy-claims-payments/src/domain/notice';
+import { claimNoticeFrom, dispatchConsumer, noticeFrom, type Notice } from '../backend/policy-claims-payments/src/domain/notice';
 import { memoryNoticeStore } from './support/notice-fakes';
 
 const A = '10000000-0000-4000-8000-00000000000a';
@@ -231,4 +231,17 @@ test('an expiry notice follows the policy choice, and only a stored notice with 
   const service = new Notices(store, clock);
   assert.deepEqual(await service.list({ clientId: A }, { ...on, policy: false }, trace), []);
   assert.deepEqual((await new Notices(memoryStore([{ owner: A, notice: stored! }]).store, clock).list({ clientId: A }, on, trace)).map(item => item.kind), ['policy_expiring']);
+});
+
+test('a claim status notice answers to the claims choice, names only the policy and is told apart from the other categories', async () => {
+  const claim = claimNoticeFrom({ eventId: event(8), policyId: policyId.toUpperCase(), createdAt: new Date('2026-11-18T11:00:00.000Z') });
+  assert.deepEqual(claim, { eventId: event(8), kind: 'claim_status_changed', category: 'claims', policyId, occurredAt: '2026-11-18T11:00:00.000Z' });
+  assert.equal(claimNoticeFrom({ eventId: 'nope', policyId, createdAt: new Date() }), null);
+  assert.equal(claimNoticeFrom({ eventId: event(8), policyId: 'nope', createdAt: new Date() }), null);
+  const owner = { clientId: A, subjectToken: '20000000-0000-4000-8000-00000000000a' };
+  const withClaims = { ...on, claims: true };
+  assert.deepEqual((await new Notices(memoryStore([{ owner: A, notice: claim! }]).store, clock).list(owner, withClaims, trace)).map(item => [item.kind, item.category, item.state]), [['claim_status_changed', 'claims', 'offered']]);
+  const suppressed = memoryStore([{ owner: A, notice: claim! }]);
+  assert.deepEqual(await new Notices(suppressed.store, clock).list(owner, { ...withClaims, claims: false }, trace), [], 'a claims choice that is off offers nothing');
+  assert.deepEqual(suppressed.writes, [`${dispatchConsumer}:suppressed_preference`]);
 });

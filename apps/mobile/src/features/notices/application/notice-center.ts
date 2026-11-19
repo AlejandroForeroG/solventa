@@ -11,6 +11,8 @@ export class NoticeCenter {
   private running = false;
   // Changes when the session ends, so that work started for one customer never touches what comes after.
   private epoch = 0;
+  // Notices already shown whose receipt could not be delivered: the next collection retries only the receipt, never the presentation.
+  private readonly unreported = new Map<string, ReceiptOutcome>();
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly deps: Dependencies) {}
@@ -30,11 +32,13 @@ export class NoticeCenter {
       this.emit({ status: 'ready', notices: current });
       for (const notice of notices) {
         if (notice.state !== 'offered' && notice.state !== 'unconfirmed') continue;
-        const outcome = await this.deliver(notice);
+        const outcome = this.unreported.get(notice.eventId) ?? await this.deliver(notice, epoch);
         if (epoch !== this.epoch) return;
         // Without a certain outcome nothing is reported: the notice stays offered and the next collection tries again.
         if (!outcome) continue;
+        this.unreported.set(notice.eventId, outcome);
         try { await this.deps.api.receipt(notice.eventId, outcome); } catch { continue; }
+        this.unreported.delete(notice.eventId);
         if (epoch !== this.epoch) return;
         current = current.map(item => item.eventId === notice.eventId ? { ...item, state: outcome } : item);
         this.emit({ status: 'ready', notices: current });
@@ -48,13 +52,17 @@ export class NoticeCenter {
   clear() {
     this.epoch++;
     this.running = false;
+    this.unreported.clear();
     if (this.snapshot.status !== 'idle' || this.snapshot.notices.length) this.emit({ status: 'idle', notices: [] });
   }
 
-  private async deliver(notice: Notice): Promise<ReceiptOutcome | null> {
+  private async deliver(notice: Notice, epoch: number): Promise<ReceiptOutcome | null> {
     try {
       // The operating system's permission is device-local: without it the notice is reported as not presentable, never as presented.
-      if (!await this.deps.permission.granted()) return 'permission_denied';
+      const granted = await this.deps.permission.granted();
+      // The session may have ended while the permission was being read: nothing is shown to whoever is next.
+      if (epoch !== this.epoch) return null;
+      if (!granted) return 'permission_denied';
       await this.deps.presenter.present(notice);
       return 'presented';
     } catch { return null; }

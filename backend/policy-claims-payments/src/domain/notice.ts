@@ -1,6 +1,6 @@
 // What a customer is told about their policy, derived from the notices Policy already stores with its business effect.
-export type NoticeCategory = 'policy' | 'payments';
-export type NoticeKind = 'parametric_payment_confirmed' | 'policy_lifecycle_changed' | 'policy_expiring';
+export type NoticeCategory = 'policy' | 'payments' | 'claims';
+export type NoticeKind = 'parametric_payment_confirmed' | 'policy_lifecycle_changed' | 'policy_expiring' | 'claim_status_changed';
 // offered: handed to the device and not yet confirmed; unconfirmed: offered long ago without a receipt, so presentation is uncertain.
 export type NoticeState = 'offered' | 'unconfirmed' | 'presented' | 'permission_denied';
 export type ReceiptOutcome = 'presented' | 'permission_denied';
@@ -9,6 +9,8 @@ export type DispatchOutcome = 'offered' | 'suppressed_preference';
 export type Notice = { eventId: string; kind: NoticeKind; category: NoticeCategory; policyId: string; occurredAt: string };
 
 export const noticeEventTypes = ['policy.indemnity.notice', 'policy.lifecycle.notice', 'policy.expiry.notice'] as const;
+// A claim notice for the customer is stored with the claim decision itself, addressed to the customer's subject; it has no outbox event of its own.
+export const claimNoticeEventType = 'claim.customer.notice';
 export const dispatchConsumer = 'notice.dispatch.v1';
 export const receiptConsumer = 'notice.receipt.v1';
 
@@ -21,6 +23,12 @@ const shape: Record<string, { kind: NoticeKind; category: NoticeCategory }> = {
   'policy.lifecycle.notice': { kind: 'policy_lifecycle_changed', category: 'policy' },
   'policy.expiry.notice': { kind: 'policy_expiring', category: 'policy' },
 };
+
+// A claim notice answers to the claims choice. It names the policy of the claim and nothing about the decision or the reason.
+export function claimNoticeFrom(row: { eventId: string; policyId: string; createdAt: Date }): Notice | null {
+  if (!UUID.test(row.eventId) || !UUID.test(row.policyId)) return null;
+  return { eventId: row.eventId.toLowerCase(), kind: 'claim_status_changed', category: 'claims', policyId: row.policyId.toLowerCase(), occurredAt: row.createdAt.toISOString() };
+}
 
 // A stored notice becomes a view only when it has exactly the identity of the kind it claims; anything else is ignored, never shown.
 export function noticeFrom(row: { eventId: string; eventType: string; payload: unknown; createdAt: Date }): Notice | null {
