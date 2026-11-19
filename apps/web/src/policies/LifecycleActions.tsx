@@ -67,6 +67,6 @@ export function LifecycleActions({ policy, onChanged, onSessionLost }: { policy:
     <div className="check"><input id="lifecycle-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="lifecycle-confirm">{t('confirm')}</label></div>
     {error && <p role="alert">{t(error)}</p>}
     <div className="actions"><button type="button" className="btn btn-secondary" disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
-      onClick={() => void submit()}>{busy ? t('saving') : t(action)}</button></div>
+      onClick={() => void submit()}>{busy ? t('saving') : t(`submit.${action}`)}</button></div>
   </section>;
 }

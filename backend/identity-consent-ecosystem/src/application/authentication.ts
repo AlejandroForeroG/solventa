@@ -5,13 +5,18 @@ export interface IdentitySessions {
   find(identity: VerifiedIdentity): Promise<Principal | null>;
   revoke(identity: VerifiedIdentity, correlationId?: string): Promise<void>;
 }
+export interface LoginSessions extends Pick<IdentitySessions, 'find' | 'revoke'> {
+  register(identity: VerifiedIdentity): Promise<Principal | null>;
+}
 
 // Only the provider adapter may produce VerifiedIdentity after token validation.
 export class Authentication {
-  constructor(private readonly sessions: IdentitySessions) {}
+  constructor(private readonly sessions: LoginSessions) {}
   async login(identity: VerifiedIdentity): Promise<Principal> {
     if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) throw new Error('identity_unverified');
-    return this.sessions.open(identity);
+    const principal = await this.sessions.register(identity);
+    if (!principal) throw new Error('session_invalid');
+    return principal;
   }
   async principal(identity: VerifiedIdentity): Promise<Principal | null> {
     if (!identity.emailVerified) return null;

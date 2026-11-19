@@ -342,10 +342,17 @@ export class SqlFinancialStore implements FinancialStore {
     return this.connection(async db => recordFrom((await db.query<RecordRow>(selectRecord()
       + ' WHERE p.id=$1 AND f.client_id=$2 AND p.subject_token=$3', [id, actor.clientId, actor.subjectToken])).rows));
   }
-  readOwnPolicies(actor: FinancialActor, limit: number, includeEnded = true): Promise<PolicyRecord[]> {
-    return this.connection(async db => (await db.query<RecordRow>(selectRecord()
-      + " WHERE f.client_id=$1 AND p.subject_token=$2 AND p.status='issued' AND ($4 OR lc.policy_id IS NULL) ORDER BY p.effective_until DESC,p.id LIMIT $3",
-    [actor.clientId, actor.subjectToken, limit, includeEnded])).rows.map(row => {
+  readOwnPolicies(actor: FinancialActor, limit: number, includeEnded = true, afterPolicyId?: string, policyId?: string): Promise<PolicyRecord[]> {
+    return this.connection(async db => (await db.query<RecordRow>(`WITH boundary AS (
+      SELECT p.id,p.effective_until FROM policy.policies p JOIN policy.financial_contracts f ON f.policy_id=p.id
+      WHERE p.id=$5::UUID AND f.client_id=$1 AND p.subject_token=$2
+    ) ` + selectRecord()
+      + ` WHERE f.client_id=$1 AND p.subject_token=$2 AND p.status='issued' AND ($4 OR lc.policy_id IS NULL)
+        AND ($5::UUID IS NULL OR EXISTS(SELECT 1 FROM boundary b WHERE p.effective_until<b.effective_until
+          OR (p.effective_until=b.effective_until AND p.id>b.id)))
+        AND ($6::UUID IS NULL OR p.id=$6::UUID)
+        ORDER BY p.effective_until DESC,p.id LIMIT $3`,
+    [actor.clientId, actor.subjectToken, limit, includeEnded, afterPolicyId ?? null, policyId ?? null])).rows.map(row => {
       const record = recordFrom([row]);
       if (!record) throw new InvalidFinancialRecord();
       return record;

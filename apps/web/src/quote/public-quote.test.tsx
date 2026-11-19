@@ -172,6 +172,10 @@ describe('public estimate and sign-in handoff', () => {
     expect(screen.getByLabelText(/Edad/)).toHaveFocus();
     expect(screen.getByLabelText(/Edad/)).toHaveAttribute('aria-invalid', 'true');
     expect(fetchMock).not.toHaveBeenCalled();
+    await fill(user);
+    for (const label of [/Edad/, /Monto/, /Plazo/]) expect(screen.getByLabelText(label)).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText(/Plazo/)).toHaveFocus();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('still calculates when session checking is unavailable and retains inputs after a service failure', async () => {

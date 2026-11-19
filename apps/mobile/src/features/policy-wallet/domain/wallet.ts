@@ -7,7 +7,8 @@ export type WalletSource = 'online' | 'stored';
 export type WalletSnapshot =
   | { status: 'locked'; failure?: 'denied' | 'no_device_lock' }
   | { status: 'loading' }
-  | { status: 'ready'; source: WalletSource; syncedAt: number; policies: CachedPolicy[]; hasMore: boolean; stored: boolean }
+  | { status: 'ready'; source: WalletSource; syncedAt: number; policies: CachedPolicy[]; hasMore: boolean; stored: boolean;
+      page: number | null; nextCursor: string | null }
   | { status: 'failed'; failure: 'unavailable' | 'no_copy' | 'unauthorized' | 'invalid_response' | 'integrity' | 'discard_pending' };
 
 // `integrity` is the server refusing a policy whose sealed evidence does not verify: it is a rejection, never an outage.

@@ -80,7 +80,7 @@ test('saving an open editor keeps its content revision after a remote refresh', 
   const renderWorkspace = () => { cursor = 0; return (node.type as (props: unknown) => Node)(node.props); };
   const find = (value: Node, match: (node: Node) => boolean): Node | undefined => match(value) ? value
     : value.children?.filter((child): child is Node => !!child && typeof child === 'object').map(child => find(child, match)).find(Boolean);
-  const editAction = find(renderWorkspace(), value => value.type === 'Action' && value.props.label === 'Abrir')!;
+  const editAction = find(renderWorkspace(), value => value.type === 'Action' && value.props.label === 'Editar borrador')!;
   assert.ok(editAction); (editAction.props.onPress as () => void)();
   snapshot = { status: 'ready', owner: who, entries: [{ ...original, confirmed: { ...original.confirmed, revision: 2 }, content: { ...content, place: 'Remote place' } }] };
   const editor = renderWorkspace(); assert.equal((editor.type as { name: string }).name, 'Editor');
