@@ -80,6 +80,8 @@ jobs:
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:advisor-sale-authorizations:sql
       - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:advisor-sale:sql
+      - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:partner-portal:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:partner-quota:sql

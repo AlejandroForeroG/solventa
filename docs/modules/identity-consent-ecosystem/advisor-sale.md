@@ -64,6 +64,7 @@ The advisor sees the offer code (`offerId`) and gives it to the customer outside
 - `tests/advisor-offers.test.ts`: the use case, the route, the Identity adapter and the scoped key.
 - `tests/advisor-sale-journey.test.ts`: the real gateway, Identity and Acquisition routes with in-memory stores and mock signals: a complete preparation, a foreign advisor, an invented authorization, a customer session, revocation of the authorization and of the consent, expiry, an Identity outage and retries without duplicates; every response is validated against the committed contract.
 - `npm run test:advisor-sale-authorizations:sql` runs the real SQL suite with the runtime role: atomic audit and outbox, exact advisor lookup, ownership, idempotent revocation, expiry and the schema bounds.
+- `npm run test:advisor-sale:sql` runs the complete sale on one disposable database with the three owners' schemas and runtime roles: the customer's authorization, the advisor's offer, the signed acceptance by the customer, its import into Policy, the mock charge and signature, issuance, the replays without duplicates, the policy's path back to the advisor through its offer, and the denial after revocation or withdrawn consent. The web sessions, the customer's consent check and the external providers are stand-ins.
 - `tests/pact/sale.consumer.test.ts`: the web client's contract with the gateway, verified against the real handlers.
 - `apps/web/src/sale/sale.test.tsx`: the screens.
 
@@ -74,3 +75,4 @@ The advisor sees the offer code (`offerId`) and gives it to the customer outside
 - Policy stores no advisor field: the link is the offer's decision capture, reachable from the policy's `offerId`.
 - Professional permissions are granted administratively; there is no self-service registration of advisors.
 - The providers are mocks: no real signal source, payment or signature is involved.
+- The complete-sale suite proves the owners' real SQL and use cases together, not a real browser session of two accounts; the deployed environment still needs an advisor permission granted by a SQL administrator for that.
