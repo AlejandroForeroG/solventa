@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -114,6 +114,19 @@ describe('protected reports workspace', () => {
     await screen.findByRole('table');
     await user.click(screen.getByRole('button', { name: 'Reaseguradora' }));
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/reports?destination=reinsurer', expect.anything()));
+  });
+
+  it('loads when the window becomes visible again after being opened in the background', async () => {
+    let hidden = true;
+    vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+    const fetch = vi.fn().mockImplementation(async () => response(page));
+    vi.stubGlobal('fetch', fetch); show();
+    expect(await screen.findByText('Vuelve a la ventana para consultar de nuevo.')).toBeVisible();
+    expect(fetch).not.toHaveBeenCalled();
+    hidden = false;
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' })).toBeVisible();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps English copy and passes the accessibility check', async () => {
