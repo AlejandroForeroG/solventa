@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import type { CachedPolicy } from '../../policy-cache/domain/cached-policy';
 import { policyReference } from '../../policy-wallet/domain/wallet';
@@ -68,7 +68,7 @@ export function ClaimReportForm({ policy, copy, locale, session, initial, prepar
   };
   const goBack = () => { if (step === 'review') { flow.backToEditing(); setStep('capture'); } else router.back(); };
 
-  const report = <Page title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
+  const report = <Page focusKey={step} title={step === 'capture' ? copy.title : copy.review.heading} subtitle={`${copy.step(step === 'capture' ? 1 : 2)} · ${header}`}>
     {preparationNotice && step === 'capture' && <Text style={ui.notice}>{preparationNotice}</Text>}
     {step === 'capture' ? <>
       <Group label={copy.fields.eventType} issues={issues} field="eventType" copy={copy}>
@@ -164,7 +164,10 @@ function Group({ label, field, issues, copy, children }: { label: string; field:
 }
 
 function Summary({ label, value }: { label: string; value: string }) {
-  return <View style={ui.summaryRow}><Text style={ui.caption}>{label}</Text><Text style={ui.summaryValue}>{value}</Text></View>;
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 380 || fontScale > 1.2;
+  return <View style={[ui.summaryRow, stacked && ui.summaryStacked]}><Text style={ui.caption}>{label}</Text>
+    <Text style={[ui.summaryValue, stacked && ui.summaryValueStacked]}>{value}</Text></View>;
 }
 
 function Item({ item, copy, locale, position, onRemove }: { item: EvidenceItem; copy: ClaimReportCopy; locale: ClaimReportLocale; position: number; onRemove?: () => void }) {
@@ -207,7 +210,7 @@ function When({ value, from, now, copy, locale, onChange }: { value: Date; from:
 }
 
 function Result({ copy, locale, phase, header }: { copy: ClaimReportCopy; locale: ClaimReportLocale; phase: { claimNumber: string; submittedAt: string; files: number; bytes: number }; header: string }) {
-  return <Page title={copy.done.heading} subtitle={header}>
+  return <Page focusKey="submitted" title={copy.done.heading} subtitle={header}>
     <View style={ui.banner} accessibilityLiveRegion="polite">
       <Text style={ui.bannerLabel}>{copy.done.caseNumber.toUpperCase()}</Text>
       <Text accessibilityRole="header" style={ui.caseNumber}>{phase.claimNumber}</Text>
