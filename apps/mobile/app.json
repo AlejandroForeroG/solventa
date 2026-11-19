@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.anonymous.solventa",
-      "blockedPermissions": ["android.permission.READ_MEDIA_IMAGES", "android.permission.DETECT_SCREEN_CAPTURE"],
+      "blockedPermissions": ["android.permission.READ_MEDIA_IMAGES"],
       "adaptiveIcon": {
         "backgroundColor": "#0B6B5F",
         "foregroundImage": "./assets/adaptive-icon.png"
