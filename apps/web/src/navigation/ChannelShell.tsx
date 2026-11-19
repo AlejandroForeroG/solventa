@@ -57,10 +57,11 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const path = window.location.pathname;
-  const workspace = workspaceLinks.some(item => (item.href === path || item.href !== '/' && path.startsWith(item.href + '/')));
+  const matchesPath = (href: string) => path === href || (href !== '/' && path.startsWith(`${href}/`));
+  const workspace = workspaceLinks.some(item => matchesPath(item.href));
   const area = t(workspace ? 'navigation.workspace' : 'navigation.account');
   const links = workspace ? workspaceLinks : customerLinks;
-  const current = links.find(item => (item.href === path || item.href !== '/' && path.startsWith(item.href + '/')));
+  const current = links.find(item => matchesPath(item.href));
   const dialog = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const stopBusyNavigation = (event: MouseEvent<HTMLAnchorElement>) => { if (busy) event.preventDefault(); };
@@ -73,7 +74,7 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
     <a className="navigation-brand" href="/" aria-label={t('landing.home')} aria-disabled={busy || undefined} onClick={stopBusyNavigation}><img src={brandAssets.logo.white} width={150} alt="Solventa" /></a>
     <p className="navigation-section">{area}</p>
     <nav aria-label={t('navigation.primary')} className="navigation-links">
-      {links.map(item => <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined} aria-disabled={busy || undefined} onClick={stopBusyNavigation}>
+      {links.map(item => <a key={item.href} href={item.href} aria-current={matchesPath(item.href) ? 'page' : undefined} aria-disabled={busy || undefined} onClick={stopBusyNavigation}>
         <Icon name={item.icon} /><span>{t(item.label)}</span>
       </a>)}
     </nav>

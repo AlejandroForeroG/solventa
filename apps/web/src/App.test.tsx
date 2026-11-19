@@ -76,6 +76,26 @@ describe('audit route in the application', () => {
 });
 
 describe('claims inbox route in the application', () => {
+  it.each([
+    { prefix: '/siniestros', audience: 'analyst', navigation: 'Consola operativa', label: 'Siniestros' },
+    { prefix: '/mis-siniestros', audience: 'customer', navigation: 'Mi cuenta', label: 'Mis siniestros' }
+  ])('keeps the case and its active navigation context on $prefix', async ({ prefix, audience, navigation, label }) => {
+    const claimId = claimsExamples.ownedCases.items[0].claimId;
+    window.history.replaceState(null, '', `${prefix}/${claimId}`);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: true });
+      return json({ ...claimsExamples.caseFile, access: audience === 'analyst' ? 'assigned' : 'customer' });
+    });
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: `Expediente ${claimsExamples.caseFile.claimNumber}` })).toBeVisible();
+    const sidebar = within(screen.getByRole('complementary', { name: navigation }));
+    expect(sidebar.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
+    expect(sidebar.getByRole('link', { name: label })).toHaveAttribute('href', prefix);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`${claimId}`))).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    if (audience === 'customer') expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
+  });
+
   it('requires sign-in and does not render the public calculator on the claims route', async () => {
     window.history.replaceState(null, '', '/siniestros'); serve(401); render(<App />);
     expect(await screen.findByRole('main')).toBeVisible();
@@ -95,6 +115,8 @@ describe('claims inbox route in the application', () => {
     });
     render(<App />); const user = userEvent.setup();
     expect(await screen.findByRole('table', { name: 'Bandeja de siniestros' })).toBeVisible();
+    expect(within(screen.getByRole('table')).getByRole('link', { name: claimsExamples.page.items[0].claimNumber }))
+      .toHaveAttribute('href', `/siniestros/${claimsExamples.page.items[0].claimId}`);
     await waitFor(() => expect(screen.getByTestId('live-region')).toBeEmptyDOMElement());
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
