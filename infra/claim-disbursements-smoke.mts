@@ -10,6 +10,7 @@ import { HmacFinancialIntegrity } from '../backend/policy-claims-payments/src/ad
 import { PaymentDeadline } from '../backend/policy-claims-payments/src/adapters/outbound/disbursement-deadline';
 import { issuanceTimeContent, offerContent, type AcceptedOffer } from '../backend/policy-claims-payments/src/domain/financial';
 import type { DisbursementStore, DisbursementTransaction } from '../backend/policy-claims-payments/src/application/ports/claim-disbursement';
+import { lifecycleContent, type LifecycleChange } from '../backend/policy-claims-payments/src/domain/policy-lifecycle';
 
 const config = await settings('local');
 assert.equal(config.database, 'solventa_local');
@@ -45,27 +46,30 @@ try {
     product: 'vida_hipotecario', premium: '100.0000', currency: 'COP', coverage: { kind: 'mortgage_life', sumInsured: '100000.0000' },
     effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveUntil: '2027-01-01T00:00:00.000Z', expiresAt: '2026-01-01T01:00:00.000Z',
     acceptedAt: '2026-01-01T00:00:01.000Z', ruleVersion: 'academic-financial-1' };
-  await db.query(`INSERT INTO policy.policies(id,subject_token,offer_id,offer_version,idempotency_key,request_hash,status,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
-    VALUES($1,$2,$3,1,'synthetic-policy',$4,'issued',100,'COP',$5,$6,$7,$8)`,
-  [policyId, subject, offer.offerId, 'a'.repeat(64), JSON.stringify(offer.coverage), offer.effectiveFrom, offer.effectiveUntil, randomUUID()]);
-  await db.query(`INSERT INTO policy.financial_contracts(policy_id,client_id,acceptance_id,acceptance_event_id,terms,terms_hash,document,document_hash,decision_capture)
+  const seedPolicy = async (selectedPolicyId = policyId, selectedOffer = offer) => {
+  await db!.query(`INSERT INTO policy.policies(id,subject_token,offer_id,offer_version,idempotency_key,request_hash,status,premium,currency,coverage_snapshot,effective_from,effective_until,correlation_id)
+    VALUES($1,$2,$3,1,$1::STRING,$4,'issued',100,'COP',$5,$6,$7,$8)`,
+  [selectedPolicyId, subject, selectedOffer.offerId, 'a'.repeat(64), JSON.stringify(selectedOffer.coverage), selectedOffer.effectiveFrom, selectedOffer.effectiveUntil, randomUUID()]);
+  await db!.query(`INSERT INTO policy.financial_contracts(policy_id,client_id,acceptance_id,acceptance_event_id,terms,terms_hash,document,document_hash,decision_capture)
     VALUES($1,$2,$3,$4,$5,$6,'synthetic document',$7,'{}')`,
-  [policyId, customer, offer.acceptanceId, randomUUID(), JSON.stringify(offer), await integrity.digest(offerContent(offer)), documentHash]);
-  await db.query(`INSERT INTO policy.policy_signatures(policy_id,document_hash,provider,receipt,signed_at,time_seal)
-    VALUES($1,$2,'synthetic-signature-v1',$3,$4,$5)`, [policyId, documentHash,
-    await integrity.digest(JSON.stringify(['mock-signature-v1', policyId, documentHash])), issuedAt,
-    await integrity.digest(issuanceTimeContent(policyId, documentHash, issuedAt))]);
+  [selectedPolicyId, customer, selectedOffer.acceptanceId, randomUUID(), JSON.stringify(selectedOffer), await integrity.digest(offerContent(selectedOffer)), documentHash]);
+  await db!.query(`INSERT INTO policy.policy_signatures(policy_id,document_hash,provider,receipt,signed_at,time_seal)
+    VALUES($1,$2,'synthetic-signature-v1',$3,$4,$5)`, [selectedPolicyId, documentHash,
+    await integrity.digest(JSON.stringify(['mock-signature-v1', selectedPolicyId, documentHash])), issuedAt,
+    await integrity.digest(issuanceTimeContent(selectedPolicyId, documentHash, issuedAt))]);
   const premium = randomUUID();
-  await db.query(`INSERT INTO policy.payments(id,policy_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
-    VALUES($1,$2,'premium','initial-premium',$3,100,'COP','confirmed',$4)`, [premium, policyId, 'b'.repeat(64), randomUUID()]);
-  await db.query(`INSERT INTO policy.financial_payment_intents(policy_id,operation,payment_id,payment_key,request_hash)
-    VALUES($1,'premium',$2,'initial-premium',$3)`, [policyId, premium, 'b'.repeat(64)]);
+  await db!.query(`INSERT INTO policy.payments(id,policy_id,operation,idempotency_key,request_hash,amount,currency,status,correlation_id)
+    VALUES($1,$2,'premium','initial-premium',$3,100,'COP','confirmed',$4)`, [premium, selectedPolicyId, 'b'.repeat(64), randomUUID()]);
+  await db!.query(`INSERT INTO policy.financial_payment_intents(policy_id,operation,payment_id,payment_key,request_hash)
+    VALUES($1,'premium',$2,'initial-premium',$3)`, [selectedPolicyId, premium, 'b'.repeat(64)]);
+  };
+  await seedPolicy();
   let sequence = 0;
-  const seed = async (status = 'approved') => {
+  const seed = async (status = 'approved', selectedPolicyId = policyId, occurredAt = '2026-11-01T00:00:00.000Z') => {
     const claimId = randomUUID(), decisionId = randomUUID(); sequence++;
     await db!.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id,claim_number,submitted_at,assignee_id)
-      VALUES($1,$2,$1::STRING,$3,$4,'2026-11-01T00:00:00Z',$5,$6,now(),$7)`,
-    [claimId, policyId, 'c'.repeat(64), status, randomUUID(), 'SIN-2026-' + String(sequence).padStart(5, '0'), analyst]);
+      VALUES($1,$2,$1::STRING,$3,$4,$8,$5,$6,now(),$7)`,
+    [claimId, selectedPolicyId, 'c'.repeat(64), status, randomUUID(), 'SIN-2026-' + String(sequence).padStart(5, '0'), analyst, occurredAt]);
     await db!.query(`INSERT INTO policy.claim_decisions(id,claim_id,actor_id,idempotency_key_hash,request_hash,action,previous_state,resulting_state,reason,evidence_ids,decision_capture,correlation_id)
       VALUES($1,$2,$3,$4,$4,'approve','in_review','approved','Synthetic verified approval','[]','{}',$5)`,
     [decisionId, claimId, analyst, 'e'.repeat(64), randomUUID()]);
@@ -155,10 +159,48 @@ try {
   await db.query("UPDATE policy.indemnities SET currency='USD' WHERE id=(SELECT indemnity_id FROM policy.payments WHERE id=$1)", [changedCurrency.payment.paymentId]);
   assert.equal((await service.recoverPayment(changedCurrency.payment.paymentId)).status, 'unavailable');
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id=$1', [changedCurrency.payment.paymentId])).rows[0].n, 0);
+  for (const action of ['cancelled', 'modified', 'renewed'] as const) {
+    const endedPolicyId = randomUUID();
+    await seedPolicy(endedPolicyId, { ...offer, acceptanceId: randomUUID(), offerId: randomUUID() });
+    const earlier = await seed('approved', endedPolicyId, '2026-10-31T23:59:59.999Z');
+    const accepted = await service.request(earlier, { amount: '1.0000' }, actor());
+    assert.equal(accepted.status, 'ok'); if (accepted.status !== 'ok') throw Error('lifecycle_intent_missing');
+    assert.equal((await create(failAfterFinish).recoverPayment(accepted.payment.paymentId)).status, 'unavailable');
+    const change: LifecycleChange = { policyId: endedPolicyId, changeId: randomUUID(), action, reason: 'customer_request',
+      at: '2026-11-01T00:00:00.000Z', replacementPolicyId: action === 'cancelled' ? null : policyId,
+      sourceDocumentHash: documentHash, replacementDocumentHash: action === 'cancelled' ? null : documentHash,
+      refund: 'not_automated', ruleVersion: 'academic-policy-lifecycle-1', documentHash: '' };
+    change.documentHash = await integrity.digest(lifecycleContent(change));
+    // Each fixture keeps its own unique replacement link, as the real append-only schema requires.
+    if (action !== 'cancelled') {
+      const replacementId = randomUUID();
+      await seedPolicy(replacementId, { ...offer, acceptanceId: randomUUID(), offerId: randomUUID() });
+      change.replacementPolicyId = replacementId; change.documentHash = await integrity.digest(lifecycleContent(change));
+    }
+    await db.query(`INSERT INTO policy.policy_lifecycle_changes(policy_id,change_id,actor_id,command_key,request_hash,replacement_policy_id,payload,occurred_at)
+      VALUES($1,$2,$3,$4,$4,$5,$6,$7)`, [endedPolicyId, change.changeId, customer, change.documentHash, change.replacementPolicyId, JSON.stringify(change), change.at]);
+    for (const occurredAt of [change.at, '2026-11-01T00:00:00.001Z']) {
+      const outside = await seed('approved', endedPolicyId, occurredAt);
+      assert.deepEqual(await service.request(outside, { amount: '1.0000' }, actor()), { status: 'conflict' });
+      assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.indemnities WHERE claim_id=$1', [outside])).rows[0].n, 0);
+    }
+    const covered = await seed('approved', endedPolicyId, '2026-10-31T23:59:59.999Z');
+    assert.equal((await service.request(covered, { amount: '1.0000' }, actor())).status, 'ok');
+    const replay = await service.request(earlier, { amount: '1.0000' }, actor());
+    assert.equal(replay.status === 'ok' && replay.replayed, true);
+    assert.equal((await service.recoverPayment(accepted.payment.paymentId)).status, 'confirmed');
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id=$1', [accepted.payment.paymentId])).rows[0].n, 1);
+    const captured = (await db.query("SELECT payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='claim.disbursement.requested'", [covered])).rows[0].payload;
+    assert.deepEqual(captured.inputs.policyLifecycle, change); assert.equal(captured.rule.version, '2');
+    await db.query('UPDATE policy.policy_lifecycle_changes SET payload=$2 WHERE policy_id=$1', [endedPolicyId, JSON.stringify({ ...change, at: '2026-11-02T00:00:00.000Z' })]);
+    await assert.rejects(service.read(covered, actor()), /integrity/);
+  }
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['assigned-grant-and-owner-boundary', 'expired-lease',
     'intent-before-provider', 'replay-and-concurrent-replay', 'changed-amount-conflict', 'provider-confirmed-before-local-rollback',
     'atomic-payment-claim-audit-notices', 'recovery-without-duplicate', 'concurrent-settlement', 'capture-schema', 'concurrent-coverage-reservation', 'late-sql-response-denied',
-    'owner-receipt-isolation', 'owned-pagination-without-financial-effects', 'indemnity-currency-integrity'] }));
+    'owner-receipt-isolation', 'owned-pagination-without-financial-effects', 'indemnity-currency-integrity',
+    'lifecycle-cutoff-three-actions-at-and-after', 'pre-lifecycle-occurrence-accepted', 'accepted-payment-recovery-after-lifecycle',
+    'lifecycle-capture-and-row-binding'] }));
 } finally {
   await db?.end().catch(() => {});
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`).catch(() => {});

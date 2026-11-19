@@ -5,8 +5,10 @@ import type { Payment } from '../../application/ports/financial';
 import type { DisbursementState } from '../../domain/claim-disbursement';
 import { addClaimNotices } from './sql-claim-notices';
 import type { ReportOwner } from '../../application/ports/claim-report';
+import { isLifecycleChange } from '../../domain/policy-lifecycle';
 
-type Row = Omit<DisbursementContext, 'occurredAt' | 'issuedAt' | 'payment'> & { occurredAt: Date; issuedAt: Date; paymentId: string | null; amount: string | null;
+type Row = Omit<DisbursementContext, 'occurredAt' | 'issuedAt' | 'payment' | 'lifecycle'> & { occurredAt: Date; issuedAt: Date;
+  lifecyclePayload: unknown; lifecycleId: string | null; lifecycleAt: Date | null; paymentId: string | null; amount: string | null;
   paymentStatus: Payment['status'] | null; paymentHash: string | null; paymentKey: string | null; reference: string | null; currency: string | null; claimNumber: string; paymentUpdatedAt: Date | null };
 
 const contextSql = `SELECT c.claim_number AS "claimNumber",c.id AS "claimId",c.policy_id AS "policyId",c.status AS state,c.occurred_at AS "occurredAt",c.assignee_id AS "analystId",
@@ -14,7 +16,7 @@ const contextSql = `SELECT c.claim_number AS "claimNumber",c.id AS "claimId",c.p
   sig.signed_at AS "issuedAt",sig.receipt AS "signatureReceipt",sig.time_seal AS "timeSeal",sig.document_hash AS "documentHash",
   premium.status AS "premiumStatus",pay.id AS "paymentId",pay.amount::STRING AS amount,pay.currency,pay.status AS "paymentStatus",
   pay.request_hash AS "paymentHash",pay.idempotency_key AS "paymentKey",pay.provider_reference AS reference,pay.updated_at AS "paymentUpdatedAt",
-  i.id AS "indemnityId",i.amount::STRING AS "indemnityAmount",
+  i.id AS "indemnityId",i.amount::STRING AS "indemnityAmount",lc.payload AS "lifecyclePayload",lc.change_id AS "lifecycleId",lc.occurred_at AS "lifecycleAt",
   (SELECT COALESCE(sum(other.amount),0)::DECIMAL(19,4)::STRING FROM policy.indemnities other
     WHERE other.policy_id=c.policy_id AND other.claim_id<>c.id AND other.status<>'declined') AS "reservedAmount"
   FROM policy.claims c JOIN policy.policies p ON p.id=c.policy_id
@@ -23,12 +25,17 @@ const contextSql = `SELECT c.claim_number AS "claimNumber",c.id AS "claimId",c.p
   JOIN policy.policy_signatures sig ON sig.policy_id=p.id AND sig.document_hash=f.document_hash
   JOIN policy.financial_payment_intents premium_intent ON premium_intent.policy_id=p.id AND premium_intent.operation='premium'
   JOIN policy.payments premium ON premium.id=premium_intent.payment_id
+  LEFT JOIN policy.policy_lifecycle_changes lc ON lc.policy_id=p.id
   LEFT JOIN policy.payments pay ON pay.policy_id=p.id AND pay.operation='indemnity' AND pay.idempotency_key='approved-claim:'||d.id::STRING
   LEFT JOIN policy.indemnities i ON i.id=pay.indemnity_id AND i.claim_id=c.id AND i.policy_id=p.id
     AND i.amount=pay.amount AND i.currency=pay.currency AND i.status=CASE WHEN pay.status='confirmed' THEN 'paid' ELSE pay.status END`;
 
 function context(row: Row | undefined): DisbursementContext | null {
   if (!row) return null;
+  const lifecycle = row.lifecyclePayload;
+  if (row.lifecycleId !== null && (!isLifecycleChange(lifecycle) || lifecycle.policyId !== row.policyId
+    || lifecycle.changeId !== row.lifecycleId || !row.lifecycleAt || Date.parse(lifecycle.at) !== row.lifecycleAt.getTime()))
+    throw Error('claim_disbursement_integrity');
   let payment: Payment | null = null;
   if (row.paymentId) {
     if (!row.amount || !row.paymentStatus || !row.paymentHash || !row.paymentKey || row.currency !== 'COP') throw Error('invalid_claim_payment');
@@ -40,7 +47,8 @@ function context(row: Row | undefined): DisbursementContext | null {
     offer: row.offer, termsHash: row.termsHash, signatureReceipt: row.signatureReceipt, timeSeal: row.timeSeal,
     documentHash: row.documentHash, premiumStatus: row.premiumStatus, indemnityId: row.indemnityId,
     indemnityAmount: row.indemnityAmount, reservedAmount: row.reservedAmount,
-    payment, occurredAt: row.occurredAt.toISOString(), issuedAt: row.issuedAt.toISOString() };
+    payment, lifecycle: isLifecycleChange(lifecycle) ? lifecycle : null,
+    occurredAt: row.occurredAt.toISOString(), issuedAt: row.issuedAt.toISOString() };
 }
 
 class Transaction implements DisbursementTransaction {

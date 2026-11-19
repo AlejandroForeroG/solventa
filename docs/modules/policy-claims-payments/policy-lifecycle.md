@@ -8,6 +8,8 @@ Cancellation uses `replacementPolicyId: null`. All three operations preserve the
 
 ## Persistence and retries
 
+Manual approved-claim disbursements also check this sealed contractual end when accepting a new payment intent. Occurrences at or after the change return conflict, while earlier covered occurrences and stable replay/recovery of an accepted payment remain available. See [approved claim disbursements](claim-disbursements.md).
+
 Apply `0011_policy_lifecycle.sql` and its `SELECT, INSERT` runtime grants before publishing dependent code. `policy_lifecycle_changes` is append-only and has one change per source, one use per replacement, and an actor-scoped command identity with a request fingerprint. Commands lock owned source and replacement policies in deterministic order. An identical retry returns the committed state; a changed payload, an ended source or a reused replacement returns conflict. Missing resources and foreign resources remain opaque.
 
 The lifecycle record, decision capture, audit and customer notice commit in the same owner transaction. A failed audit or outbox write rolls back the change. The capture retains the actual document fingerprints, offer and payment evidence, reason code, timestamp and `academic-policy-lifecycle-1` rule version. The audit retains its actor reference and correlation ID under the existing retention policy. No raw caller idempotency key or free-text personal reason is persisted.
