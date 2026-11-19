@@ -55,6 +55,8 @@ export class Reports {
   async send(id: string, actor: ReportActor): Promise<Sent> {
     this.active(actor);
     const opened = await this.store.openDelivery(id, actor);
+    // Every await below can outlive the lease, so authorization is checked again before each effect and before anything protected is returned.
+    this.active(actor);
     if (!opened) return { status: 'not_found' };
     const { report } = opened;
     const destination = this.destinations[report.destination];
@@ -65,7 +67,13 @@ export class Reports {
     if (outcome === null) {
       // The lookup may have outlived the lease: nothing is sent once authorization has expired, while an answer already in flight is still recorded below.
       this.active(actor);
-      if (!await this.store.markDispatched(message.deliveryId, actor)) return { status: 'sent', delivery: (await this.store.openDelivery(id, actor))?.delivery ?? opened.delivery, destination: report.destination, durationMs: 0 };
+      const dispatched = await this.store.markDispatched(message.deliveryId, actor);
+      this.active(actor);
+      if (!dispatched) {
+        const reopened = await this.store.openDelivery(id, actor);
+        this.active(actor);
+        return { status: 'sent', delivery: reopened?.delivery ?? opened.delivery, destination: report.destination, durationMs: 0 };
+      }
       outcome = await this.attempt(destination.deliver(message));
     }
     const result: DeliveryResult = outcome === 'uncertain' || outcome === null ? { status: 'uncertain' }
