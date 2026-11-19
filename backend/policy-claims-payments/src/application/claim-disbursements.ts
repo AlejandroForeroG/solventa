@@ -4,6 +4,7 @@ import type { ClaimDecisionActor } from './claim-decisions';
 import type { FinancialIntegrity, Payment, PaymentGateway } from './ports/financial';
 import type { DisbursementCapture, DisbursementContext, DisbursementDeadline, DisbursementStore } from './ports/claim-disbursement';
 import type { ReportOwner } from './ports/claim-report';
+import { isLifecycleChange, lifecycleContent } from '../domain/policy-lifecycle';
 
 export type DisbursementRequest = { status: 'ok'; payment: DisbursementView; replayed: boolean }
   | { status: 'not_found' | 'conflict' | 'invalid_amount' };
@@ -53,6 +54,7 @@ export class ClaimDisbursements {
       if (context.offer.coverage.kind !== 'mortgage_life') return { status: 'conflict' };
       if (context.payment) return context.payment.amount === input.amount
         ? { status: 'ok', payment: this.view(context.payment), replayed: true } : { status: 'conflict' };
+      if (context.lifecycle && Date.parse(context.occurredAt) >= Date.parse(context.lifecycle.at)) return { status: 'conflict' };
       if (!amountWithinCoverage(input.amount, disbursementLimit(context.offer), context.reservedAmount)) return { status: 'invalid_amount' };
       if (context.state !== 'approved') return { status: 'conflict' };
       const payment: Payment = { id: this.clock.newId(), policyId: context.policyId, operation: 'indemnity', amount: input.amount,
@@ -111,6 +113,10 @@ export class ClaimDisbursements {
 
   private async checked(context: DisbursementContext) {
     const offer = context.offer;
+    if (context.lifecycle && (!isLifecycleChange(context.lifecycle) || context.lifecycle.policyId !== context.policyId
+      || context.lifecycle.sourceDocumentHash !== context.documentHash
+      || !(await this.integrity.verify(lifecycleContent(context.lifecycle), context.lifecycle.documentHash))))
+      throw Error('claim_disbursement_integrity');
     if (!UUID.test(context.claimId) || !UUID.test(context.decisionId) || !UUID.test(context.policyId)
       || !isAcceptedOffer(offer) || context.policyStatus !== 'issued' || !['approved', 'paid'].includes(context.state)
       || context.ownerSubjectToken !== offer.subjectToken || context.premiumStatus !== 'confirmed'
@@ -145,8 +151,8 @@ export class ClaimDisbursements {
     return { schemaVersion: 1, contractVersion: 'v1', correlationId: traceId,
       inputs: { claimId: context.claimId, decisionId: context.decisionId, policyId: context.policyId, paymentId: payment.id,
         amount: payment.amount, currency: payment.currency, coverageLimit: disbursementLimit(context.offer), reservedAmount: context.reservedAmount,
-        policyTermsHash: context.termsHash, occurredAt: context.occurredAt, issuedAt: context.issuedAt, paymentHash: payment.hash },
+        policyTermsHash: context.termsHash, policyLifecycle: context.lifecycle, occurredAt: context.occurredAt, issuedAt: context.issuedAt, paymentHash: payment.hash },
       sources: outcome === 'pending' ? [] : [{ source: 'synthetic-payment-gateway-v1', capturedAt: this.clock.now().toISOString() }],
-      consent: { status: 'not_required' }, rule: { id: 'approved-claim-disbursement', version: '1' }, outcome };
+      consent: { status: 'not_required' }, rule: { id: 'approved-claim-disbursement', version: '2' }, outcome };
   }
 }
