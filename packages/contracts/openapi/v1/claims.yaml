@@ -1618,8 +1618,6 @@ components:
                   - approve
                   - reject
                   - extend_requirement
-                  - disbursement_confirmed
-                  - disbursement_declined
               at: *a2
               state:
                 $ref: "#/components/schemas/ClaimState"
@@ -1665,6 +1663,8 @@ components:
                   - approve
                   - reject
                   - extend_requirement
+                  - disbursement_confirmed
+                  - disbursement_declined
               at: *a2
           maxItems: 25
         traceId: *a1

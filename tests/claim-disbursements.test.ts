@@ -20,10 +20,12 @@ import claimsExamples from '../packages/contracts/examples/claims.json';
 test('terminal disbursement notices remain valid case-file contract responses', async () => {
   const spec = parse(await readFile(new URL('../packages/contracts/openapi/v1/claims.yaml', import.meta.url), 'utf8'));
   const ajv = new Ajv({ strict: false }); addFormats(ajv);
-  const validate = ajv.compile({ ...spec.components.schemas.ClaimCaseRecord, components: spec.components });
+  assert.ok(spec.components.schemas.ClaimCase);
+  const validate = ajv.compile({ ...spec.components.schemas.ClaimCase, components: spec.components });
   for (const action of ['disbursement_confirmed', 'disbursement_declined']) {
     const body = { ...claimsExamples.caseFile, notices: [{ id: randomUUID(), action, at: '2026-11-19T15:00:00.000Z' }] };
     assert.ok(validate(body), JSON.stringify(validate.errors));
+    assert.equal(validate({ ...body, notices: [{ ...body.notices[0], action: 'invalid_notice' }] }), false);
   }
 });
 
