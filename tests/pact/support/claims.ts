@@ -8,6 +8,8 @@ import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/
 import { listSyntheticExperts } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
 import type { CaseRecord } from '../../../backend/policy-claims-payments/src/application/claim-review';
 import examples from '../../../packages/contracts/examples/claims.json';
+import paymentExamples from '../../../packages/contracts/examples/claim-payments.json';
+import { parseClaimPayment, parseClaimPaymentPage } from '../../../packages/contracts/src/claim-payments';
 
 const DAY = 86_400_000;
 
@@ -33,8 +35,16 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
       return { records: open, next: null };
     }
   }, { now: () => new Date() });
+  const payment = parseClaimPayment(paymentExamples.pendingReceipt.payment);
+  const ownPage = parseClaimPaymentPage(paymentExamples.confirmedPage);
+  if (!payment || !ownPage) throw Error('invalid_payment_contract_fixture');
   const app = createHttp({ authorizeFinancialAccess: async () => null, denyResourceAccess: async () => null, finance: {} as never,
+    claimReport: { report: { create: async () => { throw Error('unexpected report write'); }, receive: async () => { throw Error('unexpected upload'); }, submit: async () => { throw Error('unexpected submission'); } },
+      disbursements: { owned: async () => ownPage },
+      authorize: async input => input.token === 'synthetic.jwt.token' ? { allowed: true,
+        actor: { kind: 'user', channel: 'mobile', operations: ['claims:report'], principal } } : { allowed: false, status: 401, error: 'unauthorized' } },
     claims: { inbox,
+      disbursements: { request: async () => ({ status: 'ok', payment, replayed: false }), read: async () => payment, owned: async () => ownPage },
       decisions: { decide: async () => ({ status: 'ok', decisionId: examples.decisionResult.decisionId, state: 'approved', replayed: false }) },
       review: {
         directory: listSyntheticExperts,
@@ -44,6 +54,7 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
         evidence: async () => null,
         review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
         respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),
+        selectFiles: async () => 'selected',
         receive: async (_id, _requirement, _owner, declaration, body) => {
           const file = parseRequirementFile(declaration);
           if (!file || !body) return 'invalid_request';

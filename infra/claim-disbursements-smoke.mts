@@ -29,12 +29,12 @@ try {
   db = clientFor(url, config.ssl); await db.connect();
   await db.query('CREATE SCHEMA policy');
   await db.query('CREATE TABLE policy.schema_migrations(version STRING PRIMARY KEY,checksum STRING NOT NULL,applied_at TIMESTAMPTZ DEFAULT now())');
-  const owner = owners.find(row => row.schema === 'policy')!;
-  await applyMigrations(db, owner); migrated = true;
+  const schemaOwner = owners.find(row => row.schema === 'policy')!;
+  await applyMigrations(db, schemaOwner); migrated = true;
   const grants = JSON.parse(await readFile('backend/policy-claims-payments/runtime-grants.json', 'utf8'));
   await db.query(`GRANT CONNECT ON DATABASE ${name} TO solventa_local_policy`);
   await db.query('GRANT USAGE ON SCHEMA policy TO solventa_local_policy');
-  await applyRuntimeGrants(db, owner, 'solventa_local_policy', grants);
+  await applyRuntimeGrants(db, schemaOwner, 'solventa_local_policy', grants);
   const runtime = new URL(url); runtime.username = 'solventa_local_policy'; runtime.password = held.passwords.policy;
   runtime.searchParams.set('sslmode', 'verify-full'); runtime.searchParams.set('sslrootcert', 'infra/.local/certs/ca.crt');
   const connection = runtime.toString();
@@ -133,6 +133,23 @@ try {
     return value;
   } };
   await assert.rejects(create(delayed).read(claimId, lease), /authorization_expired/);
+  const owner = { clientId: customer, subjectToken: subject };
+  const receipts = await service.owned(owner, randomUUID());
+  assert.equal(receipts.items.find(item => item.claimId === claimId)?.payment.status, 'confirmed');
+  assert.deepEqual(await service.owned({ ...owner, clientId: randomUUID() }, randomUUID()), { items: [], next: null });
+  assert.deepEqual(await service.owned({ ...owner, subjectToken: randomUUID() }, randomUUID()), { items: [], next: null });
+  assert.deepEqual(await service.owned(owner, randomUUID(), randomUUID()), { items: [], next: null });
+  const effectsBeforeReads = (await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations')).rows[0].n;
+  for (let i = 0; i < 8; i++) assert.equal((await service.request(await seed(), { amount: '0.0001' }, actor())).status, 'ok');
+  const seen = new Set<string>(); let cursor: string | undefined;
+  do {
+    const page = await service.owned(owner, randomUUID(), cursor);
+    assert.ok(page.items.length <= 6);
+    for (const item of page.items) { assert.ok(!seen.has(item.claimId)); seen.add(item.claimId); assert.ok(Number.isFinite(Date.parse(item.updatedAt))); }
+    cursor = page.next ?? undefined;
+  } while (cursor);
+  assert.equal(seen.size, 11);
+  assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations')).rows[0].n, effectsBeforeReads);
   const changedCurrency = await service.request(await seed(), { amount: '2.0000' }, actor());
   assert.equal(changedCurrency.status, 'ok'); if (changedCurrency.status !== 'ok') throw Error('tamper_intent_missing');
   await db.query("UPDATE policy.indemnities SET currency='USD' WHERE id=(SELECT indemnity_id FROM policy.payments WHERE id=$1)", [changedCurrency.payment.paymentId]);
@@ -140,7 +157,8 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.mock_gateway_operations WHERE payment_id=$1', [changedCurrency.payment.paymentId])).rows[0].n, 0);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['assigned-grant-and-owner-boundary', 'expired-lease',
     'intent-before-provider', 'replay-and-concurrent-replay', 'changed-amount-conflict', 'provider-confirmed-before-local-rollback',
-    'atomic-payment-claim-audit-notices', 'recovery-without-duplicate', 'concurrent-settlement', 'capture-schema', 'concurrent-coverage-reservation', 'late-sql-response-denied', 'indemnity-currency-integrity'] }));
+    'atomic-payment-claim-audit-notices', 'recovery-without-duplicate', 'concurrent-settlement', 'capture-schema', 'concurrent-coverage-reservation', 'late-sql-response-denied',
+    'owner-receipt-isolation', 'owned-pagination-without-financial-effects', 'indemnity-currency-integrity'] }));
 } finally {
   await db?.end().catch(() => {});
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`).catch(() => {});

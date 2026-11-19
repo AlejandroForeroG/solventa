@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
 import '../audit/audit.css';
 import './claims.css';
+import { ClaimDisbursement } from './ClaimDisbursement';
+import { OwnClaimPayments } from './OwnClaimPayments';
 
 type ViewTab = 'overview' | 'documents' | 'tasks' | 'history';
 type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information' | 'extend_requirement';
@@ -38,6 +40,7 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
       <a className="mono" href={'/mis-siniestros/' + claim.claimId}>{claim.claimNumber}</a>
       <span className={'claims-badge claims-state-' + claim.state}>{t('state.' + claim.state)}</span>
     </li>)}</ul>}
+    <OwnClaimPayments onSessionLost={onSessionLost} />
   </main>;
 }
 
@@ -119,7 +122,9 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
               {item.actorId && <p className="mono audit-id">{t('actor')} · {item.actorId}</p>}
             </li>)}</ol>}
           </section>
-          {claim.access === 'assigned' && <AnalystActions claimId={claimId} claim={claim} onDone={refresh} onSessionLost={onSessionLost} />}
+          {claim.access === 'assigned' && (claim.state === 'approved' || claim.state === 'paid'
+            ? <ClaimDisbursement key={claimId} claimId={claimId} paid={claim.state === 'paid'} onSessionLost={onSessionLost} onConfirmed={() => refresh('disbursement_confirmed')} />
+            : <AnalystActions claimId={claimId} claim={claim} onDone={refresh} onSessionLost={onSessionLost} />)}
         </div>
       </>}
     </>}
@@ -227,6 +232,9 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
     try {
       const prepared = await Promise.all(files.map(file => prepareRequirementFile(requirementId, file)));
       if (new Set(prepared.map(file => file.id)).size !== prepared.length) { setError('invalid'); return; }
+      const selection = await selectRequirementFiles(claimId, requirementId, prepared.map(file => file.id));
+      if (selection.kind === 'unauthenticated') { onSessionLost(); return; }
+      if (selection.kind !== 'ok') { setError(selection.kind); return; }
       for (const { id, sha256, file } of prepared) {
         const result = await sendRequirementFile(claimId, requirementId, id, file, sha256);
         if (result.kind === 'unauthenticated') { onSessionLost(); return; }

@@ -13,6 +13,8 @@ import { HmacFinancialIntegrity } from '../backend/policy-claims-payments/src/ad
 import { mountClaims } from '../backend/policy-claims-payments/src/adapters/inbound/claims-http';
 import { amountWithinCoverage, parseDisbursement } from '../backend/policy-claims-payments/src/domain/claim-disbursement';
 import { issuanceTimeContent, offerContent, type AcceptedOffer } from '../backend/policy-claims-payments/src/domain/financial';
+import { mountClaimReport } from '../backend/policy-claims-payments/src/adapters/inbound/claim-report-http';
+import { parseClaimPaymentPage } from '../packages/contracts/src/claim-payments';
 
 async function fixture() {
   let now = new Date('2026-11-19T15:00:00.000Z');
@@ -32,6 +34,7 @@ async function fixture() {
   const ledger = new Map<string, string>();
   let authorizationCapture: DisbursementCapture | undefined;
   const tx: DisbursementTransaction = {
+    owned: async () => context.payment ? [{ ...context, claimNumber: 'SIN-2026-00001', updatedAt: now.toISOString() }] : [],
     authorized: async () => permitted ? context : null,
     pending: async id => context.payment?.id === id ? context : null,
     create: async (_c, payment, indemnityId, _actor, capture) => { prepares++; authorizationCapture = capture; context.payment = { ...payment }; context.indemnityId = indemnityId; context.indemnityAmount = payment.amount; },
@@ -160,7 +163,8 @@ test('HTTP uses the operation grant, validates the amount and exposes only the c
   const payment = { paymentId: randomUUID(), amount: '1000.0000', currency: 'COP' as const, status: 'pending' as const, reference: null, simulated: true as const };
   const app = new Hono<{ Bindings: PolicyEnv }>();
   mountClaims(app, { inbox: { list: async () => ({ items: [], next: null }) },
-    disbursements: { request: async () => { calls++; return { status: 'ok', payment, replayed: false }; }, read: async () => payment },
+    disbursements: { request: async () => { calls++; return { status: 'ok', payment, replayed: false }; }, read: async () => payment,
+      owned: async () => ({ items: [], next: null }) },
     dispatchDisbursement: () => { dispatches++; },
     authorize: async input => { operation = input.operation; return { allowed: true, actor: { kind: 'user', channel: 'web', operations: [input.operation],
       principal: { clientId: f.actor.clientId, subjectToken: f.actor.subjectToken }, authorizationExpiresAt: new Date(Date.now() + 4000).toISOString() } }; } });
@@ -184,4 +188,41 @@ test('parametric coverage cannot acquire a second manual payment engine', async 
   f.context.termsHash = await f.integrity.digest(offerContent(f.context.offer));
   assert.deepEqual(await f.service.request(f.context.claimId, { amount: '1000.0000' }, f.actor), { status: 'conflict' });
   assert.deepEqual(f.counts(), { prepares: 0, effects: 0, commits: 0 });
+});
+
+test('the owner sees the actual pending and confirmed payment and malformed ownership never releases a receipt', async () => {
+  const f = await fixture(); const owner = { clientId: f.context.offer.clientId, subjectToken: f.context.ownerSubjectToken };
+  assert.deepEqual(await f.service.owned(owner, f.actor.traceId), { items: [], next: null });
+  await f.service.request(f.context.claimId, { amount: '1000.0000' }, f.actor);
+  assert.equal((await f.service.owned(owner, f.actor.traceId)).items[0].payment.status, 'pending');
+  await f.service.recoverPayment(f.context.payment!.id);
+  const page = await f.service.owned(owner, f.actor.traceId);
+  assert.equal(page.items[0].payment.status, 'confirmed');
+  assert.equal(page.items[0].payment.reference, 'MOCK-' + f.context.payment!.id);
+  assert.ok(parseClaimPaymentPage({ ...page, traceId: f.actor.traceId }));
+  await assert.rejects(f.service.owned({ ...owner, subjectToken: randomUUID() }, f.actor.traceId), /integrity/);
+  assert.deepEqual(f.counts(), { prepares: 1, effects: 1, commits: 1 });
+});
+
+test('native receipts require a bearer owner session and validate the query after authorization', async () => {
+  const f = await fixture(); const owner = { clientId: f.context.offer.clientId, subjectToken: f.context.ownerSubjectToken };
+  await f.service.request(f.context.claimId, { amount: '1000.0000' }, f.actor);
+  const app = new Hono<{ Bindings: PolicyEnv }>(); let authorizations = 0;
+  mountClaimReport(app, { disbursements: f.service,
+    report: { create: async () => { throw Error('unexpected write'); }, receive: async () => { throw Error('unexpected write'); }, submit: async () => { throw Error('unexpected write'); } },
+    authorize: async input => { authorizations++; assert.equal(input.operation, 'claims:report'); return { allowed: true,
+      actor: { kind: 'user', channel: 'mobile', operations: ['claims:report'], principal: owner } }; } });
+  const path = 'http://localhost/api/v1/claims/native/disbursements';
+  assert.equal((await app.request(path, { headers: { cookie: 'solventa-session=synthetic' } })).status, 401);
+  assert.equal(authorizations, 0);
+  const response = await app.request(path, { headers: { authorization: 'Bearer synthetic-token' } });
+  assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  const body = await response.json(); assert.ok(parseClaimPaymentPage(body));
+  const spec = parse(await readFile(new URL('../packages/contracts/openapi/v1/claims.yaml', import.meta.url), 'utf8'));
+  const ajv = new Ajv({ strict: false }); addFormats(ajv);
+  const validate = ajv.compile({ ...spec.components.schemas.OwnClaimPaymentPage, components: spec.components });
+  assert.ok(validate(body), JSON.stringify(validate.errors));
+  assert.equal((await app.request(path + '?cursor=bad', { headers: { authorization: 'Bearer synthetic-token' } })).status, 400);
+  assert.equal((await app.request(path, { method: 'POST', headers: { authorization: 'Bearer synthetic-token' } })).status, 405);
+  assert.equal(authorizations, 2);
 });
