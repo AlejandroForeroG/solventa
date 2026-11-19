@@ -63,7 +63,7 @@ try {
   assert.equal(await store.grant({ principal: ana, advisorReference: revokedAdvisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() }), null, 'a revoked advisor cannot be authorized');
   assert.deepEqual(await counts(), { audit: 0, outbox: 0 });
   const granted = await store.grant({ principal: ana, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() });
-  assert.ok(granted);
+  assert.ok(granted && granted !== 'limit_reached');
   assert.deepEqual([granted.advisorReference, granted.operation, granted.revokedAt], [advisor, 'advisor-sale:prepare', null]);
   assert.deepEqual(await counts(), { audit: 1, outbox: 1 });
   const audit = (await db.query("SELECT actor_reference, action, resource_id FROM identity.audit_events WHERE resource_type='advisor_sale_authorization'")).rows[0];
@@ -84,7 +84,7 @@ try {
 
   // Ownership: a customer lists and revokes only their own rows.
   const other = await store.grant({ principal: luis, advisorReference: otherAdvisor, grantedAt: now(), expiresAt: hours(48), traceId: randomUUID() });
-  assert.ok(other);
+  assert.ok(other && other !== 'limit_reached');
   assert.deepEqual((await store.list(ana, 50)).map(row => row.id), [granted.id]);
   assert.deepEqual((await store.list(luis, 50)).map(row => row.id), [other.id]);
   assert.deepEqual(await store.revoke(ana, other.id, now(), randomUUID()), { kind: 'not_found' });
@@ -100,17 +100,32 @@ try {
 
   // Expiry and a closed customer each stop the use.
   const short = await store.grant({ principal: ana, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() });
-  assert.ok(short);
+  assert.ok(short && short !== 'limit_reached');
   assert.equal(await store.find(advisor, short.id) !== null, true);
   await db.query("UPDATE identity.advisor_sale_authorizations SET granted_at = now() - INTERVAL '2 days', expires_at = now() - INTERVAL '1 day' WHERE id = $1", [short.id]);
   assert.equal(await store.find(advisor, short.id), null, 'an expired authorization is unusable');
   assert.equal((await store.revoke(ana, short.id, now(), randomUUID())).kind, 'expired');
   const live = await store.grant({ principal: ana, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() });
-  assert.ok(live);
+  assert.ok(live && live !== 'limit_reached');
   await db.query("UPDATE identity.clients SET status='closed' WHERE id=$1", [ana.clientId]);
   assert.equal(await store.find(advisor, live.id), null, 'a closed customer cannot be priced');
   await db.query("UPDATE identity.clients SET status='active' WHERE id=$1", [ana.clientId]);
   assert.equal(await store.find(advisor, live.id) !== null, true);
+
+  // At most 20 active authorizations per customer, and the list always puts the ones that still work first.
+  const crowded = await customerOf(await insert('clients', 'subject_token', [randomUUID()]));
+  const crowdedIds: string[] = [];
+  for (let index = 0; index < 20; index++) {
+    const row = await store.grant({ principal: crowded, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() });
+    assert.ok(row && row !== 'limit_reached');
+    crowdedIds.push(row.id);
+  }
+  assert.equal(await store.grant({ principal: crowded, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() }), 'limit_reached');
+  assert.equal((await store.revoke(crowded, crowdedIds[0], now(), randomUUID())).kind, 'revoked');
+  assert.ok(await store.grant({ principal: crowded, advisorReference: advisor, grantedAt: now(), expiresAt: hours(24), traceId: randomUUID() }));
+  const crowdedList = await store.list(crowded, 50);
+  assert.deepEqual(crowdedList.slice(0, 20).map(row => row.revokedAt), Array(20).fill(null), 'active authorizations come first');
+  assert.equal(crowdedList[20].revokedAt !== null, true);
 
   // The schema itself bounds the grant, and the runtime role cannot delete or rewrite history.
   await assert.rejects(db.query("INSERT INTO identity.advisor_sale_authorizations (advisor_grant_id, client_id, operation, expires_at) VALUES ($1, $2, 'advisor-sale:prepare', now() + INTERVAL '8 days')", [advisor, ana.clientId]), /check constraint|violates/i);

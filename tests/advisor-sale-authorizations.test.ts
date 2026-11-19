@@ -44,6 +44,26 @@ test('the grant body accepts only an advisor reference and a validity from 1 to 
   assert.equal((await service.grant({ principal: customer, body: { advisorReference: randomUUID() }, traceId: randomUUID() })).status, 'advisor_not_found');
 });
 
+test('a customer holds at most 20 active authorizations, the list shows the active ones first and revoking frees a slot', async () => {
+  const { service, advance } = fixture();
+  const body = { advisorReference: advisor.reference };
+  const ids: string[] = [];
+  for (let index = 0; index < 20; index++) {
+    const result = await service.grant({ principal: customer, body, traceId: randomUUID() });
+    if (result.status !== 'created') throw Error('unreachable');
+    ids.push(result.authorization.authorizationId);
+  }
+  assert.equal((await service.grant({ principal: customer, body, traceId: randomUUID() })).status, 'limit_reached');
+  assert.equal((await service.grant({ principal: otherCustomer, body, traceId: randomUUID() })).status, 'created', 'the limit is per customer');
+  assert.equal((await service.revoke({ principal: customer, authorizationId: ids[0], traceId: randomUUID() })).status, 'revoked');
+  assert.equal((await service.grant({ principal: customer, body, traceId: randomUUID() })).status, 'created');
+  const listed = (await service.list(customer)).items;
+  assert.equal(listed.filter(item => item.status === 'active').length, 20);
+  assert.deepEqual(listed.slice(0, 20).map(item => item.status), Array(20).fill('active'), 'every active authorization comes before the revoked ones');
+  advance(2 * 86400000);
+  assert.equal((await service.grant({ principal: customer, body, traceId: randomUUID() })).status, 'created', 'expired authorizations do not count');
+});
+
 test('an advisor cannot be authorized by themselves', async () => {
   const { service } = fixture();
   assert.equal((await service.grant({ principal: { clientId: advisor.clientId, subjectToken: advisor.subjectToken }, body: { advisorReference: advisor.reference }, traceId: randomUUID() })).status, 'advisor_not_found');

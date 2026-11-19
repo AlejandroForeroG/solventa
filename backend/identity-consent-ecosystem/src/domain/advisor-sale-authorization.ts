@@ -1,6 +1,8 @@
 export const ADVISOR_SALE_OPERATION = 'advisor-sale:prepare';
 export const DEFAULT_VALIDITY_DAYS = 1;
 export const MAX_VALIDITY_DAYS = 7;
+// Fewer than the list page, so every authorization that still works is always listed and can be revoked.
+export const MAX_ACTIVE_AUTHORIZATIONS = 20;
 const DAY_MS = 24 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

@@ -24,7 +24,7 @@ paths:
       operationId: listAdvisorSaleAuthorizations
       summary: List the customer's advisor authorizations
       tags: [Advisor sale authorizations]
-      description: At most 50, newest first. Status is computed on every read.
+      description: At most 50, the ones that still work first and then the newest, so every active authorization is listed. Status is computed on every read.
       security:
         - WebSession: []
         - LocalWebSession: []
@@ -49,7 +49,7 @@ paths:
       description: >
         Each call creates a distinct authorization, valid for the requested days from the grant
         (one by default, at most seven). The advisor receives the authorizationId from the customer,
-        outside Solventa. A write needs the same Origin as the actual request host. An unknown reference,
+        outside Solventa. A customer can hold at most 20 active authorizations at once (409 authorization_limit). A write needs the same Origin as the actual request host. An unknown reference,
         an advisor whose professional permission is revoked or expired, and the customer's own reference
         are one opaque 404.
       security:
@@ -74,6 +74,7 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
   /me/advisor-sale-authorizations/{authorizationId}/revoke:
     post:
@@ -127,7 +128,7 @@ components:
       description: >
         400 invalid_request: invalid body, an Authorization header or a malformed id.
         401 unauthorized: missing, expired or revoked session. 403 forbidden: the session lacks the operation or the Origin is not allowed.
-        404 advisor_not_found or not_found. 409 authorization_not_active. 503 access_unavailable.
+        404 advisor_not_found or not_found. 409 authorization_not_active, or authorization_limit when the customer already has 20 active authorizations. 503 access_unavailable.
       headers:
         X-Trace-Id: { $ref: '#/components/headers/TraceId' }
       content:
@@ -181,5 +182,5 @@ components:
       additionalProperties: false
       required: [error, traceId]
       properties:
-        error: { type: string, enum: [invalid_request, unauthorized, forbidden, advisor_not_found, not_found, authorization_not_active, access_unavailable] }
+        error: { type: string, enum: [invalid_request, unauthorized, forbidden, advisor_not_found, not_found, authorization_not_active, authorization_limit, access_unavailable] }
         traceId: { type: string, format: uuid }

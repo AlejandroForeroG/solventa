@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 import type { Principal } from '../../application/authentication';
 import type { AdvisorSaleAuthorizationStore, RevokeAdvisorSaleResult } from '../../application/ports/advisor-sale-authorizations';
-import { ADVISOR_SALE_OPERATION, type AdvisorSaleAuthorization } from '../../domain/advisor-sale-authorization';
+import { ADVISOR_SALE_OPERATION, MAX_ACTIVE_AUTHORIZATIONS, type AdvisorSaleAuthorization } from '../../domain/advisor-sale-authorization';
 
 const RETENTION = '5 years'; // Same provisional audit retention as consents.
 type Row = { id: string; advisor_reference: string; granted_at: Date; expires_at: Date; revoked_at: Date | null };
@@ -40,6 +40,11 @@ export class SqlAdvisorSaleAuthorizations implements AdvisorSaleAuthorizationSto
         WHERE id = $1 AND client_id <> $2 AND revoked_at IS NULL AND granted_at <= clock_timestamp() AND expires_at > clock_timestamp()`,
       [input.advisorReference, input.principal.clientId]);
       if (!advisor.rows[0]) return null;
+      // The customer row serializes concurrent grants, so the count below cannot be exceeded by a race.
+      await client.query('SELECT id FROM identity.clients WHERE id = $1 FOR UPDATE', [input.principal.clientId]);
+      const active = await client.query<{ n: string }>(`SELECT count(*) AS n FROM identity.advisor_sale_authorizations
+        WHERE client_id = $1 AND revoked_at IS NULL AND expires_at > clock_timestamp()`, [input.principal.clientId]);
+      if (Number(active.rows[0].n) >= MAX_ACTIVE_AUTHORIZATIONS) return 'limit_reached' as const;
       const inserted = await client.query<Row>(`INSERT INTO identity.advisor_sale_authorizations (advisor_grant_id, client_id, operation, granted_at, expires_at)
         VALUES ($1, $2, $3, $4, $5) RETURNING id, advisor_grant_id AS advisor_reference, granted_at, expires_at, revoked_at`,
       [input.advisorReference, input.principal.clientId, ADVISOR_SALE_OPERATION, input.grantedAt, input.expiresAt]);
@@ -49,7 +54,7 @@ export class SqlAdvisorSaleAuthorizations implements AdvisorSaleAuthorizationSto
   }
 
   list(principal: Principal, limit: number) {
-    return this.connection(async client => (await client.query<Row>(`${SELECT} WHERE a.client_id = $1 ORDER BY a.granted_at DESC, a.id LIMIT $2`,
+    return this.connection(async client => (await client.query<Row>(`${SELECT} WHERE a.client_id = $1 ORDER BY (a.revoked_at IS NULL AND a.expires_at > clock_timestamp()) DESC, a.granted_at DESC, a.id LIMIT $2`,
       [principal.clientId, limit])).rows.map(fromRow));
   }
 

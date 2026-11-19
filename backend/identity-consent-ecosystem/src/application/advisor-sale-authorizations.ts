@@ -26,6 +26,7 @@ export class AdvisorSaleAuthorizations {
     const grantedAt = this.deps.now();
     const authorization = await this.deps.store.grant({ principal: input.principal, advisorReference: request.advisorReference, grantedAt,
       expiresAt: expiryFor(grantedAt, request.validityDays), traceId: input.traceId });
+    if (authorization === 'limit_reached') return { status: 'limit_reached' as const };
     return authorization ? { status: 'created' as const, authorization: this.view(authorization) } : { status: 'advisor_not_found' as const };
   }
 
