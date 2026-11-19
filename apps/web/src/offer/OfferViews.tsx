@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Offer, Policy, SignatureChallenge } from './api';
@@ -70,6 +70,12 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const intl = useIntl();
   const { copDecimal, dayMonthYear } = useFormatters();
   const [page, setPage] = useState(1);
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const previousPage = useRef(page);
+  useEffect(() => {
+    if (previousPage.current !== page) pageHeading.current?.focus();
+    previousPage.current = page;
+  }, [page]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
@@ -94,7 +100,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
         </div>
         <div className="document-body document-sheet">
           {page === 1 ? <>
-          <h2 className="document-title">{t('policy.conditions')}</h2>
+          <h2 ref={pageHeading} tabIndex={-1} className="document-title">{t('policy.conditions')}</h2>
           <p className="mono note">{t('policy.version', { version: String(document.offerVersion ?? 1) })}</p>
           <dl className="facts">
             <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
@@ -106,7 +112,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
             <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
           </details>
           </> : <>
-          <h2 className="section-label">{t('policy.document')}</h2>
+          <h2 ref={pageHeading} tabIndex={-1} className="section-label">{t('policy.document')}</h2>
           <DocumentFields document={document} verification={<p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>} />
           </>}
         </div>

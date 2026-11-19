@@ -17,7 +17,7 @@ function sizeOf(uri: string, declared: number | undefined): number | null {
 
 function outcomeOf(result: ImagePicker.ImagePickerResult): CaptureOutcome {
   if (result.canceled) return { status: 'cancelled' };
-  const candidates: EvidenceCandidate[] = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null, byteSize: sizeOf(asset.uri, asset.fileSize), owned: isAppCopy(asset.uri) }));
+  const candidates: EvidenceCandidate[] = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null, byteSize: sizeOf(asset.uri, asset.fileSize), owned: isAppCopy(asset.uri), fileName: asset.fileName }));
   return { status: 'ok', candidates };
 }
 
@@ -47,7 +47,7 @@ export function createExpoEvidenceSource(): EvidenceSource {
         const result = await getDocumentAsync({ type: [...DOCUMENT_CONTENT_TYPES, 'image/heif'], copyToCacheDirectory: true });
         if (result.canceled) return { status: 'cancelled' };
         const candidates = result.assets.map(asset => ({ uri: asset.uri, mimeType: asset.mimeType ?? null,
-          byteSize: sizeOf(asset.uri, asset.size), owned: isAppCopy(asset.uri) }));
+          byteSize: sizeOf(asset.uri, asset.size), owned: isAppCopy(asset.uri), fileName: asset.name }));
         return { status: 'ok', candidates };
       } catch { return { status: 'failed' }; }
     },

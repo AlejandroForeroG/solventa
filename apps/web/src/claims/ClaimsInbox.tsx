@@ -87,7 +87,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <div className="audit-table-wrap audit-card-wrap"><table className="audit-table claims-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['claim', 'policy', 'state', 'age', 'amount', 'evidence', 'priority'].map(key => <th key={key} scope="col" className={key === 'amount' ? 'claims-amount' : undefined}>{t(`col.${key}`)}</th>)}</tr></thead>
           <tbody>{page.items.map(item => <tr key={item.claimId} className={`compact-record ${expanded[item.claimId] ? 'record-expanded' : ''}`}>
-            <td data-label={t('col.claim')} className="mono claims-number"><div>{item.claimNumber}<button type="button" className="record-toggle"
+            <td data-label={t('col.claim')} className="mono claims-number"><div><a href={'/siniestros/' + item.claimId}>{item.claimNumber}</a><button type="button" className="record-toggle"
               aria-expanded={!!expanded[item.claimId]} aria-label={`${t(expanded[item.claimId] ? 'hideDetails' : 'details')}: ${item.claimNumber}`}
               aria-controls={['policy', 'age', 'amount', 'evidence'].map(key => `claim-${item.claimId}-${key}`).join(' ')}
               onClick={() => setExpanded(current => ({ ...current, [item.claimId]: !current[item.claimId] }))}>{t(expanded[item.claimId] ? 'hideDetails' : 'details')}</button></div></td>
