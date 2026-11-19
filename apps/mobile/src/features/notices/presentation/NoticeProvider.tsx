@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 import { pushPermission } from '../../notification-preferences/adapters/push-permission';
 import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
@@ -16,13 +16,18 @@ export function NoticeProvider({ children }: PropsWithChildren) {
   const auth = useAuthentication();
   const session = useAuthenticatedSession();
   const copy = useNoticeMessages();
-  const text = useRef({ title: copy.notificationTitle, body: copy.notificationBody });
-  text.current = { title: copy.notificationTitle, body: copy.notificationBody };
-  const [center] = useState(() => new NoticeCenter({
-    api: createNoticesApi(session.baseUrl, session),
-    presenter: createNoticePresenter(() => text.current),
-    permission: { granted: pushPermission },
-  }));
+  const [{ center, updateText }] = useState(() => {
+    let text = { title: copy.notificationTitle, body: copy.notificationBody };
+    return {
+      center: new NoticeCenter({
+        api: createNoticesApi(session.baseUrl, session),
+        presenter: createNoticePresenter(() => text),
+        permission: { granted: pushPermission },
+      }),
+      updateText: (title: string, body: string) => { text = { title, body }; },
+    };
+  });
+  useEffect(() => { updateText(copy.notificationTitle, copy.notificationBody); }, [copy.notificationTitle, copy.notificationBody, updateText]);
   const authenticated = auth.status === 'authenticated';
 
   useEffect(() => { showNoticesInForeground(); }, []);
