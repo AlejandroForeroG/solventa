@@ -37,11 +37,13 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     <h2 id="sale-authorizations-heading" className="h-card">{t('authorizeTitle')}</h2>
     <p className="note">{t('authorizeScope')}</p>
     <form onSubmit={event => { event.preventDefault(); if (valid) void run(() => grantSaleAuthorization({ advisorReference: reference.toLowerCase(), validityDays: days })); }}>
-      <label className="field">{t('reference')}<input required value={reference} disabled={busy} autoComplete="off" onChange={event => { setReference(event.target.value.trim()); setConfirmed(false); }} /></label>
-      <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={event => { setDays(Number(event.target.value)); setConfirmed(false); }}>
-        {[1, 2, 3, 7].map(value => <option key={value} value={value}>{intl.formatMessage({ id: 'sale.days' }, { count: value })}</option>)}</select></label>
+      <div className="grid">
+      <div className="field"><label htmlFor="sale-cus-1">{t('reference')}</label><input id="sale-cus-1" required value={reference} disabled={busy} autoComplete="off" onChange={event => { setReference(event.target.value.trim()); setConfirmed(false); }} /></div>
+      <div className="field"><label htmlFor="sale-cus-2">{t('validity')}</label><select id="sale-cus-2" value={days} disabled={busy} onChange={event => { setDays(Number(event.target.value)); setConfirmed(false); }}>
+        {[1, 2, 3, 7].map(value => <option key={value} value={value}>{intl.formatMessage({ id: 'sale.days' }, { count: value })}</option>)}</select></div>
+      </div>
       <div className="check"><input id="sale-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="sale-confirm">{t('confirm')}</label></div>
-      <button className="btn btn-secondary" type="submit" disabled={busy || !valid}>{busy ? t('saving') : t('authorize')}</button>
+      <div className="actions"><button className="btn btn-secondary" type="submit" disabled={busy || !valid}>{busy ? t('saving') : t('authorize')}</button></div>
     </form>
     {error && <p role="alert">{t(error)}</p>}
     {load.kind === 'loading' && <p role="status">{t('loading')}</p>}
@@ -81,8 +83,8 @@ function Continuation({ onSessionLost }: { onSessionLost(): void }) {
     <h2 id="sale-continue-heading" className="h-card">{t('continueTitle')}</h2>
     <p className="note">{t('continueScope')}</p>
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
-      <label className="field">{t('offerCode')}<input required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></label>
-      <button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button>
+      <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
     </form>
     {state.kind === 'failed' && <p role="alert">{t(state.reason)}</p>}
   </section>;
