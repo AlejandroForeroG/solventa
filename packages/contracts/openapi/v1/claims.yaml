@@ -691,6 +691,69 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /claims/{claimId}/requirements/{requirementId}/files/selection:
+    post:
+      tags: [Claims inbox]
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      operationId: selectClaimRequirementFiles
+      summary: Select files for a pending requirement response
+      description: Requires the owning web customer and an unexpired pending requirement. Keep zero to three stable file IDs before uploading. Other unsubmitted reservations become inactive without deleting evidence metadata or objects. Reselecting the same IDs restores their original reservations. Received responses and included evidence cannot be changed; their exact committed selection is an accepted no-op for response retry recovery.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: claimId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: requirementId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fileIds]
+              properties:
+                fileIds:
+                  type: array
+                  maxItems: 3
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Selection reconciled; identical selection is safe to repeat.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, traceId]
+                properties:
+                  state: { type: string, enum: [selected] }
+                  traceId: { type: string, format: uuid }
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /claims/{claimId}/requirements/{requirementId}/files/{fileId}:
     put:
       tags:
@@ -700,7 +763,7 @@ paths:
         - LocalWebSession: []
       operationId: uploadClaimRequirementEvidence
       summary: Upload one file for a claim requirement
-      description: Requires a verified web session and ownership. Upload before the deadline. The three-file and 50 MiB limits are aggregate per requirement. The file is verified before receipt and appears in the case after submission.
+      description: Requires a verified web session and ownership. Upload before the deadline. The three-file and 50 MiB limits cover active reservations per requirement. Reconcile the selected file IDs before changing attachments; released files cannot be uploaded or included until explicitly selected again. The file is verified before receipt and appears in the case after submission.
       parameters:
         - $ref: ./common.yaml#/components/parameters/TraceId
         - name: claimId

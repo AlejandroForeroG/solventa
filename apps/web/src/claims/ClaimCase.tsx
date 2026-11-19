@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
 import '../audit/audit.css';
 import './claims.css';
 
@@ -227,6 +227,9 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
     try {
       const prepared = await Promise.all(files.map(file => prepareRequirementFile(requirementId, file)));
       if (new Set(prepared.map(file => file.id)).size !== prepared.length) { setError('invalid'); return; }
+      const selection = await selectRequirementFiles(claimId, requirementId, prepared.map(file => file.id));
+      if (selection.kind === 'unauthenticated') { onSessionLost(); return; }
+      if (selection.kind !== 'ok') { setError(selection.kind); return; }
       for (const { id, sha256, file } of prepared) {
         const result = await sendRequirementFile(claimId, requirementId, id, file, sha256);
         if (result.kind === 'unauthenticated') { onSessionLost(); return; }

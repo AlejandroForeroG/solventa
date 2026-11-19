@@ -108,7 +108,10 @@ export class SqlClaimReport implements ClaimReportStore {
 
   private async view(db: Db, claimId: string): Promise<DraftView> {
     const claim = (await db.query<{ status: string }>('SELECT status FROM policy.claims WHERE id = $1', [claimId])).rows[0];
-    const files = await db.query<{ client_file_id: string; state: string }>('SELECT client_file_id, state FROM policy.evidence_metadata WHERE claim_id = $1 ORDER BY client_file_id', [claimId]);
+    const files = await db.query<{ client_file_id: string; state: string }>(`SELECT e.client_file_id,e.state FROM policy.evidence_metadata e
+      WHERE e.claim_id=$1 AND e.client_file_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM policy.claim_requirement_files rf WHERE rf.evidence_id=e.id)
+      ORDER BY e.client_file_id`, [claimId]);
     return { claimId, state: claim.status, evidence: files.rows.map(row => ({ fileId: row.client_file_id, state: row.state === 'verified' ? 'verified' : 'pending' })) };
   }
 

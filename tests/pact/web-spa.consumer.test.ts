@@ -1,5 +1,5 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
-import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile } from '../../apps/web/src/claims/case-api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile } from '../../apps/web/src/claims/case-api';
 import { listClaims } from '../../apps/web/src/claims/api';
 import { generateReport, listReports, sendReport } from '../../apps/web/src/reports/api';
 import reportsExamples from '../../packages/contracts/examples/reports.json';
@@ -595,6 +595,15 @@ describe('SPA claim case', () => {
         'Idempotency-Key': quoteKey, Origin: 'https://solventa.dev' }, body: request })
       .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(value) });
     await pact.executeTest(server => withServer(server.url, async () => assert.equal((await caseCommand(claimId, action, request, quoteKey)).kind, 'ok'), 'https://solventa.dev'));
+  });
+
+  test('reconciles the selected requirement files before a replacement upload', async () => {
+    pact.given(state).uponReceiving('a claim requirement file selection')
+      .withRequest({ method: 'POST', path: casePath + '/requirements/' + requirementId + '/files/selection',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://solventa.dev' }, body: claimsExamples.requirementSelection })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { ...claimsExamples.selectionReceipt, traceId } });
+    await pact.executeTest(server => withServer(server.url, async () =>
+      assert.equal((await selectRequirementFiles(claimId, requirementId, claimsExamples.requirementSelection.fileIds)).kind, 'ok'), 'https://solventa.dev'));
   });
 
   test('uploads evidence using a stable file id and a content checksum', async () => {
