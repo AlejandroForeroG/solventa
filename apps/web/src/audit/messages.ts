@@ -1,4 +1,11 @@
 export const auditEs = {
+  'audit.details': 'Ver detalles', 'audit.hideDetails': 'Ocultar detalles',
+  'audit.technicalReference': 'Referencia técnica', 'audit.sourceKey': 'Clave de la fuente',
+  'audit.showingPage': 'Mostrando {count} de {total} decisiones de esta página.', 'audit.showMore': 'Mostrar más decisiones',
+  'audit.sections': 'Secciones de la decisión', 'audit.paginationTop': 'Paginación antes de los resultados',
+  'audit.sourceName.income': 'Ingresos y obligaciones (12 meses)', 'audit.sourceName.payments': 'Historial de pagos y puntaje',
+  'audit.sourceName.affiliation': 'Afiliación y régimen', 'audit.sourceName.identity': 'Validación de identidad',
+  'audit.ppmHint': 'ppm significa partes por millón: 1.000.000 ppm equivale al 100 %.',
 
   'audit.simulated': 'Proveedores externos simulados', 'audit.title': 'Decisiones de suscripción', 'audit.open': 'Auditoría', 'audit.console': 'Consola operativa',
 
@@ -6,7 +13,7 @@ export const auditEs = {
 
   'audit.all': 'Todos', 'audit.search': 'Buscar', 'audit.reset': 'Limpiar', 'audit.next': 'Siguientes', 'audit.back': 'Volver a decisiones',
 
-  'audit.accepted': 'Aceptada', 'audit.declined': 'Rechazada', 'audit.preliminary': 'Preliminar', 'audit.vida_hipotecario': 'Vida hipotecaria', 'audit.flight_delay': 'Retraso de vuelo',
+  'audit.accepted': 'Aceptada', 'audit.declined': 'Rechazada', 'audit.preliminary': 'Preliminar', 'audit.vida_hipotecario': 'Seguro de vida hipotecario', 'audit.flight_delay': 'Retraso de vuelo',
 
   'audit.decision': 'Decisión', 'audit.date': 'Fecha (Bogotá)', 'audit.rule': 'Regla aplicada', 'audit.version': 'Versión', 'audit.quote': 'Cotización', 'audit.trace': 'Correlación',
 
@@ -48,6 +55,13 @@ export const auditEs = {
 };
 
 export const auditEn: Record<keyof typeof auditEs, string> = {
+  'audit.details': 'View details', 'audit.hideDetails': 'Hide details',
+  'audit.technicalReference': 'Technical reference', 'audit.sourceKey': 'Source key',
+  'audit.showingPage': 'Showing {count} of {total} decisions on this page.', 'audit.showMore': 'Show more decisions',
+  'audit.sections': 'Decision sections', 'audit.paginationTop': 'Pagination before results',
+  'audit.sourceName.income': 'Income and obligations (12 months)', 'audit.sourceName.payments': 'Payment history and score',
+  'audit.sourceName.affiliation': 'Affiliation and regime', 'audit.sourceName.identity': 'Identity validation',
+  'audit.ppmHint': 'ppm means parts per million: 1,000,000 ppm equals 100%.',
 
   'audit.simulated': 'Simulated external providers', 'audit.title': 'Underwriting decisions', 'audit.open': 'Audit', 'audit.console': 'Operations console',
 

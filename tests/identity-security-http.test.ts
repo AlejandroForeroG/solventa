@@ -22,7 +22,7 @@ function fixture(webConfigured = true) {
   const events: SecurityDecision[] = [];
   let fail = false;
   const security = new SecurityDecisions({ append: async event => { if (fail) throw Error('synthetic-private-storage'); events.push(event); } }, () => crypto.randomUUID());
-  const sessions = { find: async () => null, open: async () => assert.fail('unexpected registration'), revoke: async () => assert.fail('unexpected logout') };
+  const sessions = { register: async () => assert.fail('unexpected registration'), find: async () => null, open: async () => assert.fail('unexpected registration'), revoke: async () => assert.fail('unexpected logout') };
   const provider = { authenticate: async () => null, begin: async () => assert.fail('unexpected login'), exchange: async () => assert.fail('unexpected exchange'), revoke: async () => {}, logoutUrl: () => '' };
   const deps: ApiAccessDependencies = { application: new ApiAccess({ find: async () => null }, sessions), security, partner: { authenticate: async () => null },
     web: webConfigured ? { authenticate: async () => null, allowedOrigins: [origin] } : null };

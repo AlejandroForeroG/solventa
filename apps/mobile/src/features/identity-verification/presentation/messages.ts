@@ -1,9 +1,12 @@
 const es = {
+  termsHelp: 'KYC/AML significa identificación del cliente y controles contra el lavado de activos. Una huella o hash identifica un archivo sin conservar su contenido.',
+  termsDetails: 'Conservación de datos y definiciones',
   title: 'Verificar identidad', simulated: 'Verificación simulada · Solo archivos de prueba',
   back: 'Volver', refresh: 'Actualizar', consent: 'Acepto este consentimiento para el intento de 24 horas.',
   begin: 'Iniciar verificación', newAttempt: 'Iniciar un nuevo intento', expires: 'Válido hasta',
   steps: { document: 'Documento', selfie: 'Selfie', liveness: 'Prueba de vida' },
   choose: 'Elegir archivo de prueba', save: 'Guardar selección', saved: 'Paso guardado',
+  savedOption: 'Guardado', pendingOption: 'Selección sin guardar',
   evaluate: 'Evaluar identidad', resume: 'Reintentar operación pendiente', assist: 'Solicitar verificación asistida',
   assistance: 'Verificación asistida pendiente', revoke: 'Revocar consentimiento', working: 'Procesando…',
   reference: 'Referencia', signedOut: 'Inicia sesión para continuar.',
@@ -21,9 +24,12 @@ const es = {
     other: 'No pudimos completar la acción. Revisa el estado y vuelve a intentar.' },
 };
 const en: typeof es = {
+  termsHelp: 'KYC/AML means customer identification and anti-money-laundering checks. A fingerprint or hash identifies a file without retaining its contents.',
+  termsDetails: 'Data retention and definitions',
   title: 'Verify identity', simulated: 'Simulated verification · Test files only', back: 'Back', refresh: 'Refresh',
   consent: 'I accept this consent for the 24-hour attempt.', begin: 'Start verification', newAttempt: 'Start a new attempt', expires: 'Valid until',
   steps: { document: 'Document', selfie: 'Selfie', liveness: 'Liveness' }, choose: 'Choose a test file', save: 'Save selection', saved: 'Step saved',
+  savedOption: 'Saved', pendingOption: 'Unsaved selection',
   evaluate: 'Evaluate identity', resume: 'Retry pending operation', assist: 'Request assisted verification',
   assistance: 'Assisted verification pending', revoke: 'Revoke consent', working: 'Processing…', reference: 'Reference', signedOut: 'Sign in to continue.',
   statuses: { draft: 'Complete all three steps.', processing: 'Evaluation pending. Resume to retrieve the result.',

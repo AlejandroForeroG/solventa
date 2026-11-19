@@ -6,6 +6,7 @@ const STEPS = [1, 2, 3, 4, 5, 6, 7] as const;
 export function Stepper({ current, available }: { current: number; available: number }) {
   const intl = useIntl();
   return <nav aria-label={intl.formatMessage({ id: 'stepper.label' })}>
+    <p className="stepper-summary" aria-hidden="true"><span>{intl.formatMessage({ id: 'navigation.progress' }, { current, total: STEPS.length })}</span><strong>{intl.formatMessage({ id: `stepper.${current}` })}</strong></p>
     <ol className="stepper">
       {STEPS.map(n => {
         const name = intl.formatMessage({ id: `stepper.${n}` });

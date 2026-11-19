@@ -13,7 +13,7 @@ export const portalEs = {
   'partnerPortal.recentLimit': 'Se muestran las 20 transacciones más recientes. Las métricas incluyen todo el período.',
   'partnerPortal.credentials': 'Credenciales', 'partnerPortal.credentialHint': 'Referencias de registro. Los secretos no se muestran.', 'partnerPortal.noCredentials': 'Sin credenciales registradas.',
   'partnerPortal.scopes': 'Permisos', 'partnerPortal.expires': 'Vencimiento', 'partnerPortal.status': 'Estado', 'partnerPortal.active': 'Activa', 'partnerPortal.expired': 'Vencida', 'partnerPortal.revoked': 'Revocada',
-  'partnerPortal.credentialLimit': 'Se muestran los 20 registros más recientes.', 'partnerPortal.catalog': 'Catálogo del canal', 'partnerPortal.mortgage': 'Vida hipotecario',
+  'partnerPortal.credentialLimit': 'Se muestran los 20 registros más recientes.', 'partnerPortal.catalog': 'Catálogo del canal', 'partnerPortal.mortgage': 'Seguro de vida hipotecario',
   'partnerPortal.quota': 'Cuota', 'partnerPortal.notConfigured': 'Sin configurar', 'partnerPortal.versions': 'Versiones de API', 'partnerPortal.noSunset': 'Sin fecha de retiro',
   'partnerPortal.sunset': 'Retiro:', 'partnerPortal.versionHint': 'La disponibilidad depende de cada operación. Consulta su ruta versionada en la documentación.',
 };

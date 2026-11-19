@@ -1,23 +1,31 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { StyleSheet, Text, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
 import { useNavigationMessages } from '@/features/navigation/presentation/navigation-messages';
+import { LargeTextTabBar } from '@/features/navigation/presentation/LargeTextTabBar';
 import { theme } from '@/theme';
 
 export default function MainLayout() {
   const auth = useAuthentication();
   const copy = useNavigationMessages();
+  const { fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
-  return <Tabs screenOptions={{
+  return <Tabs tabBar={fontScale > 1.4 ? props => auth.status === 'authenticated' ? <LargeTextTabBar {...props} /> : null : undefined} screenOptions={{
     headerShown: false,
     sceneStyle: styles.scene,
-    tabBarStyle: auth.status === 'authenticated' ? styles.bar : styles.hidden,
+    tabBarStyle: auth.status === 'authenticated' ? [styles.bar, {
+      height: Math.max(64, 36 + 30 * fontScale) + insets.bottom,
+      paddingBottom: 6 + insets.bottom,
+    }] : styles.hidden,
     tabBarActiveTintColor: theme.colors.primaryDark,
     tabBarInactiveTintColor: theme.colors.muted,
     tabBarLabelPosition: 'below-icon',
-    tabBarLabelStyle: styles.label,
+    tabBarLabel: ({ color, children }) => <Text style={[styles.label, { color }]}>{children}</Text>,
     tabBarHideOnKeyboard: true,
   }}>
     <Tabs.Screen name="index" options={{ title: copy.home, tabBarIcon: icons.home }} />
@@ -29,16 +37,9 @@ export default function MainLayout() {
 }
 
 function icon(tab: 'home' | 'wallet' | 'claims' | 'alerts' | 'profile') {
-  return function TabIcon({ focused, color }: { focused: boolean; color: ColorValue }) {
-    if (tab === 'claims') return <View style={styles.centerIcon} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Text style={styles.plus}>+</Text>
-    </View>;
-    return <View accessible={false} style={[styles.icon, tab === 'profile' && styles.round,
-      { borderColor: color }, focused && { backgroundColor: color }]}>
-      <View style={[styles.iconDetail, tab === 'home' && styles.homeDetail, tab === 'wallet' && styles.walletDetail,
-        (tab === 'alerts' || tab === 'profile') && styles.dot,
-        { backgroundColor: focused ? theme.colors.surface : color }]} />
-    </View>;
+  const names = { home: 'home-outline', wallet: 'shield-checkmark-outline', claims: 'document-text-outline', alerts: 'notifications-outline', profile: 'person-circle-outline' } as const;
+  return function TabIcon({ color }: { focused: boolean; color: ColorValue }) {
+    return <Ionicons accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" name={names[tab]} size={24} color={color} />;
   };
 }
 
@@ -46,16 +47,7 @@ const icons = { home: icon('home'), wallet: icon('wallet'), claims: icon('claims
 
 const styles = StyleSheet.create({
   scene: { backgroundColor: theme.colors.background },
-  bar: { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border },
+  bar: { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border, minHeight: 64, paddingTop: 6, paddingBottom: 6 },
   hidden: { display: 'none' },
-  label: { fontSize: 10, fontWeight: '600' },
-  icon: { width: 25, height: 25, borderWidth: 2, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  iconDetail: { width: 9, height: 2, borderRadius: 2 },
-  homeDetail: { width: 8, height: 8, borderRadius: 1, transform: [{ rotate: '45deg' }] },
-  walletDetail: { width: 12, height: 7, borderRadius: 2 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  round: { borderRadius: 13 },
-  centerIcon: { width: 33, height: 33, borderRadius: 17, backgroundColor: theme.colors.primaryDark,
-    alignItems: 'center', justifyContent: 'center' },
-  plus: { fontSize: 24, lineHeight: 27, fontWeight: '600', color: theme.colors.mint },
+  label: { alignSelf: 'stretch', width: '100%', textAlign: 'center', fontSize: 11, lineHeight: 15, fontWeight: '600' },
 });

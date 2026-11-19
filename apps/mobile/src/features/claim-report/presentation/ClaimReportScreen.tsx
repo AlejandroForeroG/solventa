@@ -7,6 +7,8 @@ import { useAppMessages } from '@/shared/i18n/use-app-messages';
 import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
 import { createPoliciesApi } from '../../policy-wallet/adapters/policies-api';
 import { policyReference, validityAt } from '../../policy-wallet/domain/wallet';
+import { formatDate, formatMoney } from '../../policy-wallet/presentation/format';
+import { PolicyPages } from '../../policy-wallet/presentation/PolicyPages';
 import { ActivePolicies } from '../application/active-policies';
 import { isReportableProduct } from '../domain/report';
 import { ClaimReportForm } from './ClaimReportForm';
@@ -41,29 +43,35 @@ export function ClaimReportScreen({ policyId, draftId }: { policyId?: string; dr
 function Authenticated({ copy, locale, requested, hidden, draftId }: { copy: ClaimReportCopy; locale: ClaimReportLocale; requested?: string; hidden: boolean; draftId?: string }) {
   const currentSession = useAuthenticatedSession();
   const [session] = useState(currentSession);
-  const [policies] = useState(() => new ActivePolicies(() => createPoliciesApi(session.baseUrl, session).list(), (policy, now) => isReportableProduct(policy.product) && validityAt(policy, now) === 'active', Date.now));
+  const [policies] = useState(() => new ActivePolicies(query => createPoliciesApi(session.baseUrl, session).list(query), (policy, now) => isReportableProduct(policy.product) && validityAt(policy, now) === 'active', Date.now));
   const load = useSyncExternalStore(policies.subscribe, policies.getSnapshot, policies.getSnapshot);
   const [chosen, choose] = useState<string | undefined>(requested);
-  useEffect(() => { void policies.refresh(); }, [policies]);
+  useEffect(() => { void policies.refresh(uuid(requested) ? requested : undefined); return () => policies.cancel(); }, [policies, requested]);
 
   const content = (() => {
     if (load.status === 'loading') return <Page title={copy.title}><ActivityIndicator accessibilityLabel={copy.policy.loading} color="#0B6B5F" /></Page>;
     if (load.status === 'failed') return <Page title={copy.title}><Text accessibilityRole="alert" style={ui.notice}>{copy.policy.failed}</Text>
-      <Action label={copy.retry} onPress={() => void policies.refresh()} /><Action label={copy.back} secondary onPress={() => router.back()} /></Page>;
+      <Action label={copy.retry} onPress={() => void policies.retry()} /><Action label={copy.back} secondary onPress={() => router.back()} /></Page>;
     const options = load.policies;
-    const policy = chosen ? options.find(item => item.policyId === chosen) : options.length === 1 ? options[0] : undefined;
+    const policy = chosen ? options.find(item => item.policyId === chosen) : load.page === 1 && !load.partial && options.length === 1 ? options[0] : undefined;
     if (policy) return draftId ? <PreparedReport key={`${policy.policyId}:${draftId}`} policy={policy} draftId={draftId} copy={copy} locale={locale} session={session} />
       : <ClaimReportForm key={policy.policyId} policy={policy} copy={copy} locale={locale} session={session} />;
-    return <Page title={copy.policy.heading} subtitle={copy.title}>
+    return <Page title={copy.policy.heading} subtitle={copy.title} focusKey={`policies-${load.page}`}>
       {chosen && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.unknown}</Text>}
       {options.length === 0 && <Text style={ui.body}>{copy.policy.none}</Text>}
-      {load.partial && <Text accessibilityRole="alert" style={ui.notice}>{copy.policy.partial}</Text>}
       <View style={ui.section}>
-        {options.map(item => <Pressable key={item.policyId} accessibilityRole="button" onPress={() => choose(item.policyId)} style={({ pressed }) => [ui.card, pressed && ui.dimmed]}>
+        {options.map(item => <Pressable key={item.policyId} accessibilityRole="button"
+          accessibilityLabel={`${copy.products[item.product]} · ${policyReference(item.policyId)} · ${copy.policy.validity}: ${formatDate(item.effectiveFrom, locale)} – ${formatDate(item.effectiveUntil, locale)} · ${copy.policy.premium}: ${formatMoney(item.premium, locale)}`}
+          onPress={() => choose(item.policyId)} style={({ pressed }) => [ui.card, pressed && ui.dimmed]}>
           <Text style={ui.subtitle}>{copy.products[item.product]}</Text>
           <Text style={ui.caption}>{policyReference(item.policyId)}</Text>
+          <Text style={ui.body}>{copy.policy.validity}: {formatDate(item.effectiveFrom, locale)} – {formatDate(item.effectiveUntil, locale)}</Text>
+          <Text style={ui.caption}>{copy.policy.premium}: {formatMoney(item.premium, locale)}</Text>
         </Pressable>)}
       </View>
+      <PolicyPages page={load.page} hasMore={load.partial} locale={locale}
+        onPrevious={() => void policies.previousPage()} onNext={() => void policies.nextPage()} />
+      {chosen && <Action label={copy.policy.chooseAnother} secondary onPress={() => { choose(undefined); void policies.refresh(); }} />}
       <Action label={copy.back} secondary onPress={() => router.back()} />
     </Page>;
   })();
