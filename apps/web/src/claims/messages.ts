@@ -1,6 +1,7 @@
 export const claimsEs = {
   'claims.payment.title': 'Desembolso',
   'claims.payment.ownerTitle': 'Mis indemnizaciones',
+  'claims.payment.queryUnavailable': 'No pudimos consultar tus indemnizaciones. Intenta de nuevo.',
   'claims.payment.empty': 'Aún no hay desembolsos autorizados.',
   'claims.payment.updated': 'Actualizado',
   'claims.payment.next': 'Siguientes',
@@ -119,6 +120,7 @@ export const claimsEs = {
 export const claimsEn: Record<keyof typeof claimsEs, string> = {
   'claims.payment.title': 'Disbursement',
   'claims.payment.ownerTitle': 'My indemnities',
+  'claims.payment.queryUnavailable': 'We could not load your indemnities. Try again.',
   'claims.payment.empty': 'There are no authorized disbursements yet.',
   'claims.payment.updated': 'Updated',
   'claims.payment.next': 'Next',

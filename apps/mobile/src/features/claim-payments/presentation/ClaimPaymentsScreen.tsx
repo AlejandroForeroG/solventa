@@ -9,6 +9,7 @@ import { Page, Action, ui } from '../../claim-report/presentation/ui';
 import { ClaimPayments } from '../application/claim-payments';
 import { createClaimPaymentsApi } from '../adapters/payments-api';
 import { paymentMessages } from './messages';
+import { formatPaymentAmount } from './format';
 
 export function ClaimPaymentsScreen() {
   const auth = useAuthentication(); const focused = useIsFocused();
@@ -36,8 +37,7 @@ function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clien
     {state.status === 'ready' && <>
       {state.page.items.length === 0 && <Text style={ui.body}>{copy.empty}</Text>}
       {state.page.items.map(item => {
-        const [whole, fraction] = item.payment.amount.split('.');
-        const amount = new Intl.NumberFormat(locale).format(BigInt(whole)) + (locale === 'es-CO' ? ',' : '.') + fraction + ' COP';
+        const amount = formatPaymentAmount(item.payment.amount, locale);
         return <View key={item.claimId} style={ui.card}>
           <Text accessibilityRole="header" style={ui.subtitle}>{item.claimNumber}</Text>
           <View style={item.payment.status === 'confirmed' ? ui.banner : ui.group}>
