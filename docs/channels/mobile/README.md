@@ -80,7 +80,7 @@ One idempotency key is kept for the whole confirmation: after a failure or an an
 
 ## Notification preferences
 
-A selected Push control shows its device-permission status beside that control when permission is blocked or still being checked. The same context is included in its accessible value; the checked state remains the customer's preference, not a claim that delivery is operational. The existing Settings action remains available in the permission warning.
+A selected Push control shows its device-permission status directly below that category's channel controls, prefixed with Push, when permission is blocked or still being checked. The status uses the category's full width so long words remain readable with large system text, while the three controls retain their alignment. The same context is included in the switch's accessible value; its checked state remains the customer's preference, not a claim that delivery is operational. The existing Settings action remains available in the permission warning.
 
 After sign-in, the notification preferences action in Profile opens `/notification-preferences` on the root stack. The native header back action returns to Profile. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. Save progress, confirmation and save/conflict errors appear beside the save action, so feedback stays with the edited form. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
 

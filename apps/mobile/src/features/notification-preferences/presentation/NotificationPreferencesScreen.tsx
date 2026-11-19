@@ -163,10 +163,10 @@ function PreferencesFlow({ language, title }: { language: 'es' | 'en'; title: st
             style={[styles.switchTrack, draft[category][channel] && styles.switchTrackOn, (busy || !!pending) && styles.dimmed]}>
             <View style={[styles.switchThumb, draft[category][channel] && styles.switchThumbOn]} />
           </View>
-          {channel === 'push' && draft[category][channel] && permission !== true && <Text accessible={false}
-            accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.channelStatus}>
-            {permission === false ? text.pushBlocked : text.pushChecking}</Text>}
         </Pressable>)}</View>
+        {draft[category].push && permission !== true && <Text accessible={false}
+          accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.channelStatus}>
+          {text.channels.push} · {permission === false ? text.pushBlocked : text.pushChecking}</Text>}
       </View>)}
     </View>}
     {pushSelected && permission === false && <Text accessibilityLiveRegion="polite" style={styles.warningText}>{text.pending}</Text>}
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   warningText: { color: theme.colors.warningText, fontSize: 14, lineHeight: 21 },
   success: { color: theme.colors.onMint, fontWeight: '600' },
   channelLabel: { color: theme.colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center' },
-  channelStatus: { color: theme.colors.warningText, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  channelStatus: { color: theme.colors.warningText, fontSize: 12, lineHeight: 18 },
   channelControls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { borderTopWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, gap: 12 },
   rowTitle: { color: theme.colors.foreground, fontSize: 14, fontWeight: '600' },
