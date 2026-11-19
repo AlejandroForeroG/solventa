@@ -1,7 +1,11 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
+import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, sendRequirementFile } from '../../apps/web/src/claims/case-api';
 import { listClaims } from '../../apps/web/src/claims/api';
 import claimsExamples from '../../packages/contracts/examples/claims.json';
 import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
@@ -67,9 +71,13 @@ describe('SPA logout', () => {
 });
 
 // The quote client calls relative URLs, so requests are redirected to the Pact mock server.
-async function withServer<T>(serverUrl: string, run: () => Promise<T>): Promise<T> {
+async function withServer<T>(serverUrl: string, run: () => Promise<T>, origin?: string): Promise<T> {
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (input, init) => realFetch(typeof input === 'string' && input.startsWith('/') ? serverUrl + input : input, init);
+  globalThis.fetch = (input, init) => {
+    const headers = new Headers(init?.headers);
+    if (origin) headers.set('origin', origin);
+    return realFetch(typeof input === 'string' && input.startsWith('/') ? serverUrl + input : input, { ...init, headers });
+  };
   try { return await run(); } finally { globalThis.fetch = realFetch; }
 }
 const submitQuote = (serverUrl: string, values = quoteValues) => withServer(serverUrl, () => requestQuote(values, quoteKey, 'es-CO'));
@@ -555,5 +563,52 @@ describe('SPA claims inbox', () => {
       .withRequest({ method: 'GET', path: '/api/v1/claims', headers: { accept: 'application/json' } })
       .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
     await pact.executeTest(server => withServer(server.url, async () => assert.equal((await list()).kind, expected)));
+  });
+});
+describe('SPA claim case', () => {
+  const state = 'an explicitly granted claims analyst';
+  const claimId = claimsExamples.ownedCases.items[0].claimId;
+  const casePath = '/api/v1/claims/' + claimId;
+  const requirementId = '11111111-1111-4111-8111-111111111114';
+  const controller = new AbortController();
+
+  for (const [name, path, value, read] of [
+    ['analyst file', casePath + '/case', claimsExamples.caseFile, () => getCase(claimId, 'case', controller.signal)],
+    ['customer file', casePath + '/customer', { ...claimsExamples.caseFile, access: 'customer' }, () => getCase(claimId, 'customer', controller.signal)],
+    ['owned cases', '/api/v1/claims/customer/cases', claimsExamples.ownedCases, () => getOwnedCases(controller.signal)],
+    ['expert directory', '/api/v1/claims/experts', claimsExamples.experts, () => getExperts(controller.signal)]
+  ] as const) test('reads the ' + name, async () => {
+    pact.given(state).uponReceiving('a request for the claim ' + name).withRequest({ method: 'GET', path })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(value) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await read()).kind, 'ok')));
+  });
+
+  for (const [action, request, value] of [
+    ['decisions', claimsExamples.decisionRequest, claimsExamples.decisionResult],
+    ['review', claimsExamples.reviewRequest, claimsExamples.actionReceipt],
+    ['requirements/' + requirementId + '/response', claimsExamples.requirementResponse, { ...claimsExamples.actionReceipt, state: 'in_review' }]
+  ] as const) test('commits the ' + action + ' command', async () => {
+    pact.given(state).uponReceiving('the claim ' + action + ' command')
+      .withRequest({ method: 'POST', path: casePath + '/' + action, headers: { 'Content-Type': 'application/json',
+        'Idempotency-Key': quoteKey, Origin: 'https://solventa.dev' }, body: request })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(value) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await caseCommand(claimId, action, request, quoteKey)).kind, 'ok'), 'https://solventa.dev'));
+  });
+
+  test('uploads evidence using a stable file id and a content checksum', async () => {
+    const evidencePath = fileURLToPath(new URL('../../packages/assets/brand/solventa-icon-green.png', import.meta.url));
+    const evidenceBytes = readFileSync(evidencePath);
+    const sha256 = createHash('sha256').update(evidenceBytes).digest('hex');
+    const file = new File([new Uint8Array(evidenceBytes)], 'evidence.png', { type: 'image/png' });
+    const prepared = await prepareRequirementFile(requirementId, file);
+    const reselection = await prepareRequirementFile(requirementId, new File([new Uint8Array(evidenceBytes)], 'selected-again.png', { type: 'image/png' }));
+    assert.equal(reselection.id, prepared.id);
+    assert.notEqual((await prepareRequirementFile(claimId, file)).id, prepared.id);
+    const fileId = prepared.id;
+    pact.given(state).uponReceiving('a claim requirement file')
+      .withRequestBinaryFile({ method: 'PUT', path: casePath + '/requirements/' + requirementId + '/files/' + fileId,
+        headers: { Origin: 'https://solventa.dev', 'X-Content-SHA256': sha256 } }, 'image/png', evidencePath)
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { fileId, state: 'verified', traceId } });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await sendRequirementFile(claimId, requirementId, fileId, file)).kind, 'ok'), 'https://solventa.dev'));
   });
 });

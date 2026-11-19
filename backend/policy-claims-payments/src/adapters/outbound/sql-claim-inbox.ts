@@ -34,8 +34,8 @@ export class SqlClaimInbox implements ClaimInboxStore {
           SELECT * FROM ranked ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} ORDER BY ${order} LIMIT ${PAGE_SIZE + 1}
         ) SELECT p.id, p.claim_number, p.policy_id, p.status, p.created_at, p.estimated_amount::STRING AS estimated_amount, p.currency, p.assignee_id,
           p.evidence_required::INT4 AS required,
-          (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state IN ('uploaded', 'verified'))::INT4 AS provided,
-          (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state = 'uploaded')::INT4 AS unverified
+          (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state IN ('uploaded', 'verified') AND e.retention_until > now() AND NOT EXISTS (SELECT 1 FROM policy.claim_requirement_files rf WHERE rf.evidence_id=e.id AND NOT rf.included))::INT4 AS provided,
+          (SELECT count(*) FROM policy.evidence_metadata e WHERE e.claim_id = p.id AND e.state = 'uploaded' AND e.retention_until > now() AND NOT EXISTS (SELECT 1 FROM policy.claim_requirement_files rf WHERE rf.evidence_id=e.id AND NOT rf.included))::INT4 AS unverified
         FROM page p ORDER BY ${order.replaceAll(/\b(rank|created_at|amount_key|id)\b/g, 'p.$1')}`, values);
       const audit = await client.query(`INSERT INTO policy.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
         SELECT $1, 'claims.inbox.read', 'claim_collection', $2::UUID, 'success', $3, now() + INTERVAL '90 days' WHERE clock_timestamp() < $4::TIMESTAMPTZ RETURNING id`,
