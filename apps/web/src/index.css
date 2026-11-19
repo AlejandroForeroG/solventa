@@ -22,7 +22,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .channel-line .product { font-size: 15px; font-weight: 600; color: #12151a; }
 @media (max-width: 600px) { .content { padding: 24px 16px 48px; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.btn { display: inline-flex; align-items: center; justify-content: center; width: auto; padding: 11px 18px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid transparent; cursor: pointer; }
+.btn { display: inline-flex; align-items: center; justify-content: center; width: auto; padding: 11px 18px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid transparent; cursor: pointer; text-decoration: none; }
+.access-panel a:not(.btn) { color: #0b6b5f; font: inherit; text-underline-offset: 3px; }
 .btn-primary { background: #0b6b5f; color: #fff; border-color: #0b6b5f; }
 .btn-primary:hover:not(:disabled) { background: #08544a; }
 .btn-primary:disabled { background: #edebe6; color: #56616f; border-color: #edebe6; opacity: 1; cursor: not-allowed; }
@@ -66,7 +67,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .section-label { margin: 0 0 16px; font: 600 12px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: #56616f; }
 .step h1.section-label { font-size: 12px; letter-spacing: .08em; margin-bottom: 4px; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
-.field label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #3a424e; }
+.field label, .field-label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: #3a424e; }
+.field-readonly { margin: 0; padding: 10px 12px; min-height: 44px; border: 1px solid #cfccc5; border-radius: 10px; background: #faf9f7; color: #3a424e; font-size: 14px; overflow-wrap: anywhere; }
 .required { color: #a32b22; }
 .field input, .field select { width: 100%; padding: 10px 12px; border: 1px solid #cfccc5; border-radius: 10px; background: #fff; color: #12151a; font: 400 14px 'IBM Plex Sans', sans-serif; }
 .field input.mono-input { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13.5px; }

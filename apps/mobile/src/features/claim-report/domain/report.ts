@@ -19,8 +19,8 @@ export type EvidenceKind = 'photo' | 'video';
 // A video is identified in the review by a still image made from it; making it can fail, and that is a state of its own, never a blank.
 export type Preview = { status: 'pending' } | { status: 'ready'; uri: string } | { status: 'failed' };
 // `owned` marks a copy the app created in its own cache. Only owned files are ever deleted: a gallery original never is.
-export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview; document?: true };
-export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null; owned?: boolean };
+export type EvidenceItem = { id: string; uri: string; contentType: EvidenceContentType; byteSize: number; kind: EvidenceKind; owned?: boolean; preview?: Preview; document?: true; fileName?: string };
+export type EvidenceCandidate = { uri: string; mimeType: string | null; byteSize: number | null; owned?: boolean; fileName?: string | null };
 
 // The customer decides whether the report carries their position. Only `ready` attaches it; a refused permission or a failed reading means the report goes without it.
 export type LocationChoice = { state: 'off' } | { state: 'reading' } | { state: 'ready'; latitude: number; longitude: number } | { state: 'denied' } | { state: 'failed' };
@@ -75,7 +75,9 @@ export function admit(evidence: readonly EvidenceItem[], candidate: EvidenceCand
   if (evidence.length >= LIMITS.files) return { rejected: 'too_many' };
   if (totalBytes(evidence) + candidate.byteSize > LIMITS.bytes) return { rejected: 'total_size' };
   const kind = kindOf(contentType);
-  return { item: { id, uri: candidate.uri, contentType, byteSize: candidate.byteSize, kind, owned: candidate.owned === true, ...(kind === 'video' ? { preview: { status: 'pending' as const } } : {}) } };
+  const fileName = [...(candidate.fileName ?? '').replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').trim()].slice(0, 255).join('');
+  return { item: { id, uri: candidate.uri, contentType, byteSize: candidate.byteSize, kind, owned: candidate.owned === true,
+    ...(fileName ? { fileName } : {}), ...(kind === 'video' ? { preview: { status: 'pending' as const } } : {}) } };
 }
 
 export function validate(draft: Draft, window: PolicyWindow, now: Date): Issue[] {

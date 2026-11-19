@@ -58,6 +58,8 @@ Open Claim drafts from Home, or Prepare claim draft from a policy detail, includ
 
 Opening drafts without a selected policy offers Choose a policy. The separate `/choose-draft-policy` screen retains the draft heading and purpose, opens the protected wallet behind its device prompt and lists eligible active policies. Choosing a record returns directly to the selected policy's draft workspace. This context does not remain on the ordinary Wallet tab. A selected policy retains the direct Create draft action.
 
+The draft editor labels the number of selected received-evidence references separately from its ten-reference limit. When online results are available, it also shows their available count and explains that selecting a reference reuses that received evidence. An unselected available reference is not counted as selected or saved.
+
 Cancelling the shared device prompt leaves the workspace locked and offers unlocking again. It does not report an unconfirmed save or alter custody. Both the offline owner lookup and the draft store translate the shared prompt's locked failure into the draft contract; actual storage failures remain distinct.
 
 Edit draft changes the partial preparation; Complete report opens the existing file-attachment/review journey. Their accessible names include both policy reference and draft reference to distinguish repeated actions. A pending edit labels the older server timestamp as Last confirmed version, keeping it separate from the current unconfirmed changes. An empty list is not announced while its initial opening or remote refresh is still pending. When no verified online owner is available, identifying the protected wallet owner and opening the separately protected drafts each retain their device prompt.
@@ -77,6 +79,8 @@ Each provider of the results offers **Solicitar asistencia**. It opens a review 
 One idempotency key is kept for the whole confirmation: after a failure or an answer that never arrived, retrying returns the stored request instead of making another, and a failed or uncertain send is never shown as a request that exists. A refusal that the same key would meet again starts a new key on the next try. The state lives in `AssistanceRequestFlow`; the screen only shows it. The contract is in [assistance requests](../../modules/policy-claims-payments/assistance-provider-search.md#requesting-assistance-on-site).
 
 ## Notification preferences
+
+A selected Push control shows its device-permission status beside that control when permission is blocked or still being checked. The same context is included in its accessible value; the checked state remains the customer's preference, not a claim that delivery is operational. The existing Settings action remains available in the permission warning.
 
 After sign-in, the notification preferences action in Profile opens `/notification-preferences` on the root stack. The native header back action returns to Profile. The screen reads the Identity-owned matrix for policy, payments, claims and commercial notices across push, email and SMS. The first read shows all channels off; saving uses an optimistic version and stable idempotency key. Save progress, confirmation and save/conflict errors appear beside the save action, so feedback stays with the edited form. A conflicting edit asks the customer to refresh. An uncertain save can be retried with the same request or reconciled by refreshing. Signing out hides the choices.
 
@@ -302,6 +306,8 @@ The wallet is the section where a signed-in customer reads their own issued poli
 
 ### What it shows, and what it does not
 
+If the wallet loses its authenticated session, it clears policy content and offers account sign-in directly from the recovery card, alongside the authentication failure explanation and an alternate Back action. A login in progress shows its status and cancellation action. This UI does not bypass pending credential cleanup, device authentication or owner authorization.
+
 The wallet represents the products and data Solventa has: `vida_hipotecario` (sum insured), `flight_delay` (flight, minimum delay and payout) and `weather_event` (station, minimum rainfall in 24 hours and payout), with the sealed premium and validity. The compact protected encoding gives each coverage kind its own code, and six policies of any mix stay within the 1800-byte bound. The mockup's cars, homes, names, amounts and two sample policies are illustrative and did not create products.
 
 | Mockup element | Wallet behavior |
@@ -337,6 +343,8 @@ The claim report lets a signed-in customer report a claim on one of their polici
 4. **Send.** The phone hashes each file, creates the draft, uploads each file and submits. The result shows the case number `SIN-YYYY-NNNNN`. A partial failure says that the report is not filed yet and never claims reception.
 
 ### Document evidence
+
+The editor and review show a bounded, control-character-free original filename when the system picker supplies one, with the existing kind/position fallback otherwise. This display name stays in the open report's memory; it is not added to the server declaration, protected wallet or saved draft. Evidence sizes use B, KB or MB to avoid displaying a nonempty small attachment as zero; the aggregate size follows the same format in review and receipt.
 
 In the evidence section, **Escanear documento** opens the camera at full capture quality. **Elegir archivo de documento** opens the native file picker with `expo-document-picker` and does not require camera permission. Documents use the report's existing image formats (JPEG, PNG and HEIC) and share its ten-file, 50 MiB limits with other evidence. PDF and multi-page assembly are outside this flow. Rebuild the native app after installing the document picker module.
 

@@ -104,6 +104,8 @@ for (const granted of [true, false]) {
       assert.deepEqual(reads, ['first']);
       assert.equal(writes.length, 0);
       if (!granted) assert.match(ui.host.textContent!, /Push está elegido, pero no operará/);
+      if (!granted) assert.match(ui.control('Eventos de póliza · Push')!.textContent!, /Sin permiso/);
+      else assert.doesNotMatch(ui.control('Eventos de póliza · Push')!.textContent!, /Sin permiso/);
       await ui.press('Guardar preferencias');
       assert.equal(writes.length, 1);
       assert.equal(writes[0].owner, 'first');

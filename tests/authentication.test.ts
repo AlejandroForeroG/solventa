@@ -12,6 +12,23 @@ const password = 'a'.repeat(64);
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const env = { APP_ENV: 'dev', AUTH_ORIGIN: origin, AUTH_REDIRECT_URI: origin+'/auth/callback', WORKOS_CLIENT_ID: 'client_test', WORKOS_API_KEY: 'sk_test_synthetic', AUTH_COOKIE_PASSWORD: password, IDENTITY_DB: {connectionString:'postgresql://synthetic.invalid/unused'} } as IdentityEnv;
 
+test('SSO callbacks reuse an active registered session without revoking its other channel', async () => {
+  const identity = { providerSubject: 'user_shared', sessionReference: 'session_shared', emailVerified: true };
+  const principal = { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() };
+  let revoked = 0;
+  const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
+    provider: () => ({ begin: async () => assert.fail(), exchange: async () => ({ identity, cookie: 'sealed_shared' }),
+      authenticate: async () => ({ identity }), revoke: async () => { revoked++; }, logoutUrl: () => '' }),
+    sessions: () => ({ open: async () => { throw new Error('session_already_registered'); },
+      register: async () => principal, find: async () => principal, revoke: async () => assert.fail('unexpected_local_logout') }),
+  } });
+  const attempt = await sealAttempt({ state: 'state', codeVerifier: 'verifier', expires: Date.now() + 60000 }, password, origin);
+  const response = await app.request(origin + '/auth/callback?state=state&code=synthetic', { headers: { Cookie: '__Host-solventa-oauth=' + attempt } }, env);
+  assert.equal(response.headers.get('location'), '/');
+  assert.match(response.headers.get('set-cookie') ?? '', /__Host-solventa-session=sealed_shared/);
+  assert.equal(revoked, 0);
+});
+
 test('separate web authenticators reuse public keys while verifying each sealed user and JWT', async t => {
   const clientId = 'client_synthetic_cache';
   const issuer = `https://api.workos.com/user_management/${clientId}`;
@@ -76,7 +93,7 @@ test('both aliases use their own PKCE callback and host-only cookie; foreign hos
   const canonical = 'https://dev.solventa.site';
   const bindings = { ...env, AUTH_ORIGIN: canonical, AUTH_REDIRECT_URI: canonical + '/auth/callback' } as IdentityEnv;
   const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
-    provider: config => new WorkosAuthentication(config), sessions: () => ({ open: async () => assert.fail('unexpected_persistence'), find: async () => assert.fail('unexpected_persistence'), revoke: async () => assert.fail('unexpected_persistence') }),
+    provider: config => new WorkosAuthentication(config), sessions: () => ({ register: async () => assert.fail('unexpected_persistence'), find: async () => assert.fail('unexpected_persistence'), revoke: async () => assert.fail('unexpected_persistence') }),
   } });
   for (const host of [canonical, origin]) {
     const response = await app.request(host + '/auth/login', {}, bindings);
@@ -105,7 +122,7 @@ test('same-environment aliases cannot submit cross-host logout or exchange one a
   let exchanges = 0;
   const callbackApp = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
     provider: () => ({ begin: async () => assert.fail(), exchange: async () => { exchanges++; return assert.fail(); }, authenticate: async () => null, revoke: async () => {}, logoutUrl: () => '' }),
-    sessions: () => ({ open: async () => assert.fail(), find: async () => null, revoke: async () => {} }),
+    sessions: () => ({ register: async () => assert.fail(), find: async () => null, revoke: async () => {} }),
   } });
   const attempt = await sealAttempt({ state: 'state', codeVerifier: 'verifier', expires: Date.now() + 60000 }, password, origin);
   const response = await callbackApp.request(canonical + '/auth/callback?state=state&code=synthetic', { headers: { Cookie: '__Host-solventa-oauth=' + attempt } }, bindings);
@@ -127,7 +144,7 @@ test('callback persistence, session and logout remain functional on each alias w
         return { begin: async () => assert.fail('unexpected_begin'), exchange: async (code, verifier) => { assert.equal(code, 'synthetic'); assert.equal(verifier, 'verifier'); calls.push('exchange'); return { identity, cookie: 'sealed_session' }; },
           authenticate: async cookie => { assert.equal(cookie, 'sealed_session'); return { identity }; }, revoke: async () => { calls.push('provider_logout'); }, logoutUrl: () => host + '/?logged-out' };
       },
-      sessions: () => ({ open: async () => { calls.push('persist'); return principal; }, find: async () => principal, revoke: async () => { calls.push('local_logout'); } }),
+      sessions: () => ({ register: async () => { calls.push('persist'); return principal; }, find: async () => principal, revoke: async () => { calls.push('local_logout'); } }),
     } });
     const attempt = await sealAttempt({ state: 'state', codeVerifier: 'verifier', expires: Date.now() + 60000 }, password, host);
     const callback = await app.request(host + '/auth/callback?state=state&code=synthetic', { headers: { Cookie: '__Host-solventa-oauth=' + attempt } }, bindings);
@@ -144,7 +161,7 @@ test('callback persistence, session and logout remain functional on each alias w
 });
 test('unverified identities cannot reach persistence', async () => {
   let called = false;
-  const auth = new Authentication({ open: async () => { called=true; throw Error(); }, find: async () => null, revoke: async () => {} });
+  const auth = new Authentication({ register: async () => { called=true; throw Error(); }, find: async () => null, revoke: async () => {} });
   await assert.rejects(auth.login({providerSubject:'user_test',sessionReference:'session_test',emailVerified:false}),/identity_unverified/);
   assert.equal(called,false);
 });
@@ -192,7 +209,7 @@ test('web logout forwards its request correlation and stops provider logout afte
     const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected_access'), authentication: {
       provider: () => ({ begin: async () => assert.fail('unexpected_login'), exchange: async () => assert.fail('unexpected_exchange'),
         authenticate: async () => ({ identity }), revoke: async () => { calls.push('provider'); }, logoutUrl: () => 'https://synthetic.example/logout' }),
-      sessions: () => ({ open: async () => assert.fail('unexpected_registration'), find: async () => null,
+      sessions: () => ({ register: async () => assert.fail('unexpected_registration'), find: async () => null,
         revoke: async (verified, correlation) => { assert.deepEqual(verified, identity); localTrace = correlation; calls.push('local'); if (failLocal) throw new Error('sql_offline'); } }),
     } });
     const response = await app.request(origin + '/auth/logout', { method: 'POST', headers: { Origin: origin, Cookie: '__Host-solventa-session=synthetic', 'X-Trace-Id': trace } }, env);

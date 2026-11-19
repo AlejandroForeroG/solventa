@@ -22,12 +22,19 @@ type PolicyFilter = keyof (typeof walletMessages)['es-CO']['filters'];
 
 export function WalletScreen({ draftSelection = false }: { draftSelection?: boolean } = {}) {
   const auth = useAuthentication();
-  const locale: WalletLocale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
+  const appCopy = useAppMessages();
+  const locale: WalletLocale = appCopy === messages.en ? 'en-US' : 'es-CO';
   const copy = walletMessages[locale];
   const access = walletAccessFor(auth);
   if (!access) return <SafeAreaView style={styles.safe}>
-    <View style={styles.card}><Text style={styles.body}>{copy.signedOut}</Text>
-      <Action label={copy.back} onPress={() => router.replace('/')} /></View>
+    <ScrollView contentContainerStyle={styles.content}><View style={styles.card}>
+      <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
+      {auth.failure && <Text accessibilityRole="alert" style={styles.notice}>{appCopy.failures[auth.failure]}</Text>}
+      <Text style={styles.body}>{auth.status === 'loading' ? appCopy.verifying : auth.status === 'authorizing' ? appCopy.authorizing : copy.signedOut}</Text>
+      {auth.status === 'signedOut' && <Action label={appCopy.actions.signIn} onPress={() => void auth.signIn()} />}
+      {auth.status === 'authorizing' && <Action label={appCopy.actions.cancel} onPress={() => void auth.cancel()} />}
+      <Action secondary label={copy.back} onPress={() => router.replace('/')} />
+    </View></ScrollView>
   </SafeAreaView>;
   // A new owner or locale gets a new coordinator, so another account never sees the previous one's data.
   const key = access.mode === 'online' ? `${access.owner.clientId}:${access.owner.subjectToken}:${locale}` : `offline:${locale}`;
