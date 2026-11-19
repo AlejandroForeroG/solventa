@@ -4,11 +4,47 @@ import { decisionState, parseClaimDecision } from '../backend/policy-claims-paym
 import { ClaimDecisions } from '../backend/policy-claims-payments/src/application/claim-decisions';
 import { Hono } from 'hono';
 import { mountClaims } from '../backend/policy-claims-payments/src/adapters/inbound/claims-http';
+import { ClaimReview, type ClaimReviewStore } from '../backend/policy-claims-payments/src/application/claim-review';
+import { parseRequirementSelection } from '../backend/policy-claims-payments/src/domain/claim-review';
 
 const actorId = '90000000-0000-4000-8000-000000000001';
 const claimId = '90000000-0000-4000-8000-000000000010';
 const evidenceId = '90000000-0000-4000-8000-000000000011';
 const request = { action: 'approve' as const, reason: 'Verified supporting evidence', evidenceIds: [evidenceId] };
+
+test('requirement selection accepts a bounded unique set and rejects caller-supplied authority', () => {
+  assert.deepEqual(parseRequirementSelection({ fileIds: [] }), []);
+  assert.deepEqual(parseRequirementSelection({ fileIds: [evidenceId.toUpperCase()] }), [evidenceId]);
+  for (const input of [null, {}, { fileIds: 'bad' }, { fileIds: ['bad'] }, { fileIds: [evidenceId, evidenceId.toUpperCase()] },
+    { fileIds: [actorId, claimId, evidenceId, '90000000-0000-4000-8000-000000000012'] }, { fileIds: [], actorId }])
+    assert.equal(parseRequirementSelection(input), null);
+});
+
+test('HTTP file selection checks web ownership authority and input before reconciling reservations', async () => {
+  let allowed = false;
+  let calls = 0;
+  let operation = '';
+  const unused = async (): Promise<never> => { throw new Error('unexpected use case'); };
+  const store: ClaimReviewStore = { owned: unused, detail: unused, evidence: unused, review: unused, respond: unused,
+    prepareFile: unused, verifyFile: unused, selectFiles: async (_claim, _requirement, owner, files) => {
+      calls++; assert.equal(owner.clientId, actorId); assert.equal(owner.subjectToken, evidenceId); assert.deepEqual(files, [evidenceId]); return 'selected';
+    } };
+  const app = new Hono<{ Bindings: PolicyEnv }>();
+  mountClaims(app, { inbox: { list: unused }, review: new ClaimReview(store, undefined, () => []),
+    authorize: async input => { operation = input.operation; return allowed ? { allowed: true, actor: { kind: 'user', channel: 'web',
+      operations: ['claims:respond'], principal: { clientId: actorId, subjectToken: evidenceId }, authorizationExpiresAt: new Date(Date.now() + 4000).toISOString() } }
+      : { allowed: false, status: 403, error: 'forbidden' }; } });
+  const send = (body: unknown) => app.request(`http://localhost:8787/api/v1/claims/${claimId}/requirements/${actorId}/files/selection`,
+    { method: 'POST', headers: { 'content-type': 'application/json', cookie: 'solventa-session=synthetic', origin: 'http://localhost:8787' },
+      body: JSON.stringify(body) }, { APP_ENV: 'local' } as PolicyEnv);
+  assert.equal((await send({ fileIds: [evidenceId] })).status, 403); assert.equal(calls, 0);
+  allowed = true;
+  assert.equal((await send({ fileIds: [evidenceId], actorId })).status, 400); assert.equal(calls, 0);
+  const reply = await send({ fileIds: [evidenceId] });
+  assert.equal(reply.status, 200); assert.equal(reply.headers.get('cache-control'), 'no-store');
+  assert.equal(operation, 'claims:respond'); assert.equal(calls, 1);
+  assert.equal((await reply.json()).state, 'selected');
+});
 
 test('decision input rejects missing, duplicate and unexpected evidence or reason fields', () => {
   assert.deepEqual(parseClaimDecision(request), request);

@@ -18,7 +18,7 @@ type WebActor = ClaimDecisionActor & { subjectToken?: string };
 export type ClaimsHttpDependencies = {
   inbox: Pick<ClaimInbox, 'list'>;
   decisions?: Pick<ClaimDecisions, 'decide'>;
-  review?: Pick<ClaimReview<ReadableStream<Uint8Array>>, 'detail' | 'evidence' | 'directory' | 'review' | 'respond' | 'receive' | 'owned'>;
+  review?: Pick<ClaimReview<ReadableStream<Uint8Array>>, 'detail' | 'evidence' | 'directory' | 'review' | 'respond' | 'receive' | 'owned' | 'selectFiles'>;
   download?(key: string, sha256: string, byteSize: number): Promise<ReadableStream<Uint8Array> | null>;
   authorize(input: { kind: 'web'; operation: Operation; traceId: string; method: Method; requestOrigin: string; origin: string; cookie: string }): Promise<unknown>;
 };
@@ -172,6 +172,15 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
   }
 
   const requirements = '/api/v1/claims/:claimId/requirements/:requirementId';
+  app.all(requirements + '/files/selection', route('POST', 'claims:respond', async (c, actor, reply) => {
+    if (!deps.review || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
+    const { claimId, requirementId } = c.req.param();
+    if (!isUuid(claimId) || !isUuid(requirementId)) return reply({ error: 'invalid_request' }, 400);
+    const status = await deps.review.selectFiles(claimId.toLowerCase(), requirementId.toLowerCase(),
+      { clientId: actor.clientId, subjectToken: actor.subjectToken }, await readJson(c.req.raw), actor.traceId);
+    return status === 'selected' ? reply({ state: status }, 200)
+      : reply({ error: status }, status === 'not_found' ? 404 : status === 'conflict' ? 409 : 400);
+  }));
   app.all(requirements + '/response', route('POST', 'claims:respond', async (c, actor, reply) => {
     if (!deps.review || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
     const { claimId, requirementId } = c.req.param();

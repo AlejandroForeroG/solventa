@@ -1,4 +1,4 @@
-import { parseRequirementFile, parseRequirementResponse, parseReview, type ClaimNotice, type Expert, type RequirementFile, type RequirementResponse, type ReviewCommand } from '../domain/claim-review';
+import { parseRequirementFile, parseRequirementResponse, parseRequirementSelection, parseReview, type ClaimNotice, type Expert, type RequirementFile, type RequirementResponse, type ReviewCommand } from '../domain/claim-review';
 import type { ClaimState } from '../domain/claims';
 import type { ClaimDecisionActor } from './claim-decisions';
 import type { ClaimEvidenceStore, EvidenceBody, ReportOwner } from './ports/claim-report';
@@ -22,6 +22,7 @@ export interface ClaimReviewStore {
   evidence(claimId: string, fileId: string, access: CaseAccess, traceId: string): Promise<(CaseEvidence & { key: string; sha256: string }) | null>;
   review(claimId: string, actor: ClaimDecisionActor, command: ReviewCommand, key: string, expert?: Expert): Promise<ReviewOutcome>;
   respond(claimId: string, requirementId: string, owner: ReportOwner, response: RequirementResponse, key: string, traceId: string): Promise<ReviewOutcome>;
+  selectFiles(claimId: string, requirementId: string, owner: ReportOwner, fileIds: string[], traceId: string): Promise<'selected' | 'not_found' | 'conflict'>;
   prepareFile(claimId: string, requirementId: string, owner: ReportOwner, file: RequirementFile, traceId: string):
     Promise<{ status: 'pending' | 'verified'; key: string } | { status: 'not_found' | 'conflict' }>;
   verifyFile(claimId: string, requirementId: string, owner: ReportOwner, fileId: string, traceId: string): Promise<boolean>;
@@ -71,5 +72,10 @@ export class ClaimReview<Body extends EvidenceBody = EvidenceBody> {
     const stored = await this.storage.put(target.key, body, file);
     if (stored !== 'stored') return stored;
     return await this.store.verifyFile(claimId, requirementId, owner, file.fileId, traceId) ? 'verified' : 'conflict';
+  }
+
+  async selectFiles(claimId: string, requirementId: string, owner: ReportOwner, input: unknown, traceId: string) {
+    const ids = parseRequirementSelection(input);
+    return ids ? this.store.selectFiles(claimId, requirementId, owner, ids, traceId) : 'invalid_request';
   }
 }
