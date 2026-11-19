@@ -20,7 +20,7 @@ Every processing attempt looks up the same payment at the synthetic provider bef
 
 A confirmed result is committed with payment and indemnity state, the claim's `paid` transition, audit, capture/outbox and participant notices in one transaction. A local commit failure keeps the pending intent, and recovery reconciles the provider's already confirmed receipt without a second financial effect. A declined result is terminal, does not mark the claim paid and leaves no confirmed-payment notice. Concurrent processing cannot overwrite an already terminal state. Expiry of an operator's session does not cancel an intent accepted under valid authorization; subsequent reads still require a fresh grant. Late authorization transaction responses cannot release protected state after their lease expires.
 
-Participant notices are durable case records for the customer and assigned analyst. They do not establish external email, push or native notification delivery. The additional outbox records preserve historical captures; scheduled payment recovery reads the owner intent directly and does not depend on an unimplemented generic outbox publisher.
+Participant notices are durable case records for the customer and assigned analyst. The case-file contract includes `disbursement_confirmed` and `disbursement_declined` alongside review actions. They do not establish external email, push or native notification delivery. The additional outbox records preserve historical captures; scheduled payment recovery reads the owner intent directly and does not depend on an unimplemented generic outbox publisher.
 
 ## Operator and customer channels
 

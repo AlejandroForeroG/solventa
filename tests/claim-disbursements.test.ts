@@ -15,6 +15,17 @@ import { amountWithinCoverage, parseDisbursement } from '../backend/policy-claim
 import { issuanceTimeContent, offerContent, type AcceptedOffer } from '../backend/policy-claims-payments/src/domain/financial';
 import { mountClaimReport } from '../backend/policy-claims-payments/src/adapters/inbound/claim-report-http';
 import { parseClaimPaymentPage } from '../packages/contracts/src/claim-payments';
+import claimsExamples from '../packages/contracts/examples/claims.json';
+
+test('terminal disbursement notices remain valid case-file contract responses', async () => {
+  const spec = parse(await readFile(new URL('../packages/contracts/openapi/v1/claims.yaml', import.meta.url), 'utf8'));
+  const ajv = new Ajv({ strict: false }); addFormats(ajv);
+  const validate = ajv.compile({ ...spec.components.schemas.ClaimCaseRecord, components: spec.components });
+  for (const action of ['disbursement_confirmed', 'disbursement_declined']) {
+    const body = { ...claimsExamples.caseFile, notices: [{ id: randomUUID(), action, at: '2026-11-19T15:00:00.000Z' }] };
+    assert.ok(validate(body), JSON.stringify(validate.errors));
+  }
+});
 
 async function fixture() {
   let now = new Date('2026-11-19T15:00:00.000Z');
