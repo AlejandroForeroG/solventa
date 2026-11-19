@@ -10,6 +10,41 @@ const principal = { clientId: 'client-internal', subjectToken: 'subject-opaque' 
 const credential = { partnerId: 'partner-internal', credentialId: 'credential-internal', scopes: ['quotes:create', 'unrecognized'] };
 const sessions: IdentitySessions = { open: async () => principal, find: async () => principal, revoke: async () => {} };
 
+test('device notice access derives its destination from the verified principal and provider session', async () => {
+  const destination = 'a1234567-1234-4123-8123-123456789abc';
+  const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, {
+    find: async (owner, verified) => {
+      assert.deepEqual(owner, principal); assert.deepEqual(verified, webIdentity);
+      return destination.toUpperCase();
+    },
+  });
+  for (const operation of ['notices:read-device', 'notices:receipt-device']) {
+    assert.deepEqual(await api.mobileUser(webIdentity, operation), { allowed: true, actor: { kind:'user', channel:'mobile', principal, operations:[operation], noticeDestination:destination } });
+    assert.deepEqual(await api.webUser(webIdentity, operation), { allowed:false, error:'forbidden', status:403 });
+    assert.deepEqual(await api.partner(identity, operation), { allowed:false, error:'forbidden', status:403 });
+  }
+});
+
+test('missing, revoked, malformed and unavailable notice bindings fail closed without widening legacy access', async () => {
+  for (const [destination, status] of [[null, 403], ['not-a-device', 503]] as const) {
+    const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, { find: async () => destination });
+    assert.equal((await api.mobileUser(webIdentity, 'notices:read-device')).allowed, false);
+    assert.deepEqual(await api.mobileUser(webIdentity, 'notices:receipt-device'), { allowed:false, error:status === 403 ? 'forbidden' : 'access_unavailable', status });
+  }
+  const absent = new ApiAccess({ find: async () => null }, sessions);
+  assert.deepEqual(await absent.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'access_unavailable', status:503 });
+  assert.equal((await absent.mobileUser(webIdentity, 'notices:read')).allowed, true, 'v1 still uses its original session contract');
+  const unavailable = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, { find: async () => { throw new Error('private database failure'); } });
+  assert.deepEqual(await unavailable.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'access_unavailable', status:503 });
+});
+
+test('an inactive native session cannot resolve a notice destination', async () => {
+  const api = new ApiAccess({ find: async () => null }, { ...sessions, find: async () => null }, undefined, undefined, undefined, undefined, {
+    find: async () => { assert.fail('a revoked or foreign session must never reach destination lookup'); },
+  });
+  assert.deepEqual(await api.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'unauthorized', status:401 });
+});
+
 test('partner access binds issuer, organization and application and intersects scopes', async () => {
   let lookup: string[] = [];
   const api = new ApiAccess({ find: async (provider, reference) => { lookup = [provider, reference]; return credential; } }, sessions);

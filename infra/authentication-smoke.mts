@@ -7,6 +7,7 @@ import { MobileSessions } from '../backend/identity-consent-ecosystem/src/applic
 import { Authentication } from '../backend/identity-consent-ecosystem/src/application/authentication';
 import { RegisteredDevices } from '../backend/identity-consent-ecosystem/src/application/registered-devices';
 import { SqlRegisteredDevices } from '../backend/identity-consent-ecosystem/src/adapters/outbound/registered-devices';
+import { SqlNoticeDestinations } from '../backend/identity-consent-ecosystem/src/adapters/outbound/notice-destinations';
 import { SecurityDecisions } from '../backend/identity-consent-ecosystem/src/application/security-decisions';
 import { SqlSecurityDecisions } from '../backend/identity-consent-ecosystem/src/adapters/outbound/sql-security-decisions';
 import { authorizeApiAccess } from '../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
@@ -130,6 +131,24 @@ try {
   assert.ok(binding);
   assert.deepEqual(await devices.execute('register',deviceInput),binding);
   assert.deepEqual(await devices.execute('find',deviceInput),binding);
+  const noticeDestinations = new SqlNoticeDestinations(runtime.toString());
+  const noticePrincipal = await repo.find(deviceIdentity); assert.ok(noticePrincipal);
+  assert.equal(await noticeDestinations.find(noticePrincipal,deviceIdentity),deviceInput.installationId);
+  assert.equal(await noticeDestinations.find(reinstallPrincipal,deviceIdentity),null,'a foreign principal cannot select the binding');
+  assert.equal(await noticeDestinations.find(noticePrincipal,{...deviceIdentity,providerSubject:'foreign'}),null);
+  const anotherPhoneIdentity = {...deviceIdentity,sessionReference:'notice_second_phone_'+randomUUID()};
+  await repo.register(anotherPhoneIdentity);
+  assert.equal(await noticeDestinations.find(noticePrincipal,anotherPhoneIdentity),null,'a local session without device registration is insufficient');
+  const anotherPhone = {identity:anotherPhoneIdentity,installationId:randomUUID(),correlationId:randomUUID()};
+  assert.ok(await devices.execute('register',anotherPhone));
+  assert.equal(await noticeDestinations.find(noticePrincipal,anotherPhoneIdentity),anotherPhone.installationId);
+  assert.equal(await noticeDestinations.find(noticePrincipal,deviceIdentity),deviceInput.installationId,'another session does not change the first destination');
+  assert.ok(await devices.execute('revoke',anotherPhone));
+  assert.equal(await noticeDestinations.find(noticePrincipal,anotherPhoneIdentity),null,'revoked session and binding no longer authorize delivery');
+  const ambiguousBinding = randomUUID();
+  await db.query('INSERT INTO identity.registered_devices(id,client_id,device_reference) VALUES($1,$2,$3)',[ambiguousBinding,noticePrincipal.clientId,`mobile-v1:${deviceIdentity.sessionReference}:${randomUUID()}`]);
+  assert.equal(await noticeDestinations.find(noticePrincipal,deviceIdentity),null,'ambiguous active bindings fail closed');
+  await db.query('DELETE FROM identity.registered_devices WHERE id=$1',[ambiguousBinding]);
   const replacementInput = {...deviceInput,installationId:randomUUID(),correlationId:randomUUID()};
   assert.equal(await devices.execute('register',replacementInput),null);
   const replacementDecision = (await db.query(`SELECT aggregate_id,payload,correlation_id FROM identity.outbox_events

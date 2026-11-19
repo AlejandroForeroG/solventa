@@ -31,7 +31,7 @@ import { advisorPactWorld } from './advisor';
 import { lifecyclePactWorld } from './policy-lifecycle';
 import { draftPactWorld } from './claim-drafts';
 import { Notices } from '../../../backend/policy-claims-payments/src/application/notices';
-import { dispatchConsumer } from '../../../backend/policy-claims-payments/src/domain/notice';
+import { noticeConsumers } from '../../../backend/policy-claims-payments/src/domain/notice';
 import { memoryNoticeStore } from '../../support/notice-fakes';
 import { contractNotice } from './notices-contract';
 
@@ -242,16 +242,17 @@ function nativeAssistanceWorld(): Partial<World> {
 
 // The native customer's stored notices. Identity's decision, with the push choices of the same request, is simulated by the bearer token.
 async function nativeNoticesWorld(stage: 'stored' | 'offered'): Promise<Partial<World>> {
+  const destination = '00000000-0000-4000-8000-000000000003';
   const memory = memoryNoticeStore([{ owner: financialActor.clientId, notice: contractNotice }], { current: new Date() });
-  if (stage === 'offered') await memory.store.record(contractNotice.eventId, 'policy.indemnity.notice', dispatchConsumer, 'offered', '30000000-0000-4000-8000-000000000001');
+  if (stage === 'offered') await memory.store.record(contractNotice.eventId, 'policy.indemnity.notice', noticeConsumers(destination).dispatch, 'offered', '30000000-0000-4000-8000-000000000001');
   const policy = createPolicyHttp({
     authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
     denyResourceAccess: async () => ({ recorded: true }),
     finance: financeFixtures(true),
     notices: {
       authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token'
-        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] },
-          ...(input.operation === 'notices:read' ? { pushChoices: { policy: true, payments: true, claims: false, commercial: false } } : {}) }
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation], noticeDestination:destination },
+          ...(input.operation === 'notices:read-device' ? { pushChoices: { policy: true, payments: true, claims: false, commercial: false } } : {}) }
         : { allowed: false, status: 401, error: 'unauthorized' },
       notices: new Notices(memory.store),
     },

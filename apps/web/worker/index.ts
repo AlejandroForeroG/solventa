@@ -12,7 +12,7 @@ const partnerOffersPath = /^\/api\/v1\/partner\/offers(\/|$)/;
 const policiesPath = /^\/api\/v[12]\/policies(\/|$)/;
 const claimsPath = /^\/api\/v1\/claims(\/|$)/;
 const claimDraftsPath = /^\/api\/v1\/claim-drafts(\/|$)/;
-const noticesPath = /^\/api\/v1\/notices(\/|$)/;
+const noticesPath = /^\/api\/v[12]\/notices(\/|$)/;
 const requirementEvidencePath = /^\/api\/v1\/claims\/[^/]+\/requirements\/[^/]+\/files\/[^/]+$/;
 const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
 // One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
