@@ -7,17 +7,21 @@ import { parseClaimDecision } from '../../domain/claim-decision';
 import type { ClaimDecisions, ClaimDecisionActor } from '../../application/claim-decisions';
 import type { CaseAccess, ClaimReview, ReviewOutcome } from '../../application/claim-review';
 import type { ClaimQuery } from '../../application/ports/claims';
+import type { ClaimDisbursements } from '../../application/claim-disbursements';
+import { parseDisbursement } from '../../domain/claim-disbursement';
 
 type Operation = 'claims:read' | 'claims:decide' | 'claims:respond';
 type Method = 'GET' | 'POST' | 'PUT';
 type ContextWithEnv = Context<{ Bindings: PolicyEnv }>;
-type Status = 200 | 400 | 401 | 403 | 404 | 405 | 409 | 422 | 503;
+type Status = 200 | 202 | 400 | 401 | 403 | 404 | 405 | 409 | 422 | 503;
 type Reply = (body: object, status: Status) => Response;
 type WebActor = ClaimDecisionActor & { subjectToken?: string };
 
 export type ClaimsHttpDependencies = {
   inbox: Pick<ClaimInbox, 'list'>;
   decisions?: Pick<ClaimDecisions, 'decide'>;
+  disbursements?: Pick<ClaimDisbursements, 'request' | 'read'>;
+  dispatchDisbursement?(paymentId: string): void;
   review?: Pick<ClaimReview<ReadableStream<Uint8Array>>, 'detail' | 'evidence' | 'directory' | 'review' | 'respond' | 'receive' | 'owned'>;
   download?(key: string, sha256: string, byteSize: number): Promise<ReadableStream<Uint8Array> | null>;
   authorize(input: { kind: 'web'; operation: Operation; traceId: string; method: Method; requestOrigin: string; origin: string; cookie: string }): Promise<unknown>;
@@ -123,6 +127,25 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
     if (result.status === 'ok') return reply({ decisionId: result.decisionId, state: result.state, replayed: result.replayed }, 200);
     return reply({ error: result.status }, result.status === 'not_found' ? 404 : 409);
   }));
+
+  const disbursementRead = route('GET', 'claims:read', async (c, actor, reply) => {
+    const claimId = c.req.param('claimId');
+    if (!isUuid(claimId)) return reply({ error: 'invalid_request' }, 400);
+    if (!deps.disbursements || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
+    const payment = await deps.disbursements.read(claimId.toLowerCase(), actor);
+    return payment ? reply({ payment }, 200) : reply({ error: 'not_found' }, 404);
+  }, 'GET, POST');
+  const disbursementRequest = route('POST', 'claims:decide', async (c, actor, reply) => {
+    const claimId = c.req.param('claimId');
+    const input = parseDisbursement(await readJson(c.req.raw));
+    if (!isUuid(claimId) || !input) return reply({ error: 'invalid_request' }, 400);
+    if (!deps.disbursements || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
+    const result = await deps.disbursements.request(claimId.toLowerCase(), input, actor);
+    if (result.status !== 'ok') return reply({ error: result.status }, result.status === 'not_found' ? 404 : 409);
+    if (result.payment.status === 'pending') deps.dispatchDisbursement?.(result.payment.paymentId);
+    return reply({ payment: result.payment, replayed: result.replayed }, result.payment.status === 'pending' ? 202 : 200);
+  }, 'GET, POST');
+  app.all('/api/v1/claims/:claimId/disbursement', c => c.req.method === 'GET' ? disbursementRead(c) : disbursementRequest(c));
 
   app.all('/api/v1/claims/experts', route('GET', 'claims:read', async (_c, _actor, reply) =>
     deps.review ? reply({ experts: deps.review.directory(), simulated: true }, 200) : reply({ error: 'service_unavailable' }, 503)));

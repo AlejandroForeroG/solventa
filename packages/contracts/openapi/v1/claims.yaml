@@ -11,6 +11,90 @@ tags:
   - name: Claim report
     description: The customer's own report of a claim, with its evidence.
 paths:
+  /claims/{claimId}/disbursement:
+    parameters:
+      - name: claimId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: ./common.yaml#/components/parameters/TraceId
+    get:
+      tags: [Claims inbox]
+      operationId: readClaimDisbursement
+      summary: Read the assigned approved claim's disbursement
+      description: Requires a fresh claims:read operator grant and the case assignment. Self-owned and foreign cases return 404. Results are never cached. This operator endpoint is not a native customer tracking API.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      responses:
+        '200':
+          description: The durable payment status; a pending payment is not a confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No accessible approved case or no authorized payment intent.
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      tags: [Claims inbox]
+      operationId: requestClaimDisbursement
+      summary: Authorize an approved amount within the remaining policy coverage
+      description: Requires a fresh claims:decide grant, the assigned mortgage-life case and a persisted approval. Parametric coverages retain their separate automatic engine and return conflict here. The amount is canonical COP with four decimals, validated against the signed policy coverage and other reserved indemnities. Intent, audit and capture commit before background settlement. The immutable approval owns the server-side idempotency identity; an identical amount reuses the original payment and a different amount returns 409. There is one complete payment per approval in this increment; no partial installments or second authorization after a decline. Both external payment settlement and its reference are explicit simulations.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amount]
+              properties:
+                amount:
+                  type: string
+                  pattern: '^(0|[1-9][0-9]{0,14})\.[0-9]{4}$'
+                  description: Positive COP amount. Zero is rejected.
+      responses:
+        '202':
+          description: The payment intent is durably accepted and remains pending confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '200':
+          description: Replay of the original terminal payment; no new provider effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No accessible assigned approved case.
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          description: Changed amount, invalid state or amount exceeding the available coverage.
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /claims:
     get:
       tags:
@@ -1602,6 +1686,40 @@ components:
         - properties:
             evidenceIds:
               minItems: 1
+    ClaimDisbursementReceipt:
+      type: object
+      additionalProperties: false
+      required: [payment, traceId]
+      properties:
+        traceId:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+          description: Present on authorization and replay responses.
+        payment:
+          type: object
+          additionalProperties: false
+          required: [paymentId, amount, currency, status, reference, simulated]
+          properties:
+            paymentId:
+              type: string
+              format: uuid
+            amount:
+              type: string
+              pattern: '^(0|[1-9][0-9]{0,14})\.[0-9]{4}$'
+            currency:
+              type: string
+              enum: [COP]
+            status:
+              type: string
+              enum: [pending, confirmed, declined]
+            reference:
+              type: string
+              nullable: true
+            simulated:
+              type: boolean
+              enum: [true]
     ClaimActionReceipt:
       type: object
       additionalProperties: false
