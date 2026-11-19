@@ -26,6 +26,8 @@ export default function RootLayout() {
             <Ionicons accessible={false} name="arrow-back" size={24} color={theme.colors.foreground} /></Pressable> : null,
         }}
       >
+        <Stack.Screen name="claim-payments" options={{ headerShown: true, title: '', headerTitle: '', headerBackButtonDisplayMode: 'minimal',
+          headerStyle: { backgroundColor: theme.colors.background }, headerTintColor: theme.colors.foreground, headerShadowVisible: false }} />
         <Stack.Screen name="notification-preferences" options={{
           headerShown: true,
           title: copy.actions.notificationPreferences,

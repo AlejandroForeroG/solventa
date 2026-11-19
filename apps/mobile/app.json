@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.anonymous.solventa",
+      "blockedPermissions": ["android.permission.READ_MEDIA_IMAGES"],
       "adaptiveIcon": {
         "backgroundColor": "#0B6B5F",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -26,6 +27,7 @@
     "plugins": [
       "expo-router",
       "./plugins/with-android-font-scale.cjs",
+      "./plugins/with-private-recents.cjs",
       [
         "expo-secure-store",
         {

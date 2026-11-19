@@ -39,6 +39,7 @@ export function ClaimsScreen() {
     {auth.status === 'authenticated'
       ? <>
         <Tile title={copy.reportClaim} detail={copy.reportClaimDetail} href="/claim-report" />
+        <Tile icon="receipt-outline" title={copy.payments} detail={copy.paymentsDetail} href="/claim-payments" />
         <Tile icon="create-outline" title={copy.drafts} detail={copy.draftsDetail} href="/claim-drafts" />
         <Tile icon="location-outline" title={copy.assistance} detail={copy.assistanceDetail} href="/assistance-providers" />
       </>

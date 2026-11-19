@@ -969,6 +969,55 @@
       }
     },
     {
+      "description": "a customer disbursement page",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/claims/customer/disbursements"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "11111111-1111-4111-8111-111111111111",
+              "claimNumber": "SIN-2026-00001",
+              "payment": {
+                "amount": "1000.0000",
+                "currency": "COP",
+                "paymentId": "11111111-1111-4111-8111-111111111112",
+                "reference": "MOCK-11111111-1111-4111-8111-111111111112",
+                "simulated": true,
+                "status": "confirmed"
+              },
+              "updatedAt": "2026-11-19T15:00:00.000Z"
+            }
+          ],
+          "next": null,
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a definitive offer request",
       "providerStates": [
         {
@@ -3073,6 +3122,96 @@
                 {
                   "match": "regex",
                   "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "an approved claim disbursement authorization",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "body": {
+          "amount": "1000.0000"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Origin": "https://solventa.dev"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims/11111111-1111-4111-8111-111111111111/disbursement"
+      },
+      "response": {
+        "body": {
+          "payment": {
+            "amount": "1000.0000",
+            "currency": "COP",
+            "paymentId": "11111111-1111-4111-8111-111111111112",
+            "reference": null,
+            "simulated": true,
+            "status": "pending"
+          },
+          "replayed": false,
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 202
+      }
+    },
+    {
+      "description": "an assigned analyst disbursement read",
+      "providerStates": [
+        {
+          "name": "an explicitly granted claims analyst"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/claims/11111111-1111-4111-8111-111111111111/disbursement"
+      },
+      "response": {
+        "body": {
+          "payment": {
+            "amount": "1000.0000",
+            "currency": "COP",
+            "paymentId": "11111111-1111-4111-8111-111111111112",
+            "reference": null,
+            "simulated": true,
+            "status": "pending"
+          },
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
                 }
               ]
             }
