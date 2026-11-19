@@ -2,6 +2,7 @@ import { messages } from '@/shared/i18n/messages';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 
 const es = {
+  payments: 'Mis indemnizaciones', paymentsDetail: 'Consulta el monto, el estado y la referencia del desembolso.',
   drafts: 'Borradores', draftsDetail: 'Prepara un reporte y retómalo, incluso sin conexión.',
   home: 'Inicio', wallet: 'Mis pólizas', claims: 'Siniestros', alerts: 'Avisos', profile: 'Perfil', preferences: 'Preferencias de avisos',
   sections: 'Secciones', openNavigation: 'Abrir navegación', closeNavigation: 'Cerrar navegación',
@@ -13,6 +14,7 @@ const es = {
 };
 
 const en: typeof es = {
+  payments: 'My indemnities', paymentsDetail: 'Check the amount, status and disbursement reference.',
   drafts: 'Drafts', draftsDetail: 'Prepare a report and resume it, even offline.',
   home: 'Home', wallet: 'My policies', claims: 'Claims', alerts: 'Notices', profile: 'Profile', preferences: 'Notification preferences',
   sections: 'Sections', openNavigation: 'Open navigation', closeNavigation: 'Close navigation',

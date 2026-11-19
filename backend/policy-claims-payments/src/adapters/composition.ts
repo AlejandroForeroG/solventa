@@ -4,9 +4,19 @@ import { SqlFinancialStore } from './outbound/sql-financial-store';
 import { MockSignatureProvider, SqlMockPaymentGateway } from './outbound/mock-financial-providers';
 import { MockParametricEventProvider } from './outbound/mock-parametric-provider';
 import type { ClientLifecycle } from './outbound/client-cleanup';
+import { ClaimDisbursements } from '../application/claim-disbursements';
+import { SqlClaimDisbursements } from './outbound/sql-claim-disbursements';
+import { PaymentDeadline } from './outbound/disbursement-deadline';
 
 type FinancialConfiguration = { APP_ENV: string; FINANCIAL_PROVIDER_MODE?: string; FINANCIAL_EVENT_KEY?: string;
   POLICY_DB: { connectionString: string } };
+
+export function createClaimDisbursements(env: FinancialConfiguration): ClaimDisbursements {
+  const enabled = ['local', 'dev', 'staging', 'prod'].includes(env.APP_ENV) && env.FINANCIAL_PROVIDER_MODE === 'mock'
+    && typeof env.FINANCIAL_EVENT_KEY === 'string' && /^[a-f0-9]{64}$/.test(env.FINANCIAL_EVENT_KEY);
+  return new ClaimDisbursements(new SqlClaimDisbursements(env.POLICY_DB.connectionString), new SqlMockPaymentGateway(env.POLICY_DB.connectionString),
+    new HmacFinancialIntegrity(env.FINANCIAL_EVENT_KEY ?? ''), new PaymentDeadline(), { now: () => new Date(), newId: () => crypto.randomUUID() }, enabled);
+}
 
 export function createPolicyFinance(env: FinancialConfiguration, lifecycle?: ClientLifecycle): PolicyFinance {
   const enabled = ['local', 'dev', 'staging', 'prod'].includes(env.APP_ENV) && env.FINANCIAL_PROVIDER_MODE === 'mock'
