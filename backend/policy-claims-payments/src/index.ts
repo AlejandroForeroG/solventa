@@ -49,7 +49,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
         inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
-      claimReport: { report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
+      claimReport: { disbursements, report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {

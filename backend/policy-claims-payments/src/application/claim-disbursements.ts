@@ -3,6 +3,7 @@ import { amountWithinCoverage, disbursementKey, disbursementLimit, type Disburse
 import type { ClaimDecisionActor } from './claim-decisions';
 import type { FinancialIntegrity, Payment, PaymentGateway } from './ports/financial';
 import type { DisbursementCapture, DisbursementContext, DisbursementDeadline, DisbursementStore } from './ports/claim-disbursement';
+import type { ReportOwner } from './ports/claim-report';
 
 export type DisbursementRequest = { status: 'ok'; payment: DisbursementView; replayed: boolean }
   | { status: 'not_found' | 'conflict' | 'invalid_amount' };
@@ -11,6 +12,22 @@ export type DisbursementOutcome = { paymentId: string; status: 'confirmed' | 'de
 export class ClaimDisbursements {
   constructor(private readonly store: DisbursementStore, private readonly gateway: PaymentGateway, private readonly integrity: FinancialIntegrity,
     private readonly deadline: DisbursementDeadline, private readonly clock: { now(): Date; newId(): string }, private readonly enabled: boolean) {}
+
+  async owned(owner: ReportOwner, traceId: string, cursor?: string) {
+    if (!this.enabled) throw Error('claim_disbursement_unavailable');
+    if (!UUID.test(owner.clientId) || !UUID.test(owner.subjectToken) || !UUID.test(traceId) || (cursor && !UUID.test(cursor))) throw Error('invalid_claim_owner');
+    return this.store.transaction(async tx => {
+      const contexts = await tx.owned(owner, traceId, cursor);
+      const items: { claimId: string; claimNumber: string; updatedAt: string; payment: DisbursementView }[] = [];
+      for (const context of contexts.slice(0, 6)) {
+        if (context.ownerSubjectToken !== owner.subjectToken || context.offer.clientId !== owner.clientId || !context.payment
+          || !/^SIN-\d{4}-\d{5}$/.test(context.claimNumber) || !Number.isFinite(Date.parse(context.updatedAt))) throw Error('claim_disbursement_integrity');
+        await this.checked(context);
+        items.push({ claimId: context.claimId, claimNumber: context.claimNumber, updatedAt: context.updatedAt, payment: this.view(context.payment) });
+      }
+      return { items, next: contexts.length > 6 ? items.at(-1)?.claimId ?? null : null };
+    });
+  }
 
   async read(claimId: string, actor: ClaimDecisionActor): Promise<DisbursementView | null> {
     if (!this.enabled) throw Error('claim_disbursement_unavailable');

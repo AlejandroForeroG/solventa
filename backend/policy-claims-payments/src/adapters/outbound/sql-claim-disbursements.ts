@@ -4,15 +4,16 @@ import type { DisbursementCapture, DisbursementContext, DisbursementStore, Disbu
 import type { Payment } from '../../application/ports/financial';
 import type { DisbursementState } from '../../domain/claim-disbursement';
 import { addClaimNotices } from './sql-claim-notices';
+import type { ReportOwner } from '../../application/ports/claim-report';
 
 type Row = Omit<DisbursementContext, 'occurredAt' | 'issuedAt' | 'payment'> & { occurredAt: Date; issuedAt: Date; paymentId: string | null; amount: string | null;
-  paymentStatus: Payment['status'] | null; paymentHash: string | null; paymentKey: string | null; reference: string | null; currency: string | null };
+  paymentStatus: Payment['status'] | null; paymentHash: string | null; paymentKey: string | null; reference: string | null; currency: string | null; claimNumber: string; paymentUpdatedAt: Date | null };
 
-const contextSql = `SELECT c.id AS "claimId",c.policy_id AS "policyId",c.status AS state,c.occurred_at AS "occurredAt",c.assignee_id AS "analystId",
+const contextSql = `SELECT c.claim_number AS "claimNumber",c.id AS "claimId",c.policy_id AS "policyId",c.status AS state,c.occurred_at AS "occurredAt",c.assignee_id AS "analystId",
   p.status AS "policyStatus",p.subject_token AS "ownerSubjectToken",d.id AS "decisionId",f.terms AS offer,f.terms_hash AS "termsHash",
   sig.signed_at AS "issuedAt",sig.receipt AS "signatureReceipt",sig.time_seal AS "timeSeal",sig.document_hash AS "documentHash",
   premium.status AS "premiumStatus",pay.id AS "paymentId",pay.amount::STRING AS amount,pay.currency,pay.status AS "paymentStatus",
-  pay.request_hash AS "paymentHash",pay.idempotency_key AS "paymentKey",pay.provider_reference AS reference,
+  pay.request_hash AS "paymentHash",pay.idempotency_key AS "paymentKey",pay.provider_reference AS reference,pay.updated_at AS "paymentUpdatedAt",
   i.id AS "indemnityId",i.amount::STRING AS "indemnityAmount",
   (SELECT COALESCE(sum(other.amount),0)::DECIMAL(19,4)::STRING FROM policy.indemnities other
     WHERE other.policy_id=c.policy_id AND other.claim_id<>c.id AND other.status<>'declined') AS "reservedAmount"
@@ -34,11 +35,31 @@ function context(row: Row | undefined): DisbursementContext | null {
     payment = { id: row.paymentId, policyId: row.policyId, operation: 'indemnity', amount: row.amount, status: row.paymentStatus,
       hash: row.paymentHash, key: row.paymentKey, currency: 'COP', providerReference: row.reference };
   }
-  return { ...row, payment, occurredAt: row.occurredAt.toISOString(), issuedAt: row.issuedAt.toISOString() };
+  return { claimId: row.claimId, policyId: row.policyId, state: row.state, analystId: row.analystId,
+    policyStatus: row.policyStatus, ownerSubjectToken: row.ownerSubjectToken, decisionId: row.decisionId,
+    offer: row.offer, termsHash: row.termsHash, signatureReceipt: row.signatureReceipt, timeSeal: row.timeSeal,
+    documentHash: row.documentHash, premiumStatus: row.premiumStatus, indemnityId: row.indemnityId,
+    indemnityAmount: row.indemnityAmount, reservedAmount: row.reservedAmount,
+    payment, occurredAt: row.occurredAt.toISOString(), issuedAt: row.issuedAt.toISOString() };
 }
 
 class Transaction implements DisbursementTransaction {
   constructor(private readonly db: Client) {}
+
+  async owned(owner: ReportOwner, traceId: string, cursor?: string) {
+    const rows = (await this.db.query<Row>(contextSql
+      + ` WHERE p.subject_token=$1 AND f.client_id=$2 AND c.submitted_at IS NOT NULL AND c.status IN ('approved','paid') AND pay.id IS NOT NULL
+        AND ($3::UUID IS NULL OR c.id>$3::UUID) AND ($3::UUID IS NULL OR EXISTS (
+          SELECT 1 FROM policy.claims boundary JOIN policy.policies owned ON owned.id=boundary.policy_id
+          JOIN policy.financial_contracts contract ON contract.policy_id=owned.id
+          WHERE boundary.id=$3 AND owned.subject_token=$1 AND contract.client_id=$2)) ORDER BY c.id LIMIT 7`,
+    [owner.subjectToken, owner.clientId, cursor ?? null])).rows;
+    await this.audit(owner.clientId, owner.clientId, traceId, 'claims.disbursement.owned', 'success');
+    return rows.map(row => {
+      const value = context(row); if (!value || !row.paymentUpdatedAt) throw Error('invalid_claim_payment');
+      return { ...value, claimNumber: row.claimNumber, updatedAt: row.paymentUpdatedAt.toISOString() };
+    });
+  }
 
   async authorized(claimId: string, actor: ClaimDecisionActor) {
     const row = (await this.db.query<Row>(contextSql + ` WHERE c.id=$1 AND c.assignee_id=$2 AND p.subject_token<>$3 AND f.client_id<>$2

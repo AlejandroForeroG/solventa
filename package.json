@@ -74,7 +74,7 @@
     "test:audit:sql": "tsx infra/underwriting-audit-smoke.mts",
     "test:claims:access:sql": "tsx infra/claims-access-smoke.mts",
     "test:claims:sql": "tsx infra/claims-inbox-smoke.mts",
-    "test:claim-disbursements": "tsx --test tests/claim-disbursements.test.ts",
+    "test:claim-disbursements": "tsx --test tests/claim-disbursements.test.ts tests/mobile-claim-payments.test.ts",
     "test:claim-disbursements:sql": "tsx infra/claim-disbursements-smoke.mts",
     "test:claim-report:sql": "tsx infra/claim-report-smoke.mts",
     "test:claim-drafts:sql": "tsx infra/claim-drafts-smoke.mts",

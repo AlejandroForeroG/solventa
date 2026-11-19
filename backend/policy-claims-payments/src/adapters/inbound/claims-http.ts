@@ -9,6 +9,7 @@ import type { CaseAccess, ClaimReview, ReviewOutcome } from '../../application/c
 import type { ClaimQuery } from '../../application/ports/claims';
 import type { ClaimDisbursements } from '../../application/claim-disbursements';
 import { parseDisbursement } from '../../domain/claim-disbursement';
+import { claimPaymentQuery } from './claim-payment-query';
 
 type Operation = 'claims:read' | 'claims:decide' | 'claims:respond';
 type Method = 'GET' | 'POST' | 'PUT';
@@ -20,7 +21,7 @@ type WebActor = ClaimDecisionActor & { subjectToken?: string };
 export type ClaimsHttpDependencies = {
   inbox: Pick<ClaimInbox, 'list'>;
   decisions?: Pick<ClaimDecisions, 'decide'>;
-  disbursements?: Pick<ClaimDisbursements, 'request' | 'read'>;
+  disbursements?: Pick<ClaimDisbursements, 'request' | 'read' | 'owned'>;
   dispatchDisbursement?(paymentId: string): void;
   review?: Pick<ClaimReview<ReadableStream<Uint8Array>>, 'detail' | 'evidence' | 'directory' | 'review' | 'respond' | 'receive' | 'owned' | 'selectFiles'>;
   download?(key: string, sha256: string, byteSize: number): Promise<ReadableStream<Uint8Array> | null>;
@@ -101,7 +102,7 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
       const remaining = Date.parse(expiresAt) - Date.now();
       if (operation === 'claims:respond' ? !subjectToken : !(remaining > 0) || remaining > 5500)
         return reply({ error: 'access_unavailable' }, 503);
-      if (requestUrl.pathname !== '/api/v1/claims' && requestUrl.search) return reply({ error: 'invalid_request' }, 400);
+      if (!['/api/v1/claims', '/api/v1/claims/customer/disbursements'].includes(requestUrl.pathname) && requestUrl.search) return reply({ error: 'invalid_request' }, 400);
       return await work(c, { clientId: actor.principal.clientId.toLowerCase(), traceId, subjectToken, expiresAt }, reply);
     } catch { return reply({ error: 'service_unavailable' }, 503); }
     finally {
@@ -146,6 +147,13 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
     return reply({ payment: result.payment, replayed: result.replayed }, result.payment.status === 'pending' ? 202 : 200);
   }, 'GET, POST');
   app.all('/api/v1/claims/:claimId/disbursement', c => c.req.method === 'GET' ? disbursementRead(c) : disbursementRequest(c));
+
+  app.all('/api/v1/claims/customer/disbursements', route('GET', 'claims:respond', async (c, actor, reply) => {
+    if (!deps.disbursements || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
+    const query = claimPaymentQuery(c.req.url);
+    if (!query) return reply({ error: 'invalid_request' }, 400);
+    return reply(await deps.disbursements.owned({ clientId: actor.clientId, subjectToken: actor.subjectToken }, actor.traceId, query.cursor), 200);
+  }));
 
   app.all('/api/v1/claims/experts', route('GET', 'claims:read', async (_c, _actor, reply) =>
     deps.review ? reply({ experts: deps.review.directory(), simulated: true }, 200) : reply({ error: 'service_unavailable' }, 503)));

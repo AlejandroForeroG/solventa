@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Claims inbox
-  version: 1.0.0
+  version: 1.1.0
   description: Operational inbox of open claims for explicitly granted web analysts. A session alone is insufficient. Partners and native clients are excluded. Identity verifies an active, expiring, revocable claims:read grant on each request; the Policy owner records each successful read in its own SQL transaction before releasing data. Responses and errors are no-store. The inbox lists claims of every client; this is an operational permission, not customer ownership access. It carries no insured name, document or contact data, because the policy model holds none. Unknown, duplicate and empty query parameters are rejected. Ages use calendar days in America/Bogota. This specification also defines the claim components that the claim detail and decision contracts reference. Web analysts can take and evaluate cases; web customers may respond only on their own policies. The same specification defines the customer's claim report from the native app, which is a separate, owner-scoped flow made of a draft with its evidence manifest, one upload per file and a submission that assigns the case number. Reporting needs the native user's access token and confers no inbox permission.
 servers:
   - url: /api/v1
@@ -11,6 +11,61 @@ tags:
   - name: Claim report
     description: The customer's own report of a claim, with its evidence.
 paths:
+  /claims/customer/disbursements:
+    get:
+      tags: [Claims inbox]
+      operationId: listOwnWebClaimDisbursements
+      summary: Read the web customer's own disbursements
+      description: Uses the sealed web session and claims:respond ownership operation, without an analyst grant. Only the verified client and subject's submitted approved or paid manual claims with an authorized payment are returned. Every payment is integrity checked. This route never authorizes or retries settlement. Results are ordered by claim UUID, with at most six items and a nullable next cursor. A supplied cursor naming a missing or foreign claim returns an empty page. Unknown, duplicate or malformed query parameters are rejected. Authorization precedes query validation. No bank account or deductible is invented.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentCursor'
+      responses:
+        '200':
+          description: Current owner-only payment page, including pending and terminal results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnClaimPaymentPage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /claims/native/disbursements:
+    get:
+      tags: [Claims inbox]
+      operationId: listOwnNativeClaimDisbursements
+      summary: Read the native customer's own disbursements
+      description: Requires the registered native user bearer session with claims:report, already allowed by Identity. Cookies confer no native access. Uses the same owner-scoped, integrity-checked page as the web customer route; only client/subject-owned payments are returned. It never authorizes payment, retries settlement or grants analyst access. At most six items, ordered by claim UUID; next is an opaque owned boundary. Missing or foreign boundaries return an empty page. Unknown, duplicate or malformed query parameters are rejected after authentication. Receipts identify the simulated payment provider and updatedAt is the actual stored payment-state update time, not a bank credit timestamp.
+      security:
+        - MobileBearer: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentCursor'
+      responses:
+        '200':
+          description: Current owner-only payment page. Pending never means paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnClaimPaymentPage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /claims/{claimId}/disbursement:
     parameters:
       - name: claimId
@@ -925,6 +980,15 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 components:
+  parameters:
+    PaymentCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Previous page's next value; repeated, empty or malformed UUIDs are invalid.
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     MobileBearer:
       type: http
@@ -1800,3 +1864,34 @@ components:
         replayed:
           type: boolean
         traceId: *a1
+    OwnClaimPaymentPage:
+      type: object
+      additionalProperties: false
+      required: [items, next, traceId]
+      properties:
+        traceId:
+          type: string
+          format: uuid
+        next:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            required: [claimId, claimNumber, updatedAt, payment]
+            properties:
+              claimId:
+                type: string
+                format: uuid
+              claimNumber:
+                type: string
+                pattern: '^SIN-[0-9]{4}-[0-9]{5}$'
+              updatedAt:
+                type: string
+                format: date-time
+              payment:
+                $ref: '#/components/schemas/ClaimDisbursementReceipt/properties/payment'
