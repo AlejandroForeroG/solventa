@@ -238,6 +238,25 @@ test('the lease is checked again after the dispatch transition, so an authorizat
   await assert.rejects(reports.send(report.id, actor()), /expired/);
   assert.equal(destinations.regulator.deliveries, 0, 'no report data reaches the destination');
   assert.equal(destinations.regulator.ledger.size, 0);
+  // The transition was committed before the lease ran out, so the delivery is `dispatched` with that attempt counted, and a retry settles it with one delivery.
+  const fresh = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date() }, new TimerDeadline(), 25);
+  const stored = (await fresh.list({}, actor())).items[0].delivery;
+  assert.deepEqual([stored?.status, stored?.attempts], ['dispatched', 1]);
+  const retried = await fresh.send(report.id, actor());
+  assert.ok(retried.status === 'sent' && retried.delivery.status === 'acknowledged' && retried.delivery.attempts === 2);
+  assert.equal(destinations.regulator.deliveries, 1);
+});
+
+test('a lookup that runs out of time under an expired authorization records nothing', async () => {
+  const { store, destinations } = service();
+  let later = false;
+  const reports = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date(Date.now() + (later ? 60_000 : 0)) }, new TimerDeadline(), 25);
+  const { report } = await reports.generate({ period, destination: 'regulator' }, actor());
+  destinations.regulator.lookup = async () => { later = true; return new Promise<never>(() => {}); };
+  await assert.rejects(reports.send(report.id, actor()), /expired/);
+  assert.equal(destinations.regulator.deliveries, 0);
+  const fresh = new Reports(store, new Sha256ReportDigest(), destinations, { now: () => new Date() }, new TimerDeadline(), 25);
+  assert.equal((await fresh.list({}, actor())).items[0].delivery?.status, 'pending', 'no uncertain state is written under an expired grant');
 });
 
 test('a final delivery is not returned when the authorization expired while it was being read', async () => {
