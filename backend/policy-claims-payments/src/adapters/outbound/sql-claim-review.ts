@@ -203,23 +203,58 @@ export class SqlClaimReview implements ClaimReviewStore {
     });
   }
 
+  selectFiles(claimId: string, requirementId: string, owner: ReportOwner, fileIds: string[], traceId: string) {
+    return this.transaction<'selected' | 'not_found' | 'conflict'>(async db => {
+      const row = await findCase(db, claimId, true);
+      if (!row || row.subject_token !== owner.subjectToken) return 'not_found';
+      if (!await this.pending(db, claimId, requirementId)) {
+        const received = (await db.query("SELECT 1 FROM policy.claim_requirements WHERE claim_id=$1 AND id=$2 AND status='received'", [claimId, requirementId])).rowCount;
+        if (!received) return 'conflict';
+        const included = (await db.query<{ client_file_id: string }>(`SELECT e.client_file_id FROM policy.claim_requirement_files rf
+          JOIN policy.evidence_metadata e ON e.id=rf.evidence_id WHERE rf.requirement_id=$1 AND e.claim_id=$2 AND rf.included`, [requirementId, claimId])).rows.map(file => file.client_file_id).sort();
+        // A lost response may retry the same committed selection; it must not edit received evidence.
+        return JSON.stringify(included) === JSON.stringify([...fileIds].sort()) ? 'selected' : 'conflict';
+      }
+      // A nullable client identity is an inactive reservation. The immutable object key retains its original identity.
+      const keys = fileIds.map(id => `claims/${claimId}/requirements/${requirementId}/${id}`);
+      const files = (await db.query<{ id: string; object_key: string; client_file_id: string | null; byte_size: string }>(`SELECT e.id,e.object_key,e.client_file_id,e.byte_size::STRING
+        FROM policy.claim_requirement_files rf JOIN policy.evidence_metadata e ON e.id=rf.evidence_id
+        WHERE rf.requirement_id=$1 AND e.claim_id=$2 AND NOT rf.included
+        AND (e.client_file_id IS NOT NULL OR e.object_key=ANY($3::STRING[]))`, [requirementId, claimId, keys])).rows;
+      if (files.filter(file => keys.includes(file.object_key)).reduce((sum, file) => sum + Number(file.byte_size), 0) > 50 * 1024 * 1024) return 'conflict';
+      for (const file of files) {
+        const selectedId = fileIds.find(id => file.object_key === `claims/${claimId}/requirements/${requirementId}/${id}`);
+        if (selectedId && (await db.query('SELECT 1 FROM policy.evidence_metadata WHERE claim_id=$1 AND client_file_id=$2 AND id<>$3',
+          [claimId, selectedId, file.id])).rowCount) return 'conflict';
+      }
+      for (const file of files) {
+        const selectedId = fileIds.find(id => file.object_key === `claims/${claimId}/requirements/${requirementId}/${id}`) ?? null;
+        if (selectedId === file.client_file_id) continue;
+        await db.query('UPDATE policy.evidence_metadata SET client_file_id=$2 WHERE id=$1', [file.id, selectedId]);
+        await audit(db, file.id, owner.clientId, traceId, selectedId ? 'claims.requirement.file.restore' : 'claims.requirement.file.release', 'success', 'evidence');
+      }
+      await audit(db, requirementId, owner.clientId, traceId, 'claims.requirement.files.select', 'success', 'claim_requirement');
+      return 'selected';
+    });
+  }
+
   prepareFile(claimId: string, requirementId: string, owner: ReportOwner, file: RequirementFile, traceId: string) {
     return this.transaction<Awaited<ReturnType<ClaimReviewStore['prepareFile']>>>(async db => {
       const row = await findCase(db, claimId, true);
       if (!row || row.subject_token !== owner.subjectToken) return { status: 'not_found' };
       const key = `claims/${claimId}/requirements/${requirementId}/${file.fileId}`;
-      const existing = (await db.query<{ state: string; object_key: string; content_type: string; byte_size: string; checksum_sha256: string }>(
-        'SELECT state,object_key,content_type,byte_size::STRING,checksum_sha256 FROM policy.evidence_metadata WHERE claim_id=$1 AND client_file_id=$2',
-        [claimId, file.fileId])).rows[0];
+      const existing = (await db.query<{ state: string; object_key: string; client_file_id: string | null; content_type: string; byte_size: string; checksum_sha256: string }>(
+        'SELECT state,object_key,client_file_id,content_type,byte_size::STRING,checksum_sha256 FROM policy.evidence_metadata WHERE claim_id=$1 AND (client_file_id=$2 OR object_key=$3)',
+        [claimId, file.fileId, key])).rows[0];
       if (existing) {
-        if (existing.object_key !== key || existing.content_type !== file.contentType ||
+        if (existing.client_file_id === null || existing.object_key !== key || existing.content_type !== file.contentType ||
           Number(existing.byte_size) !== file.byteSize || existing.checksum_sha256 !== file.sha256) return { status: 'conflict' };
         if (existing.state === 'verified') return { status: 'verified', key };
         return await this.pending(db, claimId, requirementId) ? { status: 'pending', key } : { status: 'conflict' };
       }
       if (!await this.pending(db, claimId, requirementId)) return { status: 'conflict' };
       const totals = (await db.query<{ count: number; bytes: string }>(`SELECT count(*)::INT4 AS count,coalesce(sum(e.byte_size),0)::STRING AS bytes
-        FROM policy.claim_requirement_files rf JOIN policy.evidence_metadata e ON e.id=rf.evidence_id WHERE rf.requirement_id=$1`, [requirementId])).rows[0];
+        FROM policy.claim_requirement_files rf JOIN policy.evidence_metadata e ON e.id=rf.evidence_id WHERE rf.requirement_id=$1 AND e.client_file_id IS NOT NULL`, [requirementId])).rows[0];
       if (totals.count >= 3 || Number(totals.bytes) + file.byteSize > 50 * 1024 * 1024) return { status: 'conflict' };
       const id = (await db.query<{ id: string }>(`INSERT INTO policy.evidence_metadata
         (claim_id,object_key,content_type,byte_size,checksum_sha256,retention_until,correlation_id,client_file_id)

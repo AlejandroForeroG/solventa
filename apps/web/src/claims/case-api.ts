@@ -86,3 +86,9 @@ export async function sendRequirementFile(claimId: string, requirementId: string
     { method: 'PUT', headers: { 'content-type': file.type, 'x-content-sha256': sha256 }, body: file },
     (value): value is { fileId: string; state: 'verified' } => record(value) && value.fileId === fileId && value.state === 'verified');
 }
+
+export function selectRequirementFiles(claimId: string, requirementId: string, fileIds: string[]) {
+  return request('/' + claimId + '/requirements/' + requirementId + '/files/selection',
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fileIds }) },
+    (value): value is { state: 'selected' } => record(value) && value.state === 'selected');
+}

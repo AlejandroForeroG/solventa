@@ -44,6 +44,7 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
         evidence: async () => null,
         review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
         respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),
+        selectFiles: async () => 'selected',
         receive: async (_id, _requirement, _owner, declaration, body) => {
           const file = parseRequirementFile(declaration);
           if (!file || !body) return 'invalid_request';

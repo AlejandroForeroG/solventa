@@ -235,6 +235,15 @@ try {
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.requirements[0].id, requirement);
   assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.some(notice => notice.action === 'request_information'), true);
   const responseFile = { fileId: randomUUID(), byteSize: 100, contentType: 'image/jpeg' as const, sha256: 'b'.repeat(64) };
+  const abandoned = { ...responseFile, fileId: randomUUID(), byteSize: 50 * 1024 * 1024 };
+  assert.equal((await operations.prepareFile(id, requirement, caseCustomer, abandoned, randomUUID())).status, 'pending');
+  assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID()), { status: 'conflict' }, 'a failed full-size reservation reproduces the exhausted quota');
+  assert.equal(await operations.selectFiles(id, requirement, { clientId: randomUUID(), subjectToken: randomUUID() }, [responseFile.fileId], randomUUID()), 'not_found');
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [responseFile.fileId], randomUUID()), 'selected');
+  assert.equal(await operations.verifyFile(id, requirement, caseCustomer, abandoned.fileId, randomUUID()), false, 'a late upload cannot verify a released reservation');
+  assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, abandoned, randomUUID()), { status: 'conflict' });
+  const retained = (await db.query('SELECT id,object_key,retention_until FROM policy.evidence_metadata WHERE object_key=$1',
+    [`claims/${id}/requirements/${requirement}/${abandoned.fileId}`])).rows[0];
   const prepare = await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID());
   assert.equal(prepare.status, 'pending');
   assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, { ...responseFile, byteSize: 101 }, randomUUID()), { status: 'conflict' });
@@ -264,7 +273,24 @@ try {
   assert.deepEqual(await review.respond(id, requirement, { clientId: randomUUID(), subjectToken: randomUUID() }, response, 'response-external', randomUUID()), { status: 'not_found' });
   assert.deepEqual(await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID()), { status: 'invalid_evidence' });
   assert.equal(await operations.verifyFile(id, requirement, caseCustomer, responseFile.fileId, randomUUID()), true);
+  await db.query('REVOKE INSERT ON policy.audit_events FROM solventa_local_policy');
+  try { await assert.rejects(operations.selectFiles(id, requirement, caseCustomer, [], randomUUID()), /permission|privilege/i); }
+  finally { await db.query('GRANT INSERT ON policy.audit_events TO solventa_local_policy'); }
+  assert.equal((await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID())).status, 'verified', 'failed audit rolls back selection');
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [abandoned.fileId], randomUUID()), 'selected');
+  assert.equal((await operations.prepareFile(id, requirement, caseCustomer, abandoned, randomUUID())).status, 'pending');
+  assert.deepEqual((await db.query('SELECT id,object_key,retention_until FROM policy.evidence_metadata WHERE object_key=$1', [retained.object_key])).rows[0], retained);
+  const otherLarge = { ...abandoned, fileId: randomUUID() };
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [otherLarge.fileId], randomUUID()), 'selected');
+  assert.equal((await operations.prepareFile(id, requirement, caseCustomer, otherLarge, randomUUID())).status, 'pending');
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [abandoned.fileId, otherLarge.fileId], randomUUID()), 'conflict', 'restoration cannot bypass aggregate bytes');
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [responseFile.fileId], randomUUID()), 'selected');
   assert.equal((await operations.prepareFile(id, requirement, caseCustomer, responseFile, randomUUID())).status, 'verified');
+  const smallFiles = [responseFile, { ...responseFile, fileId: randomUUID() }, { ...responseFile, fileId: randomUUID() }];
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, smallFiles.map(file => file.fileId), randomUUID()), 'selected');
+  for (const file of smallFiles.slice(1)) assert.equal((await operations.prepareFile(id, requirement, caseCustomer, file, randomUUID())).status, 'pending');
+  assert.deepEqual(await operations.prepareFile(id, requirement, caseCustomer, { ...responseFile, fileId: randomUUID() }, randomUUID()), { status: 'conflict' }, 'active reservations still enforce the three-file cap');
+  assert.deepEqual(await Promise.all([1, 2].map(() => operations.selectFiles(id, requirement, caseCustomer, [responseFile.fileId], randomUUID()))), ['selected', 'selected']);
   assert.equal((await review.detail(id, caseAnalyst(), randomUUID()))?.evidence.length, 1, 'the file is hidden before submission');
   const received = await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID());
   assert.equal(received.status, 'ok');
@@ -276,6 +302,10 @@ try {
   assert.equal(afterResponse.requirements[0].evidenceIds.length, 1);
   assert.equal(afterResponse.evidence.length, 2);
   assert.equal(afterResponse.notices.filter(notice => notice.action === 'respond').length, 1);
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [], randomUUID()), 'conflict', 'a received response cannot release included evidence');
+  assert.equal(await operations.selectFiles(id, requirement, caseCustomer, [responseFile.fileId], randomUUID()), 'selected', 'a lost response can repeat the exact committed selection without mutation');
+  assert.deepEqual(await review.respond(id, requirement, caseCustomer, response, 'response-once', randomUUID()), { ...received, replayed: true });
+  assert.equal((await db.query('SELECT client_file_id FROM policy.evidence_metadata WHERE client_file_id=$1', [responseFile.fileId])).rowCount, 1);
 
   const assign = await review.review(id, analystLease(), { action: 'assign_expert', expertId: sampleExpert.id, reason: 'Synthetic case needs an expert.' }, 'assign-expert');
   assert.equal(assign.status, 'ok');

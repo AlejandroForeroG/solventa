@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { I18n } from '../i18n/I18n';
 import { ClaimCase } from './ClaimCase';
 import examples from '../../../../packages/contracts/examples/claims.json';
+import { webcrypto } from 'node:crypto';
 
 const claimId = examples.ownedCases.items[0].claimId;
 const traceId = examples.caseFile.traceId;
@@ -13,6 +14,49 @@ const showCase = (audience: 'case' | 'customer') => render(<I18n initial="es-CO"
 </I18n>);
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('reconciles a replacement selection after an upload fails', async () => {
+  vi.stubGlobal('crypto', webcrypto);
+  const user = userEvent.setup();
+  const selections: string[][] = [];
+  const uploads: string[] = [];
+  let received = false;
+  const requirement = { id: '11111111-1111-4111-8111-111111111114', details: 'Attach the requested receipt.',
+    deadline: new Date(Date.now() + 3600000).toISOString(), status: 'pending', responseText: null, receivedAt: null, evidenceIds: [] };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/files/selection')) {
+      selections.push(JSON.parse(String(init?.body)).fileIds);
+      return json({ state: 'selected', traceId });
+    }
+    if (init?.method === 'PUT') {
+      expect(selections.at(-1)).toContain(url.split('/').at(-1));
+      uploads.push(url.split('/').at(-1)!);
+      return uploads.length === 1 ? json({ error: 'evidence_unavailable', traceId }, 503)
+        : json({ fileId: uploads.at(-1), state: 'verified', traceId });
+    }
+    if (url.endsWith('/response')) { received = true; return json({ ...examples.actionReceipt, state: 'in_review' }); }
+    return json({ ...examples.caseFile, access: 'customer', state: received ? 'in_review' : 'pending_information',
+      requirements: received ? [] : [requirement] });
+  }));
+  const file = (bytes: number[], name: string) => {
+    const value = new File([new Uint8Array(bytes)], name, { type: 'image/png' });
+    Object.defineProperty(value, 'arrayBuffer', { value: async () => new Uint8Array(bytes).buffer });
+    return value;
+  };
+  showCase('customer');
+  await user.click(await screen.findByRole('button', { name: 'Tareas' }));
+  const chooser = screen.getByLabelText(/Adjuntar imágenes o videos/);
+  await user.upload(chooser, file([1, 2, 3], 'original.png'));
+  await user.click(screen.getByRole('button', { name: 'Enviar respuesta' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos confirmar');
+  expect(screen.getByText('original.png')).toBeVisible();
+  await user.upload(chooser, file([4], 'smaller.png'));
+  await user.click(screen.getByRole('button', { name: 'Enviar respuesta' }));
+  expect(await screen.findByText('Respuesta recibida.')).toBeVisible();
+  expect(selections).toHaveLength(2);
+  expect(selections[1]).toEqual([uploads[1]]);
+  expect(uploads[1]).not.toBe(uploads[0]);
+});
 
 it('retains the analyst’s reason and command key when an approval succeeds after a retry', async () => {
   const user = userEvent.setup();
@@ -57,6 +101,7 @@ it('shows the owner the requested information and confirms their response', asyn
       received = true;
       return json({ ...examples.actionReceipt, state: 'in_review' });
     }
+    if (url.endsWith('/files/selection')) return json({ state: 'selected', traceId });
     const result = received ? { ...requirement, status: 'received', responseText: 'Calle de prueba 20.', receivedAt: new Date().toISOString() } : requirement;
     return json({ ...examples.caseFile, access: 'customer', state: received ? 'in_review' : 'pending_information', requirements: [result] });
   }));
