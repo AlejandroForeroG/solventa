@@ -4,10 +4,12 @@ import type { Payment } from './financial';
 import type { ClaimDecisionActor } from '../claim-decisions';
 import type { DisbursementState } from '../../domain/claim-disbursement';
 import type { ReportOwner } from './claim-report';
+import type { LifecycleChange } from '../../domain/policy-lifecycle';
 
 export type DisbursementContext = { claimId: string; decisionId: string; policyId: string; state: ClaimState; policyStatus: string;
   ownerSubjectToken: string; analystId: string; occurredAt: string; issuedAt: string; documentHash: string; signatureReceipt: string; timeSeal: string;
-  premiumStatus: string; reservedAmount: string; offer: AcceptedOffer; termsHash: string; payment: Payment | null; indemnityId: string | null; indemnityAmount: string | null };
+  premiumStatus: string; reservedAmount: string; offer: AcceptedOffer; termsHash: string; lifecycle: LifecycleChange | null;
+  payment: Payment | null; indemnityId: string | null; indemnityAmount: string | null };
 export type DisbursementCapture = { schemaVersion: 1; contractVersion: 'v1'; correlationId: string; inputs: Record<string, unknown>;
   sources: { source: string; capturedAt: string }[]; consent: { status: 'not_required' }; rule: { id: string; version: string }; outcome: string };
 export interface DisbursementTransaction {
