@@ -174,8 +174,8 @@ test('the client reads the list and sends the receipt with the bearer token and 
   const { api, calls } = client(url => url.endsWith('/receipt') ? json({ eventId: event(1), state: 'presented', replayed: false, traceId: trace }) : json(wire([notice(1)])));
   assert.deepEqual((await api.list()).map(item => item.eventId), [event(1)]);
   await api.receipt(event(1), 'presented');
-  assert.equal(calls[0]?.url, 'https://staging.solventa.site/api/v1/notices');
-  assert.equal(calls[1]?.url, `https://staging.solventa.site/api/v1/notices/${event(1)}/receipt`);
+  assert.equal(calls[0]?.url, 'https://staging.solventa.site/api/v2/notices');
+  assert.equal(calls[1]?.url, `https://staging.solventa.site/api/v2/notices/${event(1)}/receipt`);
   assert.equal(calls[1]?.init.method, 'POST');
   assert.equal(calls[1]?.init.body, JSON.stringify({ outcome: 'presented' }));
   for (const call of calls) {

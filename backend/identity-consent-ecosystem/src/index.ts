@@ -10,6 +10,7 @@ import { SqlClaimsAccessGrants } from './adapters/outbound/claims-access-grants'
 import { SqlReportAccessGrants } from './adapters/outbound/report-access-grants';
 import { SqlPartnerPortalGrants } from './adapters/outbound/partner-portal-grants';
 import { SqlPolicyAdvisorGrants } from './adapters/outbound/policy-advisor-grants';
+import { SqlNoticeDestinations } from './adapters/outbound/notice-destinations';
 import { authorizeAdvisorApproval } from './application/advisor-access';
 import { SqlPartnerQuotas } from './adapters/outbound/partner-quotas';
 import { admitPartnerRequest } from './application/partner-quota';
@@ -57,7 +58,7 @@ type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.shared
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString));
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString), new SqlNoticeDestinations(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
       security: securityFor(env),

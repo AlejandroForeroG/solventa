@@ -12,7 +12,7 @@ export function createNoticesApi(baseUrl: string, session: AuthenticatedSession,
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
-      const response = await request(`${baseUrl}/api/v1/notices${path}`, {
+      const response = await request(`${baseUrl}/api/v2/notices${path}`, {
         method: body ? 'POST' : 'GET', credentials: 'omit', signal: controller.signal,
         headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),

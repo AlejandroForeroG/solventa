@@ -8,11 +8,41 @@ export type DispatchOutcome = 'offered' | 'suppressed_preference';
 
 export type Notice = { eventId: string; kind: NoticeKind; category: NoticeCategory; policyId: string; occurredAt: string };
 
+export type NoticeDecisionCapture = {
+  schemaVersion: 1; contractVersion: 'v2'; correlationId: string;
+  inputs: { clientId: string; eventId: string; destination: string; kind: NoticeKind; category: NoticeCategory; operation: 'dispatch' | 'receipt'; pushEnabled?: boolean; reportedOutcome?: ReceiptOutcome };
+  sources: { source: string; capturedAt: string; quality: string }[];
+  consent: { status: 'not_required' }; rule: { id: 'native-notice-delivery'; version: '2' }; outcome: string;
+};
+
+export function noticeDecisionCapture(input: {
+  notice: Notice; clientId: string; destination: string; operation: 'dispatch' | 'receipt'; traceId: string; evaluatedAt: string;
+  outcome: DispatchOutcome | ReceiptOutcome; pushEnabled?: boolean; reportedOutcome?: ReceiptOutcome;
+}): NoticeDecisionCapture {
+  return {
+    schemaVersion: 1, contractVersion: 'v2', correlationId: input.traceId,
+    inputs: { clientId: input.clientId, eventId: input.notice.eventId, destination: input.destination.toLowerCase(), kind: input.notice.kind, category: input.notice.category,
+      operation: input.operation, ...(input.pushEnabled === undefined ? {} : { pushEnabled: input.pushEnabled }),
+      ...(input.reportedOutcome === undefined ? {} : { reportedOutcome: input.reportedOutcome }) },
+    sources: [
+      { source: 'policy-stored-notice', capturedAt: input.notice.occurredAt, quality: 'stored' },
+      { source: 'identity-session-installation', capturedAt: input.evaluatedAt, quality: 'verified' },
+      ...(input.operation === 'receipt' ? [{ source: 'native-notice-receipt', capturedAt: input.evaluatedAt, quality: 'reported' }] : []),
+    ],
+    consent: { status: 'not_required' }, rule: { id: 'native-notice-delivery', version: '2' }, outcome: input.outcome,
+  };
+}
+
 export const noticeEventTypes = ['policy.indemnity.notice', 'policy.lifecycle.notice', 'policy.expiry.notice'] as const;
 // A claim notice for the customer is stored with the claim decision itself, addressed to the customer's subject; it has no outbox event of its own.
 export const claimNoticeEventType = 'claim.customer.notice';
 export const dispatchConsumer = 'notice.dispatch.v1';
 export const receiptConsumer = 'notice.receipt.v1';
+
+export function noticeConsumers(destination?: string) {
+  return destination === undefined ? { dispatch: dispatchConsumer, receipt: receiptConsumer }
+    : { dispatch: `notice.dispatch.v2:${destination.toLowerCase()}`, receipt: `notice.receipt.v2:${destination.toLowerCase()}` };
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);

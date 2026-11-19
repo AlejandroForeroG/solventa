@@ -15,7 +15,7 @@ const claimDraftsPath = /^\/api\/v1\/claim-drafts(\/|$)/;
 const assistanceRequestsPath = /^\/api\/v1\/assistance\/requests(?:\/[^/]+)?$/;
 const requirementEvidencePath = /^\/api\/v1\/claims\/[^/]+\/requirements\/[^/]+\/files\/[^/]+$/;
 const reportsPath = /^\/api\/v1\/reports(\/|$)/;
-const noticesPath = /^\/api\/v1\/notices(\/|$)/;
+const noticesPath = /^\/api\/v[12]\/notices(\/|$)/;
 const claimEvidencePath = /^\/api\/v1\/claims\/[^/]+\/evidence\/[^/]+$/;
 // One report holds at most 50 MiB of evidence; Policy enforces the exact size, type and checksum of each file.
 const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
