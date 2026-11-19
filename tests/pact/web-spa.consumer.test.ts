@@ -599,7 +599,7 @@ describe('SPA claim case', () => {
     pact.given(state).uponReceiving('a claim requirement file selection')
       .withRequest({ method: 'POST', path: casePath + '/requirements/' + requirementId + '/files/selection',
         headers: { 'Content-Type': 'application/json', Origin: 'https://solventa.dev' }, body: claimsExamples.requirementSelection })
-      .willRespondWith({ status: 200, headers: jsonResponse, body: claimsExamples.selectionReceipt });
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { ...claimsExamples.selectionReceipt, traceId } });
     await pact.executeTest(server => withServer(server.url, async () =>
       assert.equal((await selectRequirementFiles(claimId, requirementId, claimsExamples.requirementSelection.fileIds)).kind, 'ok'), 'https://solventa.dev'));
   });
