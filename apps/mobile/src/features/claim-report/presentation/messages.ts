@@ -12,7 +12,7 @@ type Copy = {
   fields: { eventType: string; occurredAt: string; date: string; time: string; place: string; placeHint: string; description: string; descriptionHint: string;
     counter: (used: number, max: number) => string; minimum: (min: number) => string };
   eventTypes: Record<EventType, string>;
-  evidence: { heading: string; empty: string; takePhoto: string; recordVideo: string; choose: string; counts: (files: number, max: number, megabytes: string, maxMegabytes: number) => string;
+  evidence: { heading: string; empty: string; takePhoto: string; recordVideo: string; choose: string; counts: (files: number, max: number, size: string, maxMegabytes: number) => string;
     photo: string; video: string; previewing: string; noPreview: string; remove: (kind: string, position: number) => string };
   document: { scan: string; choose: string; item: string; heading: string; instructions: string; preview: string; enlarge: string; fit: string; attach: string;
     cameraDenied: string; fileType: string; pickerFailed: string; previewFailed: string };
@@ -20,7 +20,7 @@ type Copy = {
   rejected: Record<RejectedCandidate | 'failed', string>;
   issues: { eventType: { required: string }; occurredAt: { future: string; before_coverage: string; after_coverage: string };
     description: { too_short: string; too_long: string }; place: { too_long: string }; evidence: { none: string; too_many: string; total_size: string } };
-  review: { heading: string; next: (count: number) => string; policy: string; edit: string; files: (count: number, megabytes: string) => string; note: string; send: string };
+  review: { heading: string; next: (count: number) => string; policy: string; edit: string; files: (count: number, size: string) => string; note: string; send: string };
   sending: { preparing: string; creating: string; uploading: (done: number, total: number) => string; submitting: string };
   failures: Record<Exclude<ClaimFailureCode, 'incomplete'>, string> & { incomplete: (missing: number) => string };
   done: { heading: string; caseNumber: string; filedAt: string; evidence: string; once: string; home: string };
@@ -40,7 +40,7 @@ const es: Copy = {
     description: 'Qué pasó', descriptionHint: 'Describe el hecho en una o dos frases', counter: (used, max) => `${used} / ${max} caracteres`, minimum: min => `Mínimo ${min} caracteres` },
   eventTypes: { collision: 'Colisión', theft: 'Hurto', damage: 'Daño', other: 'Evento de la póliza' },
   evidence: { heading: 'Evidencia', empty: 'Agrega al menos una foto, un video o un documento.', takePhoto: 'Tomar foto', recordVideo: 'Grabar video', choose: 'Elegir de la galería',
-    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} archivos · ${megabytes} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video', previewing: 'Preparando vista previa', noPreview: 'Sin vista previa',
+    counts: (files, max, size, maxMegabytes) => `${files} / ${max} archivos · ${size} / ${maxMegabytes} MB`, photo: 'Foto', video: 'Video', previewing: 'Preparando vista previa', noPreview: 'Sin vista previa',
     remove: (kind, position) => `Quitar ${kind} ${position}` },
   document: { scan: 'Escanear documento', choose: 'Elegir archivo de documento', item: 'Documento', heading: 'Revisar documento',
     instructions: 'Comprueba que el texto se lea, que el documento esté derecho y que se vean los bordes.', preview: 'Vista previa del documento',
@@ -55,7 +55,7 @@ const es: Copy = {
     occurredAt: { future: 'La fecha y la hora no pueden ser futuras.', before_coverage: 'El evento es anterior al inicio de tu póliza.', after_coverage: 'El evento es posterior al vencimiento de tu póliza.' },
     description: { too_short: 'Cuéntanos qué pasó (mínimo 40 caracteres).', too_long: 'La descripción supera los 600 caracteres.' }, place: { too_long: 'El lugar supera los 120 caracteres.' },
     evidence: { none: 'Agrega al menos una foto, un video o un documento.', too_many: 'Un reporte admite como máximo 10 archivos.', total_size: 'Los archivos no pueden superar 50 MB en total.' } },
-  review: { heading: 'Revisa antes de enviar', next: count => `Revisar evidencia (${count})`, policy: 'Póliza', edit: 'Editar', files: (count, megabytes) => `${count} ${count === 1 ? 'archivo' : 'archivos'} · ${megabytes} MB`,
+  review: { heading: 'Revisa antes de enviar', next: count => `Revisar evidencia (${count})`, policy: 'Póliza', edit: 'Editar', files: (count, size) => `${count} ${count === 1 ? 'archivo' : 'archivos'} · ${size}`,
     note: 'Al enviar creamos un único caso. Si el envío se interrumpe, reintentar no genera un caso nuevo.', send: 'Enviar reporte' },
   sending: { preparing: 'Preparando los archivos…', creating: 'Creando el reporte…', uploading: (done, total) => `Enviando archivos (${done} de ${total})…`, submitting: 'Confirmando el reporte…' },
   failures: { unauthorized: 'Tu sesión no es válida. Inicia sesión de nuevo.', forbidden: 'Tu cuenta no puede reportar siniestros.',
@@ -81,7 +81,7 @@ const en: Copy = {
     description: 'What happened', descriptionHint: 'Describe what happened in one or two sentences', counter: (used, max) => `${used} / ${max} characters`, minimum: min => `At least ${min} characters` },
   eventTypes: { collision: 'Collision', theft: 'Theft', damage: 'Damage', other: 'Policy event' },
   evidence: { heading: 'Evidence', empty: 'Add at least one photo, video or document.', takePhoto: 'Take a photo', recordVideo: 'Record a video', choose: 'Choose from gallery',
-    counts: (files, max, megabytes, maxMegabytes) => `${files} / ${max} files · ${megabytes} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video', previewing: 'Preparing preview', noPreview: 'No preview',
+    counts: (files, max, size, maxMegabytes) => `${files} / ${max} files · ${size} / ${maxMegabytes} MB`, photo: 'Photo', video: 'Video', previewing: 'Preparing preview', noPreview: 'No preview',
     remove: (kind, position) => `Remove ${kind} ${position}` },
   document: { scan: 'Scan a document', choose: 'Choose a document file', item: 'Document', heading: 'Review document',
     instructions: 'Check that the text is readable, the document is upright and all edges are visible.', preview: 'Document preview',
@@ -96,7 +96,7 @@ const en: Copy = {
     occurredAt: { future: 'The date and time cannot be in the future.', before_coverage: 'The event is before your policy starts.', after_coverage: 'The event is after your policy ends.' },
     description: { too_short: 'Tell us what happened (at least 40 characters).', too_long: 'The description is over 600 characters.' }, place: { too_long: 'The place is over 120 characters.' },
     evidence: { none: 'Add at least one photo, video or document.', too_many: 'A report accepts at most 10 files.', total_size: 'Files cannot exceed 50 MB in total.' } },
-  review: { heading: 'Review before sending', next: count => `Review evidence (${count})`, policy: 'Policy', edit: 'Edit', files: (count, megabytes) => `${count} ${count === 1 ? 'file' : 'files'} · ${megabytes} MB`,
+  review: { heading: 'Review before sending', next: count => `Review evidence (${count})`, policy: 'Policy', edit: 'Edit', files: (count, size) => `${count} ${count === 1 ? 'file' : 'files'} · ${size}`,
     note: 'Sending creates a single case. If the send is interrupted, trying again does not create a new case.', send: 'Send report' },
   sending: { preparing: 'Preparing the files…', creating: 'Creating the report…', uploading: (done, total) => `Sending files (${done} of ${total})…`, submitting: 'Confirming the report…' },
   failures: { unauthorized: 'Your session is not valid. Sign in again.', forbidden: 'Your account cannot report claims.',

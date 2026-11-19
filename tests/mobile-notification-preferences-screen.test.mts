@@ -31,11 +31,11 @@ mock.module('react-native', { namedExports: {
   ActivityIndicator: () => createElement('span', { role: 'progressbar' }), ScrollView: container, Text: container, View: container,
   StyleSheet: { create: (styles: unknown) => styles }, useWindowDimensions: () => ({ fontScale: 1 }),
   AppState: { addEventListener: () => ({ remove() {} }) },
-  Pressable: ({ children, disabled, onPress, accessibilityLabel, accessibilityRole, accessibilityState }: {
+  Pressable: ({ children, disabled, onPress, accessibilityLabel, accessibilityRole, accessibilityState, accessibilityValue }: {
     children: ReactNode; disabled?: boolean; onPress: () => void; accessibilityLabel?: string;
-    accessibilityRole?: string; accessibilityState?: { checked?: boolean };
+    accessibilityRole?: string; accessibilityState?: { checked?: boolean }; accessibilityValue?: { text: string };
   }) => createElement('button', { disabled, onClick: onPress, role: accessibilityRole,
-    'aria-label': accessibilityLabel, 'aria-checked': accessibilityState?.checked }, children),
+    'aria-label': accessibilityLabel, 'aria-checked': accessibilityState?.checked, 'aria-valuetext': accessibilityValue?.text }, children),
 } });
 mock.module('react-native-safe-area-context', { namedExports: { SafeAreaView: container } });
 mock.module('expo-crypto', { namedExports: { randomUUID } });
@@ -104,6 +104,13 @@ for (const granted of [true, false]) {
       assert.deepEqual(reads, ['first']);
       assert.equal(writes.length, 0);
       if (!granted) assert.match(ui.host.textContent!, /Push está elegido, pero no operará/);
+      if (!granted) {
+        assert.match(ui.host.textContent!, /Push · Sin permiso/);
+        assert.match(ui.control('Eventos de póliza · Push')!.getAttribute('aria-valuetext')!, /bloqueado/);
+      } else {
+        assert.doesNotMatch(ui.host.textContent!, /Push · Sin permiso/);
+        assert.equal(ui.control('Eventos de póliza · Push')!.getAttribute('aria-valuetext'), null);
+      }
       await ui.press('Guardar preferencias');
       assert.equal(writes.length, 1);
       assert.equal(writes[0].owner, 'first');

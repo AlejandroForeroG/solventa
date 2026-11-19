@@ -183,6 +183,7 @@ describe('definitive offer journey', () => {
     expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Documento de la póliza' })).toHaveFocus();
     expect(screen.getByText('Moneda')).toBeInTheDocument();
     expect(screen.getByText('Datos de verificación')).toBeInTheDocument();
     expect(screen.queryByText(document)).toBeNull();

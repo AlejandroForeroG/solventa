@@ -66,8 +66,8 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
       <div className="grid grid-3">
         {(['amount', 'termMonths'] as FieldKey[]).map(field)}
         <div className="field">
-          <label htmlFor="quote-product">{intl.formatMessage({ id: 'form.product' })}</label>
-          <input id="quote-product" type="text" readOnly value={intl.formatMessage({ id: 'form.productValue' })} />
+          <span className="field-label">{intl.formatMessage({ id: 'form.product' })}</span>
+          <p className="field-readonly">{intl.formatMessage({ id: 'form.productValue' })}</p>
         </div>
       </div>
       <div className="form-footer">

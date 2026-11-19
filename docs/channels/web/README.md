@@ -146,6 +146,8 @@ Responses are validated before rendering. Requests are aborted when the criteria
 
 ## My policies
 
+Access/recovery actions use the existing button typography and secondary-link color, including the contextual return to Home. The quote's fixed product name is wrapping display text rather than a single-line input. Consent focuses its loading heading before its settled heading; changing a document page focuses that page's heading, while settled consent results keep their existing result-heading focus.
+
 The authenticated header opens `/polizas`, which loads `src/policies/PolicyPortal.tsx` after the session check; an anonymous visitor gets sign-in. There is no approved mockup for this journey, so it is built from the Design System: Space Grotesk headings, mono labels, cards, the status pills and the **Information / Documents / History** tabs of the component inventory. Reads come from the [web policy portal](../../modules/policy-claims-payments/README.md#web-policy-portal).
 
 - **List.** One card per issued policy with product, a status pill derived from the validity dates (active, not started, expired), a short `POL-` reference, validity and premium. The full server identifier remains available in the detail's reference disclosure. With no policies it offers a quote. Previous/Next controls read pages of at most six through the opaque server cursor, show the page number and focus the heading on change. Returning from detail preserves the page; an empty later page offers Previous. An incomplete or looping cursor response is rejected. A response with a date that is not RFC 3339 is rejected as unavailable.
