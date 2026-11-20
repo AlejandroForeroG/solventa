@@ -23,6 +23,7 @@ const verifier = 'v'.repeat(43);
 const callback = `${config.redirectUri}?state=${state}&code=synthetic-code`;
 const principal = { clientId: '00000000-0000-4000-8000-000000000001', subjectToken: '00000000-0000-4000-8000-000000000002' };
 const traceId = '00000000-0000-4000-8000-000000000003';
+const installationId = '00000000-0000-4000-8000-000000000004';
 const now = 1_800_000_000_000;
 const tokens: Tokens = { accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: now + 300_000 };
 
@@ -82,7 +83,7 @@ function fixture(initial: AuthRecord = emptyRecord(), policyCache?: { clear(): P
     revokeDevice: async () => { calls.push('revokeDevice'); },
   };
   const browser: AuthBrowser = { assertAvailable: () => {}, open: async () => null };
-  const auth = new Authentication({ baseUrl, store, identity, api, browser, now: () => clock, parseCallback, policyCache });
+  const auth = new Authentication({ baseUrl, store, identity, api, browser, now: () => clock, parseCallback, policyCache, installationId: async () => installationId });
   return { auth, api, identity, browser, store, calls, saved: () => saved, advance: (ms: number) => { clock += ms; } };
 }
 
@@ -147,12 +148,60 @@ test('feature authorization denial blocks the active session while ordinary busi
 test('PKCE callback registers, inspects and checks access before granting entry; duplicate delivery cannot exchange twice', async () => {
   const f = fixture(transactionRecord());
   await Promise.all([f.auth.complete(callback), f.auth.complete(callback)]);
-  assert.deepEqual(f.calls, ['exchange', 'register', 'inspect', 'access']);
+  assert.deepEqual(f.calls, ['exchange', 'register', 'registerDevice', 'inspect', 'access', 'inspectDevice']);
   assert.equal(f.auth.getSnapshot().status, 'authenticated');
   assert.deepEqual(f.auth.getSnapshot().principal, principal);
   assert.equal(f.saved().transaction, null);
   assert.equal(f.saved().session?.phase, 'active');
   assert.equal(JSON.stringify(f.auth.getSnapshot()).includes('synthetic-access'), false);
+});
+
+test('primary login waits for its installation binding before features can use the session without biometrics', async () => {
+  const f = fixture(transactionRecord());
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  f.api.registerDevice = async (token, id) => {
+    assert.equal(token, tokens.accessToken);
+    assert.equal(id, installationId);
+    entered.resolve();
+    await release.promise;
+  };
+  f.api.inspectDevice = async (_token, id) => { assert.equal(id, installationId); };
+  const login = f.auth.complete(callback);
+  await entered.promise;
+  assert.equal(f.auth.getSnapshot().status, 'loading');
+  assert.equal(f.auth.getSnapshot().principal, undefined);
+  await assert.rejects(f.auth.withSession(async () => assert.fail('features cannot run before device registration')), AuthFailure);
+  release.resolve();
+  await login;
+  assert.equal(f.auth.getSnapshot().status, 'authenticated');
+  assert.equal(f.auth.getSnapshot().biometricEnabled, false);
+});
+
+test('an unavailable installation bootstrap keeps its recovery phase and never repeats the OAuth exchange', async () => {
+  const f = fixture(transactionRecord());
+  const registerDevice = f.api.registerDevice;
+  f.api.registerDevice = async () => { throw new AuthFailure('unavailable'); };
+  await f.auth.complete(callback);
+  assert.equal(f.auth.getSnapshot().status, 'blocked');
+  assert.equal(f.saved().session?.phase, 'bootstrap');
+  assert.equal(f.auth.getSnapshot().principal, undefined);
+  f.api.registerDevice = registerDevice;
+  await f.auth.retry();
+  assert.equal(f.auth.getSnapshot().status, 'authenticated');
+  assert.equal(f.saved().session?.phase, 'active');
+  assert.equal(f.calls.filter(call => call === 'exchange').length, 1);
+});
+
+test('restoring a missing or revoked installation requires primary entry instead of recreating its binding', async () => {
+  const f = fixture(sessionRecord());
+  f.api.inspectDevice = async () => { throw new AuthFailure('unauthorized'); };
+  await f.auth.restore();
+  assert.equal(f.auth.getSnapshot().status, 'signedOut');
+  assert.deepEqual(f.saved(), emptyRecord());
+  await f.auth.retry();
+  assert.equal(f.calls.includes('registerDevice'), false);
+  await assert.rejects(f.auth.withSession(async () => assert.fail('a missing installation cannot use a feature')), AuthFailure);
 });
 
 test('wrong state, expired and unsolicited callbacks cannot exchange or grant access', async () => {
@@ -241,7 +290,7 @@ test('revoked local sessions are discarded without rebootstrap or unnecessary pr
 test('restoration validates server session and access even when the access token has not expired', async () => {
   const f = fixture(sessionRecord());
   await f.auth.restore();
-  assert.deepEqual(f.calls, ['inspect', 'access']);
+  assert.deepEqual(f.calls, ['inspect', 'access', 'inspectDevice']);
   f.auth.lock();
   assert.equal(f.auth.getSnapshot().status, 'loading');
   f.api.access = async () => { throw new AuthFailure('forbidden'); };
@@ -269,7 +318,7 @@ test('an access token expiring during a read refreshes and retries that read onc
   };
   await f.auth.restore();
   assert.equal(attempts, 2);
-  assert.deepEqual(f.calls, ['refresh', 'access']);
+  assert.deepEqual(f.calls, ['refresh', 'access', 'inspectDevice']);
   assert.equal(f.auth.getSnapshot().status, 'authenticated');
 });
 
@@ -487,7 +536,7 @@ test('a stale callback on cold launch cannot skip server validation or pending r
   for (const phase of ['active', 'logout'] as const) {
     const f = fixture(sessionRecord(phase));
     await f.auth.complete(callback);
-    assert.deepEqual(f.calls, phase === 'active' ? ['inspect', 'access'] : ['logout']);
+    assert.deepEqual(f.calls, phase === 'active' ? ['inspect', 'access', 'inspectDevice'] : ['logout']);
     assert.equal(f.auth.getSnapshot().status, phase === 'active' ? 'authenticated' : 'signedOut');
   }
 });
