@@ -27,6 +27,24 @@ const notice = (n: number, kind: Notice['kind'] = 'parametric_payment_confirmed'
 const firstDevice = 'a1234567-1234-4123-8123-123456789abc';
 const secondDevice = 'b1234567-1234-4123-8123-123456789abc';
 
+test('destinations distinguish all four categories and require an offered notice for the current owner and installation', async () => {
+  const claimId = event(50);
+  const kinds = ['parametric_payment_confirmed', 'policy_expiring', 'policy_lifecycle_changed', 'claim_status_changed'] as const;
+  const memory = memoryNoticeStore(kinds.map((kind, i) => ({ owner: A, notice: { ...notice(i + 1, kind), category: kind === 'claim_status_changed' ? 'claims' as const : notice(i + 1, kind).category }, ...(kind === 'claim_status_changed' ? { claimId } : {}) })), clock);
+  const service = new Notices(memory.store, clock);
+  const owner = { clientId: A, destination: firstDevice };
+  assert.equal(await service.destination(owner, event(1)), null);
+  await service.list(owner, { ...on, claims: true }, trace);
+  assert.deepEqual(await Promise.all(kinds.map((_, i) => service.destination(owner, event(i + 1)))), [
+    { kind: 'policy', policyId, section: 'history' }, { kind: 'policy', policyId, section: 'renewal' },
+    { kind: 'policy', policyId, section: 'info' }, { kind: 'claim', claimId },
+  ]);
+  assert.equal(await service.destination({ clientId: B, destination: firstDevice }, event(1)), null);
+  assert.equal(await service.destination({ clientId: A, destination: secondDevice }, event(1)), null);
+  assert.equal(await service.destination({ clientId: A }, event(1)), null);
+  assert.equal(await service.destination(owner, event(99)), null);
+});
+
 test('denied permission on one installation does not consume another installation delivery', async () => {
   const { store } = memoryStore([{ owner:A, notice:notice(1) }]);
   const service = new Notices(store, clock);
@@ -185,6 +203,25 @@ test('v2 refuses a positive authorization without its verified destination while
   assert.equal((await request('/api/v1/notices')).status,200);
 });
 
+test('the destination route rechecks the native session and binding, rejects unoffered and foreign events, and stays uncached', async () => {
+  const { request, calls } = http({ decide: input => input.token === 'expired.token' ? { allowed: false, status: 401 } : ({ allowed: true,
+    actor: { kind: 'user', channel: 'mobile', principal: { clientId: input.token === 'foreign.token' ? B : A, subjectToken: B }, operations: [input.operation], noticeDestination: firstDevice }, pushChoices: on }) });
+  const path = `/api/v2/notices/${event(1)}/destination`;
+  assert.equal((await request(path)).status, 404);
+  await request('/api/v2/notices');
+  const response = await request(path);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const body = await response.json();
+  assert.ok(validateDestination(body), JSON.stringify(validateDestination.errors));
+  assert.deepEqual(body.destination, { kind: 'policy', policyId, section: 'history' });
+  assert.equal((await request(path, { headers: { authorization: 'Bearer expired.token' } })).status, 401);
+  assert.equal((await request(path, { headers: { authorization: 'Bearer foreign.token' } })).status, 404);
+  assert.equal((await request(path, { method: 'POST' })).status, 405);
+  assert.equal((await request('/api/v2/notices/invalid/destination')).status, 404);
+  assert.ok(calls.every(operation => operation === 'notices:read-device'));
+});
+
 test('the native list answers with the offered notices, marks the transport as simulated and hides the owner', async () => {
   const { request, calls } = http();
   const response = await request('/api/v1/notices');
@@ -257,6 +294,19 @@ const validateReceipt = schema('NoticeReceipt');
 const validateBody = schema('NoticeReceiptBody');
 const validateError = schema('Error');
 const validateDecisionCapture = ajv.compile(JSON.parse(readFileSync('packages/contracts/schemas/decision-capture.v1.json','utf8')));
+const destinationSpec = parse(readFileSync('packages/contracts/openapi/v2/notices.yaml', 'utf8'));
+const validateDestination = ajv.compile(destinationSpec.components.schemas.NoticeDestinationResponse);
+
+test('the destination contract accepts every category locator and rejects untrusted URLs and malformed identifiers', () => {
+  const valid = [
+    ...(['history', 'renewal', 'info'] as const).map(section => ({ kind: 'policy', policyId, section })),
+    { kind: 'claim', claimId: event(50) },
+  ];
+  for (const destination of valid) assert.ok(validateDestination({ destination, traceId: trace }), JSON.stringify(validateDestination.errors));
+  for (const destination of [{ kind: 'policy', policyId, section: 'documents' }, { kind: 'claim', claimId: 'invalid' }, { ...valid[0], url: 'https://example.com' }]) {
+    assert.equal(validateDestination({ destination, traceId: trace }), false);
+  }
+});
 
 test('v2 retains actual destination, preference and reported outcome in schema-valid captures without duplicate replay captures',async()=>{
   const {store,captures} = memoryStore([{owner:A,notice:notice(1)}]);

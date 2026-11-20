@@ -5,7 +5,7 @@ import { UUID } from '../../domain/financial';
 type Operation = 'notices:read' | 'notices:receipt' | 'notices:read-device' | 'notices:receipt-device';
 export type NoticesHttpDependencies = {
   authorize(input: { kind: 'mobile'; operation: Operation; token: string; traceId: string }): Promise<unknown>;
-  notices: Pick<Notices, 'list' | 'receipt'>;
+  notices: Pick<Notices, 'list' | 'receipt' | 'destination'>;
 };
 type Status = 200 | 400 | 401 | 403 | 404 | 405 | 409 | 415 | 503;
 type Reply = (body: Record<string, unknown>, status: Status) => Response;
@@ -55,6 +55,13 @@ export function mountNotices(app: Hono<{ Bindings: PolicyEnv }>, deps: NoticesHt
     } catch { return reply({ error: 'service_unavailable' }, 503); }
     finally { clearTimeout(timer); }
   };
+
+  app.all('/api/v2/notices/:eventId/destination', route('GET', 'notices:read-device', async (c, owner, _decision, _traceId, reply) => {
+    const eventId = c.req.param('eventId') ?? '';
+    if (!UUID.test(eventId)) return reply({ error: 'not_found' }, 404);
+    const destination = await deps.notices.destination(owner, eventId.toLowerCase());
+    return destination ? reply({ destination }, 200) : reply({ error: 'not_found' }, 404);
+  }));
 
   for (const version of [1, 2] as const) {
     app.all(`/api/v${version}/notices`, route('GET', version === 1 ? 'notices:read' : 'notices:read-device', async (_c, owner, decision, traceId, reply) => {

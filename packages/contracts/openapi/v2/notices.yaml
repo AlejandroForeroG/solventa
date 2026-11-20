@@ -19,6 +19,41 @@ tags:
 security:
   - MobileBearer: []
 paths:
+  /notices/{eventId}/destination:
+    get:
+      operationId: readOwnDeviceNoticeDestination
+      summary: Resolve the authenticated action for an offered notice
+      description: >-
+        Rechecks the native session and its active installation binding using notices:read-device.
+        Reads the stored event for this customer and installation. Missing, foreign, suppressed and
+        never-offered events share an opaque 404. Returns only a typed resource locator, never a URL
+        or credentials. Payment notices select policy history; expiry selects renewal; lifecycle
+        selects policy information; claim notices select the customer's claim case. The destination
+        web route independently verifies its session and resource ownership. Legacy lists are unchanged.
+      tags: [Notices]
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Authenticated resource locator for this notice.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeDestinationResponse' }
+              example:
+                destination: { kind: policy, policyId: '60000000-0000-4000-8000-000000000001', section: history }
+                traceId: '30000000-0000-4000-8000-000000000001'
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /notices:
     get:
       operationId: listOwnDeviceNotices
@@ -97,6 +132,27 @@ components:
     Error:
       $ref: '../v1/notices.yaml#/components/responses/Error'
   schemas:
+    NoticeDestinationResponse:
+      type: object
+      additionalProperties: false
+      required: [destination, traceId]
+      properties:
+        traceId: { type: string, format: uuid }
+        destination:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind, policyId, section]
+              properties:
+                kind: { type: string, enum: [policy] }
+                policyId: { type: string, format: uuid }
+                section: { type: string, enum: [history, renewal, info] }
+            - type: object
+              additionalProperties: false
+              required: [kind, claimId]
+              properties:
+                kind: { type: string, enum: [claim] }
+                claimId: { type: string, format: uuid }
     NoticeList:
       $ref: '../v1/notices.yaml#/components/schemas/NoticeList'
     NoticeReceiptBody:
