@@ -35,7 +35,8 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const evidence = evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const disbursements = createClaimDisbursements(this.env);
-    const review = new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString), evidence, listSyntheticExperts);
+    const review = new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString,
+      { waitUntil: work => this.ctx.waitUntil(work) }), evidence, listSyntheticExperts);
     const response = await createHttp({ finance,
       claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
