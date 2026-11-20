@@ -38,9 +38,19 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
   const payment = parseClaimPayment(paymentExamples.pendingReceipt.payment);
   const ownPage = parseClaimPaymentPage(paymentExamples.confirmedPage);
   if (!payment || !ownPage) throw Error('invalid_payment_contract_fixture');
+  const owned = async () => [{ ...examples.ownedCases.items[0], state: 'in_review' as const }];
+  const customerCase: CaseRecord = {
+    ...examples.customerCase, state: 'in_review', access: 'customer',
+    history: [
+      { ...examples.customerCase.history[0], state: 'in_review' },
+      { ...examples.customerCase.history[1], state: 'unassigned' },
+    ],
+  };
   const app = createHttp({ authorizeFinancialAccess: async () => null, denyResourceAccess: async () => null, finance: {} as never,
     claimReport: { report: { create: async () => { throw Error('unexpected report write'); }, receive: async () => { throw Error('unexpected upload'); }, submit: async () => { throw Error('unexpected submission'); } },
       disbursements: { owned: async () => ownPage },
+      review: { owned, detail: async (id, access) =>
+        id === examples.ownedCases.items[0].claimId && access.kind === 'customer' && access.actor.subjectToken === principal.subjectToken ? customerCase : null },
       authorize: async input => input.token === 'synthetic.jwt.token' ? { allowed: true,
         actor: { kind: 'user', channel: 'mobile', operations: ['claims:report'], principal } } : { allowed: false, status: 401, error: 'unauthorized' } },
     claims: { inbox,
@@ -48,9 +58,9 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
       decisions: { decide: async () => ({ status: 'ok', decisionId: examples.decisionResult.decisionId, state: 'approved', replayed: false }) },
       review: {
         directory: listSyntheticExperts,
-        owned: async () => [{ ...examples.ownedCases.items[0], state: 'in_review' }],
+        owned,
         detail: async (id, access) => id === examples.page.items[0].claimId
-          ? { ...examples.caseFile, state: 'in_review', access: access.kind === 'analyst' ? 'assigned' : 'customer' } satisfies CaseRecord : null,
+          ? access.kind === 'customer' ? customerCase : { ...examples.caseFile, state: 'in_review', access: 'assigned' } : null,
         evidence: async () => null,
         review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
         respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),

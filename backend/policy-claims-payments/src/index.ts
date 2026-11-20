@@ -44,6 +44,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
     const evidence = evidenceBucket ? new R2ClaimEvidence(evidenceBucket) : undefined;
     const finance = createPolicyFinance(this.env, { waitUntil: work => this.ctx.waitUntil(work) });
     const disbursements = createClaimDisbursements(this.env);
+    const review = new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString), evidence, listSyntheticExperts);
     const response = await createHttp({ finance,
       claimDrafts: { drafts: new ClaimDrafts(new SqlClaimDrafts(this.env.POLICY_DB.connectionString), new Sha256ReportDigest()),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
@@ -59,7 +60,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
         disbursements, dispatchDisbursement: paymentId => this.ctx.waitUntil(disbursements.recoverPayment(paymentId).then(outcome => {
           console.log(JSON.stringify({ event: 'claim_disbursement_recovery', environment: this.env.APP_ENV, ...outcome }));
         })),
-        review: new ClaimReview(new SqlClaimReview(this.env.POLICY_DB.connectionString), evidence, listSyntheticExperts),
+        review,
         download: evidence && ((...args) => evidence.download(...args)),
         inbox: new ClaimInbox(new SqlClaimInbox(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
@@ -69,7 +70,7 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) },
       // Prod declares no evidence bucket yet, so its upload route fails closed instead of acknowledging a file it cannot keep.
       notices: { authorize: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input), notices: new Notices(new SqlNotices(this.env.POLICY_DB.connectionString)) },
-      claimReport: { disbursements, report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
+      claimReport: { disbursements, review, report: new ClaimReport(new SqlClaimReport(this.env.POLICY_DB.connectionString), evidence, new Sha256ReportDigest(), { now: () => new Date() }),
         authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input) }
     }).fetch(request, this.env, this.ctx);
     if (/^\/api\/v[12]\/policies\//.test(new URL(request.url).pathname)) {
