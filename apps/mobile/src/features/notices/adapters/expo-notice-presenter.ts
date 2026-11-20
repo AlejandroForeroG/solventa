@@ -24,7 +24,7 @@ export function createNoticePresenter(text: () => { title: string; body: string 
       const { title, body } = text();
       await Notifications.scheduleNotificationAsync({
         identifier: notice.eventId,
-        content: { title, body, data: { screen: 'alerts' } },
+        content: { title, body, data: { screen: 'notice', eventId: notice.eventId } },
         trigger: Platform.OS === 'android' ? { channelId: CHANNEL } : null,
       });
       await waitUntilShown(() => Notifications.getPresentedNotificationsAsync(), notice.eventId);
