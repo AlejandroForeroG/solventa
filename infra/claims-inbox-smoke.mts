@@ -316,10 +316,15 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.indemnities WHERE claim_id=$1', [id])).rows[0].n, 0);
   const verdict = await decisions.decide(id, { action: 'reject', reason: 'Synthetic decision after evaluation.', evidenceIds: [original] }, analystLease(), 'final-decision');
   assert.equal(verdict.status, 'ok');
-  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.state, 'rejected');
-  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.filter(notice => notice.action === 'reject').length, 1);
+  const tracking = await review.detail(id, caseOwner, randomUUID());
+  assert.equal(tracking?.state, 'rejected');
+  assert.equal(tracking.notices.filter(notice => notice.action === 'reject').length, 1);
+  assert.deepEqual(tracking.history.map(event => event.action),
+    ['reject', 'assign_expert', 'respond', 'extend_requirement', 'request_information', 'take', 'submitted']);
+  assert.ok(tracking.history.every(event => event.actorId === null && event.reason === null && event.expert === null));
+  assert.equal(await review.detail(id, { kind: 'customer', actor: { clientId: randomUUID(), subjectToken: randomUUID() } }, randomUUID()), null);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume', 'pending-requirement-kept-with-full-history'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume', 'pending-requirement-kept-with-full-history', 'owner-timeline-and-foreign-denial'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);

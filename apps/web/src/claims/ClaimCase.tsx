@@ -53,7 +53,8 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   const [updating, setUpdating] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [revision, setRevision] = useState(0);
-  const [tab, setTab] = useState<ViewTab>('overview');
+  const [tab, setTab] = useState<ViewTab>(() =>
+    audience === 'customer' && new URLSearchParams(window.location.search).get('section') === 'tasks' ? 'tasks' : 'overview');
   const refresh = (action: string) => { setConfirmation(action); setUpdating(true); setRevision(n => n + 1); };
   useEffect(() => {
     const abort = new AbortController();
@@ -69,7 +70,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
 
   const clock = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota', timeZoneName: 'short' });
-  const tabs: ViewTab[] = audience === 'case' ? ['overview', 'documents', 'tasks', 'history'] : ['overview', 'documents', 'tasks'];
+  const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
     <a href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
@@ -116,7 +117,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
               </article>)}
             </>}
             {tab === 'history' && <ol className="case-history">{claim.history.map(item => <li key={item.id}>
-              <strong>{t('action.' + item.action)}</strong> <time dateTime={item.at}>{clock(item.at)}</time>
+              <strong>{t(audience === 'customer' && item.action !== 'submitted' ? 'ack.' + item.action : 'action.' + item.action)}</strong> <time dateTime={item.at}>{clock(item.at)}</time>
               {item.reason && <p className="case-note">{item.reason}</p>}
               {item.expert && <p>{item.expert.name}</p>}
               {item.actorId && <p className="mono audit-id">{t('actor')} · {item.actorId}</p>}
@@ -125,6 +126,8 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
           {claim.access === 'assigned' && (claim.state === 'approved' || claim.state === 'paid'
             ? <ClaimDisbursement key={claimId} claimId={claimId} paid={claim.state === 'paid'} onSessionLost={onSessionLost} onConfirmed={() => refresh('disbursement_confirmed')} />
             : <AnalystActions claimId={claimId} claim={claim} onDone={refresh} onSessionLost={onSessionLost} />)}
+          {claim.access === 'customer' && tab === 'overview' && (claim.state === 'approved' || claim.state === 'paid')
+            && <OwnClaimPayments key={claimId} claimId={claimId} onSessionLost={onSessionLost} />}
         </div>
       </>}
     </>}

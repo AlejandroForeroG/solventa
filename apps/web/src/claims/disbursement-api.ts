@@ -36,16 +36,18 @@ export async function claimPayment(claimId: string, signal: AbortSignal, amount?
   finally { clearTimeout(timeout); signal.removeEventListener('abort', cancel); }
 }
 
-export async function getOwnClaimPayments(cursor: string | undefined, signal: AbortSignal): Promise<OwnedPaymentResult> {
+export async function getOwnClaimPayments(cursor: string | undefined, signal: AbortSignal, claimId?: string): Promise<OwnedPaymentResult> {
   const abort = new AbortController(); const cancel = () => abort.abort();
   signal.addEventListener('abort', cancel, { once: true }); if (signal.aborted) abort.abort();
   const timeout = setTimeout(cancel, 10000);
   try {
-    const response = await fetchWithSession('/api/v1/claims/customer/disbursements' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { signal: abort.signal, cache: 'no-store' });
+    const query = claimId ? '?claimId=' + encodeURIComponent(claimId) : cursor ? '?cursor=' + encodeURIComponent(cursor) : '';
+    const response = await fetchWithSession('/api/v1/claims/customer/disbursements' + query, { signal: abort.signal, cache: 'no-store' });
     if (response.status === 401) return { kind: 'unauthenticated' };
     if (response.status === 403) return { kind: 'forbidden' };
     const page = response.ok ? parseClaimPaymentPage(await response.json()) : null;
-    return page ? { kind: 'ok', page } : { kind: 'unavailable' };
+    if (!page || (claimId && (page.next || page.items.some(item => item.claimId !== claimId)))) return { kind: 'unavailable' };
+    return { kind: 'ok', page };
   } catch { return { kind: 'unavailable' }; }
   finally { clearTimeout(timeout); signal.removeEventListener('abort', cancel); }
 }

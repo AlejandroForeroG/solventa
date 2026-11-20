@@ -14,11 +14,13 @@ export class ClaimDisbursements {
   constructor(private readonly store: DisbursementStore, private readonly gateway: PaymentGateway, private readonly integrity: FinancialIntegrity,
     private readonly deadline: DisbursementDeadline, private readonly clock: { now(): Date; newId(): string }, private readonly enabled: boolean) {}
 
-  async owned(owner: ReportOwner, traceId: string, cursor?: string) {
+  async owned(owner: ReportOwner, traceId: string, cursor?: string, claimId?: string) {
     if (!this.enabled) throw Error('claim_disbursement_unavailable');
-    if (!UUID.test(owner.clientId) || !UUID.test(owner.subjectToken) || !UUID.test(traceId) || (cursor && !UUID.test(cursor))) throw Error('invalid_claim_owner');
+    if (!UUID.test(owner.clientId) || !UUID.test(owner.subjectToken) || !UUID.test(traceId)
+      || (cursor !== undefined && (!UUID.test(cursor) || claimId !== undefined)) || (claimId !== undefined && !UUID.test(claimId))) throw Error('invalid_claim_owner');
     return this.store.transaction(async tx => {
-      const contexts = await tx.owned(owner, traceId, cursor);
+      const contexts = await tx.owned(owner, traceId, cursor, claimId);
+      if (claimId !== undefined && (contexts.length > 1 || contexts.some(context => context.claimId !== claimId))) throw Error('claim_disbursement_integrity');
       const items: { claimId: string; claimNumber: string; updatedAt: string; payment: DisbursementView }[] = [];
       for (const context of contexts.slice(0, 6)) {
         if (context.ownerSubjectToken !== owner.subjectToken || context.offer.clientId !== owner.clientId || !context.payment
