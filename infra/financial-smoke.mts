@@ -6,6 +6,11 @@ import addFormats from 'ajv-formats';
 import type { FinancialDecisionCapture } from '../backend/policy-claims-payments/src/application/financial-decision';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
+import { Notices } from '../backend/policy-claims-payments/src/application/notices';
+import { addClaimNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-notices';
+import { SqlNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-notices';
+import { ExpiryNotices } from '../backend/policy-claims-payments/src/application/expiry-notices';
+import { SqlExpiryNotices } from '../backend/policy-claims-payments/src/adapters/outbound/sql-expiry-notices';
 import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
 import { MockSignatureProvider, SqlMockPaymentGateway } from '../backend/policy-claims-payments/src/adapters/outbound/mock-financial-providers';
 import { eventContent, issuanceTimeContent } from '../backend/policy-claims-payments/src/domain/financial';
@@ -691,6 +696,101 @@ try {
   const replayedRain = await received(new PolicyFinance(base), rainEvent);
   assert.ok(replayedRain.status === 'ok' && replayedRain.replayed);
   assert.equal((await notices(rainPolicy.policyId)).length, 1, 'a replay never announces the payment twice');
+  const payoutDetail = await finance.detail({ actor: rain.payload, policyId: rainPolicy.policyId, traceId: randomUUID() });
+  assert.equal(payoutDetail.status, 'ok', JSON.stringify(payoutDetail));
+  if (payoutDetail.status === 'ok') {
+    assert.equal(payoutDetail.detail.parametricPayment?.amount, '100000.0000');
+    assert.equal(payoutDetail.detail.parametricPayment?.status, 'paid');
+    assert.equal(payoutDetail.detail.parametricPayment?.reference, 'MOCK-' + rainNotices[0].paymentId);
+  }
+  // The customer notice reaches the device through the delivery service, with the real runtime grants: offered once, confirmed once, private to its owner.
+  const noticeService = new Notices(new SqlNotices(runtime.toString()), { now: financialNow });
+  const everyChoice = { policy: true, payments: true, claims: false, commercial: false };
+  const noticeOwner = { clientId: rain.payload.clientId };
+  const offered = (await noticeService.list(noticeOwner, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId);
+  assert.deepEqual(offered.map(item => [item.kind, item.category, item.state]), [['parametric_payment_confirmed', 'payments', 'offered']]);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID() }, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId), [], 'another customer sees nothing of it');
+  await noticeService.list(noticeOwner, everyChoice, randomUUID());
+  const noticeRows = async () => (await db!.query<{ consumer: string; outcome: string }>("SELECT consumer,outcome FROM policy.inbox_events WHERE event_id=$1 ORDER BY consumer", [rainNotices[0].paymentId])).rows;
+  assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }], 'listing again records no second decision');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'presented', randomUUID())).status, 'recorded');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'presented', randomUUID())).status, 'replayed');
+  assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'permission_denied', randomUUID())).status, 'conflict');
+  assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }, { consumer: 'notice.receipt.v1', outcome: 'presented' }]);
+  assert.deepEqual(await noticeService.receipt({ clientId: randomUUID() }, offered[0].eventId, 'presented', randomUUID()), { status: 'not_found' });
+  const deliveryCaptureValidator = new Ajv({allErrors:true}).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json','utf8')));
+  const phoneA = {...noticeOwner,destination:randomUUID()}, phoneB = {...noticeOwner,destination:randomUUID()};
+  await Promise.all([noticeService.list(phoneA,everyChoice,randomUUID()),noticeService.list(phoneB,everyChoice,randomUUID())]);
+  assert.equal((await noticeService.receipt(phoneA,offered[0].eventId,'permission_denied',randomUUID())).status,'recorded');
+  assert.equal((await noticeService.list(phoneB,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'offered');
+  const duplicateReceipts = await Promise.all([noticeService.receipt(phoneB,offered[0].eventId,'presented',randomUUID()),noticeService.receipt(phoneB,offered[0].eventId,'presented',randomUUID())]);
+  assert.deepEqual(duplicateReceipts.map(result=>result.status).sort(),['recorded','replayed']);
+  assert.equal((await noticeService.list(phoneA,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'permission_denied');
+  assert.equal((await noticeService.list(phoneB,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'presented');
+  const deliveryCaptures = (await db.query('SELECT payload FROM policy.outbox_events WHERE aggregate_type=$1 AND aggregate_id=$2 ORDER BY created_at',['notice_delivery',offered[0].eventId])).rows;
+  assert.equal(deliveryCaptures.length,4,'two dispatch decisions and two receipts, without replay duplicates');
+  for(const row of deliveryCaptures) {
+    assert.equal(deliveryCaptureValidator(row.payload),true,JSON.stringify(deliveryCaptureValidator.errors));
+    assert.equal(row.payload.contractVersion,'v2');
+    assert.ok([phoneA.destination,phoneB.destination].includes(row.payload.inputs.destination));
+  }
+  for(const table of ['audit_events','outbox_events']) {
+    const phone = {...noticeOwner,destination:randomUUID()};
+    await noticeService.list(phone,everyChoice,randomUUID());
+    const deniedTrace = randomUUID();
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { await assert.rejects(noticeService.receipt(phone,offered[0].eventId,'presented',deniedTrace),/permission|privilege/i); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.inbox_events WHERE event_id=$1 AND consumer=$2',[offered[0].eventId,`notice.receipt.v2:${phone.destination}`])).rows[0].n,0);
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1',[deniedTrace])).rows[0].n,0);
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE correlation_id=$1',[deniedTrace])).rows[0].n,0);
+    assert.equal((await noticeService.receipt(phone,offered[0].eventId,'presented',randomUUID())).status,'recorded');
+  }
+  // The customer's claim notice is the one the claim decision stores for them, addressed to their subject: it is offered by the claims choice, only to them, and carries only the policy.
+  const claimOwner = { clientId: rain.payload.clientId, subjectToken: rain.payload.subjectToken };
+  const noticedClaimId = randomUUID(), claimDecisionId = randomUUID();
+  await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
+    VALUES($1,$2,'claim-notice',$3,'approved',$4,$5)`, [noticedClaimId, rainPolicy.policyId, '1'.repeat(64), financialNow().toISOString(), randomUUID()]);
+  await addClaimNotices(db as never, claimDecisionId, noticedClaimId, 'approve', rain.payload.subjectToken, randomUUID());
+  const claimsChoice = { ...everyChoice, claims: true };
+  const claimViews = (await noticeService.list(claimOwner, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed');
+  assert.deepEqual(claimViews.map(item => [item.eventId, item.category, item.policyId, item.state]), [[claimDecisionId, 'claims', rainPolicy.policyId, 'offered']]);
+  assert.deepEqual(Object.keys(claimViews[0]).sort(), ['category', 'eventId', 'kind', 'occurredAt', 'policyId', 'state']);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID(), subjectToken: randomUUID() }, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed'), [], 'another customer sees nothing of it');
+  assert.deepEqual((await noticeService.list({ clientId: claimOwner.clientId }, claimsChoice, randomUUID())).filter(item => item.kind === 'claim_status_changed'), [], 'without the subject nothing addressed to it is read');
+  assert.equal((await noticeService.receipt(claimOwner, claimDecisionId, 'presented', randomUUID())).status, 'recorded');
+  assert.equal((await noticeService.receipt(claimOwner, claimDecisionId, 'presented', randomUUID())).status, 'replayed');
+  assert.deepEqual(await noticeService.receipt({ clientId: randomUUID(), subjectToken: randomUUID() }, claimDecisionId, 'presented', randomUUID()), { status: 'not_found' });
+  assert.equal((await noticeService.list(claimOwner, claimsChoice, randomUUID())).find(item => item.eventId === claimDecisionId)?.state, 'presented');
+  const claimPhoneA = {...claimOwner,destination:phoneA.destination}, claimPhoneB = {...claimOwner,destination:phoneB.destination};
+  await noticeService.list(claimPhoneA,claimsChoice,randomUUID());
+  assert.deepEqual(await noticeService.destination(claimPhoneA,claimDecisionId),{kind:'claim',claimId:noticedClaimId});
+  assert.equal(await noticeService.destination({...claimPhoneA,subjectToken:randomUUID()},claimDecisionId),null,'another subject cannot resolve the claim locator');
+  assert.equal(await noticeService.destination({...claimOwner,destination:randomUUID()},claimDecisionId),null,'an unoffered installation cannot resolve it');
+  assert.deepEqual(await noticeService.destination(phoneA,offered[0].eventId),{kind:'policy',policyId:rainPolicy.policyId,section:'history'});
+  assert.equal((await noticeService.receipt(claimPhoneA,claimDecisionId,'permission_denied',randomUUID())).status,'recorded');
+  assert.equal((await noticeService.list(claimPhoneB,claimsChoice,randomUUID())).find(item=>item.eventId===claimDecisionId)?.state,'offered');
+  assert.equal((await noticeService.receipt(claimPhoneB,claimDecisionId,'presented',randomUUID())).status,'recorded');
+  const mutedClaimId = randomUUID(), mutedDecisionId = randomUUID();
+  await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
+    VALUES($1,$2,'claim-notice-muted',$3,'rejected',$4,$5)`, [mutedClaimId, rainPolicy.policyId, '2'.repeat(64), financialNow().toISOString(), randomUUID()]);
+  await addClaimNotices(db as never, mutedDecisionId, mutedClaimId, 'reject', rain.payload.subjectToken, randomUUID());
+  assert.equal((await noticeService.list(claimOwner, everyChoice, randomUUID())).some(item => item.eventId === mutedDecisionId), false, 'a claims choice that is off offers nothing');
+  // A policy about to expire is announced once for its expiry date, only inside the window, and only to its own owner.
+  const expiresAt = (await db.query<{ effective_until: Date }>('SELECT effective_until FROM policy.policies WHERE id=$1', [rainPolicy.policyId])).rows[0].effective_until;
+  const expiryRows = async () => (await db!.query<{ event_id: string; payload: Record<string, unknown> }>("SELECT event_id,payload FROM policy.outbox_events WHERE aggregate_id=$1 AND event_type='policy.expiry.notice'", [rainPolicy.policyId])).rows;
+  assert.equal(await new ExpiryNotices(new SqlExpiryNotices(runtime.toString()), { now: () => new Date(expiresAt.getTime() - 30 * 24 * 3600 * 1000) }).run() >= 0, true);
+  assert.deepEqual(await expiryRows(), [], 'thirty days before the end nothing is announced for it');
+  const nearExpiry = new ExpiryNotices(new SqlExpiryNotices(runtime.toString()), { now: () => new Date(expiresAt.getTime() - 3 * 24 * 3600 * 1000) });
+  assert.ok(await nearExpiry.run() >= 1);
+  const announced = await expiryRows();
+  assert.equal(announced.length, 1);
+  assert.deepEqual(announced[0].payload, { category: 'policy_expiring', clientId: rain.payload.clientId, policyId: rainPolicy.policyId, expiresAt: expiresAt.toISOString() });
+  await nearExpiry.run();
+  assert.equal((await expiryRows()).length, 1, 'a second run announces nothing again');
+  const expiryView = (await noticeService.list(noticeOwner, everyChoice, randomUUID())).filter(item => item.policyId === rainPolicy.policyId && item.kind === 'policy_expiring');
+  assert.deepEqual(expiryView.map(item => [item.category, item.state]), [['policy', 'offered']]);
+  assert.deepEqual((await noticeService.list({ clientId: randomUUID() }, everyChoice, randomUUID())).filter(item => item.kind === 'policy_expiring'), [], 'another customer sees no expiry notice');
   const sameIdentity = await providerEvent(rainPolicy.policyId, { ...rainReading, precipitationMm: 80 }, { ...observed, providerEventId: rainEvent.providerEventId });
   const conflict = await received(finance, sameIdentity);
   assert.ok(conflict.status === 'denied' && conflict.error === 'event_conflict', JSON.stringify(conflict));
@@ -862,7 +962,7 @@ try {
     assert.ok([lifecycleOffer.payload.clientId, endedFlight.payload.clientId].includes(notice.payload.clientId)); assert.equal(notice.event_id, notice.payload.changeId);
   }
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
-  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice')")).rows;
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE aggregate_type <> 'notice_delivery' AND event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice','policy.expiry.notice')")).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'indemnity.declined', 'signature.challenge_created',
     'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'policy.lifecycle.changed', 'financial.denied'];

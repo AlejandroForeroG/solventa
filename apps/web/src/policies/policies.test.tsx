@@ -34,6 +34,22 @@ beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); window.history.replaceState(null, '', '/'); });
 
 describe('my policies', () => {
+  it('opens the parametric receipt in history and the renewal action without submitting a business command', async () => {
+    window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=history');
+    const payment = { date: '2026-11-09T11:00:00.000Z', amount: '100000.0000', currency: 'COP', status: 'paid', reference: 'MOCK-PAYOUT-1' };
+    const fetch = serve({ [`/api/v1/policies/${policyId}/detail`]: () => json({ ...detail, parametricPayment: payment }), '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }) });
+    const rendered = show();
+    expect(await screen.findByRole('tab', { name: 'Historial', selected: true })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Indemnización paramétrica' })).toBeVisible();
+    expect(screen.getByText('MOCK-PAYOUT-1')).toBeVisible();
+    rendered.unmount();
+    window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=renewal');
+    show();
+    expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
+    expect(screen.getByRole('button', { name: 'Renovar póliza' })).toBeDisabled();
+    expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
+  });
   it('opens the requested documents and abandons that selection when returning to the list', async () => {
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=documents');
     const fetch = serve({ [`/api/v1/policies/${policyId}/detail`]: () => json(detail), '/api/v1/policies/issued': () => json({ policies: [summary], hasMore: false }) });
