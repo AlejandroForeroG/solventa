@@ -10,6 +10,7 @@ import { biometricVault, secureTokenStore } from '../adapters/secure-token-store
 import { createSessionApi } from '../adapters/solventa-session';
 import { workosIdentity } from '../adapters/workos';
 import { localBusinessData } from '../../../shared/native/local-business-data';
+import { installationMarker } from '../../../shared/native/installation-marker';
 
 const Context = createContext<Authentication | null>(null);
 
@@ -20,6 +21,7 @@ export function AuthenticationProvider({ children }: PropsWithChildren) {
       baseUrl, store: secureTokenStore, identity: workosIdentity,
       api: createSessionApi(baseUrl), browser: authBrowser, now: Date.now, parseCallback,
       biometrics: biometricVault, policyCache: localBusinessData,
+      installationId: installationMarker,
     });
   });
 

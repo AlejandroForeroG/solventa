@@ -67,6 +67,8 @@ mock.module(new URL('../../claim-drafts/adapters/native-draft-storage.ts', prese
 mock.module(new URL('../adapters/solventa-session.ts', presentation).href,
   { namedExports: { createSessionApi: (baseUrl: string) => ({ baseUrl }) } });
 mock.module(new URL('../adapters/workos.ts', presentation).href, { namedExports: { workosIdentity: { kind: 'identity' } } });
+mock.module(new URL('../../../shared/native/installation-marker.ts', presentation).href,
+  { namedExports: { installationMarker: async () => '10000000-0000-4000-8000-000000000001' } });
 
 const imported = await import('../apps/mobile/src/features/authentication/presentation/AuthenticationProvider');
 const provider = (imported.default ?? imported) as typeof import('../apps/mobile/src/features/authentication/presentation/AuthenticationProvider');
@@ -76,6 +78,7 @@ test('provider restores, completes callbacks, locks on background and removes na
   process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.test';
   provider.AuthenticationProvider({ children: 'content' });
   assert.equal(constructorOptions?.baseUrl, 'https://api.example.test');
+  assert.equal(await (constructorOptions?.installationId as () => Promise<string>)(), '10000000-0000-4000-8000-000000000001');
   const cache = constructorOptions?.policyCache as { clear(): Promise<void> };
   await cache.clear(); assert.deepEqual(custodyCalls, ['policy-lock', 'draft-lock', 'policy-clear', 'draft-clear']);
   custodyCalls.length = 0; draftClearFails = true; await assert.rejects(cache.clear());

@@ -37,7 +37,7 @@ A cookie, a partner credential or a web session reaches neither route. Errors ca
 
 V1 retains its original `notices:read`/`notices:receipt` session policy and customer-wide `notice.dispatch.v1`/`notice.receipt.v1` rows. No retirement date is assigned. Its receipt can still affect all v1 consumers; current native builds use v2. Legacy global rows are never deleted, rewritten or attributed to an installation without evidence. A retained event with no v2 receipt may therefore be re-offered once to each installation during rollout. V1 and v2 receipts are intentionally independent.
 
-Publish Identity before Policy, then the mobile client. The expanded private access result is compatible with old Policy; new v2 Policy rejects an old Identity response without a destination rather than falling back to customer-wide state. Existing installations already register through the native authentication flow. A client without its active registration must recover through primary native login; the notices endpoint neither registers nor replaces a device. Runtime SQL roles and grants remain unchanged.
+Publish Identity before Policy, then the mobile client. The expanded private access result is compatible with old Policy; new v2 Policy rejects an old Identity response without a destination rather than falling back to customer-wide state. Primary native login registers the installation before exposing authenticated features, independently of optional biometric activation; restoration inspects the existing binding. An older client without its active registration must recover through primary native login; the notices endpoint neither registers nor replaces a device. Runtime SQL roles and grants remain unchanged.
 
 ## Categories
 
