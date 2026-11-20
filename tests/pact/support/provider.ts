@@ -271,6 +271,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a customer without underwriting audit permission': () => auditWorld(origin, 'denied'),
   'the underwriting audit store is unavailable': () => auditWorld(origin, 'unavailable'),
   'an explicitly granted claims analyst': () => claimsWorld(origin, 'granted'),
+  'native claim disbursement receipts': () => claimsWorld(origin, 'granted'),
   'an explicitly granted claims analyst with no open claims': () => claimsWorld(origin, 'empty'),
   'a customer without claims permission': () => claimsWorld(origin, 'denied'),
   'the claims inbox store is unavailable': () => claimsWorld(origin, 'unavailable'),

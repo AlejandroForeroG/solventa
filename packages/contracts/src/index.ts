@@ -3,3 +3,5 @@ export type { ApiVersion } from './versions';
 export { identityVerificationFixtures } from './identity-fixtures';
 export { assistanceOperation, assistanceRecord, assistanceSearchPath, parseAssistanceResults, parseAssistanceSearch } from './assistance';
 export type { AssistanceProviderMatch, AssistanceSearchRequest } from './assistance';
+export { parseClaimPayment, parseClaimPaymentPage } from './claim-payments';
+export type { ClaimPayment, ClaimPaymentPage, OwnClaimPayment } from './claim-payments';
