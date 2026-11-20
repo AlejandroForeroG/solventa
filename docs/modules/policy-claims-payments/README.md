@@ -51,6 +51,8 @@ The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) docum
 
 ### Web policy portal
 
+The owner-restricted detail includes optional `parametricPayment` separately from the premium history. It reads the stored indemnity through the existing financial transaction after ownership and integrity checks, returns its last update time, decimal amount and paid/pending/failed state, and exposes a reference only when confirmed. No provider is called by this query. The customer notice destination selects History to show that receipt; expiry selects the existing renewal form without an automatic write. See [customer notices](customer-notices.md#routes).
+
 The signed-in customer reads issued policies from the web through three owner-scoped, read-only routes. They use the sealed web session and one `authorizeFinancialAccessV1` call with `policies:read`; an `Authorization` header, a non-GET method or a malformed identifier is rejected before any business read. Each answer is `no-store` and carries `X-Trace-Id`.
 
 - `GET /api/v1/policies/issued` lists pages of at most six issued policies with the same summaries and `cursor` / `policyId` query contract as the native list. The native route keeps its own bearer contract.

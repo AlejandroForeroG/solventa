@@ -5,10 +5,10 @@ import { changePolicyLifecycle, listPolicies, type LifecycleCommand, type Policy
 
 type Action = 'modified' | 'renewed' | 'cancelled';
 const actions: Action[] = ['modified', 'renewed', 'cancelled'];
-export function LifecycleActions({ policy, onChanged, onSessionLost }: { policy: PolicyDetail; onChanged(): void; onSessionLost(): void }) {
+export function LifecycleActions({ policy, initialAction = 'cancelled', onChanged, onSessionLost }: { policy: PolicyDetail; initialAction?: Action; onChanged(): void; onSessionLost(): void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `policies.lifecycle.${key}` });
-  const [action, setAction] = useState<Action>('cancelled');
+  const [action, setAction] = useState<Action>(initialAction);
   const [replacement, setReplacement] = useState('');
   const [choices, setChoices] = useState<PolicySummary[]>([]);
   const [confirmed, setConfirmed] = useState(false);

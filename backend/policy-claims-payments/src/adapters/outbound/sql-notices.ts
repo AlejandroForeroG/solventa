@@ -10,8 +10,8 @@ const SELECT = `SELECT o.event_id, o.event_type, o.payload, o.created_at, d.outc
   LEFT JOIN policy.inbox_events r ON r.event_id = o.event_id AND r.consumer = $5`;
 
 // The customer's claim notices are stored with the claim decision, addressed to the customer's subject: the claim only gives their policy.
-type ClaimRow = { event_id: string; policy_id: string; created_at: Date; dispatch: string | null; dispatched_at: Date | null; receipt: string | null };
-const CLAIM_SELECT = `SELECT n.event_id, c.policy_id, n.created_at, d.outcome AS dispatch, d.processed_at AS dispatched_at, r.outcome AS receipt
+type ClaimRow = { event_id: string; policy_id: string; claim_id: string; created_at: Date; dispatch: string | null; dispatched_at: Date | null; receipt: string | null };
+const CLAIM_SELECT = `SELECT n.event_id, c.policy_id, n.claim_id, n.created_at, d.outcome AS dispatch, d.processed_at AS dispatched_at, r.outcome AS receipt
   FROM policy.claim_notices n JOIN policy.claims c ON c.id = n.claim_id
   LEFT JOIN policy.inbox_events d ON d.event_id = n.event_id AND d.consumer = $3
   LEFT JOIN policy.inbox_events r ON r.event_id = n.event_id AND r.consumer = $4`;
@@ -23,7 +23,7 @@ function decided(dispatch: string | null, receipt: string | null, dispatchedAt: 
 
 function claimRecord(row: ClaimRow): NoticeRecord | null {
   const notice = claimNoticeFrom({ eventId: row.event_id, policyId: row.policy_id, createdAt: row.created_at });
-  return notice ? { notice, ...decided(row.dispatch, row.receipt, row.dispatched_at) } : null;
+  return notice ? { notice, claimId: row.claim_id, ...decided(row.dispatch, row.receipt, row.dispatched_at) } : null;
 }
 
 function record(row: Row): NoticeRecord | null {

@@ -696,6 +696,13 @@ try {
   const replayedRain = await received(new PolicyFinance(base), rainEvent);
   assert.ok(replayedRain.status === 'ok' && replayedRain.replayed);
   assert.equal((await notices(rainPolicy.policyId)).length, 1, 'a replay never announces the payment twice');
+  const payoutDetail = await finance.detail({ actor: rain.payload, policyId: rainPolicy.policyId, traceId: randomUUID() });
+  assert.equal(payoutDetail.status, 'ok', JSON.stringify(payoutDetail));
+  if (payoutDetail.status === 'ok') {
+    assert.equal(payoutDetail.detail.parametricPayment?.amount, '100000.0000');
+    assert.equal(payoutDetail.detail.parametricPayment?.status, 'paid');
+    assert.equal(payoutDetail.detail.parametricPayment?.reference, 'MOCK-' + rainNotices[0].paymentId);
+  }
   // The customer notice reaches the device through the delivery service, with the real runtime grants: offered once, confirmed once, private to its owner.
   const noticeService = new Notices(new SqlNotices(runtime.toString()), { now: financialNow });
   const everyChoice = { policy: true, payments: true, claims: false, commercial: false };
@@ -757,6 +764,10 @@ try {
   assert.equal((await noticeService.list(claimOwner, claimsChoice, randomUUID())).find(item => item.eventId === claimDecisionId)?.state, 'presented');
   const claimPhoneA = {...claimOwner,destination:phoneA.destination}, claimPhoneB = {...claimOwner,destination:phoneB.destination};
   await noticeService.list(claimPhoneA,claimsChoice,randomUUID());
+  assert.deepEqual(await noticeService.destination(claimPhoneA,claimDecisionId),{kind:'claim',claimId:noticedClaimId});
+  assert.equal(await noticeService.destination({...claimPhoneA,subjectToken:randomUUID()},claimDecisionId),null,'another subject cannot resolve the claim locator');
+  assert.equal(await noticeService.destination({...claimOwner,destination:randomUUID()},claimDecisionId),null,'an unoffered installation cannot resolve it');
+  assert.deepEqual(await noticeService.destination(phoneA,offered[0].eventId),{kind:'policy',policyId:rainPolicy.policyId,section:'history'});
   assert.equal((await noticeService.receipt(claimPhoneA,claimDecisionId,'permission_denied',randomUUID())).status,'recorded');
   assert.equal((await noticeService.list(claimPhoneB,claimsChoice,randomUUID())).find(item=>item.eventId===claimDecisionId)?.state,'offered');
   assert.equal((await noticeService.receipt(claimPhoneB,claimDecisionId,'presented',randomUUID())).status,'recorded');

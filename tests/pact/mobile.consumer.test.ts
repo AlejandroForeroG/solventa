@@ -244,3 +244,11 @@ test('mobile reports that its device presented a notice through the shared contr
       body: { eventId: contractNotice.eventId, state: 'presented', replayed: false, traceId: MatchersV3.uuid(traceId) } });
   await pact.executeTest(async server => { await noticesApi(server.url).receipt(contractNotice.eventId, 'presented'); });
 });
+
+test('mobile resolves an offered notice to its authenticated category destination', async () => {
+  const destination = { kind: 'policy', policyId: contractNotice.policyId, section: 'history' };
+  pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice destination')
+    .withRequest({ method: 'GET', path: `/api/v2/notices/${contractNotice.eventId}/destination`, headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { destination, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => { assert.deepEqual(await noticesApi(server.url).destination(contractNotice.eventId), destination); });
+});

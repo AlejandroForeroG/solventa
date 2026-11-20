@@ -10,7 +10,8 @@ export const DOCUMENT_IDS = ['signed_policy', 'general_conditions', 'premium_rec
 export type PolicyDocumentId = typeof DOCUMENT_IDS[number];
 export type PolicyDetail = PolicySummary & { lifecycle?: { action: 'modified' | 'renewed' | 'cancelled'; at: string; reason: string; replacementPolicyId: string | null }; exclusions: { code: string; text: string }[]; conditionsVersion: string;
   documents: { documentId: PolicyDocumentId; issuedAt: string }[];
-  payments: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null }[] };
+  payments: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null }[];
+  parametricPayment?: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null } };
 export type PolicyListing = { policies: PolicySummary[]; hasMore: boolean; nextCursor: string | null };
 export type PolicyFile = { blob: Blob; fileName: string };
 export type PolicyOutcome<T> = { kind: 'ok'; value: T } | { kind: 'unauthenticated' | 'notFound' | 'unavailable'; traceId?: string };
@@ -54,7 +55,8 @@ const payment = (v: unknown): v is PolicyDetail['payments'][number] => record(v)
 function detail(v: unknown): v is PolicyDetail {
   return summary(v) && list((v as Record<string, unknown>).exclusions, exclusion) && typeof (v as Record<string, unknown>).conditionsVersion === 'string'
     && list((v as Record<string, unknown>).documents, documentEntry) && list((v as Record<string, unknown>).payments, payment)
-    && ((v as Record<string, unknown>).lifecycle === undefined || validLifecycle((v as Record<string, unknown>).lifecycle));
+    && ((v as Record<string, unknown>).lifecycle === undefined || validLifecycle((v as Record<string, unknown>).lifecycle))
+    && ((v as Record<string, unknown>).parametricPayment === undefined || payment((v as Record<string, unknown>).parametricPayment));
 }
 
 async function read<T>(path: string, signal: AbortSignal, valid: (body: Record<string, unknown>) => T | null): Promise<PolicyOutcome<T>> {
