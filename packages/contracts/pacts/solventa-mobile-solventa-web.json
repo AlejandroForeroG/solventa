@@ -2413,7 +2413,7 @@
           "Content-Type": "application/json"
         },
         "method": "POST",
-        "path": "/api/v1/notices/70000000-0000-4000-8000-0000000000a1/receipt"
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/receipt"
       },
       "response": {
         "body": {
@@ -2454,7 +2454,7 @@
           "Authorization": "Bearer synthetic.jwt.token"
         },
         "method": "GET",
-        "path": "/api/v1/notices"
+        "path": "/api/v2/notices"
       },
       "response": {
         "body": {

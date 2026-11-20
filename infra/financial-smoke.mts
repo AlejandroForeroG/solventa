@@ -711,6 +711,34 @@ try {
   assert.equal((await noticeService.receipt(noticeOwner, offered[0].eventId, 'permission_denied', randomUUID())).status, 'conflict');
   assert.deepEqual(await noticeRows(), [{ consumer: 'notice.dispatch.v1', outcome: 'offered' }, { consumer: 'notice.receipt.v1', outcome: 'presented' }]);
   assert.deepEqual(await noticeService.receipt({ clientId: randomUUID() }, offered[0].eventId, 'presented', randomUUID()), { status: 'not_found' });
+  const deliveryCaptureValidator = new Ajv({allErrors:true}).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json','utf8')));
+  const phoneA = {...noticeOwner,destination:randomUUID()}, phoneB = {...noticeOwner,destination:randomUUID()};
+  await Promise.all([noticeService.list(phoneA,everyChoice,randomUUID()),noticeService.list(phoneB,everyChoice,randomUUID())]);
+  assert.equal((await noticeService.receipt(phoneA,offered[0].eventId,'permission_denied',randomUUID())).status,'recorded');
+  assert.equal((await noticeService.list(phoneB,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'offered');
+  const duplicateReceipts = await Promise.all([noticeService.receipt(phoneB,offered[0].eventId,'presented',randomUUID()),noticeService.receipt(phoneB,offered[0].eventId,'presented',randomUUID())]);
+  assert.deepEqual(duplicateReceipts.map(result=>result.status).sort(),['recorded','replayed']);
+  assert.equal((await noticeService.list(phoneA,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'permission_denied');
+  assert.equal((await noticeService.list(phoneB,everyChoice,randomUUID())).find(item=>item.eventId===offered[0].eventId)?.state,'presented');
+  const deliveryCaptures = (await db.query('SELECT payload FROM policy.outbox_events WHERE aggregate_type=$1 AND aggregate_id=$2 ORDER BY created_at',['notice_delivery',offered[0].eventId])).rows;
+  assert.equal(deliveryCaptures.length,4,'two dispatch decisions and two receipts, without replay duplicates');
+  for(const row of deliveryCaptures) {
+    assert.equal(deliveryCaptureValidator(row.payload),true,JSON.stringify(deliveryCaptureValidator.errors));
+    assert.equal(row.payload.contractVersion,'v2');
+    assert.ok([phoneA.destination,phoneB.destination].includes(row.payload.inputs.destination));
+  }
+  for(const table of ['audit_events','outbox_events']) {
+    const phone = {...noticeOwner,destination:randomUUID()};
+    await noticeService.list(phone,everyChoice,randomUUID());
+    const deniedTrace = randomUUID();
+    await db.query(`REVOKE INSERT ON policy.${table} FROM solventa_local_policy`);
+    try { await assert.rejects(noticeService.receipt(phone,offered[0].eventId,'presented',deniedTrace),/permission|privilege/i); }
+    finally { await db.query(`GRANT INSERT ON policy.${table} TO solventa_local_policy`); }
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.inbox_events WHERE event_id=$1 AND consumer=$2',[offered[0].eventId,`notice.receipt.v2:${phone.destination}`])).rows[0].n,0);
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.audit_events WHERE correlation_id=$1',[deniedTrace])).rows[0].n,0);
+    assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.outbox_events WHERE correlation_id=$1',[deniedTrace])).rows[0].n,0);
+    assert.equal((await noticeService.receipt(phone,offered[0].eventId,'presented',randomUUID())).status,'recorded');
+  }
   // The customer's claim notice is the one the claim decision stores for them, addressed to their subject: it is offered by the claims choice, only to them, and carries only the policy.
   const claimOwner = { clientId: rain.payload.clientId, subjectToken: rain.payload.subjectToken };
   const noticedClaimId = randomUUID(), claimDecisionId = randomUUID();
@@ -727,6 +755,11 @@ try {
   assert.equal((await noticeService.receipt(claimOwner, claimDecisionId, 'presented', randomUUID())).status, 'replayed');
   assert.deepEqual(await noticeService.receipt({ clientId: randomUUID(), subjectToken: randomUUID() }, claimDecisionId, 'presented', randomUUID()), { status: 'not_found' });
   assert.equal((await noticeService.list(claimOwner, claimsChoice, randomUUID())).find(item => item.eventId === claimDecisionId)?.state, 'presented');
+  const claimPhoneA = {...claimOwner,destination:phoneA.destination}, claimPhoneB = {...claimOwner,destination:phoneB.destination};
+  await noticeService.list(claimPhoneA,claimsChoice,randomUUID());
+  assert.equal((await noticeService.receipt(claimPhoneA,claimDecisionId,'permission_denied',randomUUID())).status,'recorded');
+  assert.equal((await noticeService.list(claimPhoneB,claimsChoice,randomUUID())).find(item=>item.eventId===claimDecisionId)?.state,'offered');
+  assert.equal((await noticeService.receipt(claimPhoneB,claimDecisionId,'presented',randomUUID())).status,'recorded');
   const mutedClaimId = randomUUID(), mutedDecisionId = randomUUID();
   await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id)
     VALUES($1,$2,'claim-notice-muted',$3,'rejected',$4,$5)`, [mutedClaimId, rainPolicy.policyId, '2'.repeat(64), financialNow().toISOString(), randomUUID()]);
@@ -918,7 +951,7 @@ try {
     assert.ok([lifecycleOffer.payload.clientId, endedFlight.payload.clientId].includes(notice.payload.clientId)); assert.equal(notice.event_id, notice.payload.changeId);
   }
   const validateCapture = new Ajv({ allErrors: true }).compile(JSON.parse(await readFile('packages/contracts/schemas/decision-capture.v1.json', 'utf8')));
-  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice','policy.expiry.notice')")).rows;
+  const persisted = (await db.query<{ event_type: string; payload: FinancialDecisionCapture }>("SELECT event_type,payload FROM policy.outbox_events WHERE aggregate_type <> 'notice_delivery' AND event_type NOT IN ('policy.indemnity.notice','policy.lifecycle.notice','policy.expiry.notice')")).rows;
   const requiredActions = ['offer.accepted', 'premium.requested', 'premium.declined', 'premium.confirmed', 'policy.issued', 'premium.refund_requested',
     'premium.refunded', 'parametric.accepted', 'indemnity.confirmed', 'indemnity.declined', 'signature.challenge_created',
     'signature.challenge_failed', 'signature.challenge_cancelled', 'signature.challenge_verified', 'policy.lifecycle.changed', 'financial.denied'];

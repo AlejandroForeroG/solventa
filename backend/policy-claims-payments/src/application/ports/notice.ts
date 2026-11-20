@@ -1,4 +1,4 @@
-import type { DispatchOutcome, Notice, ReceiptOutcome } from '../../domain/notice';
+import type { DispatchOutcome, Notice, NoticeDecisionCapture, ReceiptOutcome } from '../../domain/notice';
 
 // Stores, once per policy and expiry date, the notice that a policy is about to expire.
 export interface ExpiryAnnouncer {
@@ -11,7 +11,7 @@ export type NoticeRecord = { notice: Notice; dispatch: DispatchOutcome | null; d
 export interface NoticeStore {
   // The owner's most recent notices, newest first and bounded.
   // The subject token is what a claim notice is addressed to; without it only the notices that name the client are read.
-  recent(clientId: string, since: Date, subjectToken?: string): Promise<NoticeRecord[]>;
-  find(clientId: string, eventId: string, subjectToken?: string): Promise<NoticeRecord | null>;
-  record(eventId: string, eventType: string, consumer: string, outcome: string, traceId: string): Promise<'recorded' | 'exists'>;
+  recent(clientId: string, since: Date, subjectToken?: string, destination?: string): Promise<NoticeRecord[]>;
+  find(clientId: string, eventId: string, subjectToken?: string, destination?: string): Promise<NoticeRecord | null>;
+  record(eventId: string, eventType: string, consumer: string, outcome: string, traceId: string, capture?: NoticeDecisionCapture): Promise<'recorded' | 'exists'>;
 }

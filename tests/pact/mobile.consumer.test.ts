@@ -310,7 +310,7 @@ const noticesApi = (serverUrl: string) => createNoticesApi(baseUrl, { execute: o
 
 test('mobile reads the notices offered to its device through the shared contract', async () => {
   pact.given('a native session with a stored notice').uponReceiving('mobile notices list')
-    .withRequest({ method: 'GET', path: '/api/v1/notices', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .withRequest({ method: 'GET', path: '/api/v2/notices', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
     .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
       body: { simulated: true, notices: [{ ...contractNotice, state: 'offered' }], traceId: MatchersV3.uuid(traceId) } });
   await pact.executeTest(async server => {
@@ -320,7 +320,7 @@ test('mobile reads the notices offered to its device through the shared contract
 
 test('mobile reports that its device presented a notice through the shared contract', async () => {
   pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice receipt')
-    .withRequest({ method: 'POST', path: `/api/v1/notices/${contractNotice.eventId}/receipt`,
+    .withRequest({ method: 'POST', path: `/api/v2/notices/${contractNotice.eventId}/receipt`,
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token' }, body: { outcome: 'presented' } })
     .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
       body: { eventId: contractNotice.eventId, state: 'presented', replayed: false, traceId: MatchersV3.uuid(traceId) } });

@@ -24,6 +24,43 @@ const memoryStore = (seed: { owner: string; notice: Notice }[]) => memoryNoticeS
 const clock = { current: new Date('2026-11-18T12:00:00.000Z'), now() { return this.current; } };
 const notice = (n: number, kind: Notice['kind'] = 'parametric_payment_confirmed'): Notice => ({ eventId: event(n), kind, category: kind === 'parametric_payment_confirmed' ? 'payments' : 'policy', policyId, occurredAt: '2026-11-18T11:00:00.000Z' });
 
+const firstDevice = 'a1234567-1234-4123-8123-123456789abc';
+const secondDevice = 'b1234567-1234-4123-8123-123456789abc';
+
+test('denied permission on one installation does not consume another installation delivery', async () => {
+  const { store } = memoryStore([{ owner:A, notice:notice(1) }]);
+  const service = new Notices(store, clock);
+  const first = { clientId:A, destination:firstDevice }, second = { clientId:A, destination:secondDevice };
+  await service.list(first, on, trace);
+  assert.deepEqual(await service.receipt(first, event(1), 'permission_denied', trace), { status:'recorded', state:'permission_denied' });
+  assert.equal((await service.list(second, on, trace))[0]?.state, 'offered');
+  assert.deepEqual(await service.receipt(second, event(1), 'presented', trace), { status:'recorded', state:'presented' });
+  assert.equal((await service.list(first, on, trace))[0]?.state, 'permission_denied');
+  assert.equal((await service.list(second, on, trace))[0]?.state, 'presented');
+});
+
+test('concurrent destinations keep independent receipts and concurrent same-destination retries replay', async () => {
+  const { store } = memoryStore([{ owner:A, notice:notice(1) }]);
+  const service = new Notices(store, clock);
+  const first = { clientId:A, destination:firstDevice }, second = { clientId:A, destination:secondDevice };
+  await Promise.all([service.list(first, on, trace), service.list(second, on, trace)]);
+  const receipts = await Promise.all([service.receipt(first, event(1), 'presented', trace), service.receipt(first, event(1), 'presented', trace), service.receipt(second, event(1), 'permission_denied', trace)]);
+  assert.deepEqual(receipts.map(result=>result.status).sort(), ['recorded','recorded','replayed']);
+  assert.deepEqual(await service.receipt(first, event(1), 'permission_denied', trace), { status:'conflict' });
+  assert.deepEqual(await service.receipt({ clientId:B, destination:firstDevice }, event(1), 'presented', trace), { status:'not_found' });
+});
+
+test('legacy global receipts remain historical and never become evidence for an unrecorded installation', async () => {
+  const { store, inbox } = memoryStore([{ owner:A, notice:notice(1) }]);
+  const service = new Notices(store, clock);
+  await service.list({ clientId:A }, on, trace);
+  await service.receipt({ clientId:A }, event(1), 'permission_denied', trace);
+  const historical = [...inbox.entries()];
+  assert.equal((await service.list({ clientId:A, destination:firstDevice }, on, trace))[0]?.state, 'offered');
+  assert.equal((await service.list({ clientId:A }, on, trace))[0]?.state, 'permission_denied');
+  for (const [key,value] of historical) assert.deepEqual(inbox.get(key), value);
+});
+
 test('a notice is offered when its choice is on, once, and the same list again records nothing new', async () => {
   const { store, writes } = memoryStore([{ owner: A, notice: notice(1) }]);
   const notices = new Notices(store, clock);
@@ -125,6 +162,29 @@ function http(options: { decide?: (input: { operation: string; token: string }) 
   return { request, calls };
 }
 
+test('v2 uses only Identity destination, isolates receipt state and rejects a caller-selected receipt destination', async () => {
+  const { request } = http({ decide: input => ({ allowed:true, actor:{kind:'user',channel:'mobile',principal:{clientId:A,subjectToken:B},operations:[input.operation],noticeDestination:input.token === 'second.token' ? secondDevice : firstDevice}, pushChoices:on }) });
+  const read = (token: string) => request('/api/v2/notices', { headers:{authorization:`Bearer ${token}`, 'x-notice-destination':secondDevice} });
+  const receipt = (token: string, body: object) => request(`/api/v2/notices/${event(1)}/receipt`, {method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await read('first.token')).status, 200);
+  const firstReceipt = await receipt('first.token',{outcome:'permission_denied'});
+  assert.equal(firstReceipt.status, 200);
+  assert.ok(validateReceipt(await firstReceipt.json()), JSON.stringify(validateReceipt.errors));
+  const secondList = await read('second.token');
+  const body = await secondList.json() as { notices: {state:string}[] };
+  assert.ok(validateList(body), JSON.stringify(validateList.errors));
+  assert.equal(body.notices[0]?.state,'offered');
+  assert.equal((await receipt('second.token',{outcome:'presented',destination:firstDevice})).status,400);
+  assert.equal((await receipt('second.token',{outcome:'presented'})).status,200);
+});
+
+test('v2 refuses a positive authorization without its verified destination while v1 stays compatible', async () => {
+  const { request } = http();
+  assert.equal((await request('/api/v2/notices')).status,503);
+  assert.equal((await request(`/api/v2/notices/${event(1)}/receipt`,{method:'POST',headers:{'content-type':'application/json'},body:'{"outcome":"presented"}'})).status,503);
+  assert.equal((await request('/api/v1/notices')).status,200);
+});
+
 test('the native list answers with the offered notices, marks the transport as simulated and hides the owner', async () => {
   const { request, calls } = http();
   const response = await request('/api/v1/notices');
@@ -196,9 +256,25 @@ const validateList = schema('NoticeList');
 const validateReceipt = schema('NoticeReceipt');
 const validateBody = schema('NoticeReceiptBody');
 const validateError = schema('Error');
+const validateDecisionCapture = ajv.compile(JSON.parse(readFileSync('packages/contracts/schemas/decision-capture.v1.json','utf8')));
+
+test('v2 retains actual destination, preference and reported outcome in schema-valid captures without duplicate replay captures',async()=>{
+  const {store,captures} = memoryStore([{owner:A,notice:notice(1)}]);
+  const service = new Notices(store,clock), owner = {clientId:A,destination:firstDevice};
+  await service.list(owner,on,trace);
+  await service.receipt(owner,event(1),'permission_denied',trace);
+  await service.receipt(owner,event(1),'permission_denied',trace);
+  assert.equal(captures.length,2);
+  for(const capture of captures) { assert.ok(validateDecisionCapture(capture),JSON.stringify(validateDecisionCapture.errors)); assert.equal(capture.inputs.destination,firstDevice); }
+  assert.equal(captures[0]!.inputs.pushEnabled,true);
+  assert.equal(captures[1]!.inputs.reportedOutcome,'permission_denied');
+  assert.ok(captures[1]!.sources.some(source=>source.source==='native-notice-receipt'&&source.quality==='reported'));
+});
 
 test('the published examples and every answer of the handler match the OpenAPI schemas', async () => {
   assert.ok(validateList(examples.list.value), JSON.stringify(validateList.errors));
+  assert.ok(validateList(examples.otherDeviceOffered.value), JSON.stringify(validateList.errors));
+  assert.ok(validateReceipt(examples.devicePermissionDenied.value), JSON.stringify(validateReceipt.errors));
   assert.ok(validateBody(examples.receipt.value), JSON.stringify(validateBody.errors));
   assert.ok(validateReceipt(examples.receiptResult.value), JSON.stringify(validateReceipt.errors));
   const { request } = http({ records: [{ owner: A, notice: notice(1) }, { owner: A, notice: notice(2, 'policy_lifecycle_changed') }] });
