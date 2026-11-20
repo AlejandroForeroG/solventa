@@ -22,6 +22,7 @@ paths:
         - LocalWebSession: []
       parameters:
         - $ref: '#/components/parameters/PaymentCursor'
+        - $ref: '#/components/parameters/PaymentClaimId'
       responses:
         '200':
           description: Current owner-only payment page, including pending and terminal results.
@@ -49,6 +50,7 @@ paths:
         - MobileBearer: []
       parameters:
         - $ref: '#/components/parameters/PaymentCursor'
+        - $ref: '#/components/parameters/PaymentClaimId'
       responses:
         '200':
           description: Current owner-only payment page. Pending never means paid.
@@ -515,6 +517,78 @@ paths:
           $ref: "#/components/responses/MethodNotAllowed"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /claims/native/cases:
+    get:
+      tags: [Claims inbox]
+      security:
+        - MobileBearer: []
+      operationId: listOwnedNativeClaimCases
+      summary: List filed claims on the registered customer's mobile session
+      description: Uses claims:report. Lists only the caller's own filed claims with the same data and ordering as the customer web route. Query parameters are rejected.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+      responses:
+        "200":
+          description: At most 25 recent owned claims.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimOwnedCases"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /claims/native/cases/{claimId}:
+    get:
+      tags: [Claims inbox]
+      security:
+        - MobileBearer: []
+      operationId: getOwnedNativeClaimCase
+      summary: Follow the customer's own filed claim
+      description: Uses claims:report and verifies ownership in Policy. Returns the same customer projection as web, with customer-facing history and pending/received requirements. Unknown, foreign or unfiled cases are opaque. Query parameters are rejected.
+      parameters:
+        - $ref: ./common.yaml#/components/parameters/TraceId
+        - name: claimId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The owned case file.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            X-Trace-Id:
+              $ref: "#/components/headers/TraceId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimCase"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /claims/{claimId}/case:
     get:
       tags:
@@ -622,7 +696,7 @@ paths:
         - LocalWebSession: []
       operationId: getOwnedClaimCase
       summary: Open a claim file as its customer
-      description: Requires a verified web session and policy ownership. Internal analyst history is omitted.
+      description: Requires a verified web session and policy ownership. History contains the submission and recent customer-addressed events, without analyst identifiers, internal reasons or expert identities.
       parameters:
         - $ref: ./common.yaml#/components/parameters/TraceId
         - name: claimId
@@ -985,7 +1059,15 @@ components:
       name: cursor
       in: query
       required: false
-      description: Previous page's next value; repeated, empty or malformed UUIDs are invalid.
+      description: Previous page's next value. Mutually exclusive with claimId. Repeated, empty or malformed UUIDs are invalid.
+      schema:
+        type: string
+        format: uuid
+    PaymentClaimId:
+      name: claimId
+      in: query
+      required: false
+      description: Exact owned claim UUID. Mutually exclusive with cursor. Returns at most one receipt with a null next cursor. Unknown, foreign and unpaid claims without an authorized payment return an empty page.
       schema:
         type: string
         format: uuid
@@ -1618,6 +1700,8 @@ components:
                   - approve
                   - reject
                   - extend_requirement
+                  - disbursement_confirmed
+                  - disbursement_declined
               at: *a2
               state:
                 $ref: "#/components/schemas/ClaimState"

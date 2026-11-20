@@ -5,3 +5,5 @@ export { assistanceOperation, assistanceRecord, assistanceSearchPath, parseAssis
 export type { AssistanceProviderMatch, AssistanceSearchRequest } from './assistance';
 export { parseClaimPayment, parseClaimPaymentPage } from './claim-payments';
 export type { ClaimPayment, ClaimPaymentPage, OwnClaimPayment } from './claim-payments';
+export { isClaimCaseId, parseOwnedClaimList, parseCustomerClaimCase } from './claim-cases';
+export type { CustomerClaimCase, OwnedClaim, ClaimCaseState, ClaimCaseEvent } from './claim-cases';

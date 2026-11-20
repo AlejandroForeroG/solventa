@@ -2235,17 +2235,29 @@
         "body": {
           "access": "customer",
           "claimNumber": "SIN-2026-01187",
-          "description": "Synthetic evidence is available for analyst evaluation.",
+          "description": "Synthetic claim.",
           "eventType": "other",
-          "evidence": [
+          "evidence": [],
+          "history": [
             {
-              "byteSize": 1024,
-              "contentType": "image/jpeg",
+              "action": "take",
+              "actorId": null,
+              "at": "2026-11-13T20:00:00.000Z",
+              "expert": null,
               "id": "a0000000-0000-4000-8000-0000000000e1",
-              "verifiedAt": "2026-11-13T19:45:00.000Z"
+              "reason": null,
+              "state": "in_review"
+            },
+            {
+              "action": "submitted",
+              "actorId": null,
+              "at": "2026-11-13T19:50:00.000Z",
+              "expert": null,
+              "id": "a0000000-0000-4000-8000-000000000001",
+              "reason": null,
+              "state": "unassigned"
             }
           ],
-          "history": [],
           "notices": [],
           "occurredAt": "2026-11-13T19:45:00.000Z",
           "place": null,
