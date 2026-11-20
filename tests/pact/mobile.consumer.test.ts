@@ -6,6 +6,8 @@ import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/a
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
 import { createDraftApi } from '../../apps/mobile/src/features/claim-drafts/adapters/draft-api';
+import { createClaimPaymentsApi } from '../../apps/mobile/src/features/claim-payments/adapters/payments-api';
+import paymentExamples from '../../packages/contracts/examples/claim-payments.json';
 import { DraftFailure } from '../../apps/mobile/src/features/claim-drafts/domain/draft';
 import draftExamples from '../../packages/contracts/examples/claim-drafts.json';
 import { draftCommand, draftConflict, draftVersion } from './support/claim-drafts';
@@ -25,6 +27,18 @@ const baseUrl = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const configuration = { clientId: 'client_01M47F52THNNZZZ4WSGACX8KA4', redirectUri: 'solventa://auth/callback',
   authorizationEndpoint: 'https://api.workos.com/user_management/authorize', tokenEndpoint: 'https://api.workos.com/user_management/authenticate' };
 const principal = { clientId: id, subjectToken: traceId };
+
+test('native disbursement receipts use the owner-scoped bearer contract', async () => {
+  pact.given('native claim disbursement receipts').uponReceiving('a native customer disbursement page')
+    .withRequest({ method: 'GET', path: '/api/v1/claims/native/disbursements', headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: MatchersV3.like(paymentExamples.confirmedPage) });
+  await pact.executeTest(async server => {
+    const api = createClaimPaymentsApi(baseUrl, { execute: work => work('synthetic.jwt.token') }, principal,
+      (url, init) => { const parsed = new URL(String(url)); return fetch(server.url + parsed.pathname + parsed.search, init); });
+    const page = await api.list(undefined, new AbortController().signal);
+    assert.equal(page.items[0].payment.status, 'confirmed');
+  });
+});
 
 const draftClient = (server: { url: string }) => createDraftApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
   (url, options) => { const parsed = new URL(String(url)); return fetch(`${server.url}${parsed.pathname}${parsed.search}`, options); });

@@ -1,6 +1,8 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
 import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile } from '../../apps/web/src/claims/case-api';
 import { listClaims } from '../../apps/web/src/claims/api';
+import { claimPayment, getOwnClaimPayments } from '../../apps/web/src/claims/disbursement-api';
+import paymentExamples from '../../packages/contracts/examples/claim-payments.json';
 import { generateReport, listReports, sendReport } from '../../apps/web/src/reports/api';
 import reportsExamples from '../../packages/contracts/examples/reports.json';
 import claimsExamples from '../../packages/contracts/examples/claims.json';
@@ -528,6 +530,27 @@ describe('SPA historical underwriting audit', () => {
 });
 
 describe('SPA claims inbox', () => {
+  test('authorizes the explicit approved amount without inventing confirmation', async () => {
+    const claimId = paymentExamples.confirmedPage.items[0].claimId;
+    pact.given('an explicitly granted claims analyst').uponReceiving('an approved claim disbursement authorization')
+      .withRequest({ method: 'POST', path: '/api/v1/claims/' + claimId + '/disbursement', headers: { 'Content-Type': 'application/json', Origin: 'https://solventa.dev' }, body: { amount: '1000.0000' } })
+      .willRespondWith({ status: 202, headers: jsonResponse, body: MatchersV3.like(paymentExamples.pendingReceipt) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await claimPayment(claimId, new AbortController().signal, '1000.0000');
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.payment.status, 'pending');
+    }, 'https://solventa.dev'));
+  });
+  test('reads the authorized payment and the customer receipt through their distinct contracts', async () => {
+    const claimId = paymentExamples.confirmedPage.items[0].claimId;
+    pact.given('an explicitly granted claims analyst').uponReceiving('an assigned analyst disbursement read')
+      .withRequest({ method: 'GET', path: '/api/v1/claims/' + claimId + '/disbursement' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ payment: paymentExamples.pendingReceipt.payment, traceId: paymentExamples.pendingReceipt.traceId }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await claimPayment(claimId, new AbortController().signal)).kind, 'ok')));
+    pact.given('an explicitly granted claims analyst').uponReceiving('a customer disbursement page')
+      .withRequest({ method: 'GET', path: '/api/v1/claims/customer/disbursements' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(paymentExamples.confirmedPage) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await getOwnClaimPayments(undefined, new AbortController().signal)).kind, 'ok')));
+  });
   const list = (query = new URLSearchParams()) => listClaims(query, new AbortController().signal);
   test('lists open claims for an explicitly granted analyst', async () => {
     pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list')

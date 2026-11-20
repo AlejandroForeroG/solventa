@@ -2,8 +2,11 @@ import type { Context, Hono } from 'hono';
 import type { ClaimReport } from '../../application/claim-report';
 import type { ReportOwner } from '../../application/ports/claim-report';
 import { isUuid } from '../../domain/claim-report';
+import type { ClaimDisbursements } from '../../application/claim-disbursements';
+import { claimPaymentQuery } from './claim-payment-query';
 
 export type ClaimReportHttpDependencies = {
+  disbursements?: Pick<ClaimDisbursements, 'owned'>;
   report: Pick<ClaimReport<ReadableStream<Uint8Array>>, 'create' | 'receive' | 'submit'>;
   authorize(input: { kind: 'mobile'; operation: 'claims:report'; token: string }): Promise<unknown>;
 };
@@ -43,6 +46,12 @@ export function createClaimReportRoute(deps: Pick<ClaimReportHttpDependencies, '
 
 export function mountClaimReport(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimReportHttpDependencies) {
   const route = createClaimReportRoute(deps);
+
+  app.all('/api/v1/claims/native/disbursements', route('GET', async (c, owner, traceId, reply) => {
+    if (!deps.disbursements) return reply({ error: 'service_unavailable' }, 503);
+    const query = claimPaymentQuery(c.req.url);
+    return query ? reply(await deps.disbursements.owned(owner, traceId, query.cursor), 200) : reply({ error: 'invalid_request' }, 400);
+  }));
 
   app.post('/api/v1/claims', route('POST', async (c, owner, traceId, reply) => {
     const key = c.req.header('idempotency-key') ?? '';

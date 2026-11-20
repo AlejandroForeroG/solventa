@@ -10,7 +10,7 @@ export type ReviewCommand =
 export type RequirementResponse = { text: string; evidenceIds: string[] };
 export type RequirementFile = { fileId: string; contentType: EvidenceContentType; byteSize: number; sha256: string };
 export type ReviewAction = ReviewCommand['action'] | 'respond';
-export type ClaimNotice = ReviewAction | 'approve' | 'reject';
+export type ClaimNotice = ReviewAction | 'approve' | 'reject' | 'disbursement_confirmed' | 'disbursement_declined';
 export type Expert = { id: string; name: string };
 export const reviewable = (state: ClaimState) => state === 'in_review' || state === 'escalated';
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);

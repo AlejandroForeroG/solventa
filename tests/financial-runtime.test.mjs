@@ -57,7 +57,8 @@ const collaborators = {
     get: input => env.TEST_STATE.financial('get', input),
     getByAcceptance: input => env.TEST_STATE.financial('lookup', input),
     issue: input => env.TEST_STATE.financial('issue', input)
-  }; }`,
+  }; }
+  export function createClaimDisbursements() { return { recoverPayment: async () => ({ status: 'unchanged' }), reconcile: async () => [] }; }`,
 };
 const caller = `export default { async fetch(request, env) {
   const operation = new URL(request.url).pathname;
@@ -167,6 +168,7 @@ test('financial entrypoints preserve authorization, owner bindings, cron failure
     assert.equal((await (await runtime.getWorker('prod-policy')).scheduled({ cron: '* * * * *' })).outcome, 'ok');
     const recovery = await snapshot();
     assert.ok(recovery.queries.some(sql => sql.includes('policy.policies')));
+    assert.ok(recovery.queries.some(sql => sql.includes("'approved-claim:'")), 'the actual scheduled composition also selects durable manual claim intents');
     assert.ok(recovery.queries.every(sql => !sql.includes('acquisition.')));
   });
   await t.test('production Policy composition imports only a correctly bound production event', async () => {

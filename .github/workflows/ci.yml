@@ -35,7 +35,7 @@ jobs:
         run: node tools/promotion-policy.mjs
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
@@ -95,6 +95,8 @@ jobs:
         run: npm run test:report-access:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:claims:sql
+      - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:claim-disbursements:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:reports:sql
       - if: steps.reuse.outputs.reused != 'true'
