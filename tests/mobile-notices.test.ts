@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { destinationUrl, parseDestination, tappedNoticeId } from '../apps/mobile/src/features/notices/domain/destination';
+import { clearNoticeLogin, consumeNoticeLogin, rememberNoticeLogin } from '../apps/mobile/src/features/notices/application/login-destination';
 import { test } from 'node:test';
 import { AuthFailure } from '../apps/mobile/src/features/authentication/domain/session';
 import { createNoticesApi } from '../apps/mobile/src/features/notices/adapters/notices-api';
@@ -169,6 +171,36 @@ function client(answer: (url: string, init: RequestInit) => Response | Promise<R
   return { api, calls };
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+test('destination requests revalidate the session and use only typed same-environment locators', async () => {
+  const target = { kind: 'policy', policyId: event(2), section: 'history' } as const;
+  const { api, calls } = client(() => json({ destination: target, traceId: trace }));
+  assert.deepEqual(await api.destination(event(1)), target);
+  assert.equal(calls[0]?.url, `https://staging.solventa.site/api/v2/notices/${event(1)}/destination`);
+  assert.equal(calls[0]?.init.credentials, 'omit');
+  assert.equal(destinationUrl('https://dev.solventa.site', target), `https://dev.solventa.site/polizas#policy=${event(2)}&section=history`);
+  assert.equal(destinationUrl('https://dev.solventa.site', { kind: 'claim', claimId: event(3) }), `https://dev.solventa.site/mis-siniestros/${event(3)}`);
+  for (const destination of [{ ...target, section: 'https://example.com' }, { ...target, url: 'https://example.com' }, { kind: 'claim', claimId: '../foreign' }, null]) {
+    assert.throws(() => parseDestination({ destination }), NoticeFailure);
+  }
+  assert.equal(tappedNoticeId({ screen: 'notice', eventId: event(1) }), event(1));
+  for (const data of [null, { screen: 'notice', eventId: '../foreign' }, { screen: 'alerts' }, { screen: 'https://example.com', eventId: event(1) }]) assert.equal(tappedNoticeId(data), null);
+});
+
+test('notice sign-in returns once to a bounded event locator and abandons expired or cancelled continuations', () => {
+  rememberNoticeLogin(event(1), 1000);
+  assert.equal(consumeNoticeLogin(1001), event(1));
+  assert.equal(consumeNoticeLogin(1002), null);
+  rememberNoticeLogin(event(1), 1000);
+  assert.equal(consumeNoticeLogin(901000), null);
+  rememberNoticeLogin(event(1), 1000);
+  assert.equal(consumeNoticeLogin(999), null);
+  rememberNoticeLogin(event(1), 1000);
+  clearNoticeLogin();
+  assert.equal(consumeNoticeLogin(1001), null);
+  rememberNoticeLogin('../foreign', 1000);
+  assert.equal(consumeNoticeLogin(1001), null);
+});
 
 test('the client reads the list and sends the receipt with the bearer token and no cookies', async () => {
   const { api, calls } = client(url => url.endsWith('/receipt') ? json({ eventId: event(1), state: 'presented', replayed: false, traceId: trace }) : json(wire([notice(1)])));

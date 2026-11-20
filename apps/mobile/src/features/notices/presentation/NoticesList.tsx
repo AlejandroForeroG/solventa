@@ -18,7 +18,7 @@ export function NoticesList() {
     {snapshot.notices.map(notice => <View key={notice.eventId} style={styles.card}>
       <Text style={styles.title}>{copy.kind[notice.kind]}</Text>
       <Text style={styles.detail}>{copy.state[notice.state]} · {new Date(notice.occurredAt).toLocaleString()}</Text>
-      <Pressable accessibilityRole="button" onPress={() => router.navigate('/wallet')} style={styles.action}><Text style={styles.actionText}>{copy.open}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.navigate({ pathname: '/notice-action', params: { eventId: notice.eventId } })} style={styles.action}><Text style={styles.actionText}>{copy.open}</Text></Pressable>
     </View>)}
   </View>;
 }
