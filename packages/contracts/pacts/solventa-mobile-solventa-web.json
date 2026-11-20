@@ -2397,6 +2397,49 @@
       }
     },
     {
+      "description": "mobile notice destination",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/destination"
+      },
+      "response": {
+        "body": {
+          "destination": {
+            "kind": "policy",
+            "policyId": "91000000-0000-4000-8000-000000000020",
+            "section": "history"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile notice receipt",
       "providerStates": [
         {

@@ -30,12 +30,35 @@ async function issuedRecord(product: 'vida_hipotecario' | 'flight_delay' | 'weat
 }
 
 const unexpected = async (): Promise<never> => { throw new Error('unexpected_call'); };
-function financeFor(records: PolicyRecord[], rejected: string[] = [], enabled = true) {
-  const store: FinancialStore = { readOwnPolicies: unexpected, readAcceptedPolicy: unexpected, importAcceptance: unexpected, issuanceCandidates: unexpected, transaction: unexpected,
+function financeFor(records: PolicyRecord[], rejected: string[] = [], enabled = true, indemnity: Payment | null = null) {
+  const store: FinancialStore = { readOwnPolicies: unexpected, readAcceptedPolicy: unexpected, importAcceptance: unexpected, issuanceCandidates: unexpected,
+    transaction: work => work({ policy: async id => records.find(record => record.policy.id === id) ?? null, payment: async () => indemnity,
+      issuanceSnapshot: unexpected, createSignatureChallenge: unexpected, signatureChallenge: unexpected, updateSignatureChallenge: unexpected,
+      beginPremium: unexpected, setPolicyStatus: unexpected, createCommand: unexpected, finishCommand: unexpected, createPayment: unexpected,
+      setPaymentStatus: unexpected, inbox: unexpected, recordInbox: unexpected, confirmPremium: unexpected, completeIssuance: unexpected, audit: unexpected, announceIndemnity: unexpected }),
     readPolicy: async id => records.find(record => record.policy.id === id) ?? null, rejection: async (_id, _trace, cause) => { rejected.push(cause); } };
   return new PolicyFinance({ enabled, environment: 'local', integrity: financialIntegrity, now: financialNow, newId: randomUUID, store,
     payments: { lookup: unexpected, settle: unexpected, refund: unexpected }, signatures: { sign: unexpected } });
 }
+
+test('parametric history exposes only integrity-checked stored payment state and never treats pending as paid', async () => {
+  const record = await issuedRecord('flight_delay');
+  const payment: Payment = { id: randomUUID(), policyId: record.policy.id, operation: 'indemnity', key: 'parametric-once', amount: '100000.0000', currency: 'COP', hash: '', status: 'pending', providerReference: null, updatedAt: paidAt };
+  payment.hash = await financialIntegrity.digest(paymentContent(payment));
+  const input = { actor: actorOf(record), policyId: record.policy.id, traceId: randomUUID() };
+  for (const status of ['pending', 'confirmed', 'declined'] as const) {
+    payment.status = status;
+    payment.providerReference = status === 'confirmed' ? 'MOCK-' + payment.id : null;
+    const result = await financeFor([record], [], true, payment).detail(input);
+    assert.equal(result.status, 'ok', JSON.stringify(result));
+    if (result.status === 'ok') assert.deepEqual(result.detail.parametricPayment, { date: paidAt, amount: payment.amount, currency: 'COP', status: status === 'confirmed' ? 'paid' : status === 'declined' ? 'failed' : 'pending', reference: payment.providerReference });
+  }
+  payment.amount = '999999.0000';
+  const invalid = await financeFor([record], [], true, payment).detail(input);
+  assert.equal(invalid.status, 'denied');
+  const foreign = await financeFor([record], [], true, payment).detail({ ...input, actor: { clientId: randomUUID(), subjectToken: randomUUID() } });
+  assert.equal(foreign.status, 'denied');
+});
 const actorOf = ({ policy }: PolicyRecord) => ({ clientId: policy.clientId, subjectToken: policy.subjectToken });
 
 test('the detail of an issued policy gives its coverage, product exclusions, documents with their issue date and the premium payment', async () => {

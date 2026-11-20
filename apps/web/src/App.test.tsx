@@ -5,6 +5,7 @@ import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
 import { clearPolicyDocumentDestination, readPolicyDocumentDestination, savePolicyDocumentDestination } from './policies/document-destination';
+import { readCustomerDestination, saveCustomerDestination } from './navigation/customer-destination';
 import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
@@ -153,6 +154,27 @@ describe('my policies route in the application', () => {
   const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
   afterEach(clearPolicyDocumentDestination);
+  it.each(['history', 'renewal', 'info'] as const)('keeps the %s action through an explicit sign-in click', async section => {
+    window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=${section}`);
+    serve(401); render(<App />);
+    const links = await screen.findAllByRole('link', { name: 'Ingresa a Solventa' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    act(() => { links[1].dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(readCustomerDestination()).toEqual({ kind: 'policy', policyId: policy.policyId, section });
+    expect(screen.queryByText('Inicia sesión para abrir los documentos de la póliza seleccionada.')).toBeNull();
+  });
+  it('keeps a customer claim destination after failed sign-in and revalidates it for retry', async () => {
+    const claimId = '30000000-0000-4000-8000-000000000001';
+    saveCustomerDestination({ kind: 'claim', claimId });
+    window.history.replaceState(null, '', '/?auth=failed');
+    serve(401); render(<App />);
+    await screen.findByRole('heading', { name: 'Mis siniestros' });
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    const links = screen.getAllByRole('link', { name: 'Ingresa a Solventa' });
+    act(() => { links[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    expect(readCustomerDestination()).toEqual({ kind: 'claim', claimId });
+  });
   it('allows both normal sign-in links after leaving document detail and losing the session', async () => {
     savePolicyDocumentDestination({ policyId: policy.policyId });
     window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=documents`);

@@ -2,14 +2,14 @@ import type { NoticeRecord, NoticeStore } from '../../backend/policy-claims-paym
 import { noticeConsumers, type Notice, type NoticeDecisionCapture } from '../../backend/policy-claims-payments/src/domain/notice';
 
 // A faithful copy of the store: the notices of an owner, and an inbox keyed by event and consumer.
-export function memoryNoticeStore(seed: { owner: string; notice: Notice }[], clock: { current: Date }) {
+export function memoryNoticeStore(seed: { owner: string; notice: Notice; claimId?: string }[], clock: { current: Date }) {
   const inbox = new Map<string, { outcome: string; at: Date }>();
   const key = (eventId: string, consumer: string) => `${eventId}|${consumer}`;
   const writes: string[] = [];
   const captures: NoticeDecisionCapture[] = [];
   const view = (notice: Notice, destination?: string): NoticeRecord => {
     const consumers = noticeConsumers(destination);
-    return { notice, dispatch: (inbox.get(key(notice.eventId, consumers.dispatch))?.outcome ?? null) as NoticeRecord['dispatch'],
+    return { notice, claimId: seed.find(row => row.notice.eventId === notice.eventId)?.claimId, dispatch: (inbox.get(key(notice.eventId, consumers.dispatch))?.outcome ?? null) as NoticeRecord['dispatch'],
       dispatchedAt: inbox.get(key(notice.eventId, consumers.dispatch))?.at.toISOString() ?? null, receipt: (inbox.get(key(notice.eventId, consumers.receipt))?.outcome ?? null) as NoticeRecord['receipt'] };
   };
   const store: NoticeStore = {

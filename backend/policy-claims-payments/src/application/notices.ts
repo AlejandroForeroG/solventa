@@ -1,5 +1,6 @@
 import { claimNoticeEventType, noticeConsumers, noticeDecisionCapture, type NoticeCategory, type NoticeKind, type NoticeState, type ReceiptOutcome } from '../domain/notice';
 import type { NoticeRecord, NoticeStore } from './ports/notice';
+import { UUID } from '../domain/financial';
 
 // What the customer chose for push, by category, as Identity reports it for this very request.
 export type PushChoices = Record<NoticeCategory | 'commercial', boolean>;
@@ -7,6 +8,7 @@ export type PushChoices = Record<NoticeCategory | 'commercial', boolean>;
 export type NoticeOwner = { clientId: string; subjectToken?: string; destination?: string };
 export type NoticeView = { eventId: string; kind: NoticeKind; category: NoticeCategory; policyId: string; occurredAt: string; state: NoticeState };
 export type ReceiptResult = { status: 'recorded' | 'replayed'; state: NoticeState } | { status: 'not_found' } | { status: 'conflict' };
+export type NoticeDestination = { kind: 'policy'; policyId: string; section: 'history' | 'renewal' | 'info' } | { kind: 'claim'; claimId: string };
 
 const WINDOW_MS = 30 * 24 * 3600 * 1000;
 const UNCONFIRMED_AFTER_MS = 10 * 60 * 1000;
@@ -14,6 +16,17 @@ const eventTypeOf = { parametric_payment_confirmed: 'policy.indemnity.notice', p
 
 export class Notices {
   constructor(private readonly store: NoticeStore, private readonly clock: { now(): Date } = { now: () => new Date() }) {}
+
+  async destination(owner: NoticeOwner, eventId: string): Promise<NoticeDestination | null> {
+    if (!owner.destination) return null;
+    const found = await this.store.find(owner.clientId, eventId, owner.subjectToken, owner.destination);
+    if (!found || found.dispatch !== 'offered') return null;
+    if (found.notice.kind === 'claim_status_changed') {
+      return found.claimId && UUID.test(found.claimId) ? { kind: 'claim', claimId: found.claimId } : null;
+    }
+    return { kind: 'policy', policyId: found.notice.policyId,
+      section: found.notice.kind === 'parametric_payment_confirmed' ? 'history' : found.notice.kind === 'policy_expiring' ? 'renewal' : 'info' };
+  }
 
   // Applies the choices in force now, before anything is offered to the device. A choice that is off is recorded once and never offered again,
   // so turning it on later does not release old notices. A notice already offered but not yet presented is withdrawn while its choice is off.
