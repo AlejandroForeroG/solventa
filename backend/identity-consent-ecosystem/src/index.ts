@@ -55,7 +55,7 @@ type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.shared
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlNoticeDestinations(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString));
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString), new SqlNoticeDestinations(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
       security: securityFor(env),

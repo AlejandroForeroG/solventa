@@ -60,7 +60,7 @@ export interface ReportPermissions {
 export class ApiAccess {
   constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions, private readonly auditPermissions?: AuditPermissions,
     private readonly claimsPermissions?: ClaimsPermissions, private readonly portalPermissions?: PartnerPortalPermissions, private readonly advisorPermissions?: AdvisorPermissions,
-    private readonly noticeDestinations?: MobileNoticeDestinations, private readonly reportPermissions?: ReportPermissions) {}
+    private readonly reportPermissions?: ReportPermissions, private readonly noticeDestinations?: MobileNoticeDestinations) {}
 
   async partner(identity: PartnerIdentity, operation: string): Promise<AccessDecision<PartnerActor>> {
     if (!isApiOperation(operation)) return invalid;

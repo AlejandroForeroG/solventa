@@ -35,7 +35,7 @@ try {
   const identity = { providerSubject: 'reports_synthetic_' + randomUUID(), sessionReference: 'reports_synthetic_' + randomUUID(), emailVerified: true };
   const principal = await sessions.open(identity);
   const permissions = new SqlReportAccessGrants(connection.toString());
-  const access = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, undefined, permissions);
+  const access = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, permissions);
   assert.equal((await access.webUser(identity, 'reports:read')).allowed, false);
 
   const grant = { grantId: randomUUID(), clientId: principal.clientId, operation: 'reports:read', expiresAt: new Date(Date.now() + 3600000).toISOString(), operatorReference: randomUUID() };
