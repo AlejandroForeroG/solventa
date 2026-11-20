@@ -6,6 +6,7 @@ import { Pressable } from 'react-native';
 import { theme } from '@/theme';
 import { AuthenticationProvider } from '@/features/authentication/presentation/AuthenticationProvider';
 import { DraftSyncProvider } from '@/features/claim-drafts/presentation/DraftSyncProvider';
+import { NoticeProvider } from '@/features/notices/presentation/NoticeProvider';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 
 export const unstable_settings = { initialRouteName: '(main)' };
@@ -15,6 +16,7 @@ export default function RootLayout() {
   return (
     <AuthenticationProvider>
       <DraftSyncProvider>
+      <NoticeProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -26,6 +28,10 @@ export default function RootLayout() {
             <Ionicons accessible={false} name="arrow-back" size={24} color={theme.colors.foreground} /></Pressable> : null,
         }}
       >
+        {(['claim-tracking/index', 'claim-tracking/[claimId]'] as const).map(name =>
+          <Stack.Screen key={name} name={name} options={{ headerShown: true, headerTitle: '', headerLeft: undefined, headerBackVisible: true,
+            headerBackButtonDisplayMode: 'minimal', headerStyle: { backgroundColor: theme.colors.background },
+            headerTintColor: theme.colors.foreground, headerShadowVisible: false }} />)}
         <Stack.Screen name="claim-payments" options={{ headerShown: true, title: '', headerTitle: '', headerBackButtonDisplayMode: 'minimal',
           headerStyle: { backgroundColor: theme.colors.background }, headerTintColor: theme.colors.foreground, headerShadowVisible: false }} />
         <Stack.Screen name="notification-preferences" options={{
@@ -41,6 +47,7 @@ export default function RootLayout() {
           <Stack.Screen key={name} name={name} options={{ headerShown: true, title, headerTitle: '', headerBackButtonDisplayMode: 'minimal',
             headerStyle: { backgroundColor: theme.colors.background }, headerTintColor: theme.colors.foreground, headerShadowVisible: false }} />)}
       </Stack>
+      </NoticeProvider>
       </DraftSyncProvider>
     </AuthenticationProvider>
   );

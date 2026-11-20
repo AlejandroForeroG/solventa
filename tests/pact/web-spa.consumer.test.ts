@@ -599,7 +599,7 @@ describe('SPA claim case', () => {
 
   for (const [name, path, value, read] of [
     ['analyst file', casePath + '/case', claimsExamples.caseFile, () => getCase(claimId, 'case', controller.signal)],
-    ['customer file', casePath + '/customer', { ...claimsExamples.caseFile, access: 'customer' }, () => getCase(claimId, 'customer', controller.signal)],
+    ['customer file', casePath + '/customer', claimsExamples.customerCase, () => getCase(claimId, 'customer', controller.signal)],
     ['owned cases', '/api/v1/claims/customer/cases', claimsExamples.ownedCases, () => getOwnedCases(controller.signal)],
     ['expert directory', '/api/v1/claims/experts', claimsExamples.experts, () => getExperts(controller.signal)]
   ] as const) test('reads the ' + name, async () => {

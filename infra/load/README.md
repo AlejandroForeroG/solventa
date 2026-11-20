@@ -129,3 +129,17 @@ The 2026-11-09 local run was **not** driven by k6: the session cookie is HttpOnl
 Reading: the p99 objective (300 ms) held, **the p95 objective (150 ms) was not met locally** (165.7 ms in the browser, 157 ms in the Worker). The existing policy read, which shares the web Worker, the Identity authorization call and a new SQL connection per request, has the same median (about 125 ms), so that floor belongs to the shared path and not to the detail query. This is development evidence from a laptop that also ran Docker and the browser, not dev, staging or production performance.
 
 Discarded runs: repeats of the detail route gave p95 of 305 and 480 ms while another test run pushed the machine load average to 43, and the Workers then lost their database connection, so they are not reported as results. A request without a renewed session also answers 401 after a few minutes because the access cookie is short-lived; the script must call `/auth/session` first, as the SPA does. A k6 run, or a staging run with its own synthetic user, is still pending.
+## Claim tracking
+
+Run `claim-tracking.k6.js` against the gateway with a real owner session and an existing submitted synthetic claim. Pass `BASE_URL`, `CLAIM_ID`, `CLAIM_NUMBER` and exactly one of `COOKIE` (plus `COOKIE_NAME` for remote web) or `BEARER` through private process configuration. Keep sessions out of command history, results and logs. Use the approved environment and owner; the script has no write or payment endpoints.
+
+Run `k6 run --summary-export <private-result-file> infra/load/claim-tracking.k6.js` once per channel. The measurement is the status/detail HTTP round trip through gateway, Identity and Policy SQL. The receipt is a separate protected read. Warmup is ten seconds; the defaults are ten requests per second for sixty seconds. The measured scenario requires p95 ≤ 150 ms, p99 ≤ 300 ms, zero failures and zero dropped iterations. Record environment, revision, channel, rate, duration, percentiles and volume together. The local SQL smoke is a functional check through an injected HTTP factory and does not replace this gateway run.
+
+The local comparison used k6 2.4.0, the two Policy HTTP detail routes and a single-node CockroachDB 26.2.0 database with a synthetic case, an evidence attachment, a requirement and a customer notice. The local HTTP harness injected the owner at the Identity dependency and excluded the web gateway, Service Binding and WorkOS. Each channel ran at 10 requests per second for 60 seconds after 10 seconds of warmup, with zero failed checks, failed requests or dropped iterations.
+
+| Local route | SQL statements per owned detail read, before → after | p95 before → after | p99 before → after |
+| --- | ---: | ---: | ---: |
+| Web | 8 → 1 | 106.4 → 106.6 ms | 115.3 → 124.0 ms |
+| Native | 8 → 1 | 109.5 → 104.2 ms | 127.2 → 119.6 ms |
+
+This comparison verifies the reduction in database exchanges and the local Policy timing. Verify the latency objective through the deployed gateway with real Identity sessions in both channels.

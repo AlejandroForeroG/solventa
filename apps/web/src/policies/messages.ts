@@ -1,4 +1,5 @@
 export const policiesEs = {
+  'policies.parametricPayment': 'Indemnización paramétrica',
   'policies.reference': 'Referencia de póliza', 'policies.fullReference': 'Referencia completa de la póliza',
   'policies.documentSignIn': 'Inicia sesión para abrir los documentos de la póliza seleccionada.', 'policies.openingDocuments': 'Abriendo los documentos de tu póliza…',
   'policies.documentAccessTitle': 'Documentos de la póliza', 'policies.retrySignIn': 'Reintentar acceso', 'policies.backHome': 'Ir al inicio',
@@ -59,6 +60,7 @@ export const policiesEs = {
 };
 
 export const policiesEn: Record<keyof typeof policiesEs, string> = {
+  'policies.parametricPayment': 'Parametric indemnity',
   'policies.reference': 'Policy reference', 'policies.fullReference': 'Full policy reference',
   'policies.documentSignIn': 'Sign in to open the selected policy documents.', 'policies.openingDocuments': 'Opening your policy documents…',
   'policies.documentAccessTitle': 'Policy documents', 'policies.retrySignIn': 'Retry sign-in', 'policies.backHome': 'Go to home',

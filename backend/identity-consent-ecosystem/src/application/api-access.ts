@@ -4,7 +4,7 @@ import type { PartnerQuota } from './partner-quota';
 
 export type ClaimsOperation = 'claims:read' | 'claims:decide';
 export type ReportOperation = 'reports:generate' | 'reports:read' | 'reports:download' | 'reports:send';
-export type ApiOperation = 'policies:manage-delegated' | 'partner-portal:read' | 'underwriting-decisions:read' | ClaimsOperation | ReportOperation | 'assistance-providers:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'policies:manage' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write' | 'partner-authorizations:read' | 'partner-authorizations:write' | 'partner-offers:create' | 'claims:report' | 'claims:respond';
+export type ApiOperation = 'policies:manage-delegated' | 'partner-portal:read' | 'underwriting-decisions:read' | ClaimsOperation | ReportOperation | 'assistance-providers:read' | 'quotes:create' | 'consents:read' | 'consents:write' | 'offers:create' | 'offers:create-flight' | 'offers:read' | 'offers:accept' | 'policies:read' | 'policies:issue' | 'policies:manage' | 'identity-verifications:read' | 'identity-verifications:write' | 'notification-preferences:read' | 'notification-preferences:write' | 'partner-authorizations:read' | 'partner-authorizations:write' | 'partner-offers:create' | 'claims:report' | 'claims:respond' | 'notices:read' | 'notices:receipt' | 'notices:read-device' | 'notices:receipt-device';
 export type PartnerIdentity = { issuer: string; applicationId: string; organizationId: string; scopes: string[] };
 export type PartnerCredential = { partnerId: string; credentialId: string; scopes: string[] };
 export interface PartnerAccessRepository {
@@ -13,7 +13,10 @@ export interface PartnerAccessRepository {
 export type PartnerActor = { kind: 'partner'; partnerId: string; credentialId: string; scopes: ApiOperation[] };
 export type PartnerPortalGrant = { quota?: PartnerQuota; expiresAt: string; partnerId: string; code: string; credentials: { id: string; scopes: string[]; expiresAt: string; status: 'active' | 'expired' | 'revoked' }[]; hasMoreCredentials: boolean };
 export interface PartnerPortalPermissions { find(principal: Principal, identity: VerifiedIdentity): Promise<PartnerPortalGrant | null>; }
-export type UserActor = { advisorPermission?: AdvisorPermission; partnerPortal?: PartnerPortalGrant; kind: 'user'; channel: 'web' | 'mobile'; principal: Principal; operations: ApiOperation[]; authorizationExpiresAt?: string };
+export type UserActor = { advisorPermission?: AdvisorPermission; partnerPortal?: PartnerPortalGrant; kind: 'user'; channel: 'web' | 'mobile'; principal: Principal; operations: ApiOperation[]; authorizationExpiresAt?: string; noticeDestination?: string };
+export interface MobileNoticeDestinations {
+  find(principal: Principal, identity: VerifiedIdentity): Promise<string | null>;
+}
 export type AccessActor = PartnerActor | UserActor;
 export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed: true; actor: Actor } | {
   allowed: false;
@@ -21,12 +24,12 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
-const operations: readonly ApiOperation[] = ['policies:manage-delegated', 'partner-portal:read', 'underwriting-decisions:read', 'claims:read', 'claims:decide', 'reports:generate', 'reports:read', 'reports:download', 'reports:send', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report', 'claims:respond', 'partner-authorizations:read', 'partner-authorizations:write', 'partner-offers:create'];
+const operations: readonly ApiOperation[] = ['policies:manage-delegated', 'partner-portal:read', 'underwriting-decisions:read', 'claims:read', 'claims:decide', 'reports:generate', 'reports:read', 'reports:download', 'reports:send', 'assistance-providers:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report', 'claims:respond', 'partner-authorizations:read', 'partner-authorizations:write', 'partner-offers:create', 'notices:read', 'notices:receipt', 'notices:read-device', 'notices:receipt-device'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create', 'partner-offers:create'];
-const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:') && !operation.startsWith('notification-preferences:') && operation !== 'partner-offers:create' && operation !== 'claims:report');
+const webUserOperations: readonly ApiOperation[] = operations.filter(operation => !operation.startsWith('identity-verifications:') && !operation.startsWith('notification-preferences:') && operation !== 'partner-offers:create' && operation !== 'claims:report' && !operation.startsWith('notices:'));
 // A native customer reads their own policies but cannot buy, accept or issue: those financial steps stay web-only.
-const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'policies:read', 'assistance-providers:read', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report'];
+const mobileUserOperations: readonly ApiOperation[] = ['quotes:create', 'policies:read', 'assistance-providers:read', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'claims:report', 'notices:read', 'notices:receipt', 'notices:read-device', 'notices:receipt-device'];
 const forbidden = { allowed: false, error: 'forbidden', status: 403 } as const;
 const unavailable = { allowed: false, error: 'access_unavailable', status: 503 } as const;
 const unauthorized = { allowed: false, error: 'unauthorized', status: 401 } as const;
@@ -56,7 +59,8 @@ export interface ReportPermissions {
 
 export class ApiAccess {
   constructor(private readonly repository: PartnerAccessRepository, private readonly sessions: IdentitySessions, private readonly auditPermissions?: AuditPermissions,
-    private readonly claimsPermissions?: ClaimsPermissions, private readonly portalPermissions?: PartnerPortalPermissions, private readonly advisorPermissions?: AdvisorPermissions, private readonly reportPermissions?: ReportPermissions) {}
+    private readonly claimsPermissions?: ClaimsPermissions, private readonly portalPermissions?: PartnerPortalPermissions, private readonly advisorPermissions?: AdvisorPermissions,
+    private readonly noticeDestinations?: MobileNoticeDestinations, private readonly reportPermissions?: ReportPermissions) {}
 
   async partner(identity: PartnerIdentity, operation: string): Promise<AccessDecision<PartnerActor>> {
     if (!isApiOperation(operation)) return invalid;
@@ -108,7 +112,15 @@ export class ApiAccess {
     if (!identity.emailVerified || !identity.providerSubject || !identity.sessionReference) return unauthorized;
     try {
       const principal = await this.sessions.find(identity);
-      return principal ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal, operations: [operation] } } : unauthorized;
+      if (!principal) return unauthorized;
+      if (operation === 'notices:read-device' || operation === 'notices:receipt-device') {
+        if (!this.noticeDestinations) return unavailable;
+        const destination = await this.noticeDestinations.find(principal, identity);
+        if (destination === null) return forbidden;
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(destination)) return unavailable;
+        return { allowed: true, actor: { kind: 'user', channel: 'mobile', principal, operations: [operation], noticeDestination: destination.toLowerCase() } };
+      }
+      return { allowed: true, actor: { kind: 'user', channel: 'mobile', principal, operations: [operation] } };
     } catch { return unavailable; }
   }
 }

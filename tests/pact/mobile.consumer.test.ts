@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import { MatchersV3, PactV3 } from '@pact-foundation/pact';
 import { createSessionApi } from '../../apps/mobile/src/features/authentication/adapters/solventa-session';
 import { createAssistanceApi } from '../../apps/mobile/src/features/assistance/adapters/assistance-api';
+import { createNoticesApi } from '../../apps/mobile/src/features/notices/adapters/notices-api';
+import { contractNotice } from './support/notices-contract';
 import { createPoliciesApi } from '../../apps/mobile/src/features/policy-wallet/adapters/policies-api';
 import { createVerificationApi } from '../../apps/mobile/src/features/identity-verification/adapters/verification-api';
 import { createDraftApi } from '../../apps/mobile/src/features/claim-drafts/adapters/draft-api';
 import { createClaimPaymentsApi } from '../../apps/mobile/src/features/claim-payments/adapters/payments-api';
+import { createClaimTrackingApi } from '../../apps/mobile/src/features/claim-tracking/adapters/tracking-api';
+import claimExamples from '../../packages/contracts/examples/claims.json';
 import paymentExamples from '../../packages/contracts/examples/claim-payments.json';
 import { DraftFailure } from '../../apps/mobile/src/features/claim-drafts/domain/draft';
 import draftExamples from '../../packages/contracts/examples/claim-drafts.json';
@@ -37,6 +41,47 @@ test('native disbursement receipts use the owner-scoped bearer contract', async 
       (url, init) => { const parsed = new URL(String(url)); return fetch(server.url + parsed.pathname + parsed.search, init); });
     const page = await api.list(undefined, new AbortController().signal);
     assert.equal(page.items[0].payment.status, 'confirmed');
+  });
+});
+
+test('native case receipt requests only the selected claim', async () => {
+  const claimId = paymentExamples.confirmedPage.items[0].claimId;
+  pact.given('native claim disbursement receipts').uponReceiving('a native receipt filtered by the selected claim')
+    .withRequest({ method: 'GET', path: '/api/v1/claims/native/disbursements', query: { claimId },
+      headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: MatchersV3.like(paymentExamples.confirmedPage) });
+  await pact.executeTest(async server => {
+    const api = createClaimPaymentsApi(baseUrl, { execute: work => work('synthetic.jwt.token') }, principal,
+      (url, init) => { const parsed = new URL(String(url)); return fetch(server.url + parsed.pathname + parsed.search, init); }, claimId);
+    const page = await api.list(undefined, new AbortController().signal);
+    assert.equal(page.items[0].claimId, claimId);
+    assert.equal(page.items[0].payment.amount, '1000.0000');
+  });
+});
+
+for (const mode of ['list', 'detail', 'foreign'] as const) test('native tracking ' + mode, async () => {
+  const owned = claimExamples.ownedCases.items[0].claimId;
+  const claimId = mode === 'foreign' ? id : owned;
+  const path = '/api/v1/claims/native/cases' + (mode === 'list' ? '' : '/' + claimId);
+  const body = mode === 'list' ? claimExamples.ownedCases : mode === 'detail' ? claimExamples.customerCase : { error: 'not_found', traceId };
+  pact.given('native claim disbursement receipts').uponReceiving('the native tracking ' + mode + ' request')
+    .withRequest({ method: 'GET', path, headers: { Authorization: 'Bearer synthetic.jwt.token', Accept: 'application/json' } })
+    .willRespondWith({ status: mode === 'foreign' ? 404 : 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: MatchersV3.like(body) });
+  await pact.executeTest(async server => {
+    const api = createClaimTrackingApi(baseUrl, { execute: (work, expected) => {
+      assert.deepEqual(expected, principal); return work('synthetic.jwt.token');
+    } }, principal, (url, init) => fetch(server.url + new URL(String(url)).pathname, init));
+    const signal = new AbortController().signal;
+    if (mode === 'list') {
+      assert.deepEqual(await api.list(signal), { kind: 'ok', value: claimExamples.ownedCases.items });
+    } else {
+      const result = await api.detail(claimId, signal);
+      if (mode === 'foreign') assert.deepEqual(result, { kind: 'not_found' });
+      else {
+        assert.equal(result.kind, 'ok');
+        if (result.kind === 'ok') assert.deepEqual(result.value.history.map(event => event.action), ['take', 'submitted']);
+      }
+    }
   });
 });
 
@@ -219,4 +264,34 @@ test('mobile finds a simulated provider through the shared search contract', asy
       (url, options) => fetch(`${server.url}${new URL(String(url)).pathname}`, options));
     assert.deepEqual(await api.search(input), [provider]);
   });
+});
+
+const noticesApi = (serverUrl: string) => createNoticesApi(baseUrl, { execute: operation => operation('synthetic.jwt.token') },
+  (url, options) => fetch(`${serverUrl}${new URL(String(url)).pathname}`, options));
+
+test('mobile reads the notices offered to its device through the shared contract', async () => {
+  pact.given('a native session with a stored notice').uponReceiving('mobile notices list')
+    .withRequest({ method: 'GET', path: '/api/v2/notices', headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { simulated: true, notices: [{ ...contractNotice, state: 'offered' }], traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => {
+    assert.deepEqual(await noticesApi(server.url).list(), [{ ...contractNotice, state: 'offered' }]);
+  });
+});
+
+test('mobile reports that its device presented a notice through the shared contract', async () => {
+  pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice receipt')
+    .withRequest({ method: 'POST', path: `/api/v2/notices/${contractNotice.eventId}/receipt`,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer synthetic.jwt.token' }, body: { outcome: 'presented' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' },
+      body: { eventId: contractNotice.eventId, state: 'presented', replayed: false, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => { await noticesApi(server.url).receipt(contractNotice.eventId, 'presented'); });
+});
+
+test('mobile resolves an offered notice to its authenticated category destination', async () => {
+  const destination = { kind: 'policy', policyId: contractNotice.policyId, section: 'history' };
+  pact.given('a native session with a notice offered to its device').uponReceiving('mobile notice destination')
+    .withRequest({ method: 'GET', path: `/api/v2/notices/${contractNotice.eventId}/destination`, headers: { Accept: 'application/json', Authorization: 'Bearer synthetic.jwt.token' } })
+    .willRespondWith({ status: 200, headers: { 'Content-Type': 'application/json' }, body: { destination, traceId: MatchersV3.uuid(traceId) } });
+  await pact.executeTest(async server => { assert.deepEqual(await noticesApi(server.url).destination(contractNotice.eventId), destination); });
 });

@@ -11,6 +11,9 @@ import { PaymentDeadline } from '../backend/policy-claims-payments/src/adapters/
 import { issuanceTimeContent, offerContent, type AcceptedOffer } from '../backend/policy-claims-payments/src/domain/financial';
 import type { DisbursementStore, DisbursementTransaction } from '../backend/policy-claims-payments/src/application/ports/claim-disbursement';
 import { lifecycleContent, type LifecycleChange } from '../backend/policy-claims-payments/src/domain/policy-lifecycle';
+import { ClaimReview } from '../backend/policy-claims-payments/src/application/claim-review';
+import { SqlClaimReview } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-review';
+import { createHttp } from '../backend/policy-claims-payments/src/adapters/inbound/http';
 
 const config = await settings('local');
 assert.equal(config.database, 'solventa_local');
@@ -140,6 +143,45 @@ try {
   const owner = { clientId: customer, subjectToken: subject };
   const receipts = await service.owned(owner, randomUUID());
   assert.equal(receipts.items.find(item => item.claimId === claimId)?.payment.status, 'confirmed');
+  const selected = await service.owned(owner, randomUUID(), undefined, claimId);
+  assert.deepEqual(selected, { items: receipts.items.filter(item => item.claimId === claimId), next: null });
+  assert.deepEqual(await service.owned({ ...owner, clientId: randomUUID() }, randomUUID(), undefined, claimId), { items: [], next: null });
+  assert.deepEqual(await service.owned({ ...owner, subjectToken: randomUUID() }, randomUUID(), undefined, claimId), { items: [], next: null });
+  const review = new ClaimReview<ReadableStream<Uint8Array>>(new SqlClaimReview(connection), undefined, () => []);
+  const access = (channel: 'web' | 'mobile', operation: string) => ({ allowed: true,
+    actor: { kind: 'user', channel, operations: [operation], principal: owner } });
+  const unexpected = async (): Promise<never> => { throw Error('unexpected_tracking_operation'); };
+  const http = createHttp({
+    finance: {} as never, authorizeFinancialAccess: unexpected, denyResourceAccess: unexpected,
+    claims: { inbox: { list: unexpected }, review, disbursements: service,
+      authorize: async input => input.cookie === 'synthetic-session' ? access('web', input.operation) : null },
+    claimReport: { review, disbursements: service, report: { create: unexpected, receive: unexpected, submit: unexpected },
+      authorize: async input => input.token === 'synthetic.jwt.token' ? access('mobile', input.operation) : null },
+  });
+  const bindings = { APP_ENV: 'local' } as PolicyEnv;
+  const web = { cookie: 'solventa-session=synthetic-session' };
+  const native = { authorization: 'Bearer synthetic.jwt.token' };
+  const read = async (path: string, headers: HeadersInit) => {
+    const reply = await http.request('/api/v1/claims' + path, { headers }, bindings);
+    assert.equal(reply.status, 200);
+    assert.equal(reply.headers.get('cache-control'), 'no-store');
+    return await reply.json();
+  };
+  const webCase = await read('/' + claimId + '/customer', web);
+  const nativeCase = await read('/native/cases/' + claimId, native);
+  assert.deepEqual({ ...nativeCase, traceId: null }, { ...webCase, traceId: null });
+  assert.equal(webCase.state, 'paid');
+  assert.equal(webCase.history[0].action, 'disbursement_confirmed');
+  assert.equal(webCase.history.at(-1).action, 'submitted');
+  const [webReceipt, nativeReceipt] = await Promise.all([
+    read('/customer/disbursements?claimId=' + claimId, web),
+    read('/native/disbursements?claimId=' + claimId, native),
+  ]);
+  assert.deepEqual(webReceipt.items, selected.items);
+  assert.deepEqual(nativeReceipt.items, selected.items);
+  assert.equal((await http.request('/api/v1/claims/native/cases/' + claimId, { headers: web }, bindings)).status, 401);
+  assert.equal((await http.request('/api/v1/claims/native/cases/' + randomUUID(), { headers: native }, bindings)).status, 404);
+  assert.equal((await http.request('/api/v1/claims/native/disbursements?claimId=' + claimId + '&cursor=' + claimId, { headers: native }, bindings)).status, 400);
   assert.deepEqual(await service.owned({ ...owner, clientId: randomUUID() }, randomUUID()), { items: [], next: null });
   assert.deepEqual(await service.owned({ ...owner, subjectToken: randomUUID() }, randomUUID()), { items: [], next: null });
   assert.deepEqual(await service.owned(owner, randomUUID(), randomUUID()), { items: [], next: null });

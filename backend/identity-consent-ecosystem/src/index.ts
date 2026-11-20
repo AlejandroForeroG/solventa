@@ -10,6 +10,7 @@ import { SqlClaimsAccessGrants } from './adapters/outbound/claims-access-grants'
 import { SqlReportAccessGrants } from './adapters/outbound/report-access-grants';
 import { SqlPartnerPortalGrants } from './adapters/outbound/partner-portal-grants';
 import { SqlPolicyAdvisorGrants } from './adapters/outbound/policy-advisor-grants';
+import { SqlNoticeDestinations } from './adapters/outbound/notice-destinations';
 import { authorizeAdvisorApproval } from './application/advisor-access';
 import { SqlPartnerQuotas } from './adapters/outbound/partner-quotas';
 import { admitPartnerRequest } from './application/partner-quota';
@@ -54,7 +55,7 @@ type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.shared
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString));
+    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlNoticeDestinations(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString));
     return await authorizeApiAccess({
       application,
       security: securityFor(env),
@@ -157,7 +158,11 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
     try {
       shared = await SqlIdentitySessions.sharedConnection(this.env.IDENTITY_DB.connectionString);
       decision = await authorizeFinancialAccess({ authorize: input => authorize(this.env, input, shared),
-        verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env) }, request);
+        verifyConsents: input => consentsFor(this.env, false, shared).verifyScopes(input), security: securityFor(this.env),
+        readPushChoices: async clientId => {
+          const matrix = await new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString).readForDelivery(clientId);
+          return { policy: matrix.policy.push, payments: matrix.payments.push, claims: matrix.claims.push, commercial: matrix.commercial.push };
+        } }, request);
     } catch { decision = { allowed: false, error: 'access_unavailable', status: 503 }; }
     finally { await shared?.close(); }
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));

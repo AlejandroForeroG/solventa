@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { useIsFocused } from 'expo-router';
+import { useIsFocused, useLocalSearchParams } from 'expo-router';
+import { isClaimCaseId } from '@solventa/contracts';
 import { ActivityIndicator, AppState, Text, View } from 'react-native';
 import { useAuthenticatedSession, useAuthentication } from '../../authentication/presentation/AuthenticationProvider';
 import { WelcomeScreen } from '../../welcome/presentation/WelcomeScreen';
@@ -16,16 +17,20 @@ export function ClaimPaymentsScreen() {
   const auth = useAuthentication(); const focused = useIsFocused();
   const session = useAuthenticatedSession();
   const locale = useAppMessages() === messages.en ? 'en-US' : 'es-CO';
+  const { claimId } = useLocalSearchParams<{ claimId?: string | string[] }>();
   if (auth.status !== 'authenticated' || !auth.principal) return <WelcomeScreen />;
   if (!focused) return <Page title={paymentMessages[locale].title} />;
-  return <ReceiptPrivacy key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}`} locale={locale}>
-    <Payments locale={locale} owner={auth.principal} />
+  if (claimId !== undefined && !isClaimCaseId(claimId)) return <Page title={paymentMessages[locale].title}>
+    <Text accessibilityRole="alert" style={ui.notice}>{paymentMessages[locale].failures.invalid_response}</Text>
+  </Page>;
+  return <ReceiptPrivacy key={`${session.baseUrl}:${auth.principal.clientId}:${auth.principal.subjectToken}:${locale}:${claimId ?? ''}`} locale={locale}>
+    <Payments locale={locale} owner={auth.principal} claimId={claimId?.toLowerCase()} />
   </ReceiptPrivacy>;
 }
 
-function Payments({ locale, owner }: { locale: 'es-CO' | 'en-US'; owner: { clientId: string; subjectToken: string } }) {
+function Payments({ locale, owner, claimId }: { locale: 'es-CO' | 'en-US'; owner: { clientId: string; subjectToken: string }; claimId?: string }) {
   const session = useAuthenticatedSession();
-  const [payments] = useState(() => new ClaimPayments(createClaimPaymentsApi(session.baseUrl, session, owner)));
+  const [payments] = useState(() => new ClaimPayments(createClaimPaymentsApi(session.baseUrl, session, owner, fetch, claimId)));
   const state = useSyncExternalStore(payments.subscribe, payments.getSnapshot, payments.getSnapshot);
   const copy = paymentMessages[locale];
   useEffect(() => {
