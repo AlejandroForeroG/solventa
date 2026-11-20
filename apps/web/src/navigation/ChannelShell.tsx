@@ -40,11 +40,13 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/polizas', label: 'policies.open', icon: 'policy' },
   { href: '/mis-siniestros', label: 'claims.customerCases', icon: 'claims' },
   { href: '/cotizar', label: 'navigation.quote', icon: 'quote' },
+  { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
   { href: '/prestadores', label: 'assistance.title', icon: 'location' },
 ];
 const workspaceLinks: typeof customerLinks = [
   { href: '/siniestros', label: 'claims.open', icon: 'claims' },
   { href: '/auditoria', label: 'audit.open', icon: 'audit' },
+  { href: '/reportes', label: 'reports.open', icon: 'audit' },
   { href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];

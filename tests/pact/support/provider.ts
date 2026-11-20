@@ -1,7 +1,13 @@
 import { portalApp } from '../../support/partner-portal-fakes';
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
+import { reportsWorld } from './reports';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
+import { assistanceRequests, fakeAssistanceStore } from '../../support/assistance-request-fakes';
+import { memoryEvidence, memoryStore as memoryClaimStore, type Stream } from '../../support/claim-report-fakes';
+import { ClaimReport } from '../../../backend/policy-claims-payments/src/application/claim-report';
+import { claimIds, evidenceBytes, idempotencyKey, manifest, providerNow } from './claim-report-contract';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { Verifier } from '@pact-foundation/pact';
 import worker from '../../../apps/web/worker/index';
@@ -34,6 +40,7 @@ import { Notices } from '../../../backend/policy-claims-payments/src/application
 import { noticeConsumers } from '../../../backend/policy-claims-payments/src/domain/notice';
 import { memoryNoticeStore } from '../../support/notice-fakes';
 import { contractNotice } from './notices-contract';
+import { saleAcquisitionApp, saleIdentityApp, type SaleMode } from './sale';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -240,6 +247,54 @@ function nativeAssistanceWorld(): Partial<World> {
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+// The native customer may request assistance and follow it. The store is in memory and its identities, references and dates are fixed, so each state starts from the same world.
+async function nativeAssistanceRequestsWorld(seed: boolean): Promise<Partial<World>> {
+  const requests = assistanceRequests(fakeAssistanceStore().store);
+  if (seed) {
+    const stored = await requests.create(financialActor, { providerId: 'demo-bog-workshop', place: { kind: 'address', address: 'Calle de prueba 10, Bogotá' } }, 'pact-seed-key-0001', financialActor.clientId);
+    if (stored.status !== 'created') throw new Error('The assistance request of the contract could not be seeded.');
+  }
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    assistanceRequests: {
+      authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+      requests,
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
+// The native customer reports a claim on an issued policy of their own. Stores are in memory with fixed identities, so each state starts from the same world.
+async function nativeClaimReportWorld(stage: 'empty' | 'draft' | 'received'): Promise<Partial<World>> {
+  const policies = new Map([[claimIds.policy, { subject: financialActor.subjectToken, issued: true, from: Date.parse('2026-01-01T00:00:00.000Z'), until: Date.parse('2027-01-01T00:00:00.000Z') }]]);
+  const memory = memoryClaimStore(policies, providerNow);
+  const report = new ClaimReport<Stream>(memory.store, memoryEvidence().evidence, { sha256Hex: async text => createHash('sha256').update(text).digest('hex') }, { now: () => providerNow });
+  if (stage !== 'empty') {
+    const draft = await report.create(financialActor, manifest, idempotencyKey, financialActor.clientId);
+    if (draft.status !== 'created') throw new Error('The claim report of the contract could not be seeded.');
+  }
+  if (stage === 'received') {
+    const stored = await report.receive(financialActor, claimIds.claim, claimIds.file, { contentType: 'image/jpeg', length: evidenceBytes.length, body: new Response(evidenceBytes).body }, financialActor.clientId);
+    if (stored.status !== 'stored') throw new Error('The evidence of the contract could not be seeded.');
+  }
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    claimReport: {
+      report,
+      authorize: async input => input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 // The native customer's stored notices. Identity's decision, with the push choices of the same request, is simulated by the bearer token.
 async function nativeNoticesWorld(stage: 'stored' | 'offered'): Promise<Partial<World>> {
   const destination = '00000000-0000-4000-8000-000000000003';
@@ -275,12 +330,23 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'an explicitly granted claims analyst with no open claims': () => claimsWorld(origin, 'empty'),
   'a customer without claims permission': () => claimsWorld(origin, 'denied'),
   'the claims inbox store is unavailable': () => claimsWorld(origin, 'unavailable'),
+  'an operator with every report grant': () => reportsWorld(origin, 'empty'),
+  'an operator with every report grant and a generated report': () => reportsWorld(origin, 'seeded'),
+  'an operator without report grants': () => reportsWorld(origin, 'denied'),
+  'the report store is unavailable': () => reportsWorld(origin, 'unavailable'),
   ...Object.fromEntries((['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as VerificationStage[]).map(stage => [
     `a native identity verification in ${stage} state`, async () => {
       const world = await verificationPactWorld(stage);
       return { identity: { fetch: (request: Request) => Promise.resolve(world.app.request(request, undefined, identityEnv)) } };
     },
   ])),
+  ...Object.fromEntries((['empty', 'authorized', 'unavailable'] as SaleMode[]).map(mode => [
+    mode === 'empty' ? 'a customer who can authorize an advisor' : mode === 'authorized' ? 'a customer with an active advisor authorization' : 'the advisor authorization store is unavailable',
+    async () => {
+      const app = await saleIdentityApp(mode, { authorizeApiAccess: input => authorizeApiAccess(consentAccess, input), authentication: unexpectedAuthentication, consents: freshConsents().consents });
+      return { identity: binding(app, identityEnv), sessionCookie: consentCookie };
+    }])),
+  ...Object.fromEntries((['ready', 'forbidden', 'consent_required', 'unavailable'] as const).map(mode => [`an advisor sale ${mode}`, () => ({ sessionCookie: 'advisor-session', acquisition: binding(saleAcquisitionApp(mode), { APP_ENV: 'dev' }) })])),
   'a native session with its installation binding': nativeWorld,
   'a native session with an issued policy': () => nativePolicyWorld(),
   'a native session with multiple policy pages': () => nativePolicyWorld(true),
@@ -288,6 +354,11 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
   'a native session with a stored notice': () => nativeNoticesWorld('stored'),
   'a native session with a notice offered to its device': () => nativeNoticesWorld('offered'),
+  'a native session that may request assistance': () => nativeAssistanceRequestsWorld(false),
+  'a native session with a stored assistance request': () => nativeAssistanceRequestsWorld(true),
+  'a native session that may report a claim': () => nativeClaimReportWorld('empty'),
+  'a native session with a draft claim report': () => nativeClaimReportWorld('draft'),
+  'a native session with a claim report whose evidence was received': () => nativeClaimReportWorld('received'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),

@@ -12,7 +12,7 @@ const sessions: IdentitySessions = { open: async () => principal, find: async ()
 
 test('device notice access derives its destination from the verified principal and provider session', async () => {
   const destination = 'a1234567-1234-4123-8123-123456789abc';
-  const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, {
+  const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, undefined, {
     find: async (owner, verified) => {
       assert.deepEqual(owner, principal); assert.deepEqual(verified, webIdentity);
       return destination.toUpperCase();
@@ -27,19 +27,19 @@ test('device notice access derives its destination from the verified principal a
 
 test('missing, revoked, malformed and unavailable notice bindings fail closed without widening legacy access', async () => {
   for (const [destination, status] of [[null, 403], ['not-a-device', 503]] as const) {
-    const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, { find: async () => destination });
+    const api = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, undefined, { find: async () => destination });
     assert.equal((await api.mobileUser(webIdentity, 'notices:read-device')).allowed, false);
     assert.deepEqual(await api.mobileUser(webIdentity, 'notices:receipt-device'), { allowed:false, error:status === 403 ? 'forbidden' : 'access_unavailable', status });
   }
   const absent = new ApiAccess({ find: async () => null }, sessions);
   assert.deepEqual(await absent.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'access_unavailable', status:503 });
   assert.equal((await absent.mobileUser(webIdentity, 'notices:read')).allowed, true, 'v1 still uses its original session contract');
-  const unavailable = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, { find: async () => { throw new Error('private database failure'); } });
+  const unavailable = new ApiAccess({ find: async () => null }, sessions, undefined, undefined, undefined, undefined, undefined, { find: async () => { throw new Error('private database failure'); } });
   assert.deepEqual(await unavailable.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'access_unavailable', status:503 });
 });
 
 test('an inactive native session cannot resolve a notice destination', async () => {
-  const api = new ApiAccess({ find: async () => null }, { ...sessions, find: async () => null }, undefined, undefined, undefined, undefined, {
+  const api = new ApiAccess({ find: async () => null }, { ...sessions, find: async () => null }, undefined, undefined, undefined, undefined, undefined, {
     find: async () => { assert.fail('a revoked or foreign session must never reach destination lookup'); },
   });
   assert.deepEqual(await api.mobileUser(webIdentity, 'notices:read-device'), { allowed:false, error:'unauthorized', status:401 });

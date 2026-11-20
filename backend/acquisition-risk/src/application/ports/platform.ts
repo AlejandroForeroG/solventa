@@ -10,4 +10,6 @@ export interface Protector {
   documentToken(documentNumber: string): Promise<string>;
   // An order key belongs to one partner and one authorization, so neither another partner nor another authorization replays its result.
   partnerKey(partnerId: string, authorizationId: string, idempotencyKey: string): Promise<string>;
+  // The same rule for an advisor: another advisor, another authorization or another key never replays it.
+  advisorKey(advisorReference: string, authorizationId: string, idempotencyKey: string): Promise<string>;
 }

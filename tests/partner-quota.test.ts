@@ -43,7 +43,7 @@ test('both real HTTP handlers preserve 429 Retry-After and start no downstream b
   let effects=0;const unexpected=async():Promise<never>=>{effects++;throw Error('unexpected_business_effect');};
   const denied={allowed:false,error:'quota_exceeded',status:429,retryAfter:1200} as const;
   const quotes=new CreateQuote({access:{authorize:async()=>denied},store:new MemoryStore(),protector,clock:{now:()=>new Date()}});
-  const offers=new PartnerOffers({access:{authorize:async()=>denied},quotes:{createFor:unexpected},offers:{create:unexpected,explanation:unexpected},protector:{partnerKey:unexpected}});
+  const offers=new PartnerOffers({access:{authorize:async()=>denied},quotes:{createFor:unexpected},offers:{create:unexpected,explanation:unexpected},protector:{partnerKey:unexpected,advisorKey:unexpected}});
   const app=new Hono<{Bindings:AcquisitionEnv}>();app.post('/api/v1/quotes',quotesHandler(quotes,'partner'));mountPartnerOffers(app,{offers});
   for(const path of ['/api/v1/quotes','/api/v1/partner/offers']){
     const response=await app.request('https://dev.solventa.site'+path,{method:'POST',headers:{authorization:'Bearer synthetic','content-type':'application/json','idempotency-key':'same-business-retry'},body:JSON.stringify({authorizationId:example.partner.id})},{APP_ENV:'dev'} as AcquisitionEnv);

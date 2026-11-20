@@ -1,7 +1,9 @@
 import { advisorEs, advisorEn } from '../advisor/messages';
+import { saleEs, saleEn } from '../sale/messages';
 import { portalEs, portalEn } from '../partner-portal/messages';
 import { auditEs, auditEn } from '../audit/messages';
 import { claimsEs, claimsEn } from '../claims/messages';
+import { reportsEs, reportsEn } from '../reports/messages';
 import { policiesEs, policiesEn } from '../policies/messages';
 import { assistanceEs, assistanceEn } from '../assistance/messages';
 import { navigationEs, navigationEn } from '../navigation/messages';
@@ -20,6 +22,7 @@ const esCO = {
   'form.dateFormat': 'Formato: {format}.',
   ...portalEs,
   ...advisorEs,
+  ...saleEs,
   'landing.home': 'Inicio de Solventa',
   'landing.product': 'Seguro de vida hipotecario',
   'landing.title': 'Conoce el seguro de vida de tu crédito.',
@@ -364,6 +367,7 @@ const enUS: typeof esCO = {
   'form.dateFormat': 'Format: {format}.',
   ...portalEn,
   ...advisorEn,
+  ...saleEn,
   'landing.home': 'Solventa home',
   'landing.product': 'Mortgage life insurance',
   'landing.title': 'Understand the life insurance for your loan.',
@@ -700,6 +704,6 @@ const enUS: typeof esCO = {
 };
 
 export const messages: Record<Locale, Record<string, string>> = {
-  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...policiesEs, ...assistanceEs, ...navigationEs, ...documentEs },
-  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...policiesEn, ...assistanceEn, ...navigationEn, ...documentEn },
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs, ...navigationEs, ...documentEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn, ...navigationEn, ...documentEn },
 };

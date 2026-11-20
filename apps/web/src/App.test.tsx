@@ -9,6 +9,7 @@ import { readCustomerDestination, saveCustomerDestination } from './navigation/c
 import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
+import reportsExamples from '../../../packages/contracts/examples/reports.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -24,7 +25,7 @@ beforeEach(() => window.history.replaceState(null, '', '/cotizar'));
 afterEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); window.history.replaceState(null, '', '/'); });
 
 describe('assistance directory route in the application', () => {
-  it('shows contact details and hours without a provider selection control', async () => {
+  it('shows contact details and hours, and offers the request without a provider selection control', async () => {
     window.history.replaceState(null, '', '/prestadores');
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
       if (input === '/auth/session') return json({ authenticated: true });
@@ -43,7 +44,8 @@ describe('assistance directory route in the application', () => {
     expect(result.getByText(/Contacto de prueba.*\+570000000001/)).toBeVisible();
     expect(result.getByText(/Horario.*08:00–17:00/)).toBeVisible();
     expect(result.queryByRole('checkbox')).toBeNull();
-    expect(result.queryByRole('button')).toBeNull();
+    // The only action is the request itself; nothing to tick or choose among providers.
+    expect(result.getAllByRole('button').map(button => button.textContent)).toEqual(['Solicitar asistencia']);
   });
 });
 
@@ -124,6 +126,27 @@ describe('claims inbox route in the application', () => {
     await act(async () => failLogout());
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
+  });
+});
+
+describe('reports route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the reports route', async () => {
+    window.history.replaceState(null, '', '/reportes'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Reportes' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('shows the reports to a signed-in user, links the other consoles and marks the current one', async () => {
+    window.history.replaceState(null, '', '/reportes');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true }) : json(reportsExamples.page));
+    render(<App />);
+    expect(await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' })).toBeVisible();
+    const nav = within(screen.getByRole('complementary', { name: 'Consola operativa' }));
+    expect(nav.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.getByRole('link', { name: 'Siniestros' })).toHaveAttribute('href', '/siniestros');
+    expect(screen.getAllByRole('link', { name: 'Reportes' }).some(link => link.getAttribute('href') === '/reportes')).toBe(true);
   });
 });
 
