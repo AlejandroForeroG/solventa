@@ -58,6 +58,7 @@ function fixture() {
   const make = () => {
     const credentials = createCredentials(custody);
     const auth = new Authentication({ baseUrl, ...{ store: credentials.store, biometrics: credentials.vault },
+      installationId: custody.installationId,
       policyCache: { clear: async () => { policyClears++; } },
       browser: { assertAvailable: () => {}, open: async () => {
         browserOpens++;
@@ -287,7 +288,7 @@ test('backgrounding preserves primary-login eligibility after server revalidatio
     assert.notEqual(flow.auth.getSnapshot().status, 'authenticated');
     assert.equal(flow.auth.getSnapshot().email, undefined);
     flow.auth.resume(); f.calls.length = 0; await flow.auth.restore();
-    assert.deepEqual(f.calls, ['inspect', 'access']);
+    assert.deepEqual(f.calls, ['inspect', 'access', 'inspectDevice']);
     assert.equal(flow.auth.getSnapshot().canEnableBiometrics, true);
   }
   const restarted = f.make(); await restarted.auth.restore();
@@ -423,7 +424,7 @@ test('another WorkOS account never inherits the previous biometric preference or
   assert.equal(f.prompts(), prompts);
   assert.equal(await flow.vault.info(), null);
   assert.equal(f.policyClears(), 1, 'the previous owner\'s offline data is erased when the new account is confirmed');
-  assert.equal(f.calls.includes('registerDevice'), false);
+  assert.equal(f.calls.filter(call => call === 'registerDevice').length, 1);
   const restarted = f.make(); await restarted.auth.restore();
   assert.equal(restarted.auth.getSnapshot().biometricEnabled, false);
 });
@@ -438,7 +439,7 @@ test('explicit logout and device revocation erase preference and do not auto-ena
     assert.equal(flow.auth.getSnapshot().status, 'signedOut');
     f.calls.length = 0; await flow.auth.signIn();
     assert.equal(flow.auth.getSnapshot().biometricEnabled, false);
-    assert.equal(f.calls.includes('registerDevice'), false);
+    assert.equal(f.calls.filter(call => call === 'registerDevice').length, 1);
   }
   const f = fixture(); const flow = f.make();
   await f.login(flow.auth, flow.store); await flow.auth.enableBiometrics();
@@ -448,7 +449,7 @@ test('explicit logout and device revocation erase preference and do not auto-ena
   assert.equal(await flow.vault.info(), null);
   f.resumeBrowser(); f.calls.length = 0; await flow.auth.signIn();
   assert.equal(flow.auth.getSnapshot().biometricEnabled, false);
-  assert.equal(f.calls.includes('registerDevice'), false);
+  assert.equal(f.calls.filter(call => call === 'registerDevice').length, 1);
 });
 
 test('legacy activation learns its owner only after biometric unlock and successful server checks', async () => {
@@ -494,7 +495,7 @@ test('an ownerless legacy preference never enables biometrics for a new WorkOS a
   assert.equal(await restarted.vault.info(), null);
   assert.equal(f.policyClears(), 1);
   assert.equal(f.values.has('solventa.biometric.credentials.v1'), false);
-  assert.equal(f.calls.includes('registerDevice'), false);
+  assert.equal(f.calls.filter(call => call === 'registerDevice').length, 1);
 });
 
 test('cancelling a legacy alternative login cannot bypass subsequent server revocation', async () => {

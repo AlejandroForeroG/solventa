@@ -2111,6 +2111,143 @@
       }
     },
     {
+      "description": "mobile notice destination",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/destination"
+      },
+      "response": {
+        "body": {
+          "destination": {
+            "kind": "policy",
+            "policyId": "91000000-0000-4000-8000-000000000020",
+            "section": "history"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile notice receipt",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "body": {
+          "outcome": "presented"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/receipt"
+      },
+      "response": {
+        "body": {
+          "eventId": "70000000-0000-4000-8000-0000000000a1",
+          "replayed": false,
+          "state": "presented",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile notices list",
+      "providerStates": [
+        {
+          "name": "a native session with a stored notice"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices"
+      },
+      "response": {
+        "body": {
+          "notices": [
+            {
+              "category": "payments",
+              "eventId": "70000000-0000-4000-8000-0000000000a1",
+              "kind": "parametric_payment_confirmed",
+              "occurredAt": "2026-11-18T11:00:00.000Z",
+              "policyId": "91000000-0000-4000-8000-000000000020",
+              "state": "offered"
+            }
+          ],
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile own policy list",
       "providerStates": [
         {

@@ -5,7 +5,8 @@ import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, ty
 import './policies.css';
 import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
-import { policyDocumentDestination, type PolicyDocumentDestination } from './document-destination';
+import type { PolicyDocumentDestination } from './document-destination';
+import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -159,6 +160,13 @@ function History({ policy }: { policy: PolicyDetail }) {
         <td data-label={t('col.date')}>{format.dateTime(new Date(payment.date))}</td><td data-label={t('col.amount')} className="mono">{format.copDecimalAmount(payment.amount)}</td>
         <td data-label={t('col.status')}><span className={`pill policy-payment-${payment.status}`}>{t(`payment.${payment.status}`)}</span></td>
         <td data-label={t('col.reference')} className="mono">{payment.reference ?? t('noReference')}</td></tr>)}</tbody></table></div>
+    {policy.parametricPayment && <section aria-labelledby="parametric-payment"><h3 id="parametric-payment">{t('parametricPayment')}</h3>
+      <dl className="policy-facts">
+        <div><dt>{t('col.date')}</dt><dd>{format.dateTime(new Date(policy.parametricPayment.date))}</dd></div>
+        <div><dt>{t('col.amount')}</dt><dd className="mono">{format.copDecimalAmount(policy.parametricPayment.amount)}</dd></div>
+        <div><dt>{t('col.status')}</dt><dd>{t(`payment.${policy.parametricPayment.status}`)}</dd></div>
+        <div><dt>{t('col.reference')}</dt><dd className="mono">{policy.parametricPayment.reference ?? t('noReference')}</dd></div>
+      </dl></section>}
     <p className="note">{t('synthetic')}</p></section>;
 }
 
@@ -178,7 +186,7 @@ function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
     onClick={() => onChange(name)} onKeyDown={event => move(event, name)}>{t(`tab.${name}`)}</button>)}</div>;
 }
 
-function PolicyDetailView({ policyId, initialTab = 'info', onBack, onSessionLost }: { policyId: string; initialTab?: Tab; onBack(): void; onSessionLost(): void }) {
+function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBack, onSessionLost }: { policyId: string; initialTab?: Tab; renewal?: boolean; onBack(): void; onSessionLost(): void }) {
   const t = useTranslate();
   const heading = useHeading();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -202,19 +210,23 @@ function PolicyDetailView({ policyId, initialTab = 'info', onBack, onSessionLost
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
       </div>
-      <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />
+      <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
       <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }
 
-export function PolicyPortal({ onSessionLost, documentDestination, onBackToList }: {
-  onSessionLost(): void; documentDestination?: PolicyDocumentDestination | null; onBackToList?(): void;
+export function PolicyPortal({ onSessionLost, documentDestination, destination: suppliedDestination, onBackToList }: {
+  onSessionLost(): void; destination?: PolicyDestination; documentDestination?: PolicyDocumentDestination | null; onBackToList?(): void;
 }) {
-  const [destination, setDestination] = useState(() => documentDestination ?? policyDocumentDestination());
+  const [destination, setDestination] = useState<PolicyDestination | null>(() => {
+    const current = suppliedDestination ?? customerDestination();
+    return documentDestination ? { kind: 'policy', policyId: documentDestination.policyId, section: 'documents' } : current?.kind === 'policy' ? current : null;
+  });
   const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
-  return selected ? <PolicyDetailView policyId={selected} initialTab={selected === destination?.policyId ? 'documents' : 'info'} onBack={() => {
+  const section = selected === destination?.policyId ? destination.section : 'info';
+  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'info' : section} renewal={section === 'renewal'} onBack={() => {
     window.history.replaceState(null, '', '/polizas'); setDestination(null); setSelected(null); onBackToList?.();
   }} onSessionLost={onSessionLost} />
     : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;

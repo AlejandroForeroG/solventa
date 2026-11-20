@@ -8,6 +8,8 @@ Explicitly granted web analysts can list open claims through the [claims inbox](
 
 The [assistance provider search](assistance-provider-search.md) guide describes the shared lookup rules and the versioned synthetic directory.
 
+The [customer notices](customer-notices.md) guide covers how stored notices about a policy reach the native device, what is recorded about it and its limits.
+
 The [editable claim drafts](claim-drafts.md) guide covers offline preparation, automatic synchronization, revision conflicts, durable customer choices and their SQL/HTTP boundaries. These drafts do not file claims or replace the upload declaration.
 
 The [parametric payouts](parametric-payouts.md) guide describes the flight-delay and heavy-rainfall indemnities, the simulated provider contract, the customer notice and the recovery of pending payments.
@@ -48,6 +50,8 @@ Issuance derives money and ownership from the stored, integrity-checked acceptan
 The [policy OpenAPI](../../../packages/contracts/openapi/v1/policies.yaml) documents `listOwnPolicies`; `tests/financial.test.ts`, `tests/financial-http.test.ts`, `tests/financial-access.test.ts` and the native Pact interaction cover it, and `infra/financial-smoke.mts` covers SQL ownership/status filtering, tied ordering across pages, exact lookup, foreign/missing boundaries and absence of write effects.
 
 ### Web policy portal
+
+The owner-restricted detail includes optional `parametricPayment` separately from the premium history. It reads the stored indemnity through the existing financial transaction after ownership and integrity checks, returns its last update time, decimal amount and paid/pending/failed state, and exposes a reference only when confirmed. No provider is called by this query. The customer notice destination selects History to show that receipt; expiry selects the existing renewal form without an automatic write. See [customer notices](customer-notices.md#routes).
 
 The signed-in customer reads issued policies from the web through three owner-scoped, read-only routes. They use the sealed web session and one `authorizeFinancialAccessV1` call with `policies:read`; an `Authorization` header, a non-GET method or a malformed identifier is rejected before any business read. Each answer is `no-store` and carries `X-Trace-Id`.
 
@@ -106,7 +110,7 @@ Every decision recorded by recovery (`premium.confirmed`, `policy.issued`, `prem
 
 Each processed candidate logs `financial_reconciliation` with the environment, its trace UUID and `outcome` (`issued`, `refunded`, `unchanged`, `rejected` with its `error`, or `unavailable`). A `signature_failed` result is followed by an integrity-checked owner read: only a stored `refunded` state produces that outcome; an in-progress refund remains `unchanged`, and an unreadable state is `unavailable`. The trace correlates with the audit and outbox records; no policy, customer or provider identifier is logged. An `unavailable` outcome, such as an uncertain provider refund, is retried by a later eligible run. With no index on policy status, selection scans owned policies, which is acceptable for synthetic volumes but should be revisited before real data.
 
-Business outbox persistence does not deliver a customer notification. A confirmed parametric indemnity stores the `policy.indemnity.notice` event for the notifications story, but nothing delivers it yet. This remains an explicit implementation limit.
+Business outbox persistence does not deliver a customer notification by itself. The stored `policy.indemnity.notice`, `policy.lifecycle.notice` and `policy.expiry.notice` events reach the native customer's device through the simulated, choice-aware delivery described in [customer notices](customer-notices.md); no real push provider exists, and claim-status and commercial notices are not produced yet. These remain explicit implementation limits.
 
 The web channel implements those retries and reads the owned policy after a signature failure. The `signature_failed` code can also occur while another request is refunding; only an authoritative `refunded` state confirms compensation. The client preserves the original policy/document command key during recovery and does not claim a completed refund or offer another purchase while the state is `refunding`. A document mismatch requires another document read and explicit review before retrying confirmation. The existing charge/signature contracts remain owned by this module.
 

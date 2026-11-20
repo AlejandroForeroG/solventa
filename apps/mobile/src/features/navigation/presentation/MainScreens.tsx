@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuthentication } from '@/features/authentication/presentation/AuthenticationProvider';
+import { NoticesList } from '@/features/notices/presentation/NoticesList';
 import { WelcomeScreen } from '@/features/welcome/presentation/WelcomeScreen';
 import { NotificationPreferencesScreen } from '@/features/notification-preferences/presentation/NotificationPreferencesScreen';
 import { theme } from '@/theme';
@@ -25,8 +26,14 @@ export function HomeScreen() {
 }
 
 export function AlertsScreen() {
+  const copy = useNavigationMessages();
+  const auth = useAuthentication();
   const focused = useIsFocused();
   return <SafeAreaView style={styles.safe} edges={['top']}>
+    {auth.status === 'authenticated' ? <ScrollView style={styles.notices} contentContainerStyle={styles.noticesContent}>
+      <Text accessibilityRole="header" style={styles.noticesTitle}>{copy.alerts}</Text>
+      <NoticesList />
+    </ScrollView> : null}
     {focused && <NotificationPreferencesScreen />}
   </SafeAreaView>;
 }
@@ -77,6 +84,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
   content: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.xl, gap: 14,
     width: '100%', maxWidth: 520, alignSelf: 'center' },
+  notices: { maxHeight: 260, width: '100%', maxWidth: 520, alignSelf: 'center', flexGrow: 0 },
+  noticesContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, gap: 12 },
+  noticesTitle: { color: theme.colors.foreground, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },
   title: { color: theme.colors.foreground, fontSize: 32, fontWeight: '700', letterSpacing: -0.8, marginBottom: 6 },
   card: { padding: 18, borderRadius: 20, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 5 },
   tile: { flexDirection: 'row', alignItems: 'center', minHeight: 68, gap: 12 },
