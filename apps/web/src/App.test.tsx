@@ -190,8 +190,10 @@ describe('my policies route in the application', () => {
     });
     render(<App />);
     await screen.findByRole('tab', { name: 'Documentos', selected: true });
-    expired = true;
-    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    const back = screen.getByRole('button', { name: /‹ Mis pólizas/ });
+    // The detail also fetches issued policies, so expire the session on navigation.
+    back.addEventListener('click', () => { expired = true; }, { once: true });
+    await userEvent.click(back);
     await screen.findByText('Tu sesión terminó. Inicia sesión para continuar.');
     expect(window.location.hash).toBe('');
     expect(readPolicyDocumentDestination()).toBeNull();

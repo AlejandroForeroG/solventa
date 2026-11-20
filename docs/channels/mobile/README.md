@@ -52,6 +52,10 @@ The current build exports for web. For native capability changes, validate the f
 
 The local `plugins/with-android-font-scale.cjs` config plugin adds `fontScale` to the generated main Activity's existing configuration changes. React Native receives the configuration callback and scales text without destroying the live Activity and its media-picker registrations; it refreshes the JavaScript dimension metrics when the Activity resumes. Regenerate Android through `npx expo prebuild --platform android --no-install` and rebuild after changing this plugin; do not edit the generated manifest. Native verification must change the system font size while the app is open, check that content still scales, return from the system-settings/background lifecycle, switch tabs, return to the default size and open the photo picker without restarting the process. A foreground-only ADB setting change does not supply that resume event. Unit tests and web export do not establish that behavior.
 
+## Claim tracking
+
+From Claims, open My claims and select a submitted case. The authenticated screen shows its current state, customer history and any requests with status, recipient and Bogotá deadline. An approved or paid case links to its own protected disbursement screen. The list, case and receipt use real owner-scoped reads, clear protected memory when backgrounded or when the owner or focused route changes, and retry with a fresh read. A missing or foreign case is opaque. The authenticated deep link `solventa://claim-tracking/<claimId>` checks the owner again. See the [shared case contract](../../modules/policy-claims-payments/claims-inbox.md#customer-tracking). A customer can answer a requirement in the web case.
+
 ## Claim disbursement receipts
 
 Amount rendering keeps the four fractional digits as text and formats only the validated, at-most-15-digit integer as a safe number. This preserves the decimal contract on Hermes, whose `Intl.NumberFormat` does not accept `BigInt`.

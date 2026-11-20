@@ -137,6 +137,8 @@ The customer can request assistance from a provider of the results. **Solicitar 
 
 ## Claims inbox
 
+In **My claims**, the owner opens a submitted case at `/mis-siniestros/<claimId>`. Information shows the current state and the exact disbursement when the case is approved or paid. History shows dated customer events. Tasks show the recipient, deadline and request state and keep the existing response flow. `?section=tasks` opens the Tasks view after normal authentication and ownership checks. See the [shared tracking contract](../../modules/policy-claims-payments/claims-inbox.md#customer-tracking).
+
 `/siniestros` loads `src/claims/ClaimsInbox.tsx` after the existing session check, with the same console shell and navigation as the audit workspace; the authenticated header links to it, and the link is not an authorization signal. An anonymous visitor gets sign-in and an ordinary client gets the forbidden state. The [claims inbox guide](../../modules/policy-claims-payments/claims-inbox.md) defines the API, ordering and limits.
 
 The table follows the approved console prototype where the contract supports it: quick filters (all, unassigned, pending information, overdue) applied by the server with `aria-pressed`, a search by claim number or policy id validated before any request, state and priority badges with the prototype's tokens, age in red when overdue, estimated amount in COP ("Por estimar" while a claim has no estimate) and the evidence summary. The prototype's insured column is replaced by the policy id, and its export button and age sort are not built because no endpoint supports them.

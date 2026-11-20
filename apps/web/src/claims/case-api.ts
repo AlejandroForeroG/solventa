@@ -1,5 +1,6 @@
 import { fetchWithSession } from '../session-fetch';
 import { CLAIM_STATES, type ClaimState } from './api';
+import { parseCustomerClaimCase, parseOwnedClaimList } from '@solventa/contracts';
 
 export type CaseAudience = 'case' | 'customer';
 export type Expert = { id: string; name: string };
@@ -49,11 +50,11 @@ async function request<T>(path: string, init: RequestInit, validate: (value: unk
 }
 
 export function getCase(id: string, audience: CaseAudience, signal: AbortSignal) {
-  return request('/' + id + '/' + audience, { signal }, caseRecord);
+  return request('/' + id + '/' + audience, { signal }, (value): value is CaseRecord =>
+    caseRecord(value) && (audience === 'case' ? value.access !== 'customer' : parseCustomerClaimCase(value) !== null));
 }
 export function getOwnedCases(signal: AbortSignal) {
-  return request('/customer/cases', { signal }, (value): value is { items: OwnedCase[] } => record(value)
-    && entries(value.items, item => record(item) && uuid(item.claimId) && typeof item.claimNumber === 'string' && state(item.state)));
+  return request('/customer/cases', { signal }, (value): value is { items: OwnedCase[] } => parseOwnedClaimList(value) !== null);
 }
 export function getExperts(signal: AbortSignal) {
   return request('/experts', { signal }, (value): value is { experts: Expert[]; simulated: true } =>
