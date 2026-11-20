@@ -9,8 +9,8 @@ export type FinancialAccessDecision =
   | { allowed: true; actor: UserActor; consent?: { consentId: string; textVersion: number; expiresAt: string }; pushChoices?: PushChoices }
   | { allowed: false; error: 'invalid_request' | 'unauthorized' | 'forbidden' | 'access_unavailable' | 'consent_required'; status: 400 | 401 | 403 | 503 };
 
-const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated', 'notices:read', 'notices:receipt'];
-const mobileOperations = ['policies:read', 'notices:read', 'notices:receipt'];
+const operations = ['offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'policies:manage-delegated', 'notices:read', 'notices:receipt', 'notices:read-device', 'notices:receipt-device'];
+const mobileOperations = ['policies:read', 'notices:read', 'notices:receipt', 'notices:read-device', 'notices:receipt-device'];
 const scopes = ['income_obligations_12m', 'payment_history_score', 'affiliation_regime', 'identity_validation'];
 
 // One RPC encloses Identity's own authentication and fresh consent checks; no remote fan-out is needed.
@@ -32,7 +32,7 @@ export async function authorizeFinancialAccess(deps: {
     // inconsistent dependency response, never a business authorization.
     const channel = input.kind === 'web' || (input.kind === 'mobile' && mobileOperations.includes(input.operation)) ? input.kind : null;
     if (!channel || access.actor.kind !== 'user' || access.actor.channel !== channel) return { allowed: false, error: 'access_unavailable', status: 503 };
-    if (input.operation === 'notices:read') {
+    if (input.operation === 'notices:read' || input.operation === 'notices:read-device') {
       // The choices belong to the caller the access decision just named; no identifier comes from the request.
       if (!deps.readPushChoices) return { allowed: false, error: 'access_unavailable', status: 503 };
       return { allowed: true, actor: access.actor, pushChoices: await deps.readPushChoices(access.actor.principal.clientId) };

@@ -9,7 +9,7 @@ import { addClaimNotices } from './sql-claim-notices';
 
 type CaseRow = {
   id: string; claim_number: string; policy_id: string; status: ClaimState; occurred_at: Date; event_type: string | null;
-  event_place: string | null; description: string | null; assignee_id: string | null; evidence_required: number; subject_token: string;
+  event_place: string | null; description: string | null; assignee_id: string | null; evidence_required: number; subject_token: string; submitted_at: Date;
 };
 type AccessView = CaseRecord['access'];
 type EvidenceRow = { id: string; content_type: string; byte_size: string; verified_at: Date; object_key: string; checksum_sha256: string };
@@ -17,6 +17,11 @@ type RequirementRow = { id: string; details: string; deadline: Date; status: Cas
 type HistoryRow = { id: string; action: string; at: Date; state: string; reason: string | null; expert_id: string | null; expert_name: string | null; actor_id: string | null };
 const sha256 = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const describeEvidence = (row: EvidenceRow): CaseEvidence => ({ id: row.id, contentType: row.content_type, byteSize: Number(row.byte_size), verifiedAt: row.verified_at.toISOString() });
+
+const customerStates: Record<ClaimNotice, ClaimState> = {
+  take: 'in_review', assign_expert: 'escalated', request_information: 'pending_information', extend_requirement: 'pending_information',
+  respond: 'in_review', approve: 'approved', reject: 'rejected', disbursement_confirmed: 'paid', disbursement_declined: 'approved',
+};
 
 function accessView(row: CaseRow, access: CaseAccess): AccessView | null {
   if (access.kind === 'customer') return row.subject_token === access.actor.subjectToken ? 'customer' : null;
@@ -27,7 +32,7 @@ function accessView(row: CaseRow, access: CaseAccess): AccessView | null {
 
 async function findCase(db: Client, claimId: string, lock = false) {
   const row = (await db.query<CaseRow>(`SELECT c.id,c.claim_number,c.policy_id,c.status,c.occurred_at,c.event_type,c.event_place,c.description,
-    c.assignee_id,c.evidence_required::INT4 AS evidence_required,p.subject_token
+    c.assignee_id,c.evidence_required::INT4 AS evidence_required,p.subject_token,c.submitted_at
     FROM policy.claims c JOIN policy.policies p ON p.id=c.policy_id
     WHERE c.id=$1 AND c.claim_number IS NOT NULL AND c.submitted_at IS NOT NULL${lock ? ' FOR UPDATE OF c' : ''}`, [claimId])).rows[0];
   if (row && !isClaimState(row.status)) throw new Error('invalid_stored_claim_state');
@@ -118,7 +123,14 @@ export class SqlClaimReview implements ClaimReviewStore {
         SELECT event_id,action,created_at FROM policy.claim_notices WHERE claim_id=$1 AND audience=$2 AND recipient=$3
         ORDER BY created_at DESC,event_id LIMIT 25`, [claimId, view === 'customer' ? 'customer' : 'analyst',
         access.kind === 'customer' ? access.actor.subjectToken : access.actor.clientId])).rows;
-      return { ...summary, description: row.description, place: row.event_place, evidence, history,
+      const customerHistory: CaseRecord['history'] = view === 'customer' ? [
+        ...notices.map(item => ({
+          id: item.event_id, action: item.action, at: item.created_at.toISOString(), state: customerStates[item.action],
+          reason: null, expert: null, actorId: null,
+        })),
+        { id: row.id, action: 'submitted', at: row.submitted_at.toISOString(), state: 'unassigned', reason: null, expert: null, actorId: null },
+      ].sort((left, right) => right.at.localeCompare(left.at)) : [];
+      return { ...summary, description: row.description, place: row.event_place, evidence, history: view === 'customer' ? customerHistory : history,
         requirements: requirements.map(item => ({ id: item.id, details: item.details, deadline: item.deadline.toISOString(), status: item.status,
           responseText: item.response_text, receivedAt: item.received_at?.toISOString() ?? null,
           evidenceIds: attached.filter(file => file.requirement_id === item.id).map(file => file.evidence_id) })),

@@ -372,7 +372,23 @@ export class PolicyFinance {
   detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult> {
     return this.run<PolicyDetailResult>(input.traceId, async traceId => {
       const facts = await this.issuedFacts(input, traceId);
-      return 'status' in facts ? facts : { status: 'ok', detail: policyDetail(facts) };
+      if ('status' in facts) return facts;
+      const detail = policyDetail(facts);
+      if (facts.offer.coverage.kind !== 'mortgage_life') {
+        const payment = await this.deps.store.transaction(async tx => {
+          const { policy } = await this.checked(await tx.policy(input.policyId, input.actor), input.actor);
+          const indemnity = await tx.payment(policy.id, 'indemnity');
+          if (indemnity) await this.checkPayment(indemnity, policy);
+          return indemnity;
+        });
+        if (payment) {
+          if (!payment.updatedAt || !iso(payment.updatedAt) || payment.status === 'refunded') throw new InvalidFinancialRecord();
+          detail.parametricPayment = { date: payment.updatedAt, amount: payment.amount, currency: 'COP',
+            status: payment.status === 'confirmed' ? 'paid' : payment.status === 'declined' ? 'failed' : 'pending',
+            reference: payment.status === 'confirmed' ? payment.providerReference : null };
+        }
+      }
+      return { status: 'ok', detail };
     });
   }
 

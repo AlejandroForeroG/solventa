@@ -3,16 +3,17 @@ import { validateBaseUrl } from '../../authentication/adapters/solventa-session'
 import type { AuthenticatedSession } from '../../policy-wallet/application/ports';
 import type { NoticesApi } from '../application/ports';
 import { NoticeFailure, object, parseNotices, parseReceipt, uuid } from '../domain/notice';
+import { parseDestination, type NoticeDestination } from '../domain/destination';
 
 const MAX_BYTES = 65_536;
 
-export function createNoticesApi(baseUrl: string, session: AuthenticatedSession, request: typeof fetch = fetch): NoticesApi {
+export function createNoticesApi(baseUrl: string, session: AuthenticatedSession, request: typeof fetch = fetch): NoticesApi & { destination(eventId: string): Promise<NoticeDestination> } {
   validateBaseUrl(baseUrl);
   const call = (path: string, body?: { outcome: string }): Promise<unknown> => session.execute(async token => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
-      const response = await request(`${baseUrl}/api/v1/notices${path}`, {
+      const response = await request(`${baseUrl}/api/v2/notices${path}`, {
         method: body ? 'POST' : 'GET', credentials: 'omit', signal: controller.signal,
         headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -37,6 +38,10 @@ export function createNoticesApi(baseUrl: string, session: AuthenticatedSession,
     } finally { clearTimeout(timer); }
   });
   return {
+    async destination(eventId) {
+      if (!uuid(eventId)) throw new NoticeFailure('rejected');
+      return parseDestination(await call(`/${eventId}/destination`));
+    },
     list: async () => parseNotices(await call('')),
     async receipt(eventId, outcome) {
       if (!uuid(eventId)) throw new NoticeFailure('rejected');

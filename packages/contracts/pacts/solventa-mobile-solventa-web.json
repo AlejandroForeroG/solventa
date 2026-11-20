@@ -57,6 +57,64 @@
       }
     },
     {
+      "description": "a native receipt filtered by the selected claim",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/disbursements",
+        "query": {
+          "claimId": [
+            "11111111-1111-4111-8111-111111111111"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "11111111-1111-4111-8111-111111111111",
+              "claimNumber": "SIN-2026-00001",
+              "payment": {
+                "amount": "1000.0000",
+                "currency": "COP",
+                "paymentId": "11111111-1111-4111-8111-111111111112",
+                "reference": "MOCK-11111111-1111-4111-8111-111111111112",
+                "simulated": true,
+                "status": "confirmed"
+              },
+              "updatedAt": "2026-11-19T15:00:00.000Z"
+            }
+          ],
+          "next": null,
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile access",
       "providerStates": [
         {
@@ -2397,6 +2455,49 @@
       }
     },
     {
+      "description": "mobile notice destination",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/destination"
+      },
+      "response": {
+        "body": {
+          "destination": {
+            "kind": "policy",
+            "policyId": "91000000-0000-4000-8000-000000000020",
+            "section": "history"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile notice receipt",
       "providerStates": [
         {
@@ -2413,7 +2514,7 @@
           "Content-Type": "application/json"
         },
         "method": "POST",
-        "path": "/api/v1/notices/70000000-0000-4000-8000-0000000000a1/receipt"
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/receipt"
       },
       "response": {
         "body": {
@@ -2454,7 +2555,7 @@
           "Authorization": "Bearer synthetic.jwt.token"
         },
         "method": "GET",
-        "path": "/api/v1/notices"
+        "path": "/api/v2/notices"
       },
       "response": {
         "body": {
@@ -2842,6 +2943,160 @@
                 {
                   "match": "regex",
                   "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the native tracking detail request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases/a0000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "access": "customer",
+          "claimNumber": "SIN-2026-01187",
+          "description": "Synthetic claim.",
+          "eventType": "other",
+          "evidence": [],
+          "history": [
+            {
+              "action": "take",
+              "actorId": null,
+              "at": "2026-11-13T20:00:00.000Z",
+              "expert": null,
+              "id": "a0000000-0000-4000-8000-0000000000e1",
+              "reason": null,
+              "state": "in_review"
+            },
+            {
+              "action": "submitted",
+              "actorId": null,
+              "at": "2026-11-13T19:50:00.000Z",
+              "expert": null,
+              "id": "a0000000-0000-4000-8000-000000000001",
+              "reason": null,
+              "state": "unassigned"
+            }
+          ],
+          "notices": [],
+          "occurredAt": "2026-11-13T19:45:00.000Z",
+          "place": null,
+          "policyId": "a0000000-0000-4000-8000-0000000000a1",
+          "requiredEvidence": 1,
+          "requirements": [],
+          "state": "in_review",
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the native tracking foreign request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases/00000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "error": "not_found",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "the native tracking list request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "state": "in_review"
+            }
+          ],
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
                 }
               ]
             }

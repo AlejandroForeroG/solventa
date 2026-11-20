@@ -1,12 +1,14 @@
-import { claimNoticeEventType, dispatchConsumer, receiptConsumer, type NoticeCategory, type NoticeKind, type NoticeState, type ReceiptOutcome } from '../domain/notice';
+import { claimNoticeEventType, noticeConsumers, noticeDecisionCapture, type NoticeCategory, type NoticeKind, type NoticeState, type ReceiptOutcome } from '../domain/notice';
 import type { NoticeRecord, NoticeStore } from './ports/notice';
+import { UUID } from '../domain/financial';
 
 // What the customer chose for push, by category, as Identity reports it for this very request.
 export type PushChoices = Record<NoticeCategory | 'commercial', boolean>;
 // The customer is the client of the notice and, for a claim, the subject it is addressed to.
-export type NoticeOwner = { clientId: string; subjectToken?: string };
+export type NoticeOwner = { clientId: string; subjectToken?: string; destination?: string };
 export type NoticeView = { eventId: string; kind: NoticeKind; category: NoticeCategory; policyId: string; occurredAt: string; state: NoticeState };
 export type ReceiptResult = { status: 'recorded' | 'replayed'; state: NoticeState } | { status: 'not_found' } | { status: 'conflict' };
+export type NoticeDestination = { kind: 'policy'; policyId: string; section: 'history' | 'renewal' | 'info' } | { kind: 'claim'; claimId: string };
 
 const WINDOW_MS = 30 * 24 * 3600 * 1000;
 const UNCONFIRMED_AFTER_MS = 10 * 60 * 1000;
@@ -15,19 +17,33 @@ const eventTypeOf = { parametric_payment_confirmed: 'policy.indemnity.notice', p
 export class Notices {
   constructor(private readonly store: NoticeStore, private readonly clock: { now(): Date } = { now: () => new Date() }) {}
 
+  async destination(owner: NoticeOwner, eventId: string): Promise<NoticeDestination | null> {
+    if (!owner.destination) return null;
+    const found = await this.store.find(owner.clientId, eventId, owner.subjectToken, owner.destination);
+    if (!found || found.dispatch !== 'offered') return null;
+    if (found.notice.kind === 'claim_status_changed') {
+      return found.claimId && UUID.test(found.claimId) ? { kind: 'claim', claimId: found.claimId } : null;
+    }
+    return { kind: 'policy', policyId: found.notice.policyId,
+      section: found.notice.kind === 'parametric_payment_confirmed' ? 'history' : found.notice.kind === 'policy_expiring' ? 'renewal' : 'info' };
+  }
+
   // Applies the choices in force now, before anything is offered to the device. A choice that is off is recorded once and never offered again,
   // so turning it on later does not release old notices. A notice already offered but not yet presented is withdrawn while its choice is off.
   async list(owner: NoticeOwner, choices: PushChoices, traceId: string): Promise<NoticeView[]> {
     const now = this.clock.now();
+    const consumers = noticeConsumers(owner.destination);
     const views: NoticeView[] = [];
-    for (const first of await this.store.recent(owner.clientId, new Date(now.getTime() - WINDOW_MS), owner.subjectToken)) {
+    for (const first of await this.store.recent(owner.clientId, new Date(now.getTime() - WINDOW_MS), owner.subjectToken, owner.destination)) {
       let current: NoticeRecord = first;
       if (current.dispatch === null) {
         const outcome = choices[current.notice.category] ? 'offered' : 'suppressed_preference';
-        const written = await this.store.record(current.notice.eventId, eventTypeOf[current.notice.kind], dispatchConsumer, outcome, traceId);
+        const capture = owner.destination === undefined ? undefined : noticeDecisionCapture({ notice: current.notice, clientId: owner.clientId, destination: owner.destination,
+          operation: 'dispatch', traceId, evaluatedAt: now.toISOString(), outcome, pushEnabled: choices[current.notice.category] });
+        const written = await this.store.record(current.notice.eventId, eventTypeOf[current.notice.kind], consumers.dispatch, outcome, traceId, capture);
         // A concurrent request may have decided first: the stored decision is the one that counts.
         current = written === 'recorded' ? { ...current, dispatch: outcome, dispatchedAt: now.toISOString() }
-          : await this.store.find(owner.clientId, current.notice.eventId, owner.subjectToken) ?? current;
+          : await this.store.find(owner.clientId, current.notice.eventId, owner.subjectToken, owner.destination) ?? current;
       }
       if (current.dispatch !== 'offered') continue;
       if (current.receipt === null && !choices[current.notice.category]) continue;
@@ -38,14 +54,16 @@ export class Notices {
 
   // The device reports what happened to a notice it was offered. One outcome per notice: the same report again is a replay, a different one a conflict.
   async receipt(owner: NoticeOwner, eventId: string, outcome: ReceiptOutcome, traceId: string): Promise<ReceiptResult> {
-    const found = await this.store.find(owner.clientId, eventId, owner.subjectToken);
+    const found = await this.store.find(owner.clientId, eventId, owner.subjectToken, owner.destination);
     // A notice of another customer is the same as one that does not exist.
     if (!found) return { status: 'not_found' };
     if (found.dispatch !== 'offered') return { status: 'conflict' };
     if (found.receipt !== null) return found.receipt === outcome ? { status: 'replayed', state: found.receipt } : { status: 'conflict' };
-    const written = await this.store.record(eventId, eventTypeOf[found.notice.kind], receiptConsumer, outcome, traceId);
+    const capture = owner.destination === undefined ? undefined : noticeDecisionCapture({ notice: found.notice, clientId: owner.clientId, destination: owner.destination,
+      operation: 'receipt', traceId, evaluatedAt: this.clock.now().toISOString(), outcome, reportedOutcome: outcome });
+    const written = await this.store.record(eventId, eventTypeOf[found.notice.kind], noticeConsumers(owner.destination).receipt, outcome, traceId, capture);
     if (written === 'recorded') return { status: 'recorded', state: outcome };
-    const stored = await this.store.find(owner.clientId, eventId, owner.subjectToken);
+    const stored = await this.store.find(owner.clientId, eventId, owner.subjectToken, owner.destination);
     return stored?.receipt === outcome ? { status: 'replayed', state: outcome } : { status: 'conflict' };
   }
 

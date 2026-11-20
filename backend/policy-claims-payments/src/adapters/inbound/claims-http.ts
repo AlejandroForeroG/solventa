@@ -152,7 +152,7 @@ export function mountClaims(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimsHttp
     if (!deps.disbursements || !actor.subjectToken) return reply({ error: 'service_unavailable' }, 503);
     const query = claimPaymentQuery(c.req.url);
     if (!query) return reply({ error: 'invalid_request' }, 400);
-    return reply(await deps.disbursements.owned({ clientId: actor.clientId, subjectToken: actor.subjectToken }, actor.traceId, query.cursor), 200);
+    return reply(await deps.disbursements.owned({ clientId: actor.clientId, subjectToken: actor.subjectToken }, actor.traceId, query.cursor, query.claimId), 200);
   }));
 
   app.all('/api/v1/claims/experts', route('GET', 'claims:read', async (_c, _actor, reply) =>
