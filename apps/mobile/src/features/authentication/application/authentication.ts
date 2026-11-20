@@ -12,6 +12,7 @@ type Dependencies = {
   policyCache?: { clear(): Promise<void> };
   now: () => number;
   parseCallback: (url: string) => OAuthCallback;
+  installationId: () => Promise<string>;
 };
 
 export class Authentication {
@@ -448,6 +449,7 @@ export class Authentication {
     }
     if (session.phase === 'bootstrap') {
       await this.request(token => this.deps.api.register(token));
+      await this.request(async token => this.deps.api.registerDevice(token, await this.deps.installationId()));
       const current = this.record?.session;
       if (!current) throw new AuthFailure('unauthorized');
       await this.save({ version: 1, transaction: null, session: { ...current, phase: 'active' } });
@@ -456,8 +458,10 @@ export class Authentication {
     if (lockVersion !== this.lockVersion) { if (!this.warmSession) this.record = undefined; return; }
     const actor = await this.request(token => this.deps.api.access(token));
     if (lockVersion !== this.lockVersion) { if (!this.warmSession) this.record = undefined; return; }
+    const installationId = await this.deps.installationId();
     const device = this.device;
-    if (device) await this.request(token => this.deps.api.inspectDevice(token, device));
+    if (device && device !== installationId) throw new AuthFailure('unauthorized');
+    await this.request(token => this.deps.api.inspectDevice(token, installationId));
     if (actor.clientId !== principal.clientId || actor.subjectToken !== principal.subjectToken) throw new AuthFailure('invalid_response');
     if (lockVersion !== this.lockVersion) { if (!this.warmSession) this.record = undefined; return; }
     const vault = this.deps.biometrics;
