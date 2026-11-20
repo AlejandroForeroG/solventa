@@ -10,7 +10,7 @@ const partner = { find: async () => null };
 const lease = () => new Date(Date.now() + 5000).toISOString();
 const reportOperations: ReportOperation[] = ['reports:generate', 'reports:read', 'reports:download', 'reports:send'];
 const grantedFor = (...allowed: ReportOperation[]) => ({ find: async (_p: unknown, _i: unknown, operation: ReportOperation) => allowed.includes(operation) ? { expiresAt: lease() } : null });
-const withReports = (...allowed: ReportOperation[]) => new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, grantedFor(...allowed));
+const withReports = (...allowed: ReportOperation[]) => new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, undefined, grantedFor(...allowed));
 
 test('a valid session never grants a report operation, even with the audit and claims permissions', async () => {
   const everything = { find: async () => ({ expiresAt: lease() }) };
@@ -35,13 +35,13 @@ test('a report grant opens neither the claims inbox nor the audit lookup', async
 test('report operations are web-only and fail closed on a missing session, an unavailable store or a bad lease', async () => {
   assert.deepEqual(await withReports(...reportOperations).mobileUser(identity, 'reports:read'), { allowed: false, error: 'forbidden', status: 403 });
   assert.equal((await withReports('reports:read').webUser({ ...identity, emailVerified: false }, 'reports:read')).status, 401);
-  assert.equal((await new ApiAccess(partner, { ...sessions, find: async () => null }, undefined, undefined, undefined, undefined, grantedFor('reports:read')).webUser(identity, 'reports:read')).status, 401);
+  assert.equal((await new ApiAccess(partner, { ...sessions, find: async () => null }, undefined, undefined, undefined, undefined, undefined, grantedFor('reports:read')).webUser(identity, 'reports:read')).status, 401);
   const failing = { find: async () => { throw new Error('store down'); } };
-  assert.deepEqual(await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, failing).webUser(identity, 'reports:read'), { allowed: false, error: 'access_unavailable', status: 503 });
+  assert.deepEqual(await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, undefined, failing).webUser(identity, 'reports:read'), { allowed: false, error: 'access_unavailable', status: 503 });
   const longLease = { find: async () => ({ expiresAt: new Date(Date.now() + 60_000).toISOString() }) };
-  assert.equal((await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, longLease).webUser(identity, 'reports:read')).status, 503);
+  assert.equal((await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, undefined, longLease).webUser(identity, 'reports:read')).status, 503);
   const expired = { find: async () => ({ expiresAt: new Date(Date.now() - 1).toISOString() }) };
-  assert.equal((await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, expired).webUser(identity, 'reports:read')).status, 503);
+  assert.equal((await new ApiAccess(partner, sessions, undefined, undefined, undefined, undefined, undefined, expired).webUser(identity, 'reports:read')).status, 503);
 });
 
 test('report grant inputs accept only the four report operations', () => {

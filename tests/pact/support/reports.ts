@@ -15,7 +15,7 @@ export async function reportsWorld(origin: string, mode: 'empty' | 'seeded' | 'd
   const identity = { providerSubject: cookie, sessionReference: cookie, emailVerified: true };
   const grants = { find: async () => mode === 'denied' ? null : { expiresAt: new Date(Date.now() + 5000).toISOString() } };
   const authorization = {
-    application: new ApiAccess({ find: async () => null }, { find: async () => principal, open: async () => principal, revoke: async () => {} }, undefined, undefined, undefined, undefined, grants),
+    application: new ApiAccess({ find: async () => null }, { find: async () => principal, open: async () => principal, revoke: async () => {} }, undefined, undefined, undefined, undefined, undefined, grants),
     partner: null,
     web: { allowedOrigins: [origin], authenticate: async (value: string) => value === cookie ? { identity } : null },
     security: { deny: async () => {} }
