@@ -6,7 +6,7 @@ import { ClaimPaymentFailure } from '../domain/payment';
 
 type Owner = { clientId: string; subjectToken: string };
 type Session = { execute<T>(work: (token: string) => Promise<T>, expectedOwner?: Owner): Promise<T> };
-export function createClaimPaymentsApi(baseUrl: string, session: Session, owner: Owner, request: typeof fetch = fetch): ClaimPaymentsApi {
+export function createClaimPaymentsApi(baseUrl: string, session: Session, owner: Owner, request: typeof fetch = fetch, claimId?: string): ClaimPaymentsApi {
   validateBaseUrl(baseUrl);
   return { list: async (cursor, signal) => { try { return await session.execute(async token => {
     const controller = new AbortController();
@@ -18,7 +18,8 @@ export function createClaimPaymentsApi(baseUrl: string, session: Session, owner:
     }, 8000); });
     try {
       if (signal.aborted) throw new ClaimPaymentFailure('unavailable');
-      const response = await Promise.race([request(baseUrl + '/api/v1/claims/native/disbursements' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), {
+      const query = claimId ? '?claimId=' + encodeURIComponent(claimId) : cursor ? '?cursor=' + encodeURIComponent(cursor) : '';
+      const response = await Promise.race([request(baseUrl + '/api/v1/claims/native/disbursements' + query, {
         method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal,
         headers: { Accept: 'application/json', Authorization: 'Bearer ' + token } }), deadline]);
       if (response.status === 401) throw new AuthFailure('unauthorized');
@@ -36,7 +37,7 @@ export function createClaimPaymentsApi(baseUrl: string, session: Session, owner:
         let value: unknown;
         try { value = JSON.parse(text); } catch { throw new ClaimPaymentFailure('invalid_response'); }
         const page = parseClaimPaymentPage(value);
-        if (!page) throw new ClaimPaymentFailure('invalid_response');
+        if (!page || (claimId && (page.next || page.items.some(item => item.claimId !== claimId)))) throw new ClaimPaymentFailure('invalid_response');
         return page;
       };
       return await Promise.race([parse(), deadline]);

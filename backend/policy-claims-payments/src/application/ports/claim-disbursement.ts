@@ -13,7 +13,7 @@ export type DisbursementContext = { claimId: string; decisionId: string; policyI
 export type DisbursementCapture = { schemaVersion: 1; contractVersion: 'v1'; correlationId: string; inputs: Record<string, unknown>;
   sources: { source: string; capturedAt: string }[]; consent: { status: 'not_required' }; rule: { id: string; version: string }; outcome: string };
 export interface DisbursementTransaction {
-  owned(owner: ReportOwner, traceId: string, cursor?: string): Promise<(DisbursementContext & { claimNumber: string; updatedAt: string })[]>;
+  owned(owner: ReportOwner, traceId: string, cursor?: string, claimId?: string): Promise<(DisbursementContext & { claimNumber: string; updatedAt: string })[]>;
   // A caller with no assigned case receives no protected context, even on replay.
   authorized(claimId: string, actor: ClaimDecisionActor): Promise<DisbursementContext | null>;
   pending(paymentId: string): Promise<DisbursementContext | null>;

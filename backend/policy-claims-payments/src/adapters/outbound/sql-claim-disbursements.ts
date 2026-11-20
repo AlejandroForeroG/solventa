@@ -54,14 +54,15 @@ function context(row: Row | undefined): DisbursementContext | null {
 class Transaction implements DisbursementTransaction {
   constructor(private readonly db: Client) {}
 
-  async owned(owner: ReportOwner, traceId: string, cursor?: string) {
+  async owned(owner: ReportOwner, traceId: string, cursor?: string, claimId?: string) {
     const rows = (await this.db.query<Row>(contextSql
       + ` WHERE p.subject_token=$1 AND f.client_id=$2 AND c.submitted_at IS NOT NULL AND c.status IN ('approved','paid') AND pay.id IS NOT NULL
+        AND ($4::UUID IS NULL OR c.id=$4::UUID)
         AND ($3::UUID IS NULL OR c.id>$3::UUID) AND ($3::UUID IS NULL OR EXISTS (
           SELECT 1 FROM policy.claims boundary JOIN policy.policies owned ON owned.id=boundary.policy_id
           JOIN policy.financial_contracts contract ON contract.policy_id=owned.id
           WHERE boundary.id=$3 AND owned.subject_token=$1 AND contract.client_id=$2)) ORDER BY c.id LIMIT 7`,
-    [owner.subjectToken, owner.clientId, cursor ?? null])).rows;
+    [owner.subjectToken, owner.clientId, cursor ?? null, claimId ?? null])).rows;
     await this.audit(owner.clientId, owner.clientId, traceId, 'claims.disbursement.owned', 'success');
     return rows.map(row => {
       const value = context(row); if (!value || !row.paymentUpdatedAt) throw Error('invalid_claim_payment');

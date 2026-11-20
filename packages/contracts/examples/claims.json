@@ -178,6 +178,41 @@
     "notices": [],
     "traceId": "a0000000-0000-4000-8000-0000000000c1"
   },
+  "customerCase": {
+    "claimNumber": "SIN-2026-01187",
+    "policyId": "a0000000-0000-4000-8000-0000000000a1",
+    "state": "in_review",
+    "occurredAt": "2026-11-13T19:45:00.000Z",
+    "eventType": "other",
+    "place": null,
+    "description": "Synthetic claim.",
+    "access": "customer",
+    "requiredEvidence": 1,
+    "evidence": [],
+    "requirements": [],
+    "history": [
+      {
+        "id": "a0000000-0000-4000-8000-0000000000e1",
+        "action": "take",
+        "at": "2026-11-13T20:00:00.000Z",
+        "state": "in_review",
+        "reason": null,
+        "expert": null,
+        "actorId": null
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000001",
+        "action": "submitted",
+        "at": "2026-11-13T19:50:00.000Z",
+        "state": "unassigned",
+        "reason": null,
+        "expert": null,
+        "actorId": null
+      }
+    ],
+    "notices": [],
+    "traceId": "a0000000-0000-4000-8000-0000000000c1"
+  },
   "ownedCases": {
     "items": [
       {
