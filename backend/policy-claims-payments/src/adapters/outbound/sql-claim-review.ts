@@ -4,7 +4,8 @@ import type { CaseAccess, CaseEvidence, CaseRecord, CaseRequirement, ClaimReview
 import type { ClaimDecisionActor } from '../../application/claim-decisions';
 import type { ReportOwner } from '../../application/ports/claim-report';
 import { reviewable, type ClaimNotice, type Expert, type RequirementFile, type RequirementResponse, type ReviewAction, type ReviewCommand } from '../../domain/claim-review';
-import { isClaimState, type ClaimState } from '../../domain/claims';
+import { CLAIM_STATES, isClaimState, type ClaimState } from '../../domain/claims';
+import { closeClient, type ClientLifecycle } from './client-cleanup';
 import { addClaimNotices } from './sql-claim-notices';
 
 type CaseRow = {
@@ -53,13 +54,53 @@ const visibleEvidence = `e.state = 'verified' AND e.retention_until > now() AND
   (NOT EXISTS (SELECT 1 FROM policy.claim_requirement_files rf WHERE rf.evidence_id=e.id)
     OR EXISTS (SELECT 1 FROM policy.claim_requirement_files rf WHERE rf.evidence_id=e.id AND rf.included))`;
 
+type CustomerDetailRow = { id: null } | (Omit<CaseRow, 'subject_token' | 'assignee_id'> &
+  Pick<CaseRecord, 'evidence' | 'requirements' | 'notices'>);
+
+const customerDetailQuery = `WITH owned_case AS MATERIALIZED (
+  SELECT c.id,c.claim_number,c.policy_id,c.status,c.occurred_at,c.event_type,c.event_place,c.description,
+    c.evidence_required::INT4 AS evidence_required,c.submitted_at
+  FROM policy.claims c JOIN policy.policies p ON p.id=c.policy_id
+  WHERE c.id=$1 AND p.subject_token=$2 AND c.claim_number IS NOT NULL AND c.submitted_at IS NOT NULL
+), read_audit AS (
+  INSERT INTO policy.audit_events (actor_reference,action,resource_type,resource_id,outcome,correlation_id,retention_until)
+  SELECT $3,'claims.case.read','claim',$1,
+    CASE WHEN EXISTS (SELECT 1 FROM owned_case) THEN 'success' ELSE 'not_found' END,
+    $4,now()+INTERVAL '90 days'
+  WHERE NOT EXISTS (SELECT 1 FROM owned_case WHERE status <> ALL($5::STRING[]))
+  RETURNING id
+)
+SELECT c.*, ARRAY(
+  SELECT jsonb_build_object('id',e.id,'contentType',e.content_type,'byteSize',e.byte_size,'verifiedAt',e.verified_at)
+  FROM policy.evidence_metadata e WHERE e.claim_id=c.id AND ${visibleEvidence}
+  ORDER BY e.created_at,e.id LIMIT 50
+) AS evidence, ARRAY(
+  SELECT jsonb_build_object('id',r.id,'details',r.details,'deadline',r.deadline,'status',r.status,
+    'responseText',r.response_text,'receivedAt',r.received_at,'evidenceIds',ARRAY(
+      SELECT f.evidence_id FROM policy.claim_requirement_files f
+      WHERE f.requirement_id=r.id AND f.included ORDER BY f.evidence_id
+    ))
+  FROM policy.claim_requirements r WHERE r.claim_id=c.id
+  ORDER BY (r.status = 'pending') DESC,r.received_at DESC NULLS LAST,r.id LIMIT 25
+) AS requirements, ARRAY(
+  SELECT jsonb_build_object('id',n.event_id,'action',n.action,'at',n.created_at)
+  FROM policy.claim_notices n WHERE n.claim_id=c.id AND n.audience='customer' AND n.recipient=$2::UUID::STRING
+  ORDER BY n.created_at DESC,n.event_id LIMIT 25
+) AS notices
+FROM read_audit LEFT JOIN owned_case c ON true`;
+
 export class SqlClaimReview implements ClaimReviewStore {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly lifecycle?: ClientLifecycle) {}
+
+  private client() {
+    const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 1300, query_timeout: 1300 });
+    db.on('error', () => {});
+    return db;
+  }
 
   private async transaction<T>(work: (db: Client) => Promise<T>, expiresAt?: string): Promise<T> {
     for (let attempt = 0; ; attempt++) {
-      const db = new Client({ connectionString: this.connectionString, connectionTimeoutMillis: 1300, query_timeout: 1300 });
-      db.on('error', () => {});
+      const db = this.client();
       try {
         if (expiresAt && Date.parse(expiresAt) <= Date.now()) throw new Error('claims_authorization_expired');
         await db.connect();
@@ -88,7 +129,39 @@ export class SqlClaimReview implements ClaimReviewStore {
     });
   }
 
+  private async customerDetail(claimId: string, owner: ReportOwner, traceId: string): Promise<CaseRecord | null> {
+    for (let attempt = 0; ; attempt++) {
+      const db = this.client();
+      try {
+        await db.connect();
+        // One implicit transaction commits the read audit before any detail can be returned.
+        const [row] = (await db.query<CustomerDetailRow>(customerDetailQuery,
+          [claimId, owner.subjectToken, owner.clientId, traceId, CLAIM_STATES])).rows;
+        if (!row) throw new Error('invalid_stored_claim_state');
+        if (row.id === null) return null;
+        const notices = row.notices.map(notice => ({ ...notice, at: new Date(notice.at).toISOString() }));
+        const history: CaseRecord['history'] = notices.map(notice => ({ ...notice, state: customerStates[notice.action],
+          reason: null, expert: null, actorId: null }));
+        history.push({ id: row.id, action: 'submitted', at: row.submitted_at.toISOString(), state: 'unassigned',
+          reason: null, expert: null, actorId: null });
+        history.sort((left, right) => right.at.localeCompare(left.at));
+        return {
+          claimNumber: row.claim_number, policyId: row.policy_id, state: row.status, occurredAt: row.occurred_at.toISOString(),
+          eventType: row.event_type, access: 'customer', requiredEvidence: row.evidence_required, place: row.event_place,
+          description: row.description, history, notices,
+          evidence: row.evidence.map(item => ({ ...item, verifiedAt: new Date(item.verifiedAt).toISOString() })),
+          requirements: row.requirements.map(item => ({ ...item, deadline: new Date(item.deadline).toISOString(),
+            receivedAt: item.receivedAt === null ? null : new Date(item.receivedAt).toISOString() })),
+        };
+      } catch (error) {
+        if (attempt === 0 && error instanceof Error && 'code' in error && error.code === '40001') continue;
+        throw error;
+      } finally { await closeClient(db, this.lifecycle); }
+    }
+  }
+
   detail(claimId: string, access: CaseAccess, traceId: string): Promise<CaseRecord | null> {
+    if (access.kind === 'customer') return this.customerDetail(claimId, access.actor, traceId);
     return this.transaction(async db => {
       const row = await findCase(db, claimId);
       const view = row && accessView(row, access);
@@ -106,7 +179,7 @@ export class SqlClaimReview implements ClaimReviewStore {
         FROM policy.claim_requirements WHERE claim_id=$1 ORDER BY (status = 'pending') DESC,received_at DESC NULLS LAST,id LIMIT 25`, [claimId])).rows;
       const attached = requirements.length ? (await db.query<{ requirement_id: string; evidence_id: string }>(
         'SELECT requirement_id,evidence_id FROM policy.claim_requirement_files WHERE requirement_id=ANY($1::UUID[]) AND included', [requirements.map(r => r.id)])).rows : [];
-      const history = view === 'assigned' ? (await db.query<HistoryRow>(`
+      const history = (await db.query<HistoryRow>(`
         SELECT * FROM (
           SELECT id,action,created_at AS at,resulting_state AS state,reason,expert_id,expert_name,actor_id
             FROM policy.claim_review_actions WHERE claim_id=$1
@@ -118,24 +191,16 @@ export class SqlClaimReview implements ClaimReviewStore {
         ) ORDER BY at DESC,id LIMIT 50`, [claimId])).rows.map(item => ({
         id: item.id, action: item.action, at: item.at.toISOString(), state: item.state, reason: item.reason, actorId: item.actor_id,
         expert: item.expert_id && item.expert_name ? { id: item.expert_id, name: item.expert_name } : null
-      })) : [];
+      }));
       const notices = (await db.query<{ event_id: string; action: ClaimNotice; created_at: Date }>(`
-        SELECT event_id,action,created_at FROM policy.claim_notices WHERE claim_id=$1 AND audience=$2 AND recipient=$3
-        ORDER BY created_at DESC,event_id LIMIT 25`, [claimId, view === 'customer' ? 'customer' : 'analyst',
-        access.kind === 'customer' ? access.actor.subjectToken : access.actor.clientId])).rows;
-      const customerHistory: CaseRecord['history'] = view === 'customer' ? [
-        ...notices.map(item => ({
-          id: item.event_id, action: item.action, at: item.created_at.toISOString(), state: customerStates[item.action],
-          reason: null, expert: null, actorId: null,
-        })),
-        { id: row.id, action: 'submitted', at: row.submitted_at.toISOString(), state: 'unassigned', reason: null, expert: null, actorId: null },
-      ].sort((left, right) => right.at.localeCompare(left.at)) : [];
-      return { ...summary, description: row.description, place: row.event_place, evidence, history: view === 'customer' ? customerHistory : history,
+        SELECT event_id,action,created_at FROM policy.claim_notices WHERE claim_id=$1 AND audience='analyst' AND recipient=$2
+        ORDER BY created_at DESC,event_id LIMIT 25`, [claimId, access.actor.clientId])).rows;
+      return { ...summary, description: row.description, place: row.event_place, evidence, history,
         requirements: requirements.map(item => ({ id: item.id, details: item.details, deadline: item.deadline.toISOString(), status: item.status,
           responseText: item.response_text, receivedAt: item.received_at?.toISOString() ?? null,
           evidenceIds: attached.filter(file => file.requirement_id === item.id).map(file => file.evidence_id) })),
         notices: notices.map(item => ({ id: item.event_id, action: item.action, at: item.created_at.toISOString() })) };
-    }, access.kind === 'analyst' ? access.actor.expiresAt : undefined);
+    }, access.actor.expiresAt);
   }
 
   evidence(claimId: string, fileId: string, access: CaseAccess, traceId: string) {
