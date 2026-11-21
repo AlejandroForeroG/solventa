@@ -43,6 +43,8 @@ GET `/mobile/config` reports the backend's public configuration; it does not est
 
 ### Installation bindings
 
+The native channel registers its current installation during primary session bootstrap, before exposing authenticated features, including when biometric access is disabled. Registration failure leaves bootstrap pending for an explicit retry; active-session restoration uses GET and never creates or reactivates a binding. Older active credentials without an installation must complete primary login. The existing POST/GET/DELETE contracts and rule version are unchanged. Biometric activation is a separate native custody action and reuses the same installation binding; the server row does not establish that native confirmation occurred.
+
 Local web and native logout share the owner-scoped transactional device cascade. If a sealed web cookie and native token identify the same WorkOS session, either logout revokes the associated bindings with audit/outbox/capture in the session transaction. Replays do not duplicate effects; both paths also repair bindings left active on an already-revoked session. Failure to persist the cascade rolls back session and device changes and stops provider logout. Web logout retains its cookie/Origin checks and response body, and forwards its supplied or generated `X-Trace-Id` to the same audit/capture correlation.
 
 The new device routes leave the closed `/mobile/config` response unchanged from contract 1.1.0. Existing configuration clients receive only the five original fields; they need no new feature flag or schema change. Verify device-route availability from the selected deployment's OpenAPI and successful deployment before running the installation examples.

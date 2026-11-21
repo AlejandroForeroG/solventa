@@ -5,9 +5,11 @@ import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
 import { clearPolicyDocumentDestination, readPolicyDocumentDestination, savePolicyDocumentDestination } from './policies/document-destination';
+import { readCustomerDestination, saveCustomerDestination } from './navigation/customer-destination';
 import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
+import reportsExamples from '../../../packages/contracts/examples/reports.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -126,10 +128,52 @@ describe('claims inbox route in the application', () => {
   });
 });
 
+describe('reports route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the reports route', async () => {
+    window.history.replaceState(null, '', '/reportes'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Reportes' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('shows the reports to a signed-in user, links the other consoles and marks the current one', async () => {
+    window.history.replaceState(null, '', '/reportes');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true }) : json(reportsExamples.page));
+    render(<App />);
+    expect(await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' })).toBeVisible();
+    const nav = within(screen.getByRole('complementary', { name: 'Consola operativa' }));
+    expect(nav.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.getByRole('link', { name: 'Siniestros' })).toHaveAttribute('href', '/siniestros');
+    expect(screen.getAllByRole('link', { name: 'Reportes' }).some(link => link.getAttribute('href') === '/reportes')).toBe(true);
+  });
+});
+
 describe('my policies route in the application', () => {
   const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
   afterEach(clearPolicyDocumentDestination);
+  it.each(['history', 'renewal', 'info'] as const)('keeps the %s action through an explicit sign-in click', async section => {
+    window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=${section}`);
+    serve(401); render(<App />);
+    const links = await screen.findAllByRole('link', { name: 'Ingresa a Solventa' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    act(() => { links[1].dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(readCustomerDestination()).toEqual({ kind: 'policy', policyId: policy.policyId, section });
+    expect(screen.queryByText('Inicia sesión para abrir los documentos de la póliza seleccionada.')).toBeNull();
+  });
+  it('keeps a customer claim destination after failed sign-in and revalidates it for retry', async () => {
+    const claimId = '30000000-0000-4000-8000-000000000001';
+    saveCustomerDestination({ kind: 'claim', claimId });
+    window.history.replaceState(null, '', '/?auth=failed');
+    serve(401); render(<App />);
+    await screen.findByRole('heading', { name: 'Mis siniestros' });
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    const links = screen.getAllByRole('link', { name: 'Ingresa a Solventa' });
+    act(() => { links[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    expect(readCustomerDestination()).toEqual({ kind: 'claim', claimId });
+  });
   it('allows both normal sign-in links after leaving document detail and losing the session', async () => {
     savePolicyDocumentDestination({ policyId: policy.policyId });
     window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=documents`);
@@ -145,8 +189,10 @@ describe('my policies route in the application', () => {
     });
     render(<App />);
     await screen.findByRole('tab', { name: 'Documentos', selected: true });
-    expired = true;
-    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    const back = screen.getByRole('button', { name: /‹ Mis pólizas/ });
+    // The detail also fetches issued policies, so expire the session on navigation.
+    back.addEventListener('click', () => { expired = true; }, { once: true });
+    await userEvent.click(back);
     await screen.findByText('Tu sesión terminó. Inicia sesión para continuar.');
     expect(window.location.hash).toBe('');
     expect(readPolicyDocumentDestination()).toBeNull();

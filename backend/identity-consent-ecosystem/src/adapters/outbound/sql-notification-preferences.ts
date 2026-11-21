@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import type { NotificationPreferenceStore, NotificationPreferencesView } from '../../application/notification-preferences';
-import { notificationMatrix, NotificationPreferenceFailure } from '../../domain/notification-preferences';
+import { defaultNotificationMatrix, notificationMatrix, NotificationPreferenceFailure, type NotificationMatrix } from '../../domain/notification-preferences';
 import type { VerifiedIdentity } from '../../application/authentication';
 
 type Row = { version: string; preferences: unknown };
@@ -14,6 +14,15 @@ export class SqlNotificationPreferences implements NotificationPreferenceStore {
     db.on('error', () => {});
     try { await db.connect(); return await run(db); }
     finally { await db.end().catch(() => {}); }
+  }
+  // For the delivery service: the caller was authenticated by the same access decision that names this client, so the read is by client only.
+  async readForDelivery(clientId: string): Promise<NotificationMatrix> {
+    return this.connection(async db => {
+      const row = (await db.query<Row>(`SELECT version,preferences FROM identity.notification_preferences WHERE client_id=$1`, [clientId])).rows[0];
+      if (!row) return defaultNotificationMatrix;
+      if (!notificationMatrix(row.preferences)) throw new Error('notification_preferences_invalid');
+      return row.preferences;
+    });
   }
   async read(clientId: string, identity: VerifiedIdentity): Promise<NotificationPreferencesView | null> {
     return this.connection(async db => {

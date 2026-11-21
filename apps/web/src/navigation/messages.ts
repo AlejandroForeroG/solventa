@@ -10,6 +10,8 @@ export const navigationEs = {
   'navigation.skip': 'Ir al contenido',
   'navigation.backToAccount': 'Volver a mi cuenta',
   'navigation.expired': 'Tu sesión terminó. Inicia sesión para continuar.',
+  'navigation.openingDestination': 'Abriendo el detalle…',
+  'navigation.destinationSignIn': 'Inicia sesión para abrir el detalle seleccionado.',
   'navigation.progress': 'Paso {current} de {total}',
 };
 
@@ -25,5 +27,7 @@ export const navigationEn: Record<keyof typeof navigationEs, string> = {
   'navigation.skip': 'Skip to content',
   'navigation.backToAccount': 'Back to my account',
   'navigation.expired': 'Your session ended. Sign in to continue.',
+  'navigation.openingDestination': 'Opening the details…',
+  'navigation.destinationSignIn': 'Sign in to open the selected details.',
   'navigation.progress': 'Step {current} of {total}',
 };

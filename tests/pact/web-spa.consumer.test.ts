@@ -1,6 +1,10 @@
 import { getAuditDecision, listAuditDecisions } from '../../apps/web/src/audit/api';
 import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile } from '../../apps/web/src/claims/case-api';
 import { listClaims } from '../../apps/web/src/claims/api';
+import { claimPayment, getOwnClaimPayments } from '../../apps/web/src/claims/disbursement-api';
+import paymentExamples from '../../packages/contracts/examples/claim-payments.json';
+import { generateReport, listReports, sendReport } from '../../apps/web/src/reports/api';
+import reportsExamples from '../../packages/contracts/examples/reports.json';
 import claimsExamples from '../../packages/contracts/examples/claims.json';
 import auditExamples from '../../packages/contracts/examples/underwriting-audit.json';
 import { createHash } from 'node:crypto';
@@ -526,6 +530,27 @@ describe('SPA historical underwriting audit', () => {
 });
 
 describe('SPA claims inbox', () => {
+  test('authorizes the explicit approved amount without inventing confirmation', async () => {
+    const claimId = paymentExamples.confirmedPage.items[0].claimId;
+    pact.given('an explicitly granted claims analyst').uponReceiving('an approved claim disbursement authorization')
+      .withRequest({ method: 'POST', path: '/api/v1/claims/' + claimId + '/disbursement', headers: { 'Content-Type': 'application/json', Origin: 'https://solventa.dev' }, body: { amount: '1000.0000' } })
+      .willRespondWith({ status: 202, headers: jsonResponse, body: MatchersV3.like(paymentExamples.pendingReceipt) });
+    await pact.executeTest(server => withServer(server.url, async () => {
+      const result = await claimPayment(claimId, new AbortController().signal, '1000.0000');
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.payment.status, 'pending');
+    }, 'https://solventa.dev'));
+  });
+  test('reads the authorized payment and the customer receipt through their distinct contracts', async () => {
+    const claimId = paymentExamples.confirmedPage.items[0].claimId;
+    pact.given('an explicitly granted claims analyst').uponReceiving('an assigned analyst disbursement read')
+      .withRequest({ method: 'GET', path: '/api/v1/claims/' + claimId + '/disbursement' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like({ payment: paymentExamples.pendingReceipt.payment, traceId: paymentExamples.pendingReceipt.traceId }) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await claimPayment(claimId, new AbortController().signal)).kind, 'ok')));
+    pact.given('an explicitly granted claims analyst').uponReceiving('a customer disbursement page')
+      .withRequest({ method: 'GET', path: '/api/v1/claims/customer/disbursements' })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: MatchersV3.like(paymentExamples.confirmedPage) });
+    await pact.executeTest(server => withServer(server.url, async () => assert.equal((await getOwnClaimPayments(undefined, new AbortController().signal)).kind, 'ok')));
+  });
   const list = (query = new URLSearchParams()) => listClaims(query, new AbortController().signal);
   test('lists open claims for an explicitly granted analyst', async () => {
     pact.given('an explicitly granted claims analyst').uponReceiving('a claims inbox list')
@@ -574,7 +599,7 @@ describe('SPA claim case', () => {
 
   for (const [name, path, value, read] of [
     ['analyst file', casePath + '/case', claimsExamples.caseFile, () => getCase(claimId, 'case', controller.signal)],
-    ['customer file', casePath + '/customer', { ...claimsExamples.caseFile, access: 'customer' }, () => getCase(claimId, 'customer', controller.signal)],
+    ['customer file', casePath + '/customer', claimsExamples.customerCase, () => getCase(claimId, 'customer', controller.signal)],
     ['owned cases', '/api/v1/claims/customer/cases', claimsExamples.ownedCases, () => getOwnedCases(controller.signal)],
     ['expert directory', '/api/v1/claims/experts', claimsExamples.experts, () => getExperts(controller.signal)]
   ] as const) test('reads the ' + name, async () => {
@@ -619,5 +644,54 @@ describe('SPA claim case', () => {
         headers: { Origin: 'https://solventa.dev', 'X-Content-SHA256': sha256 } }, 'image/png', evidencePath)
       .willRespondWith({ status: 200, headers: jsonResponse, body: { fileId, state: 'verified', traceId } });
     await pact.executeTest(server => withServer(server.url, async () => assert.equal((await sendRequirementFile(claimId, requirementId, fileId, file)).kind, 'ok'), 'https://solventa.dev'));
+  });
+});
+
+describe('SPA reports workspace', () => {
+  // A browser adds the page's own Origin to a same-origin write; the Node client has to say it explicitly.
+  const pageOrigin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
+  async function withPage<T>(serverUrl: string, run: () => Promise<T>): Promise<T> {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => realFetch(typeof input === 'string' && input.startsWith('/') ? serverUrl + input : input, { ...init, headers: { ...init?.headers, origin: pageOrigin } });
+    try { return await run(); } finally { globalThis.fetch = realFetch; }
+  }
+  const listOnly = new AbortController().signal;
+  const reportId = reportsExamples.page.items[0].reportId;
+  test('lists the revisions of an operator with the read grant', async () => {
+    pact.given('an operator with every report grant and a generated report').uponReceiving('a reports list')
+      .withRequest({ method: 'GET', path: '/api/v1/reports', headers: { accept: 'application/json' } })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like({ ...reportsExamples.page, items: [{ ...reportsExamples.page.items[0], delivery: undefined }], next: null }) });
+    await pact.executeTest(server => withPage(server.url, async () => {
+      const result = await listReports(new URLSearchParams(), listOnly);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.items[0].reportId, reportId);
+    }));
+  });
+  test('generates a revision from the month, destination and format only', async () => {
+    pact.given('an operator with every report grant').uponReceiving('a report generation')
+      .withRequest({ method: 'POST', path: '/api/v1/reports', headers: { accept: 'application/json', 'content-type': 'application/json', origin: pageOrigin },
+        body: { period: MatchersV3.regex('^[0-9]{4}-(0[1-9]|1[0-2])$', '2026-10'), destination: 'regulator', format: 'csv' } })
+      .willRespondWith({ status: 201, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like({ ...reportsExamples.generated, report: { ...reportsExamples.generated.report, delivery: undefined } }) });
+    await pact.executeTest(server => withPage(server.url, async () => {
+      const result = await generateReport({ period: '2026-10', destination: 'regulator' });
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.created, true);
+    }));
+  });
+  test('sends a revision and reads the destination acknowledgement', async () => {
+    pact.given('an operator with every report grant and a generated report').uponReceiving('a report delivery')
+      .withRequest({ method: 'POST', path: `/api/v1/reports/${reportId}/delivery`, headers: { accept: 'application/json', 'content-type': 'application/json', origin: pageOrigin }, body: {} })
+      .willRespondWith({ status: 200, headers: { ...jsonResponse, 'Cache-Control': 'no-store' }, body: MatchersV3.like({ reportId, delivery: reportsExamples.page.items[0].delivery, traceId: reportsExamples.page.traceId }) });
+    await pact.executeTest(server => withPage(server.url, async () => {
+      const result = await sendReport(reportId);
+      assert.equal(result.kind, 'ok'); if (result.kind === 'ok') assert.equal(result.value.status, 'acknowledged');
+    }));
+  });
+  for (const [state, status, error, expected] of [
+    ['an operator without report grants', 403, 'forbidden', 'forbidden'],
+    ['the report store is unavailable', 503, 'service_unavailable', 'unavailable']
+  ] as const) test('does not expose reports: ' + expected, async () => {
+    pact.given(state).uponReceiving('a reports list resulting in ' + expected)
+      .withRequest({ method: 'GET', path: '/api/v1/reports', headers: { accept: 'application/json' } })
+      .willRespondWith({ status, headers: jsonResponse, body: { error, traceId } });
+    await pact.executeTest(server => withPage(server.url, async () => assert.equal((await listReports(new URLSearchParams(), listOnly)).kind, expected)));
   });
 });

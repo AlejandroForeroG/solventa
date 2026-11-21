@@ -316,10 +316,32 @@ try {
   assert.equal((await db.query('SELECT count(*)::INT4 AS n FROM policy.indemnities WHERE claim_id=$1', [id])).rows[0].n, 0);
   const verdict = await decisions.decide(id, { action: 'reject', reason: 'Synthetic decision after evaluation.', evidenceIds: [original] }, analystLease(), 'final-decision');
   assert.equal(verdict.status, 'ok');
-  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.state, 'rejected');
-  assert.equal((await review.detail(id, caseOwner, randomUUID()))?.notices.filter(notice => notice.action === 'reject').length, 1);
+  const trackingTrace = randomUUID();
+  const tracking = await review.detail(id, caseOwner, trackingTrace);
+  assert.equal(tracking?.state, 'rejected');
+  assert.deepEqual(tracking.requirements, afterResponse.requirements);
+  assert.deepEqual(tracking.evidence, afterResponse.evidence);
+  assert.equal(tracking.notices.filter(notice => notice.action === 'reject').length, 1);
+  assert.deepEqual(tracking.history.map(event => event.action),
+    ['reject', 'assign_expert', 'respond', 'extend_requirement', 'request_information', 'take', 'submitted']);
+  assert.ok(tracking.history.every(event => event.actorId === null && event.reason === null && event.expert === null));
+  const foreign: Parameters<typeof review.detail>[1] = { kind: 'customer', actor: { clientId: randomUUID(), subjectToken: randomUUID() } };
+  const foreignTrace = randomUUID();
+  assert.equal(await review.detail(id, foreign, foreignTrace), null);
+  const readAudit = async (traceId: string) => (await db!.query(
+    "SELECT actor_reference,outcome FROM policy.audit_events WHERE correlation_id=$1 AND action='claims.case.read' AND resource_id=$2",
+    [traceId, id])).rows;
+  assert.deepEqual(await readAudit(trackingTrace), [{ actor_reference: caseCustomer.clientId, outcome: 'success' }]);
+  assert.deepEqual(await readAudit(foreignTrace), [{ actor_reference: foreign.actor.clientId, outcome: 'not_found' }]);
+  const blockedTrace = randomUUID();
+  await db.query('REVOKE INSERT ON policy.audit_events FROM solventa_local_policy');
+  try {
+    await assert.rejects(review.detail(id, caseOwner, blockedTrace), /permission|privilege/i);
+    await assert.rejects(review.detail(id, foreign, blockedTrace), /permission|privilege/i);
+  } finally { await db.query('GRANT INSERT ON policy.audit_events TO solventa_local_policy'); }
+  assert.deepEqual(await readAudit(blockedTrace), []);
   console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['legacy-parametric-insert', 'open-only', 'priority-order', 'amount-tiebreak', 'filters', 'evidence-summary',
-    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume', 'pending-requirement-kept-with-full-history'] }));
+    'stable-pagination', 'read-audit', 'expired-lease', 'audit-failure-blocks-data', 'runtime-no-delete', 'constraints', 'decision-commit', 'decision-replay', 'decision-key-conflict', 'assignment-denial', 'decision-rollback', 'concurrent-decision-replay', 'unestimated-claim-last', 'fail-closed-on-incomplete-open-claim', 'assigned-case-detail', 'requirement-and-response', 'expert-segregation', 'participant-notices', 'expired-requirement-extension', 'verified-upload-resume', 'pending-requirement-kept-with-full-history', 'owner-timeline-and-foreign-denial'] }));
 } finally {
   if (db) await db.end();
   if (created && migrated) await admin.query(`DROP DATABASE ${name} CASCADE`);

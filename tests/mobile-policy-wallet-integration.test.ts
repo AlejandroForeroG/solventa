@@ -52,7 +52,7 @@ function device() {
       configuration: async () => config, register: async () => principal, inspect, access: async () => principal, logout: async () => { await inspect(); },
       registerDevice: async () => {}, inspectDevice: async () => {}, revokeDevice: async () => {},
     };
-    return new Authentication({ baseUrl, store: tokens, identity, api, browser, biometrics, now: () => now, parseCallback, policyCache: { clear: () => cache.clear() } });
+    return new Authentication({ baseUrl, store: tokens, identity, api, browser, biometrics, now: () => now, parseCallback, policyCache: { clear: () => cache.clear() }, installationId: async () => installation });
   };
   // A new app start reuses the same device storage with fresh in-memory state.
   return { get cache() { return cache; }, start, storage, saved: () => structuredClone(saved), restart: () => { cache = open(); return cache; } };

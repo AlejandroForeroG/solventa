@@ -46,8 +46,13 @@ Partner requests for a customer's offer: [Partner authorizations](modules/identi
 An advisor preparing a sale for a customer who authorized them: [Assisted sale by an advisor](modules/identity-consent-ecosystem/advisor-sale.md).
 
 Operational claims list: [Claims inbox API and workspace](modules/policy-claims-payments/claims-inbox.md).
+Approved manual claim payments: [Claim disbursements and recovery](modules/policy-claims-payments/claim-disbursements.md).
+Customer notices about a policy, delivered to the native device with the customer's choices: [Customer notices](modules/policy-claims-payments/customer-notices.md).
+
 Customer claim report with evidence: [Claim report](modules/policy-claims-payments/claim-report.md) and its [mobile journey](channels/mobile/README.md#claim-report).
 
 Customer policy portal (coverage, documents, payments): [Web policy portal](modules/policy-claims-payments/README.md#web-policy-portal).
 
 Automatic indemnities for flight delay and heavy rainfall: [Parametric payouts](modules/policy-claims-payments/parametric-payouts.md).
+
+Monthly reports to the simulated regulator and reinsurer: [Regulator and reinsurer reports](modules/policy-claims-payments/regulatory-reports.md).
