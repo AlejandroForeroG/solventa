@@ -5,6 +5,7 @@ import { isDocumentKind } from '../../domain/policy-portal';
 import type { DocumentFile, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../../domain/policy-portal';
 import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
+import { mountReports, type ReportsHttpDependencies } from './reports-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 import { mountClaimDrafts, type ClaimDraftHttpDependencies } from './claim-drafts-http';
 
@@ -19,6 +20,7 @@ export type PolicyHttpDependencies = {
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
+  reports?: ReportsHttpDependencies;
   claimReport?: ClaimReportHttpDependencies;
   notices?: NoticesHttpDependencies;
   finance: {
@@ -242,6 +244,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
   if (deps?.notices) mountNotices(app, deps.notices);
   if (deps?.claims) mountClaims(app, deps.claims);
+  if (deps?.reports) mountReports(app, deps.reports);
   if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;
