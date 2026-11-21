@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import { LeaseExpired } from '../../application/ports/lease';
+import { commitBeforeLease } from './lease-commit';
 import type { NewQuote, QuoteStore, SaveResult, StoredQuote } from '../../application/ports/quote-store';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
@@ -52,6 +53,8 @@ export class SqlQuoteStore implements QuoteStore {
       const stored: StoredQuote = { quoteId: code, premiumMonthly: q.premiumMonthly, sumInsured: q.amount, termMonths: q.termMonths, validUntil: q.validUntil, ruleVersion: q.ruleVersion };
       // A single implicit transaction commits the quote, audit and outbox together, avoiding
       // separate BEGIN/INSERT/INSERT/INSERT/COMMIT network round trips.
+      // With a lease the write runs in an explicit transaction that ends with a final database-time check.
+      if (q.deadline !== undefined) await client.query('BEGIN');
       const inserted = await timed('write', () => client.query<{ id: string }>(
         `WITH inserted AS (
            INSERT INTO acquisition.quotes (subject_token, partner_id, idempotency_key, request_hash, normalized_request, rule_version, result, status, correlation_id, quote_code, client_id)
@@ -73,12 +76,14 @@ export class SqlQuoteStore implements QuoteStore {
           owner.actorId, JSON.stringify({ quoteId: code, premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), q.deadline ?? null]));
       if (!inserted.rows[0]) {
         // The lease ended inside the statement: no quote, audit or event was written.
+        if (q.deadline !== undefined) await client.query('ROLLBACK');
         if (q.deadline && !(Date.now() < Date.parse(q.deadline))) throw new LeaseExpired();
         // A concurrent retry won the race: the implicit transaction wrote nothing.
         const winner = await timed('raceLookup', () => this.find(client, q));
         if (winner) { outcome = winner.kind; return winner; }
         throw Object.assign(new Error('quote_race_unresolved'), { code: SERIALIZATION_FAILURE });
       }
+      await commitBeforeLease(client, q.deadline);
       outcome = 'created';
       return { kind: 'created', quote: stored };
     } finally {

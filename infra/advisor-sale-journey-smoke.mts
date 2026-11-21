@@ -17,6 +17,7 @@ import { HmacOfferIntegrity } from '../backend/acquisition-risk/src/adapters/out
 import { MockFlightSchedule, MockRiskSignals } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
 import { platformTimer } from '../backend/acquisition-risk/src/adapters/outbound/degradation-log';
 import { offerRequestIdentity } from '../backend/acquisition-risk/src/domain/offer';
+import { commitBeforeLease } from '../backend/acquisition-risk/src/adapters/outbound/lease-commit';
 import { LeaseExpired } from '../backend/acquisition-risk/src/application/ports/lease';
 import type { AdvisorSaleDecision } from '../backend/acquisition-risk/src/application/ports/advisor-sale-access';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
@@ -237,8 +238,39 @@ try {
     requestIdentity: offerRequestIdentity('vida_hipotecario', liveQuote.quote.quoteId), key: 'lease-offer-direct',
     offer: { ...template, terms: { ...template.terms, offerId: randomUUID() } }, capture: retainedCapture, traceId: randomUUID(), deadline: new Date(Date.now() + 60_000).toISOString() });
   assert.equal(inTime.created, true, 'the same write under a lease that has not ended commits');
+  // A later write that waits for a lock must not carry the commit past the lease: the offer statement starts inside the lease, is blocked by another transaction
+  // holding the same request key, and finishes after it; the final database-time check rolls everything back.
+  const holder = clientFor(url, config.ssl);
+  await holder.connect();
+  try {
+    const anchor = (await db.query('SELECT decision_id, id FROM acquisition.offers ORDER BY id LIMIT 1')).rows[0];
+    await holder.query('BEGIN');
+    await holder.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
+      VALUES ($1,$2,'lease-block','held','accepted',$3,$4)`, [customer.clientId, customer.subjectToken, anchor.decision_id, anchor.id]);
+    const beforeBlocked = await written();
+    const blocked = offerStore.create({ actor: customer, quote: quoteSnapshot.quote, sourceReference: liveQuote.quote.quoteId,
+      requestIdentity: offerRequestIdentity('vida_hipotecario', liveQuote.quote.quoteId), key: 'lease-block',
+      offer: { ...template, terms: { ...template.terms, offerId: randomUUID() } }, capture: retainedCapture, traceId: randomUUID(), deadline: new Date(Date.now() + 700).toISOString() });
+    const released = new Promise<void>(resolve => setTimeout(() => { void holder.query('ROLLBACK').then(() => resolve()); }, 1500));
+    await assert.rejects(blocked, LeaseExpired, 'the statement began inside the lease and finished after it');
+    await released;
+    assert.deepEqual(await written(), beforeBlocked, 'nothing of that offer was committed');
+  } finally { await holder.end().catch(() => {}); }
+  // The shared final check also protects any other write: a transaction that reaches COMMIT after the lease is rolled back.
+  const probe = clientFor(url, config.ssl);
+  await probe.connect();
+  try {
+    await probe.query('BEGIN');
+    await probe.query("INSERT INTO acquisition.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until) VALUES ('lease-probe','lease.probe','probe',gen_random_uuid(),'success',gen_random_uuid(),now()+interval '1 day')");
+    await assert.rejects(commitBeforeLease(probe, pastLease()), LeaseExpired);
+    assert.equal(await scalar("SELECT count(*)::INT4 AS n FROM acquisition.audit_events WHERE actor_reference='lease-probe'"), 0, 'the rolled back write left no row');
+    await probe.query('BEGIN');
+    await probe.query("INSERT INTO acquisition.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until) VALUES ('lease-probe','lease.probe','probe',gen_random_uuid(),'success',gen_random_uuid(),now()+interval '1 day')");
+    await commitBeforeLease(probe, new Date(Date.now() + 60_000).toISOString());
+    assert.equal(await scalar("SELECT count(*)::INT4 AS n FROM acquisition.audit_events WHERE actor_reference='lease-probe'"), 1, 'under a lease that has not ended it commits');
+  } finally { await probe.end().catch(() => {}); }
   console.log(JSON.stringify({ advisorSaleJourneySQL: 'passed', checks: ['authorization', 'offer_for_customer', 'advisor_channel_retained', 'replay_without_duplicates', 'foreign_denied', 'advisor_cannot_accept',
-    'customer_accepts', 'policy_import', 'charge_signature_issuance', 'policy_to_advisor_traceability', 'revocation', 'consent_withdrawn', 'slow_operation_outlives_the_lease', 'database_refuses_a_write_after_the_lease'] }));
+    'customer_accepts', 'policy_import', 'charge_signature_issuance', 'policy_to_advisor_traceability', 'revocation', 'consent_withdrawn', 'slow_operation_outlives_the_lease', 'database_refuses_a_write_after_the_lease', 'blocked_write_cannot_commit_after_the_lease'] }));
 } finally {
   await db?.end().catch(() => {});
   if (created) await admin.query(`DROP DATABASE ${name} CASCADE`).catch(() => {});
