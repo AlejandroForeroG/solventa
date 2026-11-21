@@ -1,6 +1,7 @@
 import { portalApp } from '../../support/partner-portal-fakes';
 import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
+import { reportsWorld } from './reports';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
 import { memoryEvidence, memoryStore as memoryClaimStore, type Stream } from '../../support/claim-report-fakes';
 import { ClaimReport } from '../../../backend/policy-claims-payments/src/application/claim-report';
@@ -306,6 +307,10 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'an explicitly granted claims analyst with no open claims': () => claimsWorld(origin, 'empty'),
   'a customer without claims permission': () => claimsWorld(origin, 'denied'),
   'the claims inbox store is unavailable': () => claimsWorld(origin, 'unavailable'),
+  'an operator with every report grant': () => reportsWorld(origin, 'empty'),
+  'an operator with every report grant and a generated report': () => reportsWorld(origin, 'seeded'),
+  'an operator without report grants': () => reportsWorld(origin, 'denied'),
+  'the report store is unavailable': () => reportsWorld(origin, 'unavailable'),
   ...Object.fromEntries((['empty', 'draft', 'ready', 'not_verified', 'unavailable', 'approved', 'assistance', 'revoked', 'expired'] as VerificationStage[]).map(stage => [
     `a native identity verification in ${stage} state`, async () => {
       const world = await verificationPactWorld(stage);
