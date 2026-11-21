@@ -6,10 +6,11 @@ import type { SecurityDecisions } from './security-decisions';
 import { RISK_SCOPES, type RiskConsent } from './partner-offer-access';
 
 export type AdvisorSaleAccessDecision =
-  | { allowed: true; advisorReference: string; customer: { clientId: string; subjectToken: string }; authorizationExpiresAt: string; consent: RiskConsent }
+  | { allowed: true; advisorReference: string; customer: { clientId: string; subjectToken: string }; authorizationExpiresAt: string; leaseExpiresAt: string; consent: RiskConsent }
   | { allowed: false; error: 'invalid_request' | 'unauthorized' | 'forbidden' | 'access_unavailable' | 'consent_required'; status: 400 | 401 | 403 | 503 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_LEASE_MS = 5500;
 const failure = (error: 'invalid_request' | 'forbidden' | 'access_unavailable' | 'consent_required', status: 400 | 403 | 503) => ({ allowed: false, error, status }) as const;
 
 function singleConsent(decisions: ConsentDecision[]): RiskConsent | null {
@@ -41,6 +42,9 @@ export async function authorizeAdvisorSaleAccess(deps: {
     if (!access.allowed) return access;
     if (access.actor.kind !== 'user' || access.actor.channel !== 'web' || !access.actor.advisorPermission) return failure('access_unavailable', 503);
     const advisorReference = access.actor.advisorPermission.reference;
+    // The permission is a short lease: it is handed on so the sale respects it separately from the offer's own validity.
+    const lease = Date.parse(access.actor.advisorPermission.expiresAt);
+    if (!(lease > Date.now()) || lease > Date.now() + MAX_LEASE_MS) return failure('access_unavailable', 503);
     const denied = async (error: 'forbidden' | 'consent_required') => {
       await deps.security?.deny({ category: 'api_access', channel: 'web', operation: 'advisor-sale:prepare', cause: 'forbidden' }, traceId);
       return failure(error, 403);
@@ -52,6 +56,6 @@ export async function authorizeAdvisorSaleAccess(deps: {
     if (decisions.length !== RISK_SCOPES.length || decisions.some(decision => !decision.allowed && decision.reason === 'unavailable')) return failure('access_unavailable', 503);
     const consent = singleConsent(decisions);
     if (!consent) return await denied('consent_required');
-    return { allowed: true, advisorReference, customer: { clientId: customer.clientId, subjectToken: customer.subjectToken }, authorizationExpiresAt: customer.expiresAt, consent };
+    return { allowed: true, advisorReference, customer: { clientId: customer.clientId, subjectToken: customer.subjectToken }, authorizationExpiresAt: customer.expiresAt, leaseExpiresAt: access.actor.advisorPermission.expiresAt, consent };
   } catch { return failure('access_unavailable', 503); }
 }

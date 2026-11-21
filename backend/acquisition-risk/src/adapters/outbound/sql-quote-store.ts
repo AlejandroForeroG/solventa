@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { LeaseExpired } from '../../application/ports/lease';
 import type { NewQuote, QuoteStore, SaveResult, StoredQuote } from '../../application/ports/quote-store';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.

@@ -47,7 +47,7 @@ const conforms = (check: ReturnType<typeof contractSchema>, body: unknown) => { 
 const quote = { product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
   credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } };
 
-async function world(options: { identityDown?: () => boolean } = {}) {
+async function world(options: { identityDown?: () => boolean; leaseMs?: number; slowQuoteMs?: () => number } = {}) {
   const time = clock('2026-11-09T12:00:00Z');
   const consentStore = new MemoryConsents();
   const consents = new Consents({ store: consentStore, platform: time, integrity: new HmacIntegrity(SEAL_KEY) });
@@ -56,7 +56,7 @@ async function world(options: { identityDown?: () => boolean } = {}) {
   const advisors = {
     find: async (_principal: unknown, identity: { sessionReference: string }) => {
       const reference = references.get(identity.sessionReference);
-      return reference ? { reference, expiresAt: new Date(Date.now() + 4000).toISOString() } : null;
+      return reference ? { reference, expiresAt: new Date(Date.now() + (options.leaseMs ?? 4000)).toISOString() } : null;
     },
     eligible: async () => null
   };
@@ -77,14 +77,16 @@ async function world(options: { identityDown?: () => boolean } = {}) {
   };
   const quoteStore = new MemoryStore();
   const protector = new HmacProtector('synthetic-journey-key-'.padEnd(40, 'x'));
-  const quotes = new CreateQuote({ access: { authorize: async () => { throw Error('advisors never create their own quote here'); } }, store: quoteStore, clock: time, protector });
+  const quotes = new CreateQuote({ access: { authorize: async () => { throw Error('advisors never create their own quote here'); } }, store: quoteStore, clock: { now: () => new Date() }, protector });
   const offerStore = new JourneyOffers(quoteStore);
   const offers = new OfferService({ store: offerStore, integrity: new HmacOfferIntegrity('synthetic-journey-financial-key-'.padEnd(40, 'x')), flights: new MockFlightSchedule(time.now),
     signals: new ReadSignal({ guard: { verify: async () => ({ allowed: false, reason: 'unavailable' }) }, provider: new MockRiskSignals(time.now), snapshots: new NoSnapshots(), clock: time,
       timer: { after: () => new Promise<void>(() => {}) }, trace: { record: () => {} } }),
     clock: time, environment: 'local', enabled: true });
   const acquisitionHttp = createAcquisitionHttp({ quotes, estimates: new EstimateQuote(),
-    advisorOffers: new AdvisorOffers({ access: new IdentityAdvisorSaleAccess(identityRpc, 40), quotes, offers, protector }),
+    advisorOffers: new AdvisorOffers({ access: new IdentityAdvisorSaleAccess(identityRpc, 40), offers, protector, clock: { now: () => new Date() },
+      // A slow step between the permission check and the write: the quote store of a busy system.
+      quotes: { createFor: async (actor, input) => { await new Promise(resolve => setTimeout(resolve, options.slowQuoteMs?.() ?? 0)); return quotes.createFor(actor, input); } } }),
     offers: { offers, authorizeFinancialAccess: input => authorizeFinancialAccess({ authorize, verifyConsents: input => consents.verifyScopes(input) }, input), denyResourceAccess: async () => ({ recorded: true }) } });
   const env = { APP_ENV: 'local', IDENTITY: { fetch: (request: Request) => identityHttp.fetch(request, { APP_ENV: 'local' } as never) },
     ACQUISITION: { fetch: (request: Request) => acquisitionHttp.fetch(request, { APP_ENV: 'local' } as never) }, POLICY: { fetch: async () => assert.fail('unused') }, ASSETS: { fetch: async () => new Response('asset') } } as never;
@@ -224,6 +226,26 @@ test('retrying a sale replays the same offer without a second quote, a changed s
   const luisAgain = await w.prepare('advisor-session', luis, 'sale-1');
   assert.deepEqual([luisAgain.status, luisAgain.body.offerId], [200, otherCustomer.body.offerId], "each customer's sale replays its own offer");
   assert.equal(w.offerStore.offers.size, 3);
+});
+
+test('a slow operation that outlives the advisor permission writes nothing, is never a success and a retry with a fresh permission creates one offer', async () => {
+  let slow = 700;
+  const w = await world({ leaseMs: 300, slowQuoteMs: () => slow });
+  await w.consent('ana-session');
+  const authorizationId = await w.authorizeAdvisor('ana-session', advisorReferences.advisor);
+  const late = await w.prepare('advisor-session', authorizationId, 'sale-1');
+  assert.deepEqual([late.status, late.body.error], [503, 'access_unavailable'], 'the permission ended before the quote could be saved');
+  assert.equal(w.quoteStore.saved.length, 0, 'no quote was written under an expired permission');
+  assert.equal(w.offerStore.offers.size, 0);
+  slow = 0;
+  const retry = await w.prepare('advisor-session', authorizationId, 'sale-1');
+  assert.equal(retry.status, 201, 'the same sale goes through under a fresh permission');
+  assert.equal(w.quoteStore.saved.length, 1);
+  assert.equal(w.offerStore.offers.size, 1);
+  const again = await w.prepare('advisor-session', authorizationId, 'sale-1');
+  assert.deepEqual([again.status, again.body.offerId], [200, retry.body.offerId], 'and still creates one offer');
+  const offer = [...w.offerStore.offers.values()][0].terms;
+  assert.equal(Date.parse(offer.expiresAt) - w.time.now().getTime(), 15 * 60_000, 'the offer keeps its own fifteen minutes, not the 300 ms the permission lasted');
 });
 
 test('the request is validated before it prices: bad body, missing key and unknown fields never create anything', async () => {

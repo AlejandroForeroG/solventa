@@ -2,6 +2,8 @@ export type AdvisorSaleDenial = 'unauthorized' | 'forbidden' | 'consent_required
 
 export type AdvisorSaleDecision =
   | { allowed: true; advisorReference: string; customer: { clientId: string; subjectToken: string }; authorizationExpiresAt: string;
+    // End of the advisor's own short professional permission. Nothing is written or returned for the sale after it, whatever the offer's own validity is.
+    leaseExpiresAt: string;
     consent: { consentId: string; textVersion: number; expiresAt: string } }
   | { allowed: false; error: AdvisorSaleDenial; status: 400 | 401 | 403 | 503 };
 
