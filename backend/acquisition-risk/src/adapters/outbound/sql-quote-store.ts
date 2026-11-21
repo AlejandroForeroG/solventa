@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import { LeaseExpired } from '../../application/ports/lease';
+import { commitBeforeLease } from './lease-commit';
 import type { NewQuote, QuoteStore, SaveResult, StoredQuote } from '../../application/ports/quote-store';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
@@ -44,6 +45,8 @@ export class SqlQuoteStore implements QuoteStore {
         validUntil: q.validUntil, ruleVersion: q.ruleVersion, currency: 'COP', basis: 'minimum_data' };
       // One implicit transaction releases the counter with the business commit, without a network
       // round trip while its row is locked. Existing keys allocate no code and write no effects.
+      // With a lease the statement runs in an explicit transaction that ends with a final database-time check.
+      if (q.deadline !== undefined) await client.query('BEGIN');
       const saved = await timed('save', () => client.query<Row & { created: boolean }>(
         `WITH existing AS (
            SELECT quote_code, request_hash, result FROM acquisition.quotes
@@ -76,6 +79,8 @@ export class SqlQuoteStore implements QuoteStore {
           JSON.stringify(storedFields), q.traceId, owner.clientId,
           owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year, q.deadline ?? null]));
       const row = saved.rows[0];
+      // Nothing was written unless a quote was created: a lease transaction that wrote nothing is simply closed.
+      if (q.deadline !== undefined && !row?.created) await client.query('ROLLBACK');
       if (!row) {
         // Nothing was allocated because the lease ended inside the statement: no quote, audit or event exists.
         if (q.deadline && !(Date.now() < Date.parse(q.deadline))) throw new LeaseExpired();
@@ -85,6 +90,7 @@ export class SqlQuoteStore implements QuoteStore {
         throw Object.assign(new Error('quote_race_unresolved'), { code: SERIALIZATION_FAILURE });
       }
       if (!row.created && row.request_hash !== q.requestFingerprint) { outcome = 'conflict'; return { kind: 'conflict' }; }
+      if (q.deadline !== undefined && row.created) await commitBeforeLease(client, q.deadline);
       outcome = row.created ? 'created' : 'replayed';
       return { kind: row.created ? 'created' : 'replayed', quote: fromRow(row) };
     } finally {
