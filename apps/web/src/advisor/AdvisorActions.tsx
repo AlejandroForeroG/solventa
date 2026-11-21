@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
+import { AdvisorSale } from '../sale/AdvisorSale';
 import '../policies/policies.css';
 
 export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSessionLost():void}) {
@@ -70,5 +71,5 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
   </section>;
 }
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
-  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/></main>;
+  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/><AdvisorSale onSessionLost={onSessionLost}/></main>;
 }

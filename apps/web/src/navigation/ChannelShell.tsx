@@ -40,6 +40,7 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/polizas', label: 'policies.open', icon: 'policy' },
   { href: '/mis-siniestros', label: 'claims.customerCases', icon: 'claims' },
   { href: '/cotizar', label: 'navigation.quote', icon: 'quote' },
+  { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
   { href: '/prestadores', label: 'assistance.title', icon: 'location' },
 ];
 const workspaceLinks: typeof customerLinks = [

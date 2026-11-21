@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Advisor sale authorizations
+  version: 1.0.0
+  description: >
+    The authenticated web customer authorizes one named advisor to prepare a quote and an offer on their
+    behalf, for a bounded time of at most seven days, and can revoke it at any time. The advisor is named
+    by the reference that Solventa shows in the advisor workspace. Only the sealed session cookie decides
+    who the customer is; no customer identifier is taken from the body or the path. An authorization only
+    lets the advisor prepare: it is not consent to use data, it does not accept an offer, pay or sign, and
+    the customer's consent is verified separately on every advisor request (see consents.yaml and
+    advisor-offers.yaml). An advisor cannot authorize themselves, and a partner token or a native session
+    never creates one. Each grant, and each first revocation, commits its audit and outbox event with the
+    change; a failed record leaves no change. Requests with an Authorization header are rejected with 400.
+    The body is limited to 4096 bytes.
+servers:
+  - url: /api/v1
+tags:
+  - name: Advisor sale authorizations
+    description: A customer's own permission for one advisor to prepare one operation.
+paths:
+  /me/advisor-sale-authorizations:
+    get:
+      operationId: listAdvisorSaleAuthorizations
+      summary: List the customer's advisor authorizations
+      tags: [Advisor sale authorizations]
+      description: At most 50, the ones that still work first and then the newest, so every active authorization is listed. Status is computed on every read.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: The customer's own authorizations only.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthorizationList' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createAdvisorSaleAuthorization
+      summary: Authorize an advisor to prepare a sale for the customer
+      tags: [Advisor sale authorizations]
+      description: >
+        Each call creates a distinct authorization, valid for the requested days from the grant
+        (one by default, at most seven). The advisor receives the authorizationId from the customer,
+        outside Solventa. A customer can hold at most 20 active authorizations at once (409 authorization_limit). A write needs the same Origin as the actual request host. An unknown reference,
+        an advisor whose professional permission is revoked or expired, and the customer's own reference
+        are one opaque 404.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorizationRequest' }
+      responses:
+        '201':
+          description: Authorization created.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Authorization' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /me/advisor-sale-authorizations/{authorizationId}/revoke:
+    post:
+      operationId: revokeAdvisorSaleAuthorization
+      summary: Revoke an advisor authorization
+      tags: [Advisor sale authorizations]
+      description: >
+        Effective on the advisor's next request. Revoking twice returns the same record. An expired
+        authorization cannot be revoked (409). A foreign or unknown id is an opaque 404.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Revoked, or already revoked.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Authorization' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Remote sealed HttpOnly session from the web login flow.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local-only sealed HttpOnly session for http://localhost:8787.
+  headers:
+    TraceId:
+      description: Request correlation UUID, normalized to lowercase. Missing or invalid values are replaced.
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: >
+        400 invalid_request: invalid body, an Authorization header or a malformed id.
+        401 unauthorized: missing, expired or revoked session. 403 forbidden: the session lacks the operation or the Origin is not allowed.
+        404 advisor_not_found or not_found. 409 authorization_not_active, or authorization_limit when the customer already has 20 active authorizations. 503 access_unavailable.
+      headers:
+        X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    AuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [advisorReference]
+      properties:
+        advisorReference: { type: string, format: uuid }
+        validityDays: { type: integer, minimum: 1, maximum: 7, default: 1 }
+    Authorization:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, advisorReference, operation, grantedAt, expiresAt, revokedAt, status, traceId]
+      properties:
+        authorizationId: { type: string, format: uuid }
+        advisorReference: { type: string, format: uuid }
+        operation: { type: string, enum: ['advisor-sale:prepare'] }
+        grantedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [active, revoked, expired] }
+        traceId: { type: string, format: uuid }
+    AuthorizationList:
+      type: object
+      additionalProperties: false
+      required: [items, traceId]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/AuthorizationItem' }
+        traceId: { type: string, format: uuid }
+    AuthorizationItem:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, advisorReference, operation, grantedAt, expiresAt, revokedAt, status]
+      properties:
+        authorizationId: { type: string, format: uuid }
+        advisorReference: { type: string, format: uuid }
+        operation: { type: string, enum: ['advisor-sale:prepare'] }
+        grantedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [active, revoked, expired] }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error: { type: string, enum: [invalid_request, unauthorized, forbidden, advisor_not_found, not_found, authorization_not_active, authorization_limit, access_unavailable] }
+        traceId: { type: string, format: uuid }

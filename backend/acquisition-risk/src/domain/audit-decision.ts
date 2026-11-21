@@ -11,12 +11,14 @@ export type AuditDetail = AuditSummary & {
   consent: { status: string; id?: string; version?: number } | null;
   rule: { id: string; version: string } | null;
   model: { status: 'not_used' | 'recorded' | 'unknown'; id?: string; version?: string };
+  channel?: { kind: 'partner'; partnerId: string; authorizationId: string } | { kind: 'advisor'; advisorReference: string; authorizationId: string };
   reconstruction: { status: string; missing: string[]; calculatedPremium?: string; checks?: Record<string, boolean> };
   inputEvidence: InputEvidence[];
   revisions: (Omit<AuditRevision, 'coverage'> & { flightReference?: string })[];
 };
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128;
+const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v);
 const primitive = (v: unknown): v is string | number | boolean => typeof v === 'boolean' || (typeof v === 'number' && Number.isSafeInteger(v)) || text(v);
 const inputKeys = ['amount', 'termMonths', 'ageYears', 'monthlyIncomeCop', 'monthlyObligationsCop', 'paymentScore', 'identityVerified', 'affiliationActive', 'debtRatioPpm', 'adjustmentPpm', 'baseRatePpm', 'baseRuleVersion', 'premium', 'payoutAmount', 'thresholdMinutes', 'flightReference', 'scheduleAvailable'];
 
@@ -42,6 +44,11 @@ export function explainDecision(decision: HistoricalDecision): AuditDetail {
   const rule = record(capture.rule) && text(capture.rule.id) && text(capture.rule.version) ? { id: capture.rule.id, version: capture.rule.version } : null;
   const model: AuditDetail['model'] = record(capture.model) && text(capture.model.id) && text(capture.model.version)
     ? { status: 'recorded', id: capture.model.id, version: capture.model.version } : { status: 'unknown' };
+  let channel: AuditDetail['channel'];
+  if (record(capture.channel) && uuid(capture.channel.authorizationId)) {
+    if (capture.channel.kind === 'advisor' && uuid(capture.channel.advisorReference)) channel = { kind: 'advisor', advisorReference: capture.channel.advisorReference, authorizationId: capture.channel.authorizationId };
+    else if (capture.channel.kind === 'partner' && uuid(capture.channel.partnerId)) channel = { kind: 'partner', partnerId: capture.channel.partnerId, authorizationId: capture.channel.authorizationId };
+  }
   let reconstruction: AuditDetail['reconstruction'] = { status: rule ? 'unsupported_rule' : 'invalid_capture', missing: [] };
   if (rule?.id === 'mortgage-underwriting') {
     const result = reconstructMortgageDecision(recovered.snapshot);
@@ -62,7 +69,7 @@ export function explainDecision(decision: HistoricalDecision): AuditDetail {
     || capture.contractVersion !== decision.contractVersion || capture.correlationId !== decision.correlationId
     || revisions.some(revision => revision.premium !== reconstruction.calculatedPremium || revision.currency !== 'COP'))) reconstruction = { status: 'inconsistent_capture', missing: [] };
   if (recovered.conflict) reconstruction = { status: 'inconsistent_capture', missing: [] };
-  return { ...summary, inputs, sources, consent, rule, model, reconstruction,
+  return { ...summary, inputs, sources, consent, rule, model, ...(channel ? { channel } : {}), reconstruction,
     inputEvidence: recovered.evidence,
     revisions: revisions.map(({ coverage, ...revision }) => ({ ...revision, ...(record(coverage) && coverage.kind === 'flight_delay' && typeof coverage.flightReference === 'string'
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(coverage.flightReference) ? { flightReference: coverage.flightReference } : {}) })) };

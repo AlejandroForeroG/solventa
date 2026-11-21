@@ -528,6 +528,23 @@ components:
               minLength: 1
               maxLength: 128
           nullable: true
+        channel:
+          description: Present only when a partner or an advisor requested the decision for a customer who authorized it. Identifiers only.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind, partnerId, authorizationId]
+              properties:
+                kind: { type: string, enum: [partner] }
+                partnerId: { type: string, format: uuid }
+                authorizationId: { type: string, format: uuid }
+            - type: object
+              additionalProperties: false
+              required: [kind, advisorReference, authorizationId]
+              properties:
+                kind: { type: string, enum: [advisor] }
+                advisorReference: { type: string, format: uuid }
+                authorizationId: { type: string, format: uuid }
         model:
           type: object
           additionalProperties: false

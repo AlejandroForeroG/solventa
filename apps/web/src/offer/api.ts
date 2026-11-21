@@ -133,6 +133,11 @@ const post = (body: unknown, idempotencyKey: string, signal?: AbortSignal): Requ
 export const createOffer = (quoteId: string, idempotencyKey: string, signal?: AbortSignal) =>
   send(`/api/v1/quotes/${encodeURIComponent(quoteId)}/offers`, post({}, idempotencyKey, signal), body => asOffer(body, quoteId), [200, 201]);
 
+// An offer that already exists for this customer, such as one an advisor prepared: read it, never create another.
+export const readOffer = (offerId: string, signal?: AbortSignal) =>
+  send(`/api/v1/offers/${encodeURIComponent(offerId)}`, { signal, cache: 'no-store' },
+    body => isRecord(body) && typeof body.quoteId === 'string' && body.offerId === offerId.toLowerCase() ? asOffer(body, body.quoteId) : null, [200]);
+
 export const acceptOffer = (offerId: string, idempotencyKey: string, signal?: AbortSignal) =>
   send(`/api/v1/offers/${encodeURIComponent(offerId)}/accept`, post({}, idempotencyKey, signal), body => asAcceptance(body, offerId), [200, 202]);
 

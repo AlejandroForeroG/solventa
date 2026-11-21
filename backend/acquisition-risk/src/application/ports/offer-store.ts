@@ -12,8 +12,8 @@ export interface OfferStore {
   acceptanceSnapshot(actor: OfferActor, offerId: string, key: string): Promise<OfferAcceptanceSnapshot>;
   get(actor: OfferActor, offerId: string): Promise<StoredOffer | null>;
   explanation(actor: OfferActor, offerId: string): Promise<OfferCapture | null>;
-  create(input: { actor: OfferActor; quote: OfferQuote | null; sourceReference: string; requestIdentity: string; key: string; offer: StoredOffer; capture: OfferCapture | Record<string, unknown>; traceId: string }): Promise<OfferRequestResult>;
-  decline(input: { actor: OfferActor; quote: OfferQuote; key: string; requestIdentity: string; capture: OfferCapture; traceId: string }): Promise<OfferRequestResult>;
+  create(input: { actor: OfferActor; quote: OfferQuote | null; sourceReference: string; requestIdentity: string; key: string; offer: StoredOffer; capture: OfferCapture | Record<string, unknown>; traceId: string; deadline?: string }): Promise<OfferRequestResult>;
+  decline(input: { actor: OfferActor; quote: OfferQuote; key: string; requestIdentity: string; capture: OfferCapture; traceId: string; deadline?: string }): Promise<OfferRequestResult>;
   accept(input: { actor: OfferActor; key: string; offer: StoredOffer; event: AcceptanceEvent; acceptance: AcceptedOffer; traceId: string; now: string; authorizedUntil: string }): Promise<{ status: 'created' | 'replayed'; acceptance: AcceptedOffer } | { status: 'conflict' | 'expired' }>;
   reject(actor: OfferActor, offerId: string, traceId: string, reason: 'expired' | 'integrity_invalid', operation?: 'offer.read' | 'offer.accept'): Promise<void>;
 }

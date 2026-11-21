@@ -43,6 +43,9 @@ import { SyntheticVerificationCorpus, syntheticKycSource } from './adapters/outb
 import { KycProvider } from './adapters/outbound/kyc-provider';
 import { NotificationPreferences } from './application/notification-preferences';
 import { PartnerAuthorizations } from './application/partner-authorizations';
+import { AdvisorSaleAuthorizations } from './application/advisor-sale-authorizations';
+import { authorizeAdvisorSaleAccess } from './application/advisor-sale-access';
+import { SqlAdvisorSaleAuthorizations } from './adapters/outbound/sql-advisor-sale-authorizations';
 import { authorizePartnerOfferAccess } from './application/partner-offer-access';
 import { SqlPartnerAuthorizations } from './adapters/outbound/sql-partner-authorizations';
 import { SqlNotificationPreferences } from './adapters/outbound/sql-notification-preferences';
@@ -125,6 +128,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
       }),
       notificationPreferences: new NotificationPreferences(new SqlNotificationPreferences(this.env.IDENTITY_DB.connectionString)),
       partnerAuthorizations: new PartnerAuthorizations({ store: new SqlPartnerAuthorizations(this.env.IDENTITY_DB.connectionString), now: () => new Date() }),
+      advisorSaleAuthorizations: new AdvisorSaleAuthorizations({ store: new SqlAdvisorSaleAuthorizations(this.env.IDENTITY_DB.connectionString), now: () => new Date() }),
       verificationAccess: (identity, operation) => new ApiAccess(new SqlPartnerAccess(this.env.IDENTITY_DB.connectionString),
         new SqlIdentitySessions(this.env.IDENTITY_DB.connectionString)).mobileUser(identity, operation),
       mobile: config ? {
@@ -178,6 +182,14 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
       verifyConsents: input => consentsFor(this.env, false).verifyScopes(input), security: securityFor(this.env) }, request);
     if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
     return decision.allowed ? admitPartnerRequest(decision, decision.partnerId, new SqlPartnerQuotas(this.env.IDENTITY_DB.connectionString)) : decision;
+  }
+  async authorizeAdvisorSaleV1(request: unknown) {
+    const decision = await authorizeAdvisorSaleAccess({ authorize: input => authorize(this.env, input), security: securityFor(this.env),
+      advisors: new SqlPolicyAdvisorGrants(this.env.IDENTITY_DB.connectionString),
+      authorizations: new SqlAdvisorSaleAuthorizations(this.env.IDENTITY_DB.connectionString),
+      verifyConsents: input => consentsFor(this.env, false).verifyScopes(input) }, request);
+    if (!decision.allowed && (decision.status === 401 || decision.status === 403)) this.ctx.waitUntil(dispatchSecurityAlerts(this.env));
+    return decision;
   }
   async denyResourceAccessV1(request: unknown) {
     const result = await denyResourceAccess(securityFor(this.env), request);
