@@ -34,6 +34,10 @@ import type { VerificationStage } from './identity-verification';
 import { advisorPactWorld } from './advisor';
 import { lifecyclePactWorld } from './policy-lifecycle';
 import { draftPactWorld } from './claim-drafts';
+import { Notices } from '../../../backend/policy-claims-payments/src/application/notices';
+import { noticeConsumers } from '../../../backend/policy-claims-payments/src/domain/notice';
+import { memoryNoticeStore } from '../../support/notice-fakes';
+import { contractNotice } from './notices-contract';
 
 const origin = 'https://solventa-web-dev.ja-forerog1.workers.dev';
 const sessionCookieName = '__Host-solventa-session';
@@ -267,6 +271,26 @@ async function nativeClaimReportWorld(stage: 'empty' | 'draft' | 'received'): Pr
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+// The native customer's stored notices. Identity's decision, with the push choices of the same request, is simulated by the bearer token.
+async function nativeNoticesWorld(stage: 'stored' | 'offered'): Promise<Partial<World>> {
+  const destination = '00000000-0000-4000-8000-000000000003';
+  const memory = memoryNoticeStore([{ owner: financialActor.clientId, notice: contractNotice }], { current: new Date() });
+  if (stage === 'offered') await memory.store.record(contractNotice.eventId, 'policy.indemnity.notice', noticeConsumers(destination).dispatch, 'offered', '30000000-0000-4000-8000-000000000001');
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    notices: {
+      authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation], noticeDestination:destination },
+          ...(input.operation === 'notices:read-device' ? { pushChoices: { policy: true, payments: true, claims: false, commercial: false } } : {}) }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+      notices: new Notices(memory.store),
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 type StateParameters = { idempotencyKey?: string } | undefined;
 const states: Record<string, (parameters: StateParameters) => Promise<Partial<World>> | Partial<World>> = {
   ...Object.fromEntries((['ready','empty','denied','unavailable'] as const).map(mode => [`partner portal ${mode}`, () => ({ acquisition: binding(portalApp(mode), { APP_ENV: 'dev' }) })])),
@@ -278,6 +302,7 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a customer without underwriting audit permission': () => auditWorld(origin, 'denied'),
   'the underwriting audit store is unavailable': () => auditWorld(origin, 'unavailable'),
   'an explicitly granted claims analyst': () => claimsWorld(origin, 'granted'),
+  'native claim disbursement receipts': () => claimsWorld(origin, 'granted'),
   'an explicitly granted claims analyst with no open claims': () => claimsWorld(origin, 'empty'),
   'a customer without claims permission': () => claimsWorld(origin, 'denied'),
   'the claims inbox store is unavailable': () => claimsWorld(origin, 'unavailable'),
@@ -295,6 +320,8 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session that may report a claim': () => nativeClaimReportWorld('empty'),
   'a native session with a draft claim report': () => nativeClaimReportWorld('draft'),
   'a native session with a claim report whose evidence was received': () => nativeClaimReportWorld('received'),
+  'a native session with a stored notice': () => nativeNoticesWorld('stored'),
+  'a native session with a notice offered to its device': () => nativeNoticesWorld('offered'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),

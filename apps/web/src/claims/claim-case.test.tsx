@@ -4,16 +4,36 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { I18n } from '../i18n/I18n';
 import { ClaimCase } from './ClaimCase';
 import examples from '../../../../packages/contracts/examples/claims.json';
+import paymentExamples from '../../../../packages/contracts/examples/claim-payments.json';
 import { webcrypto } from 'node:crypto';
 
 const claimId = examples.ownedCases.items[0].claimId;
 const traceId = examples.caseFile.traceId;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-const showCase = (audience: 'case' | 'customer') => render(<I18n initial="es-CO">
-  <ClaimCase claimId={claimId} audience={audience} onSessionLost={vi.fn()} />
+const showCase = (audience: 'case' | 'customer', caseId = claimId) => render(<I18n initial="es-CO">
+  <ClaimCase claimId={caseId} audience={audience} onSessionLost={vi.fn()} />
 </I18n>);
 
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([claimId, claimId.toUpperCase()])('opens the exact receipt and timeline for claim %s', async caseId => {
+  const user = userEvent.setup();
+  const receipt = { ...paymentExamples.confirmedPage.items[0], claimId, claimNumber: examples.customerCase.claimNumber };
+  const fetcher = vi.fn(async (url: string) => url.includes('/disbursements')
+    ? json({ ...paymentExamples.confirmedPage, items: [receipt] })
+    : json({ ...examples.customerCase, state: 'paid', history: [
+      { ...examples.customerCase.history[0], action: 'disbursement_confirmed', state: 'paid' }, examples.customerCase.history[1],
+    ] }));
+  vi.stubGlobal('fetch', fetcher);
+  showCase('customer', caseId);
+  expect(await screen.findByText('Pago simulado')).toBeVisible();
+  expect(screen.getByText(new RegExp(receipt.payment.reference))).toBeVisible();
+  expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/v1/claims/customer/disbursements?claimId=' + claimId);
+  await user.click(screen.getByRole('button', { name: 'Historial' }));
+  expect(screen.getByText('Desembolso simulado confirmado.')).toBeVisible();
+  expect(screen.getByText('Radicación')).toBeVisible();
+  expect(screen.queryByText('Pago simulado')).toBeNull();
+});
 
 it('reconciles a replacement selection after an upload fails', async () => {
   vi.stubGlobal('crypto', webcrypto);

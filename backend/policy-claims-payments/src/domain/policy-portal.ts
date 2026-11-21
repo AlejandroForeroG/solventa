@@ -10,7 +10,7 @@ export type PolicyPaymentStatus = 'paid' | 'pending' | 'failed';
 export type PolicyPaymentEntry = { date: string; amount: string; currency: 'COP'; status: PolicyPaymentStatus; reference: string | null };
 export type PolicyDetail = { lifecycle?: import('./policy-lifecycle').LifecycleChange; policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: Coverage; exclusions: Exclusion[]; conditionsVersion: string;
-  documents: PolicyDocumentEntry[]; payments: PolicyPaymentEntry[] };
+  documents: PolicyDocumentEntry[]; payments: PolicyPaymentEntry[]; parametricPayment?: PolicyPaymentEntry };
 export type DocumentFile = { fileName: string; title: string; lines: string[] };
 type Failure = Extract<FinancialResult, { status: 'denied' | 'unavailable' }>;
 export type PolicyDetailResult = { status: 'ok'; detail: PolicyDetail } | Failure;

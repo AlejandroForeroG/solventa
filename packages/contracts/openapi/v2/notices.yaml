@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Device customer notices
+  version: 2.0.0
+  description: >-
+    Native notices with independent delivery state per event and authenticated installation.
+    Identity derives the destination from the active installation binding of the verified provider session;
+    no request identifier, query parameter or header can select a destination. A missing or revoked binding
+    is forbidden; unavailable verification blocks delivery. Customer preferences and the operating-system
+    permission still apply. The transport is simulated and presentation is confirmed by the device, never
+    inferred from dispatch. A denied permission on one installation does not consume another installation's
+    notice. Legacy v1 customer-wide records remain historical and are not destination-specific receipts.
+    A retained notice without a v2 receipt may therefore be offered once to each installation during rollout.
+servers:
+  - url: /api/v2
+tags:
+  - name: Notices
+    description: Read notices and record presentation for the authenticated installation.
+security:
+  - MobileBearer: []
+paths:
+  /notices/{eventId}/destination:
+    get:
+      operationId: readOwnDeviceNoticeDestination
+      summary: Resolve the authenticated action for an offered notice
+      description: >-
+        Rechecks the native session and its active installation binding using notices:read-device.
+        Reads the stored event for this customer and installation. Missing, foreign, suppressed and
+        never-offered events share an opaque 404. Returns only a typed resource locator, never a URL
+        or credentials. Payment notices select policy history; expiry selects renewal; lifecycle
+        selects policy information; claim notices select the customer's claim case. The destination
+        web route independently verifies its session and resource ownership. Legacy lists are unchanged.
+      tags: [Notices]
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Authenticated resource locator for this notice.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeDestinationResponse' }
+              example:
+                destination: { kind: policy, policyId: '60000000-0000-4000-8000-000000000001', section: history }
+                traceId: '30000000-0000-4000-8000-000000000001'
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /notices:
+    get:
+      operationId: listOwnDeviceNotices
+      summary: Read notices for the authenticated installation
+      description: >-
+        At most 20 notices from the last 30 days, newest first. Current push choices are verified before
+        offering. A disabled category suppresses this installation's delivery; enabling it later does not
+        release a suppressed notice. An offered but unpresented notice is withheld while its choice is off.
+        Presented and denied-permission states describe this installation only. Destination identifiers
+        are not returned. v1 remains available with its original customer-wide state and no retirement date.
+      tags: [Notices]
+      responses:
+        '200':
+          description: Notices and recorded states for this installation.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeList' }
+              examples:
+                offered: { $ref: '../../examples/notices.json#/list' }
+                independentDevice: { $ref: '../../examples/notices.json#/otherDeviceOffered' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /notices/{eventId}/receipt:
+    post:
+      operationId: confirmOwnDeviceNoticeReceipt
+      summary: Record presentation for the authenticated installation
+      description: >-
+        One outcome per event and installation. Repeating the same outcome replays the stored result;
+        changing it conflicts only with this installation's receipt. Another installation's permission
+        denial or presentation never answers this command. A notice must first be offered to this
+        installation. Missing and foreign customer notices remain the same opaque 404. The body contains
+        exactly outcome; supplying a destination is invalid. Existing v1 receipts are preserved separately.
+      tags: [Notices]
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoticeReceiptBody' }
+            examples:
+              presented: { $ref: '../../examples/notices.json#/receipt' }
+      responses:
+        '200':
+          description: This installation's outcome is stored or replayed.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            X-Trace-Id: { schema: { type: string, format: uuid } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoticeReceipt' }
+              examples:
+                denied: { $ref: '../../examples/notices.json#/devicePermissionDenied' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    MobileBearer:
+      $ref: '../v1/notices.yaml#/components/securitySchemes/MobileBearer'
+  responses:
+    Error:
+      $ref: '../v1/notices.yaml#/components/responses/Error'
+  schemas:
+    NoticeDestinationResponse:
+      type: object
+      additionalProperties: false
+      required: [destination, traceId]
+      properties:
+        traceId: { type: string, format: uuid }
+        destination:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind, policyId, section]
+              properties:
+                kind: { type: string, enum: [policy] }
+                policyId: { type: string, format: uuid }
+                section: { type: string, enum: [history, renewal, info] }
+            - type: object
+              additionalProperties: false
+              required: [kind, claimId]
+              properties:
+                kind: { type: string, enum: [claim] }
+                claimId: { type: string, format: uuid }
+    NoticeList:
+      $ref: '../v1/notices.yaml#/components/schemas/NoticeList'
+    NoticeReceiptBody:
+      $ref: '../v1/notices.yaml#/components/schemas/NoticeReceiptBody'
+    NoticeReceipt:
+      $ref: '../v1/notices.yaml#/components/schemas/NoticeReceipt'

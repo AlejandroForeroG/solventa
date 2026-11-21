@@ -2,8 +2,13 @@ import type { Context, Hono } from 'hono';
 import type { ClaimReport } from '../../application/claim-report';
 import type { ReportOwner } from '../../application/ports/claim-report';
 import { isUuid } from '../../domain/claim-report';
+import type { ClaimDisbursements } from '../../application/claim-disbursements';
+import { claimPaymentQuery } from './claim-payment-query';
+import type { ClaimReview } from '../../application/claim-review';
 
 export type ClaimReportHttpDependencies = {
+  disbursements?: Pick<ClaimDisbursements, 'owned'>;
+  review?: Pick<ClaimReview<ReadableStream<Uint8Array>>, 'owned' | 'detail'>;
   report: Pick<ClaimReport<ReadableStream<Uint8Array>>, 'create' | 'receive' | 'submit'>;
   authorize(input: { kind: 'mobile'; operation: 'claims:report'; token: string }): Promise<unknown>;
 };
@@ -43,6 +48,27 @@ export function createClaimReportRoute(deps: Pick<ClaimReportHttpDependencies, '
 
 export function mountClaimReport(app: Hono<{ Bindings: PolicyEnv }>, deps: ClaimReportHttpDependencies) {
   const route = createClaimReportRoute(deps);
+
+  app.all('/api/v1/claims/native/disbursements', route('GET', async (c, owner, traceId, reply) => {
+    if (!deps.disbursements) return reply({ error: 'service_unavailable' }, 503);
+    const query = claimPaymentQuery(c.req.url);
+    return query ? reply(await deps.disbursements.owned(owner, traceId, query.cursor, query.claimId), 200) : reply({ error: 'invalid_request' }, 400);
+  }));
+
+  app.all('/api/v1/claims/native/cases', route('GET', async (c, owner, traceId, reply) => {
+    if (!deps.review) return reply({ error: 'service_unavailable' }, 503);
+    if (new URL(c.req.url).search) return reply({ error: 'invalid_request' }, 400);
+    return reply({ items: await deps.review.owned(owner, traceId) }, 200);
+  }));
+
+  app.all('/api/v1/claims/native/cases/:claimId', route('GET', async (c, owner, traceId, reply) => {
+    if (!deps.review) return reply({ error: 'service_unavailable' }, 503);
+    if (new URL(c.req.url).search) return reply({ error: 'invalid_request' }, 400);
+    const id = c.req.param('claimId');
+    if (!isUuid(id)) return reply({ error: 'not_found' }, 404);
+    const detail = await deps.review.detail(id.toLowerCase(), { kind: 'customer', actor: owner }, traceId);
+    return detail ? reply(detail, 200) : reply({ error: 'not_found' }, 404);
+  }));
 
   app.post('/api/v1/claims', route('POST', async (c, owner, traceId, reply) => {
     const key = c.req.header('idempotency-key') ?? '';

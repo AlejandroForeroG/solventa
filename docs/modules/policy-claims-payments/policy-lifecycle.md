@@ -8,11 +8,13 @@ Cancellation uses `replacementPolicyId: null`. All three operations preserve the
 
 ## Persistence and retries
 
+Manual approved-claim disbursements also check this sealed contractual end when accepting a new payment intent. Occurrences at or after the change return conflict, while earlier covered occurrences and stable replay/recovery of an accepted payment remain available. See [approved claim disbursements](claim-disbursements.md).
+
 Apply `0011_policy_lifecycle.sql` and its `SELECT, INSERT` runtime grants before publishing dependent code. `policy_lifecycle_changes` is append-only and has one change per source, one use per replacement, and an actor-scoped command identity with a request fingerprint. Commands lock owned source and replacement policies in deterministic order. An identical retry returns the committed state; a changed payload, an ended source or a reused replacement returns conflict. Missing resources and foreign resources remain opaque.
 
 The lifecycle record, decision capture, audit and customer notice commit in the same owner transaction. A failed audit or outbox write rolls back the change. The capture retains the actual document fingerprints, offer and payment evidence, reason code, timestamp and `academic-policy-lifecycle-1` rule version. The audit retains its actor reference and correlation ID under the existing retention policy. No raw caller idempotency key or free-text personal reason is persisted.
 
-The `policy.lifecycle.notice` v1 payload follows [policy-lifecycle-notice.v1.json](../../../packages/contracts/schemas/policy-lifecycle-notice.v1.json): owner pseudonym, source and replacement references, action, change ID/time and `refund: not_automated`. Its event ID is the change ID; an eventual consumer must deduplicate that identity before acknowledging. The separate `policy.policy.lifecycle.changed` event retains the full decision capture. Persistence prepares notification delivery; there is no delivery claim or new notification consumer in this feature.
+The `policy.lifecycle.notice` v1 payload follows [policy-lifecycle-notice.v1.json](../../../packages/contracts/schemas/policy-lifecycle-notice.v1.json): owner pseudonym, source and replacement references, action, change ID/time and `refund: not_automated`. Its event ID is the change ID; an eventual consumer must deduplicate that identity before acknowledging. The separate `policy.policy.lifecycle.changed` event retains the full decision capture. Persistence prepares notification delivery. This feature adds no consumer; the stored notice reaches the native customer through the simulated, choice-aware delivery of [customer notices](customer-notices.md), under the policy choice.
 
 ## Channel projections and verification
 
