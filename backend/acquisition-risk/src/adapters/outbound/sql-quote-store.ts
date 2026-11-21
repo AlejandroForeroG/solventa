@@ -50,7 +50,7 @@ export class SqlQuoteStore implements QuoteStore {
            WHERE ${owner.column} = $12 AND idempotency_key = $3
          ), allocated AS (
            INSERT INTO acquisition.quote_counters (year, last_value)
-           SELECT $13::INT8, 1 WHERE NOT EXISTS (SELECT 1 FROM existing)
+           SELECT $13::INT8, 1 WHERE NOT EXISTS (SELECT 1 FROM existing) AND ($14::TIMESTAMPTZ IS NULL OR clock_timestamp() < $14::TIMESTAMPTZ)
            ON CONFLICT (year) DO UPDATE SET last_value = acquisition.quote_counters.last_value + 1
            RETURNING last_value
          ), numbered AS (
@@ -74,9 +74,11 @@ export class SqlQuoteStore implements QuoteStore {
         [q.subjectToken, owner.partnerId, q.idempotencyKey, q.requestFingerprint,
           JSON.stringify(q.capture), q.ruleVersion,
           JSON.stringify(storedFields), q.traceId, owner.clientId,
-          owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year]));
+          owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year, q.deadline ?? null]));
       const row = saved.rows[0];
       if (!row) {
+        // Nothing was allocated because the lease ended inside the statement: no quote, audit or event exists.
+        if (q.deadline && !(Date.now() < Date.parse(q.deadline))) throw new LeaseExpired();
         // A concurrent retry won the unique-key race; read it in a new snapshot.
         const winner = await timed('raceLookup', () => this.find(client, q));
         if (winner) { outcome = winner.kind; return winner; }
