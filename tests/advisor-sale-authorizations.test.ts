@@ -136,23 +136,24 @@ const grantedConsent = (overrides: Partial<{ consentId: string; textVersion: num
   ({ allowed: true, consent: { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-01T00:00:00.000Z', ...overrides } }) as ConsentDecision;
 const allGranted = (): ConsentDecision[] => RISK_SCOPES.map(() => grantedConsent());
 
-async function accessFixture(options: { advisor?: typeof advisor; actor?: unknown; consents?: ConsentDecision[] | (() => Promise<ConsentDecision[]>); denyFails?: boolean; authorizedFor?: typeof customer } = {}) {
+async function accessFixture(options: { advisor?: typeof advisor; actor?: unknown; consents?: ConsentDecision[] | (() => Promise<ConsentDecision[]>); denyFails?: boolean; authorizedFor?: typeof customer; leaseMs?: number } = {}) {
   const { service, store, advance } = fixture();
   const granted = await service.grant({ principal: options.authorizedFor ?? customer, body: { advisorReference: advisor.reference }, traceId: randomUUID() });
   if (granted.status !== 'created') throw Error('unreachable');
   const actingAdvisor = options.advisor ?? advisor;
+  const lease = options.leaseMs === undefined ? new Date(Date.now() + 4000).toISOString() : new Date(Date.now() + options.leaseMs).toISOString();
   const denials: unknown[] = []; const authorizations: unknown[] = []; let consentReads = 0;
   const run = (input: unknown) => authorizeAdvisorSaleAccess({
     authorize: async request => { authorizations.push(request); return options.actor === null ? { allowed: false, error: 'unauthorized', status: 401 }
       : { allowed: true, actor: options.actor ?? { kind: 'user', channel: 'web', principal: { clientId: actingAdvisor.clientId, subjectToken: actingAdvisor.subjectToken }, operations: ['policies:manage-delegated'],
-        advisorPermission: { reference: actingAdvisor.reference, expiresAt: new Date(Date.now() + 4000).toISOString() } } } as never; },
+        advisorPermission: { reference: actingAdvisor.reference, expiresAt: lease } } } as never; },
     advisors: { eligible: async () => null },
     authorizations: store,
     verifyConsents: async request => { consentReads++; assert.equal(request.subjectToken, (options.authorizedFor ?? customer).subjectToken); assert.deepEqual([...request.scopes], [...RISK_SCOPES]); assert.equal(request.purposeCode, 'risk_profiling');
       return typeof options.consents === 'function' ? options.consents() : options.consents ?? allGranted(); },
     security: { deny: async (denial: unknown) => { if (options.denyFails) throw Error('audit down'); denials.push(denial); } } as never
   }, input);
-  return { run, id: granted.authorization.authorizationId, store, advance, denials, authorizations, reads: () => consentReads };
+  return { run, id: granted.authorization.authorizationId, store, advance, denials, authorizations, lease, reads: () => consentReads };
 }
 
 const webInput = (authorizationId: string) => ({ kind: 'web', cookie: 'session', authorizationId, traceId: randomUUID() });
@@ -160,7 +161,7 @@ const webInput = (authorizationId: string) => ({ kind: 'web', cookie: 'session',
 test('an authorized advisor receives the customer behind the authorization and the fresh consent, never the other way round', async () => {
   const f = await accessFixture();
   const decision = await f.run(webInput(f.id));
-  assert.deepEqual(decision, { allowed: true, advisorReference: advisor.reference, customer, authorizationExpiresAt: '2026-11-10T12:00:00.000Z',
+  assert.deepEqual(decision, { allowed: true, advisorReference: advisor.reference, customer, authorizationExpiresAt: '2026-11-10T12:00:00.000Z', leaseExpiresAt: f.lease,
     consent: { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-01T00:00:00.000Z' } });
   assert.equal((f.authorizations[0] as { operation: string }).operation, 'policies:manage-delegated');
   assert.equal('authorizationId' in (f.authorizations[0] as object), false, 'the authorization is not forwarded to session verification');
@@ -218,4 +219,16 @@ test('a technical failure verifying consent, or recording a denial, blocks prote
   }
   const f = await accessFixture({ denyFails: true });
   assert.deepEqual(await f.run(webInput(randomUUID())), { allowed: false, error: 'access_unavailable', status: 503 });
+});
+
+test('the decision hands over the advisor lease as its own deadline, and a lease that is over or longer than Identity ever grants blocks the sale', async () => {
+  const ok = await accessFixture();
+  const decision = await ok.run(webInput(ok.id));
+  assert.equal(decision.allowed && decision.leaseExpiresAt, ok.lease);
+  assert.ok(decision.allowed && Date.parse(decision.leaseExpiresAt) !== Date.parse(decision.authorizationExpiresAt), 'the lease is not the authorization expiry');
+  for (const leaseMs of [-1, 0, 60_000]) {
+    const f = await accessFixture({ leaseMs });
+    assert.deepEqual(await f.run(webInput(f.id)), { allowed: false, error: 'access_unavailable', status: 503 }, String(leaseMs));
+    assert.equal(f.reads(), 0, 'no consent is read under a lease that is not usable');
+  }
 });

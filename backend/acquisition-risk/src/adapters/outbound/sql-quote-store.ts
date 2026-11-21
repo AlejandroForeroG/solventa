@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { LeaseExpired } from '../../application/ports/lease';
 import type { NewQuote, QuoteStore, SaveResult, StoredQuote } from '../../application/ports/quote-store';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
@@ -54,7 +55,7 @@ export class SqlQuoteStore implements QuoteStore {
       const inserted = await timed('write', () => client.query<{ id: string }>(
         `WITH inserted AS (
            INSERT INTO acquisition.quotes (subject_token, partner_id, idempotency_key, request_hash, normalized_request, rule_version, result, status, correlation_id, quote_code, client_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10)
+           SELECT $1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10 WHERE ($13::TIMESTAMPTZ IS NULL OR clock_timestamp() < $13::TIMESTAMPTZ)
            ON CONFLICT DO NOTHING RETURNING id
          ), audit AS (
            INSERT INTO acquisition.audit_events (actor_reference, action, resource_type, resource_id, outcome, correlation_id, retention_until)
@@ -69,8 +70,10 @@ export class SqlQuoteStore implements QuoteStore {
         [q.subjectToken, owner.partnerId, q.idempotencyKey, q.requestFingerprint,
           JSON.stringify(q.capture), q.ruleVersion,
           JSON.stringify({ ...stored, currency: 'COP', basis: 'minimum_data' }), q.traceId, code, owner.clientId,
-          owner.actorId, JSON.stringify({ quoteId: code, premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion })]));
+          owner.actorId, JSON.stringify({ quoteId: code, premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), q.deadline ?? null]));
       if (!inserted.rows[0]) {
+        // The lease ended inside the statement: no quote, audit or event was written.
+        if (q.deadline && !(Date.now() < Date.parse(q.deadline))) throw new LeaseExpired();
         // A concurrent retry won the race: the implicit transaction wrote nothing.
         const winner = await timed('raceLookup', () => this.find(client, q));
         if (winner) { outcome = winner.kind; return winner; }

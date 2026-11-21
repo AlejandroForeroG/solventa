@@ -5,6 +5,7 @@ import { createHttp } from '../backend/acquisition-risk/src/adapters/inbound/htt
 import { HmacProtector } from '../backend/acquisition-risk/src/adapters/outbound/hmac-protector';
 import { IdentityAdvisorSaleAccess } from '../backend/acquisition-risk/src/adapters/outbound/identity-advisor-sale-access';
 import { AdvisorOffers } from '../backend/acquisition-risk/src/application/advisor-offers';
+import { LeaseExpired } from '../backend/acquisition-risk/src/application/ports/lease';
 import type { AdvisorSaleAccess, AdvisorSaleDecision } from '../backend/acquisition-risk/src/application/ports/advisor-sale-access';
 import { CONFIDENCE } from '../backend/acquisition-risk/src/domain/signal';
 import { underwrite, offerTerms, type OfferQuote } from '../backend/acquisition-risk/src/domain/offer';
@@ -17,8 +18,11 @@ const advisorReference = randomUUID();
 const customer = { clientId: randomUUID(), subjectToken: randomUUID() };
 const authorizationId = randomUUID();
 const consent = { consentId: 'CNS-2026-00001', textVersion: 2, expiresAt: '2027-01-01T00:00:00.000Z' };
+// The use case runs on a controllable clock; the advisor's short lease ends four seconds after the decision.
+const T0 = Date.parse('2026-11-09T12:00:00.000Z');
+const leaseEnd = new Date(T0 + 4000).toISOString();
 const allowed = (overrides: Partial<Extract<AdvisorSaleDecision, { allowed: true }>> = {}): AdvisorSaleDecision =>
-  ({ allowed: true, advisorReference, customer, consent, authorizationExpiresAt: '2026-11-10T12:00:00.000Z', ...overrides });
+  ({ allowed: true, advisorReference, customer, consent, authorizationExpiresAt: '2026-11-10T12:00:00.000Z', leaseExpiresAt: leaseEnd, ...overrides });
 const quoteBody = { product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
   credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } };
 const quote = { quoteId: 'COT-2026-00001', premiumMonthly: 1, sumInsured: 200000000, termMonths: 120, validUntil: '2026-12-31T00:00:00.000Z', ruleVersion: 'provisional-1' };
@@ -38,16 +42,18 @@ function offerFixture() {
 }
 
 const session = { cookie: 'sealed-session', origin: 'http://localhost', requestOrigin: 'http://localhost', method: 'POST' };
-function fixture(options: { access?: AdvisorSaleAccess; offer?: unknown; quote?: unknown } = {}) {
+function fixture(options: { access?: AdvisorSaleAccess; offer?: unknown; quote?: unknown; onQuote?: () => void; onOffer?: () => void; onExplanation?: () => void } = {}) {
   const calls = { access: [] as unknown[], quotes: [] as unknown[], offers: [] as unknown[] };
+  const time = { now: T0, advance(ms: number) { this.now += ms; } };
   const { terms, capture } = offerFixture();
   const service = new AdvisorOffers({
     access: options.access ?? { authorize: async input => { calls.access.push(input); return allowed(); } },
-    quotes: { createFor: async (actor, input) => { calls.quotes.push({ actor, input }); return (options.quote ?? { status: 'created', quote: { ...quote, currency: 'COP', basis: 'minimum_data', traceId: input.traceId } }) as never; } },
-    offers: { create: async input => { calls.offers.push(input); return (options.offer ?? { status: 'created', offer: terms }) as never; }, explanation: async () => capture },
-    protector: new HmacProtector('synthetic-advisor-key-'.padEnd(40, 'x'))
+    quotes: { createFor: async (actor, input) => { calls.quotes.push({ actor, input }); options.onQuote?.(); return (options.quote ?? { status: 'created', quote: { ...quote, currency: 'COP', basis: 'minimum_data', traceId: input.traceId } }) as never; } },
+    offers: { create: async input => { calls.offers.push(input); options.onOffer?.(); return (options.offer ?? { status: 'created', offer: terms }) as never; }, explanation: async () => { options.onExplanation?.(); return capture; } },
+    protector: new HmacProtector('synthetic-advisor-key-'.padEnd(40, 'x')),
+    clock: { now: () => new Date(time.now) }
   });
-  return { service, calls, terms };
+  return { service, calls, terms, time };
 }
 const request = (overrides: Record<string, unknown> = {}) => ({ session, body: { authorizationId, ...quoteBody }, idempotencyKey: 'sale-1', traceId: randomUUID(), ...overrides });
 
@@ -109,6 +115,49 @@ test('every Identity denial blocks the offer; an invalid-request answer is an in
     assert.deepEqual(result.status === 'denied' ? [result.httpStatus, result.error] : null, expected);
     assert.deepEqual([f.calls.quotes.length, f.calls.offers.length], [0, 0]);
   }
+});
+
+test('the advisor lease is a deadline of its own: handed to the quote and the offer, never used as the offer validity', async () => {
+  const f = fixture();
+  const result = await f.service.create(request());
+  assert.equal(result.status, 'created');
+  const [{ input }] = f.calls.quotes as { input: { deadline?: string } }[];
+  const [offer] = f.calls.offers as { deadline?: string; authorization: { expiresAt: string } }[];
+  assert.equal(input.deadline, leaseEnd);
+  assert.equal(offer.deadline, leaseEnd);
+  assert.equal(offer.authorization.expiresAt, '2026-11-10T12:00:00.000Z', 'the offer lasts as long as the authorization and the consent allow, not as long as the lease');
+});
+
+test('a lease that is already over, or that ends while the quote is being saved, writes nothing more and is never a success', async () => {
+  const over = fixture({ access: { authorize: async () => allowed({ leaseExpiresAt: new Date(T0 - 1).toISOString() }) } });
+  assert.deepEqual(await over.service.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 });
+  assert.deepEqual([over.calls.quotes.length, over.calls.offers.length], [0, 0]);
+  const slow = fixture({ onQuote: () => slow.time.advance(5000) });
+  assert.deepEqual(await slow.service.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 });
+  assert.equal(slow.calls.offers.length, 0, 'no offer is started once the lease ended during the quote');
+});
+
+test('a lease that ends while the offer is being created is the lease, not the customer consent, whatever the offer service answers', async () => {
+  for (const offer of [{ status: 'denied' }, { status: 'unavailable' }, { status: 'declined' }]) {
+    const slow = fixture({ offer, onOffer: () => slow.time.advance(5000) });
+    assert.deepEqual(await slow.service.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 }, JSON.stringify(offer));
+  }
+  const committed = fixture({ onOffer: () => committed.time.advance(5000) });
+  assert.deepEqual(await committed.service.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 }, 'a committed offer is not handed over after the lease');
+});
+
+test('a lease that ends while the retained decision is read hands nothing over, and a store that refuses a write after the lease is a 503', async () => {
+  const late = fixture({ onExplanation: () => late.time.advance(5000) });
+  assert.deepEqual(await late.service.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 });
+  for (const where of ['quote', 'offer'] as const) {
+    const refusing = new AdvisorOffers({ access: { authorize: async () => allowed() },
+      quotes: { createFor: async () => { if (where === 'quote') throw new LeaseExpired(); return { status: 'created', quote: { ...quote, currency: 'COP', basis: 'minimum_data', traceId: randomUUID() } } as never; } },
+      offers: { create: async () => { throw new LeaseExpired(); }, explanation: async () => null }, protector: new HmacProtector('synthetic-advisor-key-'.padEnd(40, 'x')), clock: { now: () => new Date(T0) } });
+    assert.deepEqual(await refusing.create(request()), { status: 'denied', error: 'access_unavailable', httpStatus: 503 }, where);
+  }
+  const broken = new AdvisorOffers({ access: { authorize: async () => allowed() }, quotes: { createFor: async () => { throw Error('sql down'); } },
+    offers: { create: async () => { throw Error('unused'); }, explanation: async () => null }, protector: new HmacProtector('synthetic-advisor-key-'.padEnd(40, 'x')), clock: { now: () => new Date(T0) } });
+  await assert.rejects(broken.create(request()), /sql down/, 'any other failure is still a failure, not a lease');
 });
 
 test('the idempotency key is required and bounded, and a key reused with another request creates no offer', async () => {
@@ -206,12 +255,14 @@ test('the Identity adapter validates the untrusted reply, drops oversized cookie
   const sent: unknown[] = [];
   const identity = (reply: unknown, delay = 0) => new IdentityAdvisorSaleAccess({ authorizeAdvisorSaleV1: async request => { sent.push(request); await new Promise(resolve => setTimeout(resolve, delay)); return reply; } }, 30);
   const input = { session, authorizationId, traceId: randomUUID() };
-  const good = { allowed: true, advisorReference, customer, consent, authorizationExpiresAt: '2026-11-10T12:00:00.000Z' };
-  assert.deepEqual(await identity(good).authorize(input), allowed());
+  const lease = new Date(Date.now() + 4000).toISOString();
+  const good = { allowed: true, advisorReference, customer, consent, authorizationExpiresAt: '2026-11-10T12:00:00.000Z', leaseExpiresAt: lease };
+  assert.deepEqual(await identity(good).authorize(input), allowed({ leaseExpiresAt: lease }));
   assert.deepEqual(sent[0], { kind: 'web', cookie: session.cookie, origin: session.origin, requestOrigin: session.requestOrigin, method: 'POST', authorizationId, traceId: input.traceId });
   const unavailable = { allowed: false, error: 'access_unavailable', status: 503 };
   for (const reply of [null, 'ok', {}, { allowed: true }, { ...good, advisorReference: 'x' }, { ...good, customer: { ...customer, clientId: 'x' } }, { ...good, consent: { ...consent, consentId: 'CNS-1' } },
     { ...good, consent: { ...consent, textVersion: 0 } }, { ...good, consent: { ...consent, expiresAt: 'later' } }, { ...good, authorizationExpiresAt: 'soon' },
+    { ...good, leaseExpiresAt: undefined }, { ...good, leaseExpiresAt: 'soon' }, { ...good, leaseExpiresAt: new Date(Date.now() - 1).toISOString() }, { ...good, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() },
     { allowed: false, error: 'invalid_request', status: 400 }, { allowed: false, error: 'forbidden', status: 401 }, { allowed: false, status: 500 }]) {
     assert.deepEqual(await identity(reply).authorize(input), unavailable, JSON.stringify(reply));
   }

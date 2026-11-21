@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import type { AcceptedOffer, OfferAcceptanceSnapshot, OfferCreationSnapshot, OfferStore, StoredOffer, StoredOfferRequest } from '../../application/ports/offer-store';
+import { LeaseExpired } from '../../application/ports/lease';
 import { offerRequestIdentity, type OfferActor, type OfferCapture, type OfferQuote } from '../../domain/offer';
 
 type OfferRow = { terms: StoredOffer['terms']; terms_seal: string; consent_reference: string; consent_version: string };
@@ -92,7 +93,7 @@ export class SqlOfferStore implements OfferStore {
       try {
         const created = await c.query(`WITH decision AS (
           INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1',$20,$3,$3,$4) RETURNING id
+          SELECT $1,$2,'v1',$20,$3,$3,$4 WHERE ($22::TIMESTAMPTZ IS NULL OR clock_timestamp() < $22::TIMESTAMPTZ) RETURNING id
         ), offered AS (
           INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
           SELECT $5,1,id,$6,'COP',$7,$21,$8,$9 FROM decision RETURNING id,decision_id
@@ -113,7 +114,9 @@ export class SqlOfferStore implements OfferStore {
         [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId, t.offerId, t.premium, JSON.stringify(t.coverage),
           t.effectiveFrom, t.expiresAt, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference,
           JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion, input.requestIdentity,
-          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), t.status === 'preliminary' ? 'preliminary' : 'accepted', t.status]);
+          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), t.status === 'preliminary' ? 'preliminary' : 'accepted', t.status, input.deadline ?? null]);
+        // The lease ended inside the statement: no decision, offer, audit or event was written.
+        if (created.rowCount !== 1 && input.deadline && !(Date.now() < Date.parse(input.deadline))) throw new LeaseExpired();
         if (created.rowCount !== 1) throw new Error('offer_creation_incomplete');
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
@@ -141,7 +144,8 @@ export class SqlOfferStore implements OfferStore {
       await c.query('BEGIN');
       try {
         const d = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1','declined',$3,$3,$4) RETURNING id`, [input.quote.id, input.capture.rule.version, JSON.stringify(input.capture), input.traceId]);
+          SELECT $1,$2,'v1','declined',$3,$3,$4 WHERE ($5::TIMESTAMPTZ IS NULL OR clock_timestamp() < $5::TIMESTAMPTZ) RETURNING id`, [input.quote.id, input.capture.rule.version, JSON.stringify(input.capture), input.traceId, input.deadline ?? null]);
+        if (!d.rows[0]) throw new LeaseExpired();
         await this.audit(c, input.actor.clientId, 'underwriting.decline', d.rows[0].id, 'declined', input.traceId, 'underwriting');
         await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
           VALUES (gen_random_uuid(),'underwriting',$1,'underwriting.declined',1,$2,$3)`, [d.rows[0].id, JSON.stringify({ decisionId: d.rows[0].id, synthetic: true }), input.traceId]);

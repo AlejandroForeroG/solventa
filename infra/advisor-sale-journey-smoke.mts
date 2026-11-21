@@ -16,6 +16,8 @@ import { HmacProtector } from '../backend/acquisition-risk/src/adapters/outbound
 import { HmacOfferIntegrity } from '../backend/acquisition-risk/src/adapters/outbound/hmac-offer-integrity';
 import { MockFlightSchedule, MockRiskSignals } from '../backend/acquisition-risk/src/adapters/outbound/mock-risk-signals';
 import { platformTimer } from '../backend/acquisition-risk/src/adapters/outbound/degradation-log';
+import { offerRequestIdentity } from '../backend/acquisition-risk/src/domain/offer';
+import { LeaseExpired } from '../backend/acquisition-risk/src/application/ports/lease';
 import type { AdvisorSaleDecision } from '../backend/acquisition-risk/src/application/ports/advisor-sale-access';
 import { PolicyFinance } from '../backend/policy-claims-payments/src/application/policy-finance';
 import { SqlFinancialStore } from '../backend/policy-claims-payments/src/adapters/outbound/sql-financial-store';
@@ -76,13 +78,16 @@ try {
 
   const consent = { allowed: true as const, consent: { consentId: 'CNS-2026-00001', textVersion: 1, expiresAt: hours(24).toISOString() } };
   let consentGranted = true;
+  // The advisor's short permission: its length and a slow step before the quote write can be set per case.
+  let leaseMs = 4000;
+  let slowMs = 0;
   const principals = new Map([[advisorReference, advisor], [otherReference, otherAdvisor]]);
   const sessions = new Map([['advisor-session', advisorReference], ['other-advisor-session', otherReference]]);
   const access = { authorize: async ({ session, authorizationId, traceId }: { session: { cookie: string; origin: string; requestOrigin: string; method: string }; authorizationId: string; traceId: string }) => {
     const reference = sessions.get(session.cookie);
     return authorizeAdvisorSaleAccess({
       authorize: async () => reference ? { allowed: true, actor: { kind: 'user', channel: 'web', principal: principals.get(reference)!, operations: ['policies:manage-delegated'],
-        advisorPermission: { reference, expiresAt: new Date(Date.now() + 4000).toISOString() } } } as never : { allowed: false, error: 'unauthorized', status: 401 },
+        advisorPermission: { reference, expiresAt: new Date(Date.now() + leaseMs).toISOString() } } } as never : { allowed: false, error: 'unauthorized', status: 401 },
       advisors: { eligible: async () => null }, authorizations,
       verifyConsents: async () => RISK_SCOPES.map(() => consentGranted ? consent : { allowed: false as const, reason: 'consent_revoked' as const }) as never,
     }, { kind: 'web', ...session, authorizationId, traceId }) as Promise<AdvisorSaleDecision>;
@@ -96,7 +101,8 @@ try {
   const offers = new OfferService({ store: offerStore, flights: new MockFlightSchedule(), integrity: new HmacOfferIntegrity(financialKey), clock: { now }, environment: 'local', enabled: true,
     signals: new ReadSignal({ guard: { verify: async () => ({ allowed: false, reason: 'unavailable' }) }, provider: new MockRiskSignals(), snapshots: new SqlSignalSnapshots(acquisition),
       clock: { now }, timer: platformTimer, trace: { record: () => {} } }) });
-  const advisorOffers = new AdvisorOffers({ access, quotes, offers, protector });
+  const advisorOffers = new AdvisorOffers({ access, offers, protector, clock: { now },
+    quotes: { createFor: async (actor, input) => { await new Promise(resolve => setTimeout(resolve, slowMs)); return quotes.createFor(actor, input); } } });
 
   const finance = new PolicyFinance({ enabled: true, environment: 'local', integrity: new HmacFinancialIntegrity(financialKey), store: new SqlFinancialStore(runtimeFor('policy')),
     payments: new SqlMockPaymentGateway(runtimeFor('policy')), signatures: new MockSignatureProvider(new HmacFinancialIntegrity(financialKey)),
@@ -190,8 +196,49 @@ try {
   assert.deepEqual(afterConsent.status === 'denied' && afterConsent.error, 'consent_required');
   consentGranted = true;
   assert.equal(await scalar('SELECT count(*)::INT4 AS n FROM acquisition.offers'), offersBefore, 'blocked requests wrote nothing');
+  // 8. The advisor's permission is a deadline of its own. A slow step that outlives it writes nothing, and the same sale succeeds under a fresh permission.
+  const written = async () => ({ quotes: await scalar('SELECT count(*)::INT4 AS n FROM acquisition.quotes'), offers: await scalar('SELECT count(*)::INT4 AS n FROM acquisition.offers'),
+    decisions: await scalar('SELECT count(*)::INT4 AS n FROM acquisition.underwriting_decisions'), audit: await scalar('SELECT count(*)::INT4 AS n FROM acquisition.audit_events'),
+    outbox: await scalar('SELECT count(*)::INT4 AS n FROM acquisition.outbox_events') });
+  const slowSale = await grant(advisorReference);
+  const slowBody = { ...quoteBody, credit: { ...quoteBody.credit, partnerCreditId: randomUUID() } };
+  const beforeSlow = await written();
+  leaseMs = 300; slowMs = 700;
+  const lateSale = await prepare('advisor-session', slowSale.id, 'sale-slow', slowBody);
+  assert.deepEqual(lateSale.status === 'denied' && [lateSale.error, lateSale.httpStatus], ['access_unavailable', 503], 'a sale slower than the permission is never a success');
+  assert.deepEqual(await written(), beforeSlow, 'and writes no quote, offer, decision, audit or event');
+  leaseMs = 4000; slowMs = 0;
+  const freshSale = await prepare('advisor-session', slowSale.id, 'sale-slow', slowBody);
+  assert.equal(freshSale.status, 'created');
+  assert.equal(freshSale.status === 'created' && Date.parse(freshSale.offer.validity.expiresAt) - Date.now() > 10 * 60_000, true, 'the validity of the offer is not the seconds the permission lasted');
+  assert.deepEqual((await prepare('advisor-session', slowSale.id, 'sale-slow', slowBody)).status, 'replayed');
+
+  // 9. Where the write commits, the database itself refuses it after the lease: a clock that is behind lets the use case start, the statement still rejects.
+  const behind = { now: () => new Date(Date.now() - 60_000) };
+  const pastLease = () => new Date(Date.now() - 1000).toISOString();
+  const lateQuotes = new CreateQuote({ access: { async authorize() { throw Error('unused'); } }, store: new SqlQuoteStore(acquisition), protector, clock: behind });
+  const beforeQuote = await written();
+  await assert.rejects(lateQuotes.createFor({ kind: 'user', ...customer }, { idempotencyKey: 'lease-quote', traceId: randomUUID(), deadline: pastLease(),
+    body: { ...quoteBody, credit: { ...quoteBody.credit, partnerCreditId: randomUUID() } } }), LeaseExpired);
+  assert.deepEqual(await written(), beforeQuote, 'a quote that would commit after the lease leaves no trace');
+  const liveQuote = await quotes.createFor({ kind: 'user', ...customer }, { idempotencyKey: 'lease-offer', traceId: randomUUID(), body: { ...quoteBody, credit: { ...quoteBody.credit, partnerCreditId: randomUUID() } } });
+  assert.equal(liveQuote.status, 'created'); if (liveQuote.status !== 'created') throw Error('quote not created');
+  // The offer statement is guarded the same way: a complete offer that would commit after the lease is refused with no decision, offer, audit or event.
+  const template = await offerStore.get(customer, offerId);
+  const retainedCapture = await offerStore.explanation(customer, offerId);
+  const quoteSnapshot = await offerStore.creationSnapshot(customer, 'lease-offer-direct', liveQuote.quote.quoteId);
+  assert.ok(template && retainedCapture && quoteSnapshot.quote);
+  const beforeOffer = await written();
+  await assert.rejects(offerStore.create({ actor: customer, quote: quoteSnapshot.quote, sourceReference: liveQuote.quote.quoteId,
+    requestIdentity: offerRequestIdentity('vida_hipotecario', liveQuote.quote.quoteId), key: 'lease-offer-direct',
+    offer: { ...template, terms: { ...template.terms, offerId: randomUUID() } }, capture: retainedCapture, traceId: randomUUID(), deadline: pastLease() }), LeaseExpired);
+  assert.deepEqual(await written(), beforeOffer, 'an offer that would commit after the lease leaves no trace');
+  const inTime = await offerStore.create({ actor: customer, quote: quoteSnapshot.quote, sourceReference: liveQuote.quote.quoteId,
+    requestIdentity: offerRequestIdentity('vida_hipotecario', liveQuote.quote.quoteId), key: 'lease-offer-direct',
+    offer: { ...template, terms: { ...template.terms, offerId: randomUUID() } }, capture: retainedCapture, traceId: randomUUID(), deadline: new Date(Date.now() + 60_000).toISOString() });
+  assert.equal(inTime.created, true, 'the same write under a lease that has not ended commits');
   console.log(JSON.stringify({ advisorSaleJourneySQL: 'passed', checks: ['authorization', 'offer_for_customer', 'advisor_channel_retained', 'replay_without_duplicates', 'foreign_denied', 'advisor_cannot_accept',
-    'customer_accepts', 'policy_import', 'charge_signature_issuance', 'policy_to_advisor_traceability', 'revocation', 'consent_withdrawn'] }));
+    'customer_accepts', 'policy_import', 'charge_signature_issuance', 'policy_to_advisor_traceability', 'revocation', 'consent_withdrawn', 'slow_operation_outlives_the_lease', 'database_refuses_a_write_after_the_lease'] }));
 } finally {
   await db?.end().catch(() => {});
   if (created) await admin.query(`DROP DATABASE ${name} CASCADE`).catch(() => {});
