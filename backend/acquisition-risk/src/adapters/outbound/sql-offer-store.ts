@@ -1,5 +1,7 @@
 import { Client } from 'pg';
 import type { AcceptedOffer, OfferAcceptanceSnapshot, OfferCreationSnapshot, OfferStore, StoredOffer, StoredOfferRequest } from '../../application/ports/offer-store';
+import { LeaseExpired } from '../../application/ports/lease';
+import { commitBeforeLease } from './lease-commit';
 import { offerRequestIdentity, type OfferActor, type OfferCapture, type OfferQuote } from '../../domain/offer';
 
 type OfferRow = { terms: StoredOffer['terms']; terms_seal: string; consent_reference: string; consent_version: string };
@@ -89,10 +91,13 @@ export class SqlOfferStore implements OfferStore {
   async create(input: Parameters<OfferStore['create']>[0]) {
     return this.retry(() => this.connection(async c => {
       const t = input.offer.terms;
+      // With a lease the statement runs in an explicit transaction that ends with a final database-time check; without one it stays a single implicit transaction.
+      const leased = input.deadline !== undefined;
       try {
+        if (leased) await c.query('BEGIN');
         const created = await c.query(`WITH decision AS (
           INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1',$20,$3,$3,$4) RETURNING id
+          SELECT $1,$2,'v1',$20,$3,$3,$4 WHERE ($22::TIMESTAMPTZ IS NULL OR clock_timestamp() < $22::TIMESTAMPTZ) RETURNING id
         ), offered AS (
           INSERT INTO acquisition.offers (id,version,decision_id,premium,currency,coverages,status,valid_from,expires_at)
           SELECT $5,1,id,$6,'COP',$7,$21,$8,$9 FROM decision RETURNING id,decision_id
@@ -113,10 +118,14 @@ export class SqlOfferStore implements OfferStore {
         [input.quote?.id ?? null, t.ruleVersion, JSON.stringify(input.capture), input.traceId, t.offerId, t.premium, JSON.stringify(t.coverage),
           t.effectiveFrom, t.expiresAt, input.actor.clientId, input.actor.subjectToken, input.key, input.sourceReference,
           JSON.stringify(t), input.offer.seal, input.offer.consentId, input.offer.consentVersion, input.requestIdentity,
-          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), t.status === 'preliminary' ? 'preliminary' : 'accepted', t.status]);
+          JSON.stringify({ offerId: t.offerId, status: t.status, synthetic: true }), t.status === 'preliminary' ? 'preliminary' : 'accepted', t.status, input.deadline ?? null]);
+        // The lease ended inside the statement: no decision, offer, audit or event was written.
+        if (created.rowCount !== 1 && input.deadline && !(Date.now() < Date.parse(input.deadline))) throw new LeaseExpired();
         if (created.rowCount !== 1) throw new Error('offer_creation_incomplete');
+        if (leased) await commitBeforeLease(c, input.deadline);
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'accepted' as const, offer: input.offer } };
       } catch (e) {
+        if (leased) await c.query('ROLLBACK').catch(() => {});
         if ((e as { code?: string }).code === '23505') {
           const winner = await this.winner(c, input.actor, input.key);
           if (winner) return { created: false, request: winner };
@@ -141,13 +150,14 @@ export class SqlOfferStore implements OfferStore {
       await c.query('BEGIN');
       try {
         const d = await c.query<{ id: string }>(`INSERT INTO acquisition.underwriting_decisions (quote_id,rule_version,contract_version,outcome,explanation,input_snapshot,correlation_id)
-          VALUES ($1,$2,'v1','declined',$3,$3,$4) RETURNING id`, [input.quote.id, input.capture.rule.version, JSON.stringify(input.capture), input.traceId]);
+          SELECT $1,$2,'v1','declined',$3,$3,$4 WHERE ($5::TIMESTAMPTZ IS NULL OR clock_timestamp() < $5::TIMESTAMPTZ) RETURNING id`, [input.quote.id, input.capture.rule.version, JSON.stringify(input.capture), input.traceId, input.deadline ?? null]);
+        if (!d.rows[0]) throw new LeaseExpired();
         await this.audit(c, input.actor.clientId, 'underwriting.decline', d.rows[0].id, 'declined', input.traceId, 'underwriting');
         await c.query(`INSERT INTO acquisition.outbox_events (event_id,aggregate_type,aggregate_id,event_type,event_version,payload,correlation_id)
           VALUES (gen_random_uuid(),'underwriting',$1,'underwriting.declined',1,$2,$3)`, [d.rows[0].id, JSON.stringify({ decisionId: d.rows[0].id, synthetic: true }), input.traceId]);
         await c.query(`INSERT INTO acquisition.offer_requests (client_id,subject_token,idempotency_key,request_identity,outcome,decision_id,offer_id)
           VALUES ($1,$2,$3,$4,'declined',$5,NULL)`, [input.actor.clientId, input.actor.subjectToken, input.key, input.requestIdentity, d.rows[0].id]);
-        await c.query('COMMIT');
+        await commitBeforeLease(c, input.deadline);
         return { created: true, request: { actor: input.actor, requestIdentity: input.requestIdentity, outcome: 'declined' as const } };
       } catch (error) {
         await c.query('ROLLBACK').catch(() => {});

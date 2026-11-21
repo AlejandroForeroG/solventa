@@ -1,6 +1,7 @@
 import { ageOn, decisionCapture, monthlyPremium, RULE_VERSION, validateQuoteRequest, VALIDITY_DAYS, type FieldError } from '../domain/quote';
 import type { AccessCredential, AccessDenial, ApiAccess, QuoteActor } from './ports/api-access';
 import type { QuoteStore, StoredQuote } from './ports/quote-store';
+import { LeaseExpired } from './ports/lease';
 import type { Clock, Protector } from './ports/platform';
 
 export type CreateQuoteInput = { credential: AccessCredential | null; idempotencyKey: string | null; body: unknown; traceId: string };
@@ -27,7 +28,8 @@ export class CreateQuote {
   }
 
   // For callers whose actor Identity has already established, such as a partner acting for an authorizing customer.
-  async createFor(actor: QuoteActor, input: Pick<CreateQuoteInput, 'idempotencyKey' | 'body' | 'traceId'>): Promise<CreateQuoteForResult> {
+  // `deadline` is the end of the short permission of an advisor acting for the customer: nothing is written at or after it, and LeaseExpired is thrown instead.
+  async createFor(actor: QuoteActor, input: Pick<CreateQuoteInput, 'idempotencyKey' | 'body' | 'traceId'> & { deadline?: string }): Promise<CreateQuoteForResult> {
     const key = input.idempotencyKey;
     if (key === null || key.length < 1) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'required' }] };
     if (key.length > 128) return { status: 'invalid', errors: [{ field: 'Idempotency-Key', code: 'invalid_format' }] };
@@ -42,6 +44,7 @@ export class CreateQuote {
     const actorId = actor.kind === 'partner' ? actor.partnerId : actor.clientId;
     // A web user is identified by the session, never by the body.
     const subjectToken = actor.kind === 'partner' ? await this.deps.protector.documentToken(request.customer.documentNumber) : actor.subjectToken;
+    if (input.deadline && !(this.deps.clock.now().getTime() < Date.parse(input.deadline))) throw new LeaseExpired();
     const saved = await this.deps.store.save({
       actor,
       subjectToken,
@@ -54,7 +57,8 @@ export class CreateQuote {
       ruleVersion: RULE_VERSION,
       validUntil: new Date(now.getTime() + VALIDITY_DAYS * DAY_MS).toISOString(),
       year: Number(today.slice(0, 4)),
-      traceId: input.traceId
+      traceId: input.traceId,
+      ...(input.deadline ? { deadline: input.deadline } : {})
     });
     if (saved.kind === 'conflict') return { status: 'idempotency_conflict' };
     return { status: saved.kind, quote: { ...saved.quote, currency: 'COP', basis: 'minimum_data', traceId: input.traceId } };

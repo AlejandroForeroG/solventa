@@ -118,7 +118,9 @@ paths:
         '503':
           description: >
             access_unavailable: Identity could not verify the advisor, authorization or consent in time, so
-            nothing was priced. financial_unavailable: a required dependency of the offer failed. Retry with
+            nothing was priced, or the advisor's own short permission ended before the quote and the offer were
+            written (nothing is written at or after it, separately from the validity of the offer; retry with the
+            same Idempotency-Key). financial_unavailable: a required dependency of the offer failed. Retry with
             the same Idempotency-Key.
           headers:
             X-Trace-Id: { $ref: '#/components/headers/TraceId' }

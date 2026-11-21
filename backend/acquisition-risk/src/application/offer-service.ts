@@ -5,7 +5,7 @@ import type { FlightSchedule, OfferCreationSnapshot, OfferIntegrity, OfferStore,
 import type { SignalResult } from './read-signal';
 import type { DependencyTimings } from './dependency-timings';
 
-type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization; timings?: DependencyTimings; channel?: OfferCapture['channel'] };
+type Command = { actor: OfferActor; idempotencyKey: string; traceId: string; authorization: OfferAuthorization; timings?: DependencyTimings; channel?: OfferCapture['channel']; deadline?: string };
 type OfferSignalReader = { executeAllAuthorized(input: { subjectToken: string; traceId: string; consent: { allowed: true } & OfferAuthorization; timings?: DependencyTimings }): Promise<{ results: SignalResult[]; confidence: number }> };
 const validKey = (key: string) => typeof key === 'string' && key.length > 0 && key.length <= 128;
 
@@ -13,7 +13,9 @@ export class OfferService {
   constructor(private readonly deps: { store: OfferStore; signals: OfferSignalReader; flights: FlightSchedule; integrity: OfferIntegrity; clock: Clock; environment: string; enabled: boolean }) {}
   private authorized(input: Command): boolean {
     return this.deps.enabled && input.authorization.textVersion > 0 && !!input.authorization.consentId
-      && Date.parse(input.authorization.expiresAt) > this.deps.clock.now().getTime();
+      && Date.parse(input.authorization.expiresAt) > this.deps.clock.now().getTime()
+      // The acting advisor's short lease is a deadline of its own, separate from how long the offer stays valid.
+      && (input.deadline === undefined || Date.parse(input.deadline) > this.deps.clock.now().getTime());
   }
   private timed<T>(input: Pick<Command, 'timings'>, name: string, call: () => Promise<T>): Promise<T> {
     return input.timings ? input.timings.measure(name, call) : call();
@@ -74,7 +76,7 @@ export class OfferService {
     if (!decision) return { status: 'unavailable' as const };
     const capture = input.channel ? { ...decision.capture, channel: input.channel } : decision.capture;
     if (!decision.accepted && !decision.preliminary) {
-      const result = await this.timed(input, 'offer_write', () => this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture, traceId: input.traceId }));
+      const result = await this.timed(input, 'offer_write', () => this.deps.store.decline({ actor: input.actor, quote, key: input.idempotencyKey, requestIdentity, capture, traceId: input.traceId, ...(input.deadline ? { deadline: input.deadline } : {}) }));
       return this.outcome(result, input.actor, requestIdentity);
     }
     // A slow or unavailable provider cannot stretch a previously verified authorization window.
@@ -83,7 +85,7 @@ export class OfferService {
       decision.preliminary ? 'preliminary' : 'definitive');
     const consent = { consentId: input.authorization.consentId, consentVersion: input.authorization.textVersion };
     const offer: StoredOffer = { terms, seal: await this.deps.integrity.seal(terms, consent), ...consent };
-    const result = await this.timed(input, 'offer_write', () => this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture, traceId: input.traceId }));
+    const result = await this.timed(input, 'offer_write', () => this.deps.store.create({ actor: input.actor, quote, sourceReference: quote.quoteId, requestIdentity, key: input.idempotencyKey, offer, capture, traceId: input.traceId, ...(input.deadline ? { deadline: input.deadline } : {}) }));
     return this.outcome(result, input.actor, requestIdentity);
   }
   async createFlight(input: { actor: OfferActor; flightReference: string; idempotencyKey: string; traceId: string }) {

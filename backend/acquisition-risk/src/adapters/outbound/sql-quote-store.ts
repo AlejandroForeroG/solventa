@@ -1,4 +1,6 @@
 import { Client } from 'pg';
+import { LeaseExpired } from '../../application/ports/lease';
+import { commitBeforeLease } from './lease-commit';
 import type { NewQuote, QuoteStore, SaveResult, StoredQuote } from '../../application/ports/quote-store';
 
 const RETENTION = '5 years'; // Provisional audit retention until the policy owner defines it.
@@ -43,13 +45,15 @@ export class SqlQuoteStore implements QuoteStore {
         validUntil: q.validUntil, ruleVersion: q.ruleVersion, currency: 'COP', basis: 'minimum_data' };
       // One implicit transaction releases the counter with the business commit, without a network
       // round trip while its row is locked. Existing keys allocate no code and write no effects.
+      // With a lease the statement runs in an explicit transaction that ends with a final database-time check.
+      if (q.deadline !== undefined) await client.query('BEGIN');
       const saved = await timed('save', () => client.query<Row & { created: boolean }>(
         `WITH existing AS (
            SELECT quote_code, request_hash, result FROM acquisition.quotes
            WHERE ${owner.column} = $12 AND idempotency_key = $3
          ), allocated AS (
            INSERT INTO acquisition.quote_counters (year, last_value)
-           SELECT $13::INT8, 1 WHERE NOT EXISTS (SELECT 1 FROM existing)
+           SELECT $13::INT8, 1 WHERE NOT EXISTS (SELECT 1 FROM existing) AND ($14::TIMESTAMPTZ IS NULL OR clock_timestamp() < $14::TIMESTAMPTZ)
            ON CONFLICT (year) DO UPDATE SET last_value = acquisition.quote_counters.last_value + 1
            RETURNING last_value
          ), numbered AS (
@@ -73,15 +77,20 @@ export class SqlQuoteStore implements QuoteStore {
         [q.subjectToken, owner.partnerId, q.idempotencyKey, q.requestFingerprint,
           JSON.stringify(q.capture), q.ruleVersion,
           JSON.stringify(storedFields), q.traceId, owner.clientId,
-          owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year]));
+          owner.actorId, JSON.stringify({ premiumMonthly: q.premiumMonthly, currency: 'COP', ruleVersion: q.ruleVersion }), owner.actorId, q.year, q.deadline ?? null]));
       const row = saved.rows[0];
+      // Nothing was written unless a quote was created: a lease transaction that wrote nothing is simply closed.
+      if (q.deadline !== undefined && !row?.created) await client.query('ROLLBACK');
       if (!row) {
+        // Nothing was allocated because the lease ended inside the statement: no quote, audit or event exists.
+        if (q.deadline && !(Date.now() < Date.parse(q.deadline))) throw new LeaseExpired();
         // A concurrent retry won the unique-key race; read it in a new snapshot.
         const winner = await timed('raceLookup', () => this.find(client, q));
         if (winner) { outcome = winner.kind; return winner; }
         throw Object.assign(new Error('quote_race_unresolved'), { code: SERIALIZATION_FAILURE });
       }
       if (!row.created && row.request_hash !== q.requestFingerprint) { outcome = 'conflict'; return { kind: 'conflict' }; }
+      if (q.deadline !== undefined && row.created) await commitBeforeLease(client, q.deadline);
       outcome = row.created ? 'created' : 'replayed';
       return { kind: row.created ? 'created' : 'replayed', quote: fromRow(row) };
     } finally {
