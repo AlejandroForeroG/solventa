@@ -71,3 +71,6 @@
 .own-claim-open { margin-left: auto; color: var(--brand); font-size: 14px; font-weight: 600; }
 .own-claim:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) { .own-claim:hover { border-color: var(--brand); } }
+.report-in-app { margin: 16px 0 8px; padding: 20px 22px; border-color: #cbe5e0; background: var(--brand-tint); }
+.report-in-app .h-card { margin: 0 0 6px; font: 600 18px/1.3 'Space Grotesk', sans-serif; }
+.report-in-app .note { margin: 0; color: var(--ink-2); }

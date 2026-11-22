@@ -33,6 +33,10 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
 
   return <main className="audit-main claim-case">
     <h1>{t('customerCases')}</h1>
+    <section className="card report-in-app" aria-labelledby="report-in-app-title">
+      <h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
+      <p className="note">{t('reportInApp.body')}</p>
+    </section>
     {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
     {claims?.length === 0 && <p>{t('customerEmpty')}</p>}
