@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
+import { useFormatters } from '../i18n/I18n';
 import { approvedAmount, claimPayment, type ClaimPayment, type PaymentResult } from './disbursement-api';
 
 type Props = { claimId: string; paid: boolean; onSessionLost(): void; onConfirmed(): void };
 
 export function ClaimDisbursement({ claimId, paid, onSessionLost, onConfirmed }: Props) {
   const intl = useIntl();
+  const formatters = useFormatters();
   const t = (key: string) => intl.formatMessage({ id: `claims.payment.${key}` });
   const [payment, setPayment] = useState<ClaimPayment>();
   const [amount, setAmount] = useState('');
@@ -72,11 +74,7 @@ export function ClaimDisbursement({ claimId, paid, onSessionLost, onConfirmed }:
   }
 
   const value = intent.current ?? approvedAmount(amount);
-  function format(value: string) {
-    const [whole, fraction] = value.split('.');
-    const separator = new Intl.NumberFormat(intl.locale).formatToParts(1.1).find(p => p.type === 'decimal')?.value ?? ',';
-    return new Intl.NumberFormat(intl.locale).format(BigInt(whole)) + separator + fraction + ' COP';
-  }
+  const format = (value: string) => formatters.copDecimal(value);
   return <aside className="case-card claim-payment" aria-labelledby="claim-payment-title">
     <h2 id="claim-payment-title">{t('title')}</h2>
     {hidden ? <p role="status">{t('hidden')}</p> : loading ? <p role="status">{t('loading')}</p> : <>

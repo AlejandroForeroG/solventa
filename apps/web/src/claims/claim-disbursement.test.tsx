@@ -34,7 +34,7 @@ it('requires amount review and retries the exact amount after an uncertain respo
   await user.type(await screen.findByRole('textbox', { name: 'Monto aprobado (COP)' }), '1000,00');
   await user.click(screen.getByRole('button', { name: 'Revisar monto' }));
   expect(bodies).toHaveLength(0);
-  expect(screen.getByText('1.000,0000 COP')).toBeVisible();
+  expect(screen.getByText('$ 1.000 COP')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Autorizar desembolso' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos confirmar');
   expect(screen.queryByRole('textbox')).toBeNull();

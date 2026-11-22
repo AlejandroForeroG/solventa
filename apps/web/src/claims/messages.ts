@@ -111,7 +111,7 @@ export const claimsEs = {
   'claims.priority.high': 'Alta', 'claims.priority.medium': 'Media', 'claims.priority.low': 'Baja',
   'claims.age': '{days, plural, one {# día} other {# días}}',
   'claims.amountPending': 'Por estimar',
-  'claims.evidence': '{provided} de {required} · {status}',
+  'claims.evidence': '{provided, plural, one {# archivo} other {# archivos}} (mínimo {required}) · {status}',
   'claims.evidenceStatus.complete': 'completa', 'claims.evidenceStatus.incomplete': 'incompleta', 'claims.evidenceStatus.in_review': 'en revisión',
 
   'claims.empty': 'No hay siniestros abiertos.', 'claims.emptyFiltered': 'Ningún siniestro coincide con el filtro «{filter}»', 'claims.emptyHint': 'Quita el filtro para ver todos los siniestros abiertos.',
@@ -236,7 +236,7 @@ export const claimsEn: Record<keyof typeof claimsEs, string> = {
   'claims.priority.high': 'High', 'claims.priority.medium': 'Medium', 'claims.priority.low': 'Low',
   'claims.age': '{days, plural, one {# day} other {# days}}',
   'claims.amountPending': 'To be estimated',
-  'claims.evidence': '{provided} of {required} · {status}',
+  'claims.evidence': '{provided, plural, one {# file} other {# files}} (minimum {required}) · {status}',
   'claims.evidenceStatus.complete': 'complete', 'claims.evidenceStatus.incomplete': 'incomplete', 'claims.evidenceStatus.in_review': 'under review',
 
   'claims.empty': 'There are no open claims.', 'claims.emptyFiltered': 'No claim matches the "{filter}" filter', 'claims.emptyHint': 'Clear the filter to see every open claim.',

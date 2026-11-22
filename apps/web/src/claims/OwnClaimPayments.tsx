@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
+import { useFormatters } from '../i18n/I18n';
 import type { ClaimPaymentPage } from '@solventa/contracts';
 import { getOwnClaimPayments } from './disbursement-api';
 
 export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): void; claimId?: string }) {
   const intl = useIntl();
+  const formatters = useFormatters();
   const t = (key: string) => intl.formatMessage({ id: `claims.payment.${key}` });
   const [page, setPage] = useState<ClaimPaymentPage>();
   const [error, setError] = useState('');
@@ -30,11 +32,9 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
       {error && <p role="alert" className="claims-error">{t(error === 'unavailable' ? 'queryUnavailable' : 'error.' + error)}</p>}
       {page?.items.length === 0 && <p>{t('empty')}</p>}
       {page && <ul className="case-list">{page.items.map(item => {
-        const [whole, fraction] = item.payment.amount.split('.');
-        const separator = new Intl.NumberFormat(intl.locale).formatToParts(1.1).find(part => part.type === 'decimal')?.value ?? ',';
         return <li key={item.claimId}><div>
           {claimId ? <span>{item.claimNumber}</span> : <a href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
-          <p className="claim-payment-amount">{new Intl.NumberFormat(intl.locale).format(BigInt(whole)) + separator + fraction} COP</p>
+          <p className="claim-payment-amount">{formatters.copDecimal(item.payment.amount)}</p>
           <p className="note">{t('simulated')}</p>
           {item.payment.reference && <p className="mono">{t('reference')}: {item.payment.reference}</p>}
           <p>{t('updated')}: <time dateTime={item.updatedAt}>{intl.formatDate(item.updatedAt, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Bogota' })}</time></p>
