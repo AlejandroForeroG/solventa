@@ -26,6 +26,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [visibleCount, setVisibleCount] = useState(5);
+  const [pageHistory, setPageHistory] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const revealFocus = useRef<string | null>(null);
   const generation = useRef(0);
@@ -78,7 +79,8 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   }
   const detail = state.kind === 'ready' && state.data.kind === 'detail' ? state.data.detail : null;
   const page = state.kind === 'ready' && state.data.kind === 'page' ? state.data.page : null;
-  const nextPage = () => { if (!page?.next) return; const params = new URLSearchParams(query); params.set('before', page.next); setVisibleCount(5); setQuery(params.toString()); };
+  const nextPage = () => { if (!page?.next) return; const params = new URLSearchParams(query); params.set('before', page.next); setPageHistory(history => [...history, query]); setVisibleCount(5); setQuery(params.toString()); };
+  const previousPage = () => { const previous = pageHistory.at(-1); if (previous === undefined) return; setPageHistory(history => history.slice(0, -1)); setVisibleCount(5); setQuery(previous); };
   return <main className="audit-shell">
     <div className="audit-main">
       {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}><Icon name="back" size={16} />{t('back')}</button>}
@@ -87,7 +89,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
       </div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       {!selection && <form className="audit-filters" onReset={event => {
-        event.preventDefault(); setRangeProblem(null); setFilters(emptyFilters()); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
+        event.preventDefault(); setRangeProblem(null); setFilters(emptyFilters()); setPageHistory([]); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
       }} onSubmit={event => {
         event.preventDefault();
         const found = dateRangeProblem(filters.from.trim(), filters.to.trim());
@@ -95,7 +97,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         if (found) { document.getElementById(`audit-${found.field}`)?.focus(); return; }
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(filters)) if (value.trim()) params.set(key, value.trim());
-        setQuery(params.toString()); setVisibleCount(5); setRefresh(value => value + 1);
+        setPageHistory([]); setQuery(params.toString()); setVisibleCount(5); setRefresh(value => value + 1);
       }}>
         <div className="field audit-reference"><label htmlFor="audit-reference">{t('reference')}</label><input id="audit-reference" name="reference" value={filters.reference} onChange={event => setFilters(current => ({ ...current, reference: event.target.value }))} maxLength={64} autoComplete="off" /></div>
         <div className="field"><label htmlFor="audit-product">{t('product')}</label><select id="audit-product" name="product" value={filters.product} onChange={event => setFilters(current => ({ ...current, product: event.target.value }))}><option value="">{t('all')}</option>{['vida_hipotecario', 'flight_delay'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
@@ -109,12 +111,14 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && state.kind !== 'invalid' && <button type="button" className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}>{t('retry')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
-      {page && (page.items.length ? <><p className="note" role="status">{t('showingPage', { count: Math.min(visibleCount, page.items.length), total: page.items.length })}</p>{page.next && <nav className="audit-pagination audit-pagination-top" aria-label={t('paginationTop')}><button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button></nav>}<div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption><thead><tr>{['decision', 'product', 'outcome', 'rule', 'date'].map(key => <th key={key} scope="col">{t(key)}</th>)}</tr></thead><tbody>
+      {page && (page.items.length ? <><p className="note" role="status">{t('showingPage', { count: Math.min(visibleCount, page.items.length), total: page.items.length })}</p><div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption><thead><tr>{['decision', 'product', 'outcome', 'rule', 'date'].map(key => <th key={key} scope="col">{t(key)}</th>)}</tr></thead><tbody>
         {page.items.slice(0, visibleCount).map(item => <tr key={item.decisionId} className={`compact-record ${expanded[item.decisionId] ? 'record-expanded' : ''}`}><td data-label={t('decision')}><div><button type="button" id={`audit-decision-${item.decisionId}`} className="audit-link mono" aria-label={`${t('decision')}: ${item.quoteId ?? item.decisionId}`} onClick={() => setSelection(item.decisionId)}>{item.quoteId ?? item.decisionId.slice(0, 8)}</button><button type="button" className="record-toggle"
           aria-expanded={!!expanded[item.decisionId]} aria-label={`${t(expanded[item.decisionId] ? 'hideDetails' : 'details')}: ${item.quoteId ?? item.decisionId.slice(0, 8)}`}
           aria-controls={`audit-rule-${item.decisionId} audit-date-${item.decisionId} audit-reference-${item.decisionId}`}
           onClick={() => setExpanded(current => ({ ...current, [item.decisionId]: !current[item.decisionId] }))}>{t(expanded[item.decisionId] ? 'hideDetails' : 'details')}</button><details id={`audit-reference-${item.decisionId}`} data-secondary className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{item.decisionId}</span></details></div></td><td data-label={t('product')}>{item.product ? t(item.product) : t('unknown')}</td><td data-label={t('outcome')}><span className={`audit-outcome audit-${item.outcome}`}>{t(item.outcome)}</span></td><td id={`audit-rule-${item.decisionId}`} data-secondary data-label={t('rule')} className="mono">{item.ruleVersion}</td><td id={`audit-date-${item.decisionId}`} data-secondary data-label={t('date')}>{format.dateTime(new Date(item.decidedAt))}</td></tr>)}
-      </tbody></table></div>{visibleCount < page.items.length && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { revealFocus.current = `audit-decision-${page.items[visibleCount].decisionId}`; setVisibleCount(count => count + 5); }}>{t('showMore')}</button></div>}{page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button></div>}</> : <div className="audit-state" role="status">{t('empty')}</div>)}
+      </tbody></table></div>{visibleCount < page.items.length && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { revealFocus.current = `audit-decision-${page.items[visibleCount].decisionId}`; setVisibleCount(count => count + 5); }}>{t('showMore')}</button></div>}{(pageHistory.length > 0 || (page.next && visibleCount >= page.items.length)) && <nav className="audit-pagination" aria-label={t('pagination')}>
+        {pageHistory.length > 0 && <button className="btn btn-secondary" type="button" onClick={previousPage}>{t('previous')}</button>}
+        {page.next && visibleCount >= page.items.length && <button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button>}</nav>}</> : <div className="audit-state" role="status">{t('empty')}</div>)}
       {detail && <>
         <nav className="audit-section-links" aria-label={t('sections')}>
           {['reconstruction', 'inputs', 'sources', 'rule', 'consent', 'revisions'].map(section => <a key={section} href={`#audit-${section}`} onClick={() => {

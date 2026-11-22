@@ -36,9 +36,13 @@ describe('protected underwriting audit workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
     expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(12);
     expect(screen.queryByRole('button', { name: 'Mostrar más decisiones' })).toBeNull();
-    await user.click(screen.getAllByRole('button', { name: 'Siguientes' })[0]);
+    expect(screen.getAllByRole('button', { name: 'Página siguiente' })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(`/api/v1/underwriting-decisions?before=${next}`, expect.anything()));
     expect(await screen.findByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Página siguiente' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Página anterior' }));
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions', expect.anything()));
   });
   it('lists decisions, applies filters, opens captured facts and rule checks and returns to the list', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) => response(url.includes('/' + id) ? examples.detail : examples.page));
