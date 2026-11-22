@@ -26,9 +26,9 @@ describe('protected reports workspace', () => {
     expect(within(rows[0]).getByText('Revisión 1')).toBeVisible();
     expect(within(rows[0]).getByText(sent.contentHash.slice(0, 12))).toBeVisible();
     expect(within(rows[0]).getByText('Acuse recibido')).toBeVisible();
-    expect(within(rows[0]).getByRole('button', { name: 'Reintentar envío' })).toBeDisabled();
+    expect(within(rows[0]).queryByRole('button', { name: /Enviar|Reintentar/ })).not.toBeInTheDocument();
     expect(within(rows[1]).getByText('Sin enviar')).toBeVisible();
-    expect(within(rows[1]).getByRole('button', { name: 'Enviar' })).toBeEnabled();
+    expect(within(rows[1]).getByRole('button', { name: 'Enviar a la reaseguradora' })).toBeEnabled();
     expect(screen.getByRole('heading', { name: 'Reportes al regulador y la reaseguradora' })).toHaveFocus();
   });
 
@@ -49,7 +49,7 @@ describe('protected reports workspace', () => {
     const fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? response(answers.shift()) : response(page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     const row = within(await screen.findByRole('table')).getAllByRole('row')[2];
-    await user.click(within(row).getByRole('button', { name: 'Enviar' }));
+    await user.click(within(row).getByRole('button', { name: /^Enviar a/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('El destino no respondió a tiempo. Reintenta para consultar su estado.');
     expect(fetch).toHaveBeenCalledWith(`/api/v1/reports/${unsent.reportId}/delivery`, expect.objectContaining({ method: 'POST', body: '{}' }));
     await waitFor(() => expect(screen.queryByText('Acuse recibido', { selector: '.reports-delivery-uncertain' })).toBeNull());
@@ -62,7 +62,7 @@ describe('protected reports workspace', () => {
     const row = within(await screen.findByRole('table')).getAllByRole('row')[1];
     expect(within(row).getByText('Rechazado')).toBeVisible();
     expect(within(row).getByText('Motivo: totals_mismatch')).toBeVisible();
-    expect(within(row).getByRole('button', { name: 'Reintentar envío' })).toBeDisabled();
+    expect(within(row).queryByRole('button', { name: /Enviar|Reintentar/ })).not.toBeInTheDocument();
   });
 
   it('downloads through the authorized route and shows the failure instead of a JSON page', async () => {

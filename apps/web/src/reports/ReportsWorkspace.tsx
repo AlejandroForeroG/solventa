@@ -103,24 +103,24 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
       {page && (page.items.length ? <>
-        <div className="audit-table-wrap"><table className="audit-table reports-table"><caption className="visually-hidden">{t('title')}</caption>
+        <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table reports-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['period', 'destination', 'revision', 'generated', 'hash', 'rows', 'delivery', 'actions'].map(key => <th key={key} scope="col">{t(`col.${key}`)}</th>)}</tr></thead>
-          <tbody>{page.items.map(report => <tr key={report.reportId}>
-            <td className="mono">{report.period}</td>
-            <td>{t(`destination.${report.destination}`)}</td>
-            <td className="mono">{t('revision', { revision: report.revision })}</td>
-            <td className="mono">{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
-            <td className="mono audit-id" title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
-            <td className="mono">{t('rows', { count: report.manifest.rowCount })}</td>
-            <td><span className={`claims-badge reports-delivery-${report.delivery?.status ?? 'none'}`}>{t(`delivery.${report.delivery?.status ?? 'none'}`)}</span>
+          <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
+            <td className="mono" data-label={t('col.period')}><span id={label}>{report.period} · {t(`destination.${report.destination}`)}</span></td>
+            <td data-label={t('col.destination')}>{t(`destination.${report.destination}`)}</td>
+            <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
+            <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
+            <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
+            <td className="mono" data-label={t('col.rows')}>{t('rows', { count: report.manifest.rowCount })}</td>
+            <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>
               {report.delivery?.rejectionCode && <span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span>}</td>
-            <td className="reports-actions">
-              <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
-              <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
-              <button type="button" className="btn btn-primary btn-small" disabled={busy !== null || isFinal(report)} onClick={() => void send(report)}>
-                {busy === report.reportId ? t('sending') : report.delivery && report.delivery.status !== 'pending' ? t('retry') : t('send')}</button>
-            </td>
-          </tr>)}</tbody></table></div>
+            <td className="reports-actions" data-label={t('col.actions')}><div>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
+              {!isFinal(report) && <button type="button" className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void send(report)}>
+                {busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
+            </div></td>
+          </tr>; })}</tbody></table></div>
         {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}
       </> : <div className="audit-state" role="status"><p>{filter === 'all' ? t('empty') : t('emptyFiltered')}</p></div>)}
     </div>
