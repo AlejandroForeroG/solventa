@@ -51,7 +51,6 @@ export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
     {offer && <div role="status" className="card">
       <p>{offer.contractable ? t('definitive') : t('preliminary')}</p>
       <p>{t('premium')}: {intl.formatNumber(Number(offer.premium), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</p>
-      <CopyValue label={t('offerLink')} value={`${window.location.origin}/venta-asistida?oferta=${offer.offerId}`} copyLabel={t('copyLink')} />
       <CopyValue label={t('offerCode')} value={offer.offerId} />
       <p className="note">{t('handoff')}</p>
     </div>}

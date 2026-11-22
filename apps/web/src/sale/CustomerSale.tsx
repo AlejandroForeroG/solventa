@@ -63,13 +63,12 @@ type Continue = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ready'; offer:
 
 function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; onOpenChange(open: boolean): void }) {
   const intl = useIntl(), t = (key: string) => intl.formatMessage({ id: `sale.${key}` });
-  const linked = useRef(new URLSearchParams(window.location.search).get('oferta') ?? '');
-  const [offerId, setOfferId] = useState(() => uuid(linked.current) ? linked.current : ''), [state, setState] = useState<Continue>({ kind: 'idle' }), run = useRef(0);
-  async function open(id = offerId) {
-    if (!uuid(id)) { setState({ kind: 'failed', reason: 'invalid' }); return; }
+  const [offerId, setOfferId] = useState(''), [state, setState] = useState<Continue>({ kind: 'idle' }), run = useRef(0);
+  async function open() {
+    if (!uuid(offerId)) { setState({ kind: 'failed', reason: 'invalid' }); return; }
     setState({ kind: 'loading' });
     try {
-      const outcome = await readOffer(id.toLowerCase());
+      const outcome = await readOffer(offerId.toLowerCase());
       if (outcome.kind === 'unauthenticated') onSessionLost();
       run.current += 1;
       setState(outcome.kind === 'ok' ? { kind: 'ready', offer: outcome.value, run: run.current } : { kind: 'failed', reason: outcome.kind === 'notFound' || outcome.kind === 'forbidden' ? 'offerNotFound' : outcome.kind });
@@ -77,10 +76,8 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   }
   const back = useCallback(() => {
     setState({ kind: 'idle' }); setOfferId('');
-    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
   }, []);
   useEffect(() => { onOpenChange(state.kind === 'ready'); }, [state.kind, onOpenChange]);
-  useEffect(() => { if (uuid(linked.current)) void open(linked.current); }, []);
   if (state.kind === 'ready') {
     // Consent, acceptance, payment and signature are the customer's own steps, exactly as in their own purchase.
     return <OfferJourney key={state.run} quote={{ quoteId: state.offer.quoteId }} initialOffer={state.offer} onRequote={back} onBack={back} onSessionLost={onSessionLost}
