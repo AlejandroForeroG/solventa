@@ -72,3 +72,14 @@ it('never restores protected data from a pending response after the tab is hidde
   expect(await screen.findByRole('alert')).toHaveTextContent('No tienes acceso');
   expect(screen.queryByText('synthetic-partner')).not.toBeInTheDocument();
 });
+it('points to the end date when the period is inverted and does not query it', async () => {
+  const fetch = vi.fn(async () => json(example)); vi.stubGlobal('fetch', fetch); show();
+  await screen.findByText('synthetic-partner');
+  fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '30112026' } });
+  fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '01112026' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Consultar' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('La fecha final debe ser igual o posterior a la inicial.');
+  expect(screen.getByLabelText('Hasta')).toHaveFocus();
+  expect(screen.getByLabelText('Hasta')).toHaveAttribute('aria-invalid', 'true');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

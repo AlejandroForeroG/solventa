@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
+import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import { getAuditDecision, listAuditDecisions, type AuditDetail, type AuditOutcome, type AuditPage } from './api';
 import './audit.css';
 
@@ -16,6 +17,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const t = (key: string, values?: Record<string, number>) => intl.formatMessage({ id: `audit.${key}`, defaultMessage: key }, values);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(emptyFilters);
+  const [rangeProblem, setRangeProblem] = useState<DateRangeProblem>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -82,16 +84,22 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}>{t(exporting ? 'exporting' : 'export')}</button>}
       </div>
       {!selection && <form className="audit-filters" onReset={event => {
-        event.preventDefault(); setFilters(emptyFilters()); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
+        event.preventDefault(); setRangeProblem(null); setFilters(emptyFilters()); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
       }} onSubmit={event => {
-        event.preventDefault(); const params = new URLSearchParams();
+        event.preventDefault();
+        const found = dateRangeProblem(filters.from.trim(), filters.to.trim());
+        setRangeProblem(found);
+        if (found) { document.getElementById(`audit-${found.field}`)?.focus(); return; }
+        const params = new URLSearchParams();
         for (const [key, value] of Object.entries(filters)) if (value.trim()) params.set(key, value.trim());
         setQuery(params.toString()); setVisibleCount(5); setRefresh(value => value + 1);
       }}>
         <div className="field audit-reference"><label htmlFor="audit-reference">{t('reference')}</label><input id="audit-reference" name="reference" value={filters.reference} onChange={event => setFilters(current => ({ ...current, reference: event.target.value }))} maxLength={64} autoComplete="off" /></div>
         <div className="field"><label htmlFor="audit-product">{t('product')}</label><select id="audit-product" name="product" value={filters.product} onChange={event => setFilters(current => ({ ...current, product: event.target.value }))}><option value="">{t('all')}</option>{['vida_hipotecario', 'flight_delay'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
         <div className="field"><label htmlFor="audit-outcome">{t('outcome')}</label><select id="audit-outcome" name="outcome" value={filters.outcome} onChange={event => setFilters(current => ({ ...current, outcome: event.target.value }))}><option value="">{t('all')}</option>{['accepted', 'declined', 'preliminary'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
-        {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><CalendarDateInput id={`audit-${key}`} name={key} value={filters[key]} onChange={value => setFilters(current => ({ ...current, [key]: value }))} /></div>)}
+        {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><CalendarDateInput id={`audit-${key}`} name={key} value={filters[key]} aria-invalid={rangeProblem?.field === key || undefined} aria-describedby={rangeProblem?.field === key ? 'audit-range-error' : undefined}
+          onChange={value => { setFilters(current => ({ ...current, [key]: value })); setRangeProblem(null); }} />
+          {rangeProblem?.field === key && <p className="field-error" id="audit-range-error" role="alert">{intl.formatMessage({ id: `form.range.${rangeProblem.reason}` }, { days: 31 })}</p>}</div>)}
         <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="reset">{t('reset')}</button></div>
       </form>}
       {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>

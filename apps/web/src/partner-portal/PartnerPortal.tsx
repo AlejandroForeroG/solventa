@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { readPartnerPortal, type PortalOutcome } from './api';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
+import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import '../audit/audit.css';
 import './portal.css';
 
@@ -10,6 +11,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const t = (key: string) => intl.formatMessage({ id: `partnerPortal.${key}` });
   const [period, setPeriod] = useState(() => ({ from: new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) }));
   const [draft, setDraft] = useState(period);
+  const [problem, setProblem] = useState<DateRangeProblem>(null);
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<{ key: string; value: PortalOutcome } | null>(null);
   const generation = useRef(0);
@@ -38,9 +40,17 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
       <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
-      <form className="portal-period" onSubmit={event => { event.preventDefault(); setResult(null); setPeriod({ ...draft }); setRefresh(v => v + 1); }}>
-        <div className="field"><label htmlFor="portal-from">{t('from')}</label><CalendarDateInput id="portal-from" required value={draft.from} onChange={value => setDraft({ ...draft, from: value })} /></div>
-        <div className="field"><label htmlFor="portal-to">{t('to')}</label><CalendarDateInput id="portal-to" required value={draft.to} onChange={value => setDraft({ ...draft, to: value })} /></div>
+      <form className="portal-period" noValidate onSubmit={event => {
+        event.preventDefault();
+        const found = dateRangeProblem(draft.from, draft.to, 31) ?? (!draft.from ? { field: 'from' as const, reason: 'invalid' as const } : !draft.to ? { field: 'to' as const, reason: 'invalid' as const } : null);
+        setProblem(found);
+        if (found) { document.getElementById(`portal-${found.field}`)?.focus(); return; }
+        setResult(null); setPeriod({ ...draft }); setRefresh(v => v + 1);
+      }}>
+        {(['from', 'to'] as const).map(field => <div className="field" key={field}><label htmlFor={`portal-${field}`}>{t(field)}</label>
+          <CalendarDateInput id={`portal-${field}`} required value={draft[field]} aria-invalid={problem?.field === field || undefined} aria-describedby={problem?.field === field ? 'portal-period-error' : undefined}
+            onChange={value => { setDraft({ ...draft, [field]: value }); setProblem(null); }} />
+          {problem?.field === field && <p className="field-error" id="portal-period-error" role="alert">{intl.formatMessage({ id: `form.range.${problem.reason}` }, { days: 31 })}</p>}</div>)}
         <button className="btn btn-secondary" type="submit">{t('apply')}</button>
         <p className="note">{t('periodHint')}</p>
       </form>
