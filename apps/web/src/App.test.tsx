@@ -382,3 +382,12 @@ describe('purchase interrupted by a reload', () => {
     expect(readPurchaseDraft()).toBeNull();
   });
 });
+
+it('shows a not-found page for an unknown address instead of the landing', async () => {
+  window.history.replaceState(null, '', '/ruta-que-no-existe');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401, headers: { 'content-type': 'application/json' } })));
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: 'No encontramos esta página' })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
+  window.history.replaceState(null, '', '/');
+});

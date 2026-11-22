@@ -72,6 +72,7 @@ function Shell() {
   const isPrivacy = window.location.pathname === '/privacidad';
   const isConsole = isAdvisor || isSale || isPartnerPortal || isAudit || isClaims || isReports || isProviders || isPolicies || isPrivacy;
   const sectionTitle = isPrivacy ? 'privacy.open' : isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? isCustomerClaims ? 'claims.customerCases' : 'claims.open' : isReports ? 'reports.open' : 'audit.open';
+  const knownPath = path === '/' || path === '/cotizar' || isConsole || path.startsWith('/auth/');
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -137,6 +138,7 @@ function Shell() {
           </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
         {failed && isPolicies && destination && <p><a href="/" onClick={clearCustomerDestination}>{t('policies.backHome')}</a></p>}
       </main>)
+      : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><p>{t('navigation.notFoundHint')}</p><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>

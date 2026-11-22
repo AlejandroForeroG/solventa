@@ -81,8 +81,10 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
     <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{'← ' + t('caseBack')}</a>
-    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + error)}</p>{trace && <p className="mono">{trace}</p>}
-      <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
+    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + error)}</p>
+      {error === 'not_found' ? <a className="btn btn-secondary" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
+        : <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button>}
+      {trace && <details className="audit-reference-details"><summary>{t('supportDetails')}</summary><span className="mono">{trace}</span></details>}</div>}
     {!claim && !error && <p role="status">{t('loading')}</p>}
     {claim && <>
       <header className="claim-case-heading"><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
