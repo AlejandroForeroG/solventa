@@ -37,7 +37,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   }, []);
   const state = result?.key === key ? result.value : null;
   const page = state?.kind === 'ok' ? state.value : null;
-  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
       <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
