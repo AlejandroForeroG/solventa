@@ -20,3 +20,8 @@
 .reports-delivery-acknowledged { background: #e4f1ee; color: #08544a; }
 .reports-delivery-uncertain, .reports-delivery-dispatched { background: #fbf0dc; color: #7a4e05; }
 .reports-delivery-rejected { background: #fbe9e7; color: #8a241c; }
+.reports-confirm { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px solid #edd8ae; border-radius: 10px; background: #fbf0dc; }
+.reports-confirm .note { margin: 0; color: #5c3b04; }
+.reports-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.reports-table td.mono, .reports-table .mono { font-family: 'IBM Plex Sans', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reports-table .audit-id { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
