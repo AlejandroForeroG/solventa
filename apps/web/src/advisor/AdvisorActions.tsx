@@ -11,7 +11,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
   const [cursors,setCursors]=useState<(string|undefined)[]>([undefined]);
   const [result,setResult]=useState<Outcome<ApprovalList>|null>(null),[refresh,setRefresh]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [reference,setReference]=useState(''),[action,setAction]=useState<Approval['action']>('cancelled'),[replacement,setReplacement]=useState('');
-  const [expiry,setExpiry]=useState(()=>new Date(Date.now()+86400000).toISOString().slice(0,16)),[confirmed,setConfirmed]=useState(false);
+  const [days,setDays]=useState(1),[confirmed,setConfirmed]=useState(false);
   const [selected,setSelected]=useState<string|null>(null),[executeConfirmed,setExecuteConfirmed]=useState(false);
   const command=useRef<{body:string;key:string}|null>(null),executions=useRef(new Map<string,string>());
   useEffect(()=>{
@@ -27,7 +27,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     return()=>{window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',visible);};
   },[]);
   const page=result?.kind==='ok'?result.value:null;
-  const timestamp=(v:string)=>intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC';
+  const timestamp=(v:string)=>intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'})+' '+t('bogota');
   const reload=()=>{setResult(null);setRefresh(v=>v+1);};
   async function run(work:()=>Promise<Outcome<unknown>>) {
     if(busy)return;setBusy(true);setError('');
@@ -37,7 +37,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
   }
   const grant=()=>run(async()=>{
     if(!policy||!confirmed||!uuid(reference)||(action!=='cancelled'&&!uuid(replacement)))return{kind:'invalid'};
-    const expiresAt=new Date(expiry+'Z').toISOString(),payload={advisorReference:reference.toLowerCase(),action,replacementPolicyId:action==='cancelled'?null:replacement.toLowerCase(),expiresAt};
+    const expiresAt=new Date(Date.now()+days*86400000-300000).toISOString(),payload={advisorReference:reference.toLowerCase(),action,replacementPolicyId:action==='cancelled'?null:replacement.toLowerCase(),expiresAt};
     const body=JSON.stringify(payload);if(command.current?.body!==body)command.current={body,key:crypto.randomUUID()};
     return grantApproval(policy.policyId,payload,command.current.key);
   });
@@ -64,7 +64,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
       <p className="note">{t('scope')}</p><label className="field">{t('reference')}<input required value={reference} disabled={busy} onChange={e=>{setReference(e.target.value.trim());setConfirmed(false);}}/></label>
       <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']);setConfirmed(false);}}>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
       {action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
-      <label className="field">{t('expires')}<input type="datetime-local" required value={expiry} disabled={busy} onChange={e=>{setExpiry(e.target.value);setConfirmed(false);}}/></label>
+      <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={e=>{setDays(Number(e.target.value));setConfirmed(false);}}>{[1,2,3,7].map(value=><option key={value} value={value}>{intl.formatMessage({id:'sale.days'},{count:value})}</option>)}</select></label>
       <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t('confirm')}</label></div>
       <button className="btn btn-secondary" disabled={busy||!confirmed} type="submit">{busy?t('saving'):t('grant')}</button>
     </form>}

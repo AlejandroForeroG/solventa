@@ -22,7 +22,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     }).catch(() => { if (!abort.signal.aborted) setLoad({ kind: 'failed', reason: 'unavailable' }); });
     return () => abort.abort();
   }, [refresh, onSessionLost]);
-  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   async function run(work: () => Promise<Outcome<unknown>>) {
     if (busy) return;
     setBusy(true); setError('');
