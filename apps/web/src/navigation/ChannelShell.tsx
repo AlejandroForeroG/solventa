@@ -26,8 +26,8 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
 ];
 const workspaceLinks: typeof customerLinks = [
   { href: '/siniestros', label: 'claims.open', icon: 'claims' },
-  { href: '/reportes', label: 'reports.open', icon: 'reports' },
   { href: '/auditoria', label: 'audit.open', icon: 'audit' },
+  { href: '/reportes', label: 'reports.open', icon: 'reports' },
   { href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];

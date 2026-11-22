@@ -1,5 +1,5 @@
 import { findAssistanceProviders, validCoordinates } from '../../domain/assistance-search';
-import type { AssistanceDirectoryResult, AssistanceProvider, AssistanceSearch } from '../../domain/assistance-search';
+import type { AssistanceDirectoryResult, AssistanceMatch, AssistanceProvider, AssistanceSearch } from '../../domain/assistance-search';
 
 export const syntheticAssistanceFormat = 'synthetic-assistance-directory.v1';
 
@@ -42,22 +42,38 @@ function parseProvider(value: unknown): AssistanceProvider | null {
   return { id, kind, name, city, address, phone, hours, coordinates: point };
 }
 
-export function searchSyntheticAssistance(
-  search: AssistanceSearch,
-  payload: unknown = syntheticAssistanceDirectory,
-): AssistanceDirectoryResult {
+// A catalog that is malformed, of another version or with a duplicate provider is unavailable as a whole, never partly trusted.
+function loadProviders(payload: unknown): AssistanceProvider[] | null {
   if (!record(payload) || Object.keys(payload).length !== 3
     || payload.formatVersion !== syntheticAssistanceFormat || payload.simulated !== true
-    || !Array.isArray(payload.providers) || payload.providers.length > 100) return { status: 'unavailable' };
-
+    || !Array.isArray(payload.providers) || payload.providers.length > 100) return null;
   const providers: AssistanceProvider[] = [];
   const ids = new Set<string>();
   for (const raw of payload.providers) {
     const provider = parseProvider(raw);
-    if (!provider || ids.has(provider.id)) return { status: 'unavailable' };
+    if (!provider || ids.has(provider.id)) return null;
     ids.add(provider.id);
     providers.push(provider);
   }
+  return providers;
+}
+
+// The provider a request names, without its coordinates, or null when the directory has no such provider.
+export function findSyntheticProvider(id: string, payload: unknown = syntheticAssistanceDirectory): AssistanceMatch | null | 'unavailable' {
+  const providers = loadProviders(payload);
+  if (!providers) return 'unavailable';
+  const found = providers.find(provider => provider.id === id);
+  if (!found) return null;
+  const { coordinates: _coordinates, ...provider } = found;
+  return provider;
+}
+
+export function searchSyntheticAssistance(
+  search: AssistanceSearch,
+  payload: unknown = syntheticAssistanceDirectory,
+): AssistanceDirectoryResult {
+  const providers = loadProviders(payload);
+  if (!providers) return { status: 'unavailable' };
   const matches = findAssistanceProviders(search, providers);
   return matches ? { status: 'ok', simulated: true, providers: matches } : { status: 'invalid_input' };
 }

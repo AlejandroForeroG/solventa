@@ -133,6 +133,7 @@ All protected responses are validated before rendering. Requests are aborted and
 The authenticated header opens `/prestadores`. Enter a city or directory fixture address to see matches, sample contacts and hours. This web screen does not request device location. The [shared Policy API](../../modules/policy-claims-payments/assistance-provider-search.md) supplies the same directory to both channels and distinguishes an empty result from a failure.
 
 Search uses the shared single session-renewal attempt on 401, retaining its original query and cancellation signal. A second 401 clears protected content and explains that the session ended before offering sign-in.
+The customer can request assistance from a provider of the results. **Solicitar asistencia** opens a review with the provider and the address that was searched; nothing is sent until **Confirmar solicitud**. The page then shows the stored reference and state, noting that the provider is simulated, and **Mis solicitudes** lists the customer's own requests. A failed or uncertain send is told as such and is retried with the same idempotency key, so it never creates a second request; a lost session leaves through the usual sign-in path. See [requesting assistance](../../modules/policy-claims-payments/assistance-provider-search.md#requesting-assistance-on-site).
 
 ## Claims inbox
 

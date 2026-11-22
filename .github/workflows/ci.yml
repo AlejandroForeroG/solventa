@@ -108,6 +108,8 @@ jobs:
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:claim-drafts:sql
       - if: steps.reuse.outputs.reused != 'true'
+        run: npm run test:assistance-requests:sql
+      - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:financial:sql
       - if: steps.reuse.outputs.reused != 'true'
         run: npm run test:security:sql
