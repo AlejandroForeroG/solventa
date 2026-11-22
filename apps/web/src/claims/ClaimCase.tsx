@@ -36,9 +36,12 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
     {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
     {claims?.length === 0 && <p>{t('customerEmpty')}</p>}
-    {claims && <ul className="case-list">{claims.map(claim => <li key={claim.claimId}>
-      <a className="mono" href={'/mis-siniestros/' + claim.claimId}>{claim.claimNumber}</a>
-      <span className={'claims-badge claims-state-' + claim.state}>{t('state.' + claim.state)}</span>
+    {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
+      <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
+        <span className="mono own-claim-number">{claim.claimNumber}</span>
+        <span className={'claims-badge claims-state-' + claim.state}>{t((claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span>
+        <span className="own-claim-open" aria-hidden="true">{t('openCase')}</span>
+      </a>
     </li>)}</ul>}
     <OwnClaimPayments onSessionLost={onSessionLost} />
   </main>;
@@ -73,13 +76,14 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
-    <a href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
+    <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{'← ' + t('caseBack')}</a>
     {error && <div role="alert" className="audit-state"><p>{t('caseError.' + error)}</p>{trace && <p className="mono">{trace}</p>}
       <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claim && !error && <p role="status">{t('loading')}</p>}
     {claim && <>
       <header className="claim-case-heading"><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
-        <span className={'claims-badge claims-state-' + claim.state}>{t('state.' + claim.state)}</span></header>
+        <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
+      {audience === 'customer' && claim.state === 'unassigned' && <p className="note">{t('customerState.unassignedHint')}</p>}
       {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
       {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} /> : <>
         <div role="group" className="claims-filters" aria-label={t('caseSections')}>
@@ -190,7 +194,7 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   }
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
-    {claim.access === 'unassigned' ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button>
+    {claim.access === 'unassigned' ? <><p className="note">{t('takeHint')}</p><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
       : <div className="case-action-options">{options.map(option => <button key={option} type="button" className="btn btn-secondary"
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}>{t('action.' + option)}</button>)}</div>}

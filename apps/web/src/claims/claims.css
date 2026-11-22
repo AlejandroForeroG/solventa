@@ -65,3 +65,9 @@
 .claim-payment-confirmed { background: #e6f3ec; color: #1f7a4d; }
 .claim-payment-pending { background: #fbf0dc; color: #7a4e05; }
 .claim-payment-declined { background: #fbe9e7; color: #8a241c; }
+.own-claims { display: grid; gap: 12px; margin: 16px 0 32px; padding: 0; list-style: none; }
+.own-claim { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 18px 20px; color: inherit; text-decoration: none; }
+.own-claim-number { font-size: 16px; font-weight: 600; color: var(--ink); }
+.own-claim-open { margin-left: auto; color: var(--brand); font-size: 14px; font-weight: 600; }
+.own-claim:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .own-claim:hover { border-color: var(--brand); } }
