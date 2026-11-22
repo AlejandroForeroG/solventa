@@ -44,7 +44,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
       {key === 'birthDate' ? <CalendarDateInput id={id} name={key} className="mono-input" autoComplete="bday" required value={values[key]}
         onChange={value => onChange(key, value)} aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
       : <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
-        value={values[key]} onChange={event => onChange(key, key === 'amount' ? groupedDigits(event.target.value) : event.target.value)}
+        value={values[key]} onChange={event => onChange(key, event.target.value)} onBlur={key === 'amount' ? event => { const value = groupedDigits(event.target.value); if (value !== event.target.value) onChange(key, value); } : undefined}
         aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />}
       {problem && <p className="field-error" id={`${id}-error`}>{intl.formatMessage({ id: problem.message }, problem.values)}</p>}
     </div>;

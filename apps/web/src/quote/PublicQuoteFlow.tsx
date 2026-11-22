@@ -25,8 +25,10 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => { heading.current?.focus(); }, [phase]);
 
-  async function calculate() {
+  async function calculate(current = values) {
     if (busy) return;
+    const values = { ...current, amount: groupedDigits(current.amount) };
+    if (values.amount !== current.amount) { setValues(values); onValuesChange?.(values); }
     const errors = invalidEstimateFields(values);
     setInvalid(errors); setUnavailable(false);
     if (errors.length) { document.getElementById(`estimate-${errors[0]}`)?.focus(); announce(t('estimate.invalid')); return; }
@@ -56,13 +58,13 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
     {phase === 'form' ? <>
       <p className="lede">{t('estimate.intro')}</p>
       {unavailable && <p className="banner banner-error" role="alert">{t('form.errorUnavailable')}</p>}
-      <form className="card" noValidate onSubmit={event => { event.preventDefault(); void calculate(); }}>
+      <form className="card" noValidate onSubmit={event => { event.preventDefault(); void calculate(values); }}>
         <div className="grid grid-3">{estimateFields.map(key => <div className="field" key={key}>
           <label htmlFor={`estimate-${key}`}>{t(`estimate.${key}`)} <span aria-hidden="true">*</span></label>
           <input id={`estimate-${key}`} name={key} type="text" inputMode="numeric" className="mono-input" autoComplete="off" required disabled={busy} maxLength={key === 'ageYears' ? 2 : key === 'termMonths' ? 3 : 22}
             value={values[key]} onChange={event => {
               clearEstimateDraft();
-              const next = { ...values, [key]: key === 'amount' ? groupedDigits(event.target.value) : event.target.value };
+              const next = { ...values, [key]: event.target.value };
               setValues(next);
               setInvalid(current => current.includes(key) && !invalidEstimateFields(next).includes(key) ? current.filter(field => field !== key) : current);
               onValuesChange?.(next);

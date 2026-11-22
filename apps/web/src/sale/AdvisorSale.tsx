@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { prepareAdvisorOffer, uuid, type PreparedOffer, type PrepareRequest } from './api';
 import { CopyValue } from '../forms/CopyValue';
+import { groupedDigits } from '../quote/estimate-api';
 import '../policies/policies.css';
 
 const empty = { authorizationId: '', fullName: '', documentNumber: '', birthDate: '', city: '', partnerCreditId: '', amount: '', termMonths: '120' };
@@ -13,7 +14,7 @@ export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
   // The same sale keeps its key across retries, so a lost answer never creates a second offer.
   const command = useRef<{ body: string; key: string } | null>(null);
   const set = (field: keyof typeof empty) => (event: { target: { value: string } }) => { setForm(current => ({ ...current, [field]: event.target.value })); setOffer(null); };
-  const amount = Number(form.amount), term = Number(form.termMonths);
+  const amount = Number(groupedDigits(form.amount.trim())), term = Number(form.termMonths);
   const ready = uuid(form.authorizationId.trim()) && form.fullName.trim() && form.documentNumber.trim() && form.birthDate && form.city.trim() && form.partnerCreditId.trim()
     && Number.isSafeInteger(amount) && amount > 0 && Number.isSafeInteger(term) && term > 0;
   async function submit() {
