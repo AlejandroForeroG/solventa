@@ -17,7 +17,7 @@ function downloadDocument(policy: Policy) {
   URL.revokeObjectURL(url);
 }
 
-export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
+export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack, assisted = false }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; assisted?: boolean; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
   const intl = useIntl();
   const { copDecimal, copDecimalAmount, dayMonthYear, dateTime } = useFormatters();
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
@@ -31,7 +31,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
           <p className="offer-billing">{t('document.billing')}</p>
-          <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>
+          {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p> : <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>}
         </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
