@@ -30,7 +30,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
           <p className="offer-billing">{t('document.billing')}</p>
-          <details className="offer-verification"><summary>{t('document.estimateRelation')}</summary><p className="offer-billing">{t('document.billingDetail')}</p></details>
+          <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>
         </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
