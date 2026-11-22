@@ -16,7 +16,7 @@ Case evidence is linked to the existing `evidence_metadata` record. Only verifie
 
 ## Case actions
 
-- **Take case** assigns the authenticated analyst and moves a filed unassigned case into review. Assignment and the fact that the case was taken are recorded together.
+- **Take case** ("Asignarme el expediente" in the web console) assigns the authenticated analyst and moves a filed unassigned case into review. Assignment and the fact that the case was taken are recorded together.
 - **Approve or reject** requires a reviewable case, a trimmed reason of 10–1000 characters, and a selection of one to twenty verified evidence records from that same case. The required evidence count must also be met. The decision preserves its inputs, actor, prior and resulting states, versioned capture, reason and audit. It creates no indemnity or payment.
 - **Authorize disbursement** is a separate operator API after approval. It records an explicit amount within the policy's remaining coverage, then processes and reconciles the durable payment independently of the session. See [claim disbursements](claim-disbursements.md) for supported coverage, grants, replay, states and limits.
 - **Assign expert** requires a reason and a valid expert from the shared [simulated assistance directory](assistance-provider-search.md). The assignment creates an escalated case and a peritaje task with the expert, reason, analyst and date. It leaves approval and payment as independent actions.
