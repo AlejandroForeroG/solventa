@@ -19,7 +19,10 @@ import { Reports } from './application/reports';
 import { SqlReportStore } from './adapters/outbound/sql-report-store';
 import { SqlMockReportDestination } from './adapters/outbound/sql-mock-report-destination';
 import { TimerDeadline } from './adapters/outbound/timer-deadline';
-import { listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
+import { AssistanceRequests } from './application/assistance-requests';
+import { SqlAssistanceRequests } from './adapters/outbound/sql-assistance-requests';
+import { newAssistanceReference } from './adapters/outbound/random-assistance-reference';
+import { findSyntheticProvider, listSyntheticExperts, searchSyntheticAssistance } from './adapters/outbound/synthetic-assistance-directory';
 import { Notices } from './application/notices';
 import { SqlNotices } from './adapters/outbound/sql-notices';
 import { ExpiryNotices } from './application/expiry-notices';
@@ -52,6 +55,8 @@ export default class extends WorkerEntrypoint<PolicyEnv & { FINANCIAL_EVENT_KEY?
       authorizeFinancialAccess: input => this.env.IDENTITY_SERVICE.authorizeFinancialAccessV1(input),
       denyResourceAccess: input => this.env.IDENTITY_SERVICE.denyResourceAccessV1(input),
       assistance: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input), search: searchSyntheticAssistance },
+      assistanceRequests: { authorize: input => this.env.IDENTITY_SERVICE.authorizeApiAccessV1(input),
+        requests: new AssistanceRequests(new SqlAssistanceRequests(this.env.POLICY_DB.connectionString), { find: id => findSyntheticProvider(id) }, new Sha256ReportDigest(), newAssistanceReference) },
       claims: { decisions: new ClaimDecisions(new SqlClaimDecisions(this.env.POLICY_DB.connectionString), { now: () => new Date() }),
         disbursements, dispatchDisbursement: paymentId => this.ctx.waitUntil(disbursements.recoverPayment(paymentId).then(outcome => {
           console.log(JSON.stringify({ event: 'claim_disbursement_recovery', environment: this.env.APP_ENV, ...outcome }));

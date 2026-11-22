@@ -33,7 +33,8 @@ export class ClaimReportFlow {
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly deps: Dependencies) {
-    this.snapshot = { draft: { policyId: deps.policyId, eventType: null, occurredAt: deps.now(), place: '', location: { state: 'off' }, description: '', evidence: [] }, issues: [], rejected: [], phase: { kind: 'editing' }, document: { kind: 'idle' } };
+    this.snapshot = { draft: { policyId: deps.policyId, eventType: null, occurredAt: deps.now(), place: '', location: { state: 'off' }, description: '', evidence: [] },
+      issues: [], rejected: [], phase: { kind: 'editing' }, document: { kind: 'idle' } };
   }
 
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };

@@ -3,6 +3,7 @@ import { auditWorld } from './audit';
 import { claimsWorld } from './claims';
 import { reportsWorld } from './reports';
 import { searchSyntheticAssistance } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
+import { assistanceRequests, fakeAssistanceStore } from '../../support/assistance-request-fakes';
 import { memoryEvidence, memoryStore as memoryClaimStore, type Stream } from '../../support/claim-report-fakes';
 import { ClaimReport } from '../../../backend/policy-claims-payments/src/application/claim-report';
 import { claimIds, evidenceBytes, idempotencyKey, manifest, providerNow } from './claim-report-contract';
@@ -246,6 +247,27 @@ function nativeAssistanceWorld(): Partial<World> {
   return { policy: binding(policy, { APP_ENV: 'dev' }) };
 }
 
+// The native customer may request assistance and follow it. The store is in memory and its identities, references and dates are fixed, so each state starts from the same world.
+async function nativeAssistanceRequestsWorld(seed: boolean): Promise<Partial<World>> {
+  const requests = assistanceRequests(fakeAssistanceStore().store);
+  if (seed) {
+    const stored = await requests.create(financialActor, { providerId: 'demo-bog-workshop', place: { kind: 'address', address: 'Calle de prueba 10, Bogotá' } }, 'pact-seed-key-0001', financialActor.clientId);
+    if (stored.status !== 'created') throw new Error('The assistance request of the contract could not be seeded.');
+  }
+  const policy = createPolicyHttp({
+    authorizeFinancialAccess: async () => ({ allowed: false, status: 403, error: 'forbidden' }),
+    denyResourceAccess: async () => ({ recorded: true }),
+    finance: financeFixtures(true),
+    assistanceRequests: {
+      authorize: async input => input.kind === 'mobile' && input.token === 'synthetic.jwt.token'
+        ? { allowed: true, actor: { kind: 'user', channel: 'mobile', principal: financialActor, operations: [input.operation] } }
+        : { allowed: false, status: 401, error: 'unauthorized' },
+      requests,
+    },
+  });
+  return { policy: binding(policy, { APP_ENV: 'dev' }) };
+}
+
 // The native customer reports a claim on an issued policy of their own. Stores are in memory with fixed identities, so each state starts from the same world.
 async function nativeClaimReportWorld(stage: 'empty' | 'draft' | 'received'): Promise<Partial<World>> {
   const policies = new Map([[claimIds.policy, { subject: financialActor.subjectToken, issued: true, from: Date.parse('2026-01-01T00:00:00.000Z'), until: Date.parse('2027-01-01T00:00:00.000Z') }]]);
@@ -330,11 +352,13 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with multiple policy pages': () => nativePolicyWorld(true),
   ...Object.fromEntries((['ready', 'conflict', 'resolved', 'unavailable'] as const).map(mode => [`native claim drafts ${mode}`, () => ({ policy: draftPactWorld(mode) })])),
   'a native session with access to the synthetic assistance directory': nativeAssistanceWorld,
+  'a native session with a stored notice': () => nativeNoticesWorld('stored'),
+  'a native session with a notice offered to its device': () => nativeNoticesWorld('offered'),
+  'a native session that may request assistance': () => nativeAssistanceRequestsWorld(false),
+  'a native session with a stored assistance request': () => nativeAssistanceRequestsWorld(true),
   'a native session that may report a claim': () => nativeClaimReportWorld('empty'),
   'a native session with a draft claim report': () => nativeClaimReportWorld('draft'),
   'a native session with a claim report whose evidence was received': () => nativeClaimReportWorld('received'),
-  'a native session with a stored notice': () => nativeNoticesWorld('stored'),
-  'a native session with a notice offered to its device': () => nativeNoticesWorld('offered'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
