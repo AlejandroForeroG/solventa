@@ -1,4 +1,5 @@
 import { useIntl } from 'react-intl';
+import { Icon } from '../navigation/Icon';
 import './landing.css';
 
 export function Landing({ authenticated = false, sessionUnavailable, onRetry }: { authenticated?: boolean; sessionUnavailable: boolean; onRetry: () => void }) {
@@ -15,7 +16,7 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
         <h1 id="landing-title">{t(authenticated ? 'accountHeading' : 'title')}</h1>
         <p className="landing-lede">{t(authenticated ? 'accountIntro' : 'intro')}</p>
         <div className="landing-actions">
-          <a className="btn btn-primary" href={authenticated ? '/polizas' : '/cotizar'}>{authenticated ? intl.formatMessage({ id: 'policies.open' }) : t('start')} <span aria-hidden="true">→</span></a>
+          <a className="btn btn-primary" href={authenticated ? '/polizas' : '/cotizar'}>{authenticated ? intl.formatMessage({ id: 'policies.open' }) : t('start')} <Icon name="forward" size={18} /></a>
           <a className="landing-text-link" href={authenticated ? '/cotizar' : '#how-it-works'}>{authenticated ? intl.formatMessage({ id: 'navigation.quote' }) : t('how')}</a>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { prepareAdvisorOffer, uuid, type PreparedOffer, type PrepareRequest } from './api';
+import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
 
 const empty = { authorizationId: '', fullName: '', documentNumber: '', birthDate: '', city: '', partnerCreditId: '', amount: '', termMonths: '120' };
@@ -50,7 +51,7 @@ export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
     {offer && <div role="status" className="card">
       <p>{offer.contractable ? t('definitive') : t('preliminary')}</p>
       <p>{t('premium')}: {intl.formatNumber(Number(offer.premium), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</p>
-      <p>{t('offerCode')}: <span className="mono audit-id">{offer.offerId}</span></p>
+      <CopyValue label={t('offerCode')} value={offer.offerId} />
       <p className="note">{t('handoff')}</p>
     </div>}
   </section>;

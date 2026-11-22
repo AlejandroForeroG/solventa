@@ -29,7 +29,7 @@ it.each([claimId, claimId.toUpperCase()])('opens the exact receipt and timeline 
   expect(await screen.findByText('Pago simulado')).toBeVisible();
   expect(screen.getByText(new RegExp(receipt.payment.reference))).toBeVisible();
   expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/v1/claims/customer/disbursements?claimId=' + claimId);
-  await user.click(screen.getByRole('button', { name: 'Historial' }));
+  await user.click(screen.getByRole('tab', { name: 'Historial' }));
   expect(screen.getByText('Desembolso simulado confirmado.')).toBeVisible();
   expect(screen.getByText('Radicación')).toBeVisible();
   expect(screen.queryByText('Pago simulado')).toBeNull();
@@ -64,7 +64,7 @@ it('reconciles a replacement selection after an upload fails', async () => {
     return value;
   };
   showCase('customer');
-  await user.click(await screen.findByRole('button', { name: 'Tareas' }));
+  await user.click(await screen.findByRole('tab', { name: 'Tareas' }));
   const chooser = screen.getByLabelText(/Adjuntar imágenes o videos/);
   await user.upload(chooser, file([1, 2, 3], 'original.png'));
   await user.click(screen.getByRole('button', { name: 'Enviar respuesta' }));
@@ -97,10 +97,10 @@ it('retains the analyst’s reason and command key when an approval succeeds aft
   await user.click(await screen.findByRole('button', { name: 'Aprobar' }));
   await user.type(screen.getByRole('textbox', { name: 'Motivo' }), 'Evidence evaluated by the assigned analyst.');
   await user.click(screen.getByRole('checkbox', { name: 'Documento 1' }));
-  await user.click(screen.getByRole('button', { name: 'Confirmar acción' }));
+  await user.click(screen.getByRole('button', { name: 'Aprobar siniestro' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos confirmar el resultado');
   expect(screen.getByRole('textbox', { name: 'Motivo' })).toHaveValue('Evidence evaluated by the assigned analyst.');
-  await user.click(screen.getByRole('button', { name: 'Confirmar acción' }));
+  await user.click(screen.getByRole('button', { name: 'Aprobar siniestro' }));
   expect(await screen.findByText('Siniestro aprobado.')).toBeVisible();
   expect(bodies).toEqual([bodies[0], bodies[0]]);
   expect(keys[1]).toBe(keys[0]);
@@ -126,7 +126,7 @@ it('shows the owner the requested information and confirms their response', asyn
     return json({ ...examples.caseFile, access: 'customer', state: received ? 'in_review' : 'pending_information', requirements: [result] });
   }));
   showCase('customer');
-  await user.click(await screen.findByRole('button', { name: 'Tareas' }));
+  await user.click(await screen.findByRole('tab', { name: 'Tareas' }));
   expect(screen.getByText(requirement.details)).toBeVisible();
   expect(screen.getByText('Titular de la póliza')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();

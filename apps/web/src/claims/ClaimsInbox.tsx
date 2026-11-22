@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { listClaims, type ClaimsOutcome, type ClaimsPage } from './api';
+import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './claims.css';
 
@@ -62,6 +63,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-shell">
     <div className="audit-main">
       <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <div className="claims-toolbar">
         <div role="group" aria-label={t('filterGroup')} className="claims-filters">
           {FILTERS.map(option => <button key={option} type="button" className="claims-filter" aria-pressed={filter === option} onClick={() => choose(option)}>{t(`filter.${option}`)}</button>)}
@@ -69,7 +71,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <form className="claims-search" onSubmit={event => {
           event.preventDefault();
           const value = draft.trim();
-          if (value && !SEARCH.test(value)) { setSearchInvalid(true); return; }
+          if (value && !SEARCH.test(value)) { setSearchInvalid(true); document.getElementById('claims-search')?.focus(); return; }
           moveFocus.current = true; setSearchInvalid(false); setSearch(value.toLowerCase().startsWith('sin-') ? value.toUpperCase() : value.toLowerCase()); setBefore(undefined);
         }}>
           <label htmlFor="claims-search">{t('search')}</label>
@@ -79,7 +81,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         </form>
       </div>
       {searchInvalid && <p id="claims-search-error" className="claims-error" role="alert">{t('searchInvalid')}</p>}
-      {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
+      {state.kind !== 'ready' && <div className="audit-state" role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
         <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => { moveFocus.current = true; setResult(null); setRefresh(value => value + 1); }}>{t('retry')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
@@ -105,6 +107,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <p>{filtered ? t('emptyFiltered', { filter: search ? search : t(`filter.${filter}`) }) : t('empty')}</p>
         {filtered && <><p className="note">{t('emptyHint')}</p><button type="button" className="btn btn-secondary" onClick={clear}>{t('clearFilter')}</button></>}
       </div>)}
+      </>}
     </div>
   </main>;
 }

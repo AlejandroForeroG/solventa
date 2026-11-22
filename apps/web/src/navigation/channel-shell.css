@@ -2,7 +2,7 @@
 .channel-layout-signed-in { padding-left: 224px; }
 .channel-workspace, .channel-content { min-width: 0; }
 .channel-content:focus { outline: none; }
-.channel-topbar { min-height: 76px; padding: 16px 36px; display: flex; align-items: center; gap: 20px; background: #fff; border-bottom: 1px solid #e3e1dc; }
+.channel-topbar { min-height: 76px; padding: max(16px, env(safe-area-inset-top)) max(36px, env(safe-area-inset-right)) 16px max(36px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 20px; background: #fff; border-bottom: 1px solid #e3e1dc; }
 .channel-topbar-brand { flex: none; }
 .channel-topbar-brand img { width: 150px; height: auto; }
 .channel-layout-signed-in .channel-topbar-brand { display: none; }
@@ -46,18 +46,24 @@
 @media (max-width: 1079px) {
   .channel-layout-signed-in { padding-left: 0; }
   .channel-sidebar { display: none; }
-  .channel-topbar { min-height: 72px; padding: 12px 24px; gap: 12px; }
+  .channel-topbar { min-height: 72px; padding: max(12px, env(safe-area-inset-top)) 24px 12px; gap: 12px; }
   .channel-layout-signed-in .channel-topbar-brand { display: block; }
   .channel-topbar-brand img { width: 128px; }
   .channel-breadcrumb { display: none; }
   .navigation-menu-trigger { display: inline-flex; justify-content: center; align-items: center; flex: none; background: #fff; color: #062f2a; border-color: #e3e1dc; }
 }
 @media (max-width: 599px) {
-  .channel-topbar { padding: 12px 16px; }
+  .channel-topbar { padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
   .channel-topbar-brand img { width: 116px; }
   .channel-topbar-tools { gap: 10px; }
   .channel-topbar .locale-btn { min-width: 44px; min-height: 44px; padding: 8px; }
   .channel-topbar .btn-small { min-height: 44px; padding: 9px 12px; font-size: 12px; }
-  .channel-layout:not(.channel-layout-signed-in) .channel-topbar { flex-wrap: wrap; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar { flex-wrap: nowrap; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar-brand img { width: 104px; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar .locale-btn { min-width: 40px; }
   .channel-layout-signed-in .content { padding-top: 24px; }
 }
+.navigation-cta { display: flex; gap: 10px; justify-content: center; margin: -20px 0 28px; min-height: 46px; background: #12d9b8; border-color: #12d9b8; color: #062f2a; }
+.navigation-cta[aria-current='page'] { box-shadow: inset 0 0 0 2px #fff; }
+@media (hover: hover) and (pointer: fine) { .navigation-cta:hover:not([aria-disabled='true']) { background: #4fe3ca; } }
+.navigation-cta:focus-visible { outline-color: #7fc7bc; outline-offset: 3px; }

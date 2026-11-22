@@ -7,11 +7,12 @@ import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
 import type { PolicyDocumentDestination } from './document-destination';
 import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
+import { Icon } from '../navigation/Icon';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
-type Tab = 'info' | 'documents' | 'history';
-const TABS: readonly Tab[] = ['info', 'documents', 'history'];
+type Tab = 'info' | 'documents' | 'history' | 'manage';
+const TABS: readonly Tab[] = ['info', 'documents', 'history', 'manage'];
 
 function useTranslate() {
   const intl = useIntl();
@@ -172,7 +173,7 @@ function History({ policy }: { policy: PolicyDetail }) {
 
 function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
   const t = useTranslate();
-  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null });
+  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null, manage: null });
   function move(event: KeyboardEvent, from: Tab) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
     if (!step) return;
@@ -196,7 +197,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
   const policy = state.kind === 'ready' ? state.value : null;
   const status = policy ? policyState(policy, now) : null;
   return <main className="content policies">
-    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}>‹ {t('back')}</button>
+    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}><Icon name="back" size={16} />{t('back')}</button>
     <p className="section-label">{t('label')}</p>
     <h1 ref={heading} tabIndex={-1}>{policy ? t(`product.${policy.product}`) : t('title')}</h1>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
@@ -209,9 +210,11 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
         {tab === 'info' && <Coverage policy={policy} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
+        {tab === 'manage' && <>
+          <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
+          <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
+        </>}
       </div>
-      <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
-      <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }
@@ -226,7 +229,7 @@ export function PolicyPortal({ onSessionLost, documentDestination, destination: 
   const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const section = selected === destination?.policyId ? destination.section : 'info';
-  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'info' : section} renewal={section === 'renewal'} onBack={() => {
+  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'manage' : section} renewal={section === 'renewal'} onBack={() => {
     window.history.replaceState(null, '', '/polizas'); setDestination(null); setSelected(null); onBackToList?.();
   }} onSessionLost={onSessionLost} />
     : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;

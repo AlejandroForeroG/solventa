@@ -4,6 +4,7 @@ import { OfferJourney } from '../offer/OfferJourney';
 import { readOffer, type Offer } from '../offer/api';
 import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
+import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
 
 type Load = { kind: 'loading' } | { kind: 'ready'; items: SaleAuthorization[] } | { kind: 'failed'; reason: string };
@@ -21,7 +22,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     }).catch(() => { if (!abort.signal.aborted) setLoad({ kind: 'failed', reason: 'unavailable' }); });
     return () => abort.abort();
   }, [refresh, onSessionLost]);
-  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   async function run(work: () => Promise<Outcome<unknown>>) {
     if (busy) return;
     setBusy(true); setError('');
@@ -52,7 +53,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
       <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
       <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
-      {item.status === 'active' && <details className="document-verification"><summary>{t('code')}</summary><p className="mono audit-id">{item.authorizationId}</p></details>}
+      {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
     </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>
       : <p>{t('empty')}</p>)}
   </section>;
@@ -60,7 +61,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
 
 type Continue = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ready'; offer: Offer; run: number } | { kind: 'failed'; reason: string };
 
-function Continuation({ onSessionLost }: { onSessionLost(): void }) {
+function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; onOpenChange(open: boolean): void }) {
   const intl = useIntl(), t = (key: string) => intl.formatMessage({ id: `sale.${key}` });
   const [offerId, setOfferId] = useState(''), [state, setState] = useState<Continue>({ kind: 'idle' }), run = useRef(0);
   async function open() {
@@ -73,7 +74,10 @@ function Continuation({ onSessionLost }: { onSessionLost(): void }) {
       setState(outcome.kind === 'ok' ? { kind: 'ready', offer: outcome.value, run: run.current } : { kind: 'failed', reason: outcome.kind === 'notFound' || outcome.kind === 'forbidden' ? 'offerNotFound' : outcome.kind });
     } catch { setState({ kind: 'failed', reason: 'unavailable' }); }
   }
-  const back = useCallback(() => { setState({ kind: 'idle' }); setOfferId(''); }, []);
+  const back = useCallback(() => {
+    setState({ kind: 'idle' }); setOfferId('');
+  }, []);
+  useEffect(() => { onOpenChange(state.kind === 'ready'); }, [state.kind, onOpenChange]);
   if (state.kind === 'ready') {
     // Consent, acceptance, payment and signature are the customer's own steps, exactly as in their own purchase.
     return <OfferJourney key={state.run} quote={{ quoteId: state.offer.quoteId }} initialOffer={state.offer} onRequote={back} onBack={back} onSessionLost={onSessionLost}
@@ -95,13 +99,14 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
   // A purchase interrupted by a reload resumes at its policy: the draft keeps only server references and command keys.
   const [resume, setResume] = useState(readPurchaseDraft);
   const leave = useCallback(() => { clearPurchaseDraft(); setResume(null); }, []);
+  const [offerOpen, setOfferOpen] = useState(false);
   if (resume) {
     return <main className="content policies"><OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} onRequote={leave} onBack={leave} onSessionLost={onSessionLost}
       onConsentRequired={leave} /></main>;
   }
   return <main className="content policies">
-    <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>
-    <Authorizations onSessionLost={onSessionLost} />
-    <Continuation onSessionLost={onSessionLost} />
+    {!offerOpen && <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>}
+    {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
+    <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
   </main>;
 }

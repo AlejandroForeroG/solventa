@@ -190,7 +190,7 @@ describe('my policies route in the application', () => {
     });
     render(<App />);
     await screen.findByRole('tab', { name: 'Documentos', selected: true });
-    const back = screen.getByRole('button', { name: /‹ Mis pólizas/ });
+    const back = screen.getByRole('button', { name: /^Mis pólizas$/ });
     // The detail also fetches issued policies, so expire the session on navigation.
     back.addEventListener('click', () => { expired = true; }, { once: true });
     await userEvent.click(back);
@@ -334,7 +334,7 @@ describe('privacy dashboard in the application', () => {
     serve(200);
     const user = userEvent.setup();
     const { container } = render(<App />);
-    const open = await screen.findByRole('button', { name: 'Panel de privacidad' });
+    const open = await screen.findByRole('button', { name: 'Privacidad' });
     await user.type(screen.getByLabelText(/Nombre completo/), 'Cliente Sintetico Uno');
 
     await user.click(open);
@@ -351,14 +351,14 @@ describe('privacy dashboard in the application', () => {
     serve(401);
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Calcular estimación' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Panel de privacidad' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Privacidad' })).toBeNull();
   });
 
   it('follows the language of the interface', async () => {
     serve(200);
     window.localStorage.setItem('solventa.locale', 'en-US');
     render(<App />);
-    expect(await screen.findByRole('button', { name: 'Privacy dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Privacy' })).toBeInTheDocument();
   });
 });
 
@@ -382,4 +382,13 @@ describe('purchase interrupted by a reload', () => {
     await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
     expect(readPurchaseDraft()).toBeNull();
   });
+});
+
+it('shows a not-found page for an unknown address instead of the landing', async () => {
+  window.history.replaceState(null, '', '/ruta-que-no-existe');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401, headers: { 'content-type': 'application/json' } })));
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: 'No encontramos esta página' })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
+  window.history.replaceState(null, '', '/');
 });

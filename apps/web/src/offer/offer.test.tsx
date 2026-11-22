@@ -49,7 +49,7 @@ function journey(api = stubs(), locale: Locale = 'es-CO', strict = false) {
 }
 
 async function signFromReview(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+  await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
   await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
   await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
   await user.click(screen.getByRole('checkbox'));
@@ -192,7 +192,7 @@ describe('definitive offer journey', () => {
     expect(api.issuePolicy).not.toHaveBeenCalled();
     expect(await axe(container)).toHaveNoViolations();
 
-    await user.click(screen.getByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
     expect(api.chargePolicy).toHaveBeenCalledWith(pending, expect.any(String), expect.any(AbortSignal));
     expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
@@ -223,7 +223,7 @@ describe('definitive offer journey', () => {
     const api = stubs({ chargePolicy: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(charged)) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     expect(await screen.findByRole('button', { name: 'Actualizar estado' })).toBeInTheDocument();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
     expect(api.beginSignatureChallenge).not.toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('definitive offer journey', () => {
         status: 'refunded', payment: { status: 'refunded', reference: receipt } })) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     expect(await screen.findByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
     expect(api.issuePolicy).not.toHaveBeenCalled();
   });
@@ -252,7 +252,7 @@ describe('definitive offer journey', () => {
     policyForAcceptance: vi.fn().mockResolvedValueOnce(ok(pending)).mockResolvedValueOnce(ok(refunding)).mockResolvedValue(ok(refunded)) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     await user.click(await screen.findByRole('button', { name: 'Verificar y recuperar operación' }));
     expect(await screen.findByRole('heading', { name: 'Cobro revertido' })).toBeInTheDocument();
     expect(api.chargePolicy).toHaveBeenCalledTimes(2);
@@ -284,7 +284,7 @@ describe('definitive offer journey', () => {
     const api = stubs({ beginSignatureChallenge: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(challenge)) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
     await user.click(screen.getByRole('checkbox'));
@@ -299,7 +299,7 @@ describe('definitive offer journey', () => {
     const api = stubs({ cancelSignatureChallenge: vi.fn().mockResolvedValueOnce({ kind: 'unavailable' }).mockResolvedValue(ok(charged)) });
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
     await user.click(screen.getByRole('checkbox'));
@@ -430,7 +430,7 @@ describe('definitive offer journey', () => {
       beginSignatureChallenge: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'offer_invalid' }) });
     const { user, onRequote } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     await user.click(await screen.findByRole('button', { name: 'Continuar a la firma' }));
     await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
     await user.click(screen.getByRole('checkbox'));
@@ -459,7 +459,7 @@ describe('definitive offer journey', () => {
       };
       await act(async () => {});
       await click('Aceptar oferta');
-      await click('Continuar al cobro');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ })); });
       await click('Continuar a la firma');
       await click('Página siguiente');
       await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
@@ -531,7 +531,7 @@ describe('definitive offer journey', () => {
     const api = stubs({ chargePolicy: vi.fn().mockResolvedValue({ kind: 'rejected', code: 'payment_declined' }) });
     const { user, onRequote, container } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
-    await user.click(await screen.findByRole('button', { name: 'Continuar al cobro' }));
+    await user.click(await screen.findByRole('button', { name: /^Pagar .* \(cobro simulado\)$/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'El cobro no se pudo completar' })).toBeInTheDocument();
     expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 6: Cobro');
     expect(screen.getByText('La póliza no se emitió y no se generó ningún cargo.')).toBeInTheDocument();

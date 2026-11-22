@@ -69,8 +69,10 @@ function Shell() {
   const isAdvisor = window.location.pathname === '/asesor';
   const isSale = window.location.pathname === '/venta-asistida';
   const isPartnerPortal = window.location.pathname === '/socios';
-  const isConsole = isAdvisor || isSale || isPartnerPortal || isAudit || isClaims || isReports || isProviders || isPolicies;
-  const sectionTitle = isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? isCustomerClaims ? 'claims.customerCases' : 'claims.open' : isReports ? 'reports.open' : 'audit.open';
+  const isPrivacy = window.location.pathname === '/privacidad';
+  const isConsole = isAdvisor || isSale || isPartnerPortal || isAudit || isClaims || isReports || isProviders || isPolicies || isPrivacy;
+  const sectionTitle = isPrivacy ? 'privacy.open' : isAdvisor ? 'advisor.title' : isSale ? 'sale.title' : isPartnerPortal ? 'partnerPortal.title' : isPolicies ? 'policies.title' : isProviders ? 'assistance.title' : isClaims ? isCustomerClaims ? 'claims.customerCases' : 'claims.open' : isReports ? 'reports.open' : 'audit.open';
+  const knownPath = path === '/' || path === '/cotizar' || isConsole || path.startsWith('/auth/');
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
     setSession('loading');
@@ -121,7 +123,7 @@ function Shell() {
     {restoringDestination && session === 'authenticated'
       ? <main className="access-panel"><p role="status">{t('navigation.openingDestination')}</p></main>
       : isConsole ? (session === 'authenticated' && !busy
-      ? isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal destination={destination?.kind === 'policy' ? destination : undefined} onBackToList={abandonDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? uuid(caseId) ? <ClaimCase key={path} claimId={caseId} audience={caseAudience} onSessionLost={sessionLost} /> : isCustomerClaims ? <CustomerClaims onSessionLost={sessionLost} /> : <ClaimsInbox onSessionLost={sessionLost} /> : isReports ? <ReportsWorkspace onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
+      ? isPrivacy ? <main className="content"><PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => window.location.assign('/polizas')} onSessionLost={sessionLost} /></main> : isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal destination={destination?.kind === 'policy' ? destination : undefined} onBackToList={abandonDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? uuid(caseId) ? <ClaimCase key={path} claimId={caseId} audience={caseAudience} onSessionLost={sessionLost} /> : isCustomerClaims ? <CustomerClaims onSessionLost={sessionLost} /> : <ClaimsInbox onSessionLost={sessionLost} /> : isReports ? <ReportsWorkspace onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
         <h1>{t(isPolicies && failed && destination?.kind === 'policy' && destination.section === 'documents' ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
         {isPolicies && destination?.kind === 'policy' && <><p>{t(destination.section === 'documents' ? 'policies.documentSignIn' : 'navigation.destinationSignIn')}</p>
@@ -136,6 +138,7 @@ function Shell() {
           </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
         {failed && isPolicies && destination && <p><a href="/" onClick={clearCustomerDestination}>{t('policies.backHome')}</a></p>}
       </main>)
+      : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><p>{t('navigation.notFoundHint')}</p><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
