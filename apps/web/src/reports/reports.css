@@ -9,7 +9,7 @@
 .reports-table .audit-id { margin-top: 0; font-size: 11.5px; white-space: nowrap; overflow-wrap: normal; }
 .reports-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .reports-table td:first-child span { white-space: nowrap; }
-@container (max-width: 1040px) {
+@container (max-width: 760px) {
   .reports-table td:first-child { display: block; padding: 14px 16px; background: #faf9f7; font-weight: 600; font-size: 15px; }
   .reports-table td:first-child::before, .reports-table td.reports-actions::before { display: none; }
   .reports-table td:nth-child(2) { display: none; }

@@ -22,7 +22,7 @@
 .claims-priority-high { background: #fbe9e7; color: #8a241c; }
 .claims-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 @media (max-width: 720px) { .claims-search { max-width: none; } }
-@container (max-width: 1040px) {
+@container (max-width: 760px) {
   .claims-table .audit-id { white-space: normal; overflow-wrap: anywhere; }
 }
 .audit-state .note + .btn { margin-top: 14px; }

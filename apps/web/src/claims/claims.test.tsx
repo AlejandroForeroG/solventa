@@ -113,7 +113,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.forbidden, 403)));
     const denied = show();
     expect(await screen.findByRole('alert')).toHaveTextContent('Tu cuenta no tiene permiso para consultar siniestros.');
-    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeVisible();
+    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeInTheDocument(); expect(screen.getByRole('link', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas'); expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
     denied.unmount();
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response({ error: 'unauthorized', traceId }, 401)));
     const expired = show();

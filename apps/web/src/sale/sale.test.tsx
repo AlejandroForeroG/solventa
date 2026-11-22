@@ -158,6 +158,6 @@ it('the customer link from the advisor opens the offer on its own without the au
   }));
   render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
   await waitFor(() => expect(screen.queryByLabelText('Código de la oferta')).not.toBeInTheDocument());
-  expect(screen.queryByRole('heading', { name: 'Autorizar a un asesor' })).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Autorizar a un asesor' })).not.toBeInTheDocument());
   window.history.replaceState(null, '', '/');
 });

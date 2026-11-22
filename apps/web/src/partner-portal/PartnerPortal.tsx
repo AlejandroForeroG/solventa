@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { readPartnerPortal, type PortalOutcome } from './api';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
 import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
+import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './portal.css';
 
@@ -40,6 +41,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
       <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
+      {state?.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="portal-period" noValidate onSubmit={event => {
         event.preventDefault();
         const found = dateRangeProblem(draft.from, draft.to, 31) ?? (!draft.from ? { field: 'from' as const, reason: 'invalid' as const } : !draft.to ? { field: 'to' as const, reason: 'invalid' as const } : null);
@@ -55,7 +57,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
         <p className="note">{t('periodHint')}</p>
       </form>
       {!page && <div className="audit-state" role={!state ? 'status' : 'alert'}><p>{t(state?.kind ?? 'loading')}</p>
-        {state && state.kind !== 'unauthenticated' && <button className="btn btn-secondary" type="button" onClick={() => { setResult(null); setRefresh(v => v + 1); }}>{t('retry')}</button>}
+        {state && state.kind !== 'unauthenticated' && state.kind !== 'invalid' && <button className="btn btn-secondary" type="button" onClick={() => { setResult(null); setRefresh(v => v + 1); }}>{t('retry')}</button>}
         {state && 'traceId' in state && state.traceId && <p className="mono">{state.traceId}</p>}
       </div>}
       {page && <>
@@ -77,6 +79,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
         <section aria-labelledby="portal-catalog"><h2 id="portal-catalog">{t('catalog')}</h2><p>{t('mortgage')}</p><ul>{page.catalog.flatMap(p => p.operations).map(o => <li className="mono" key={o.path}>{o.method} {o.path} · {o.scope}</li>)}</ul></section>
         <section aria-labelledby="portal-quota"><h2 id="portal-quota">{t('quota')}</h2>{page.quota.configured ? <><dl className="portal-metrics">{(['limit','used','remaining'] as const).map(k=><div key={k}><dt>{t(k)}</dt><dd className="mono">{intl.formatNumber(page.quota.configured ? page.quota[k] : 0)}</dd></div>)}</dl><p className="note">{t('quotaHint')}</p><p>{t('resets')} {timestamp(page.quota.resetsAt)}</p><p className="note">{t('trackingSince')} {timestamp(page.quota.trackingSince)}</p><p className="note">{t('updated')} {timestamp(page.quota.updatedAt)}</p></> : <p>{t('notConfigured')}</p>}</section>
         <section aria-labelledby="portal-versions"><h2 id="portal-versions">{t('versions')}</h2><ul>{page.versions.map(v => <li key={v.id}><span className="mono">{v.id}</span> · {v.sunset ? `${t('sunset')} ${v.sunset}` : t('noSunset')}</li>)}</ul><p className="note">{t('versionHint')}</p></section>
+      </>}
       </>}
     </div>
   </main>;

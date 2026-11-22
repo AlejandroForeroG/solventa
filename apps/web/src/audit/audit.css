@@ -49,7 +49,7 @@
 @media (max-width: 720px) { .audit-shell { display: block; } .audit-nav { padding: 12px 16px; } .audit-nav p { display: none; } .audit-nav a { width: fit-content; padding: 8px 16px; } .audit-main { padding: 28px 16px; } .audit-heading h1 { font-size: 25px; } .audit-filters { padding: 16px; } .audit-section { padding: 20px; } .audit-two-columns { grid-template-columns: 1fr; gap: 0; } .audit-state { padding: 28px 20px; } }
 @media (max-width: 720px) { .audit-filters { grid-template-columns: minmax(0, 1fr); } .audit-reference { grid-column: auto; } }
 
-@container (max-width: 1040px) {
+@container (max-width: 760px) {
   .audit-card-wrap { overflow: visible; background: transparent; border: 0; }
   .audit-card-table, .audit-card-table tbody { display: block; width: 100%; }
   .audit-card-table thead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
@@ -82,7 +82,7 @@
 
 .record-toggle { display: none; width: fit-content; min-height: 44px; padding: 8px 0; background: transparent; border: 0; color: #0b6b5f; text-decoration: underline; text-underline-offset: 3px; font: 500 14px/1.5 'IBM Plex Sans', sans-serif; cursor: pointer; }
 .record-toggle:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
-@container (max-width: 1040px) {
+@container (max-width: 760px) {
   .compact-record .record-toggle { display: block; }
   .compact-record:not(.record-expanded) [data-secondary] { display: none; }
   .audit-card-table .compact-record td { padding-block: 10px; }
@@ -92,3 +92,8 @@
 .audit-disclosure > summary h2 { display: inline; line-height: 44px; margin: 0; }
 .audit-disclosure[open] > summary { margin-bottom: 20px; }
 .audit-disclosure > summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 3px; }
+.audit-table th, .audit-table td { padding: 12px 14px; }
+.audit-denied { display: grid; justify-items: center; gap: 12px; }
+.audit-denied p { margin: 0; }
+.access-denied-title { font-weight: 600; color: #8a241c; }
+.access-denied-support { justify-self: stretch; text-align: left; }

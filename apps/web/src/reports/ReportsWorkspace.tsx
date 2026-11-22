@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { DESTINATIONS, downloadReport, generateReport, listReports, sendReport, type Destination, type Report, type ReportsOutcome, type ReportsPage } from './api';
+import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import '../claims/claims.css';
 import './reports.css';
@@ -85,6 +86,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-shell">
     <div className="audit-main">
       <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
         <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
         <label>{t('destination')}<select value={destination} onChange={event => setDestination(event.target.value as Destination)}>
@@ -97,8 +99,8 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         {(['all', ...DESTINATIONS] as const).map(option => <button key={option} type="button" className="claims-filter" aria-pressed={filter === option}
           onClick={() => { moveFocus.current = true; setFilter(option); setBefore(undefined); }}>{t(`destination.${option}`)}</button>)}
       </div>
-      {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
-        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && state.kind !== 'forbidden'
+      {state.kind !== 'ready' && <div className="audit-state" role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
+        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated'
           && <button type="button" className="btn btn-secondary" onClick={() => { moveFocus.current = true; setResult(null); setRefresh(value => value + 1); }}>{t('retryLoad')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
@@ -123,6 +125,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
           </tr>; })}</tbody></table></div>
         {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}
       </> : <div className="audit-state" role="status"><p>{filter === 'all' ? t('empty') : t('emptyFiltered')}</p></div>)}
+      </>}
     </div>
   </main>;
 }
