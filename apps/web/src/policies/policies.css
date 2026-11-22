@@ -46,3 +46,9 @@
   .policy-table td::before { content: attr(data-label); flex: none; font: 600 14px/1.5 'IBM Plex Sans', sans-serif; color: #485563; text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) { .policy-card { transition: none; } }
+.replacement-choices { display: grid; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
+.replacement-choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; }
+.replacement-choice:has(input:checked) { border-color: var(--brand); background: var(--brand-tint); }
+.replacement-choice input { margin-top: 3px; accent-color: var(--brand); }
+.replacement-choice > span { display: grid; gap: 2px; }
+.replacement-choice .note { font-size: 13px; }

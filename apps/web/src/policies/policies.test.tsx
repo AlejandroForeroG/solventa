@@ -47,7 +47,7 @@ describe('my policies', () => {
     show();
     expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
-    expect(screen.getByRole('button', { name: 'Renovar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
     expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
   });
   it('opens the requested documents and abandons that selection when returning to the list', async () => {

@@ -22,11 +22,14 @@ it('retains a command identity after an uncertain cancellation and reports succe
   }); vi.stubGlobal('fetch', fetch);
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={changed} onSessionLost={lost} /></I18n>);
   const user = userEvent.setup();
-  expect(screen.getByRole('button', { name: 'Cancelar póliza' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('');
+  expect(screen.queryByRole('button', { name: 'Confirmar cancelación' })).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByRole('combobox'), 'cancelled');
+  expect(screen.getByRole('button', { name: 'Confirmar cancelación' })).toBeDisabled();
   await user.click(screen.getByRole('checkbox', { name: 'Confirmo esta operación' }));
-  await user.click(screen.getByRole('button', { name: 'Cancelar póliza' }));
+  await user.click(screen.getByRole('button', { name: 'Confirmar cancelación' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No se confirmó el cambio'); expect(changed).not.toHaveBeenCalled();
-  await user.click(screen.getByRole('button', { name: 'Cancelar póliza' })); expect(changed).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole('button', { name: 'Confirmar cancelación' })); expect(changed).toHaveBeenCalledOnce();
   const commands = fetch.mock.calls.filter(([url]) => url.endsWith('/lifecycle'));
   expect(commands[0][1]?.body).toBe(commands[1][1]?.body); expect(commands[0][1]?.headers).toEqual(commands[1][1]?.headers);
 });
@@ -36,7 +39,7 @@ it('explains renewal eligibility before offering a replacement purchase, in the 
   render(<I18n initial="en-US"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
   await userEvent.setup().selectOptions(screen.getByRole('combobox'), 'renewed');
   expect(screen.getByText(/You can renew after the previous policy expires/)).toBeVisible();
-  expect(screen.queryByRole('link', { name: 'Quote replacement' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Renew policy' })).toBeDisabled();
+  expect(screen.queryByRole('link', { name: 'Quote replacement' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Confirm renewal' })).toBeDisabled();
 });
 
 it.each([{ action: 'broken', at: '2026-11-11T12:00:00Z', reason: 'customer_request', replacementPolicyId: null },
@@ -51,4 +54,18 @@ it('rejects a non-string contract state in the issued list', async () => {
   const { listPolicies } = await import('./api');
   vi.stubGlobal('fetch', vi.fn(async () => json({ policies: [{ ...policy, contractStatus: ['cancelled'] }], hasMore: false, traceId })));
   expect((await listPolicies(new AbortController().signal)).kind).toBe('unavailable');
+});
+
+it('offers eligible replacements by short reference instead of a raw identifier', async () => {
+  const other = { ...policy, policyId: '20000000-0000-4000-8000-000000000002', premium: '77760.0000' };
+  vi.stubGlobal('fetch', vi.fn(async () => json({ policies: [policy, other], hasMore: false, traceId })));
+  render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox'), 'modified');
+  const choice = await screen.findByRole('radio', { name: /POL-20000000/ });
+  expect(screen.queryByRole('radio', { name: /POL-10000000/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Confirmar modificación' })).toBeDisabled();
+  await user.click(choice);
+  await user.click(screen.getByRole('checkbox', { name: 'Confirmo esta operación' }));
+  expect(screen.getByRole('button', { name: 'Confirmar modificación' })).toBeEnabled();
 });

@@ -5,10 +5,10 @@ import { changePolicyLifecycle, listPolicies, type LifecycleCommand, type Policy
 
 type Action = 'modified' | 'renewed' | 'cancelled';
 const actions: Action[] = ['modified', 'renewed', 'cancelled'];
-export function LifecycleActions({ policy, initialAction = 'cancelled', onChanged, onSessionLost }: { policy: PolicyDetail; initialAction?: Action; onChanged(): void; onSessionLost(): void }) {
+export function LifecycleActions({ policy, initialAction, onChanged, onSessionLost }: { policy: PolicyDetail; initialAction?: Action; onChanged(): void; onSessionLost(): void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `policies.lifecycle.${key}` });
-  const [action, setAction] = useState<Action>(initialAction);
+  const [action, setAction] = useState<Action | ''>(initialAction ?? '');
   const [replacement, setReplacement] = useState('');
   const [choices, setChoices] = useState<PolicySummary[]>([]);
   const [confirmed, setConfirmed] = useState(false);
@@ -17,7 +17,9 @@ export function LifecycleActions({ policy, initialAction = 'cancelled', onChange
   const [choiceState, setChoiceState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const command = useRef<{ body: string; key: string } | null>(null);
   const expired = Date.now() >= Date.parse(policy.effectiveUntil);
-  const eligible = action === 'cancelled' || (action === 'renewed' ? expired : !expired);
+  const eligible = action === 'cancelled' || (action === 'renewed' ? expired : action === 'modified' && !expired);
+  const shortId = (id: string) => `POL-${id.slice(0, 8).toUpperCase()}`;
+  const money = (value: string) => intl.formatNumber(Number(value), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
   useEffect(() => {
     const controller = new AbortController();
     void listPolicies(controller.signal).then(result => {
@@ -29,7 +31,7 @@ export function LifecycleActions({ policy, initialAction = 'cancelled', onChange
     return () => controller.abort();
   }, [policy.policyId, policy.product, onSessionLost]);
   async function submit() {
-    if (!confirmed || busy || !eligible) return;
+    if (!confirmed || busy || !eligible || !action) return;
     setBusy(true); setError('');
     try {
       const read = await fetchWithSession(`/api/v1/policies/${policy.policyId}`, { cache: 'no-store' });
@@ -53,20 +55,27 @@ export function LifecycleActions({ policy, initialAction = 'cancelled', onChange
     <p>{t('recorded')}</p>
   </section>;
   return <section className="card policy-section" aria-labelledby="lifecycle-title"><h2 id="lifecycle-title" className="h-card">{t('manage')}</h2>
-    <div className="field"><label htmlFor="lifecycle-operation">{t('operation')}</label><select id="lifecycle-operation" value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action); setConfirmed(false); }}>
+    <div className="field"><label htmlFor="lifecycle-operation">{t('operation')}</label><select id="lifecycle-operation" value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action | ''); setConfirmed(false); setError(''); }}>
+      <option value="" disabled>{t('choose')}</option>
       {actions.map(value => <option key={value} value={value}>{t(value)}</option>)}
     </select></div>
-    {!eligible && <p role="status">{t(action === 'renewed' ? 'renewAfterExpiry' : 'modifyBeforeExpiry')}</p>}
-    {action !== 'cancelled' && eligible && <><p>{t('prepare')}</p><p><a href="/cotizar">{t('quote')}</a></p>
+    {action && !eligible && <p role="status">{t(action === 'renewed' ? 'renewAfterExpiry' : 'modifyBeforeExpiry')}</p>}
+    {action && action !== 'cancelled' && eligible && <><p>{t('prepare')}</p><p><a href="/cotizar">{t('quote')}</a></p>
       {choiceState === 'loading' && <p role="status">{t('loading')}</p>}
-      {choiceState === 'failed' && <p role="status">{t('choicesFailed')}</p>}
-      <div className="field"><label htmlFor="lifecycle-replacement">{t('replacement')}</label><input id="lifecycle-replacement" className="mono-input" list="replacement-policies" value={replacement} disabled={busy} onChange={event => { setReplacement(event.target.value.trim()); setConfirmed(false); }} placeholder="00000000-0000-4000-8000-000000000000" /></div>
-      <datalist id="replacement-policies">{choices.map(item => <option key={item.policyId} value={item.policyId} />)}</datalist>
-      <p className="note">{t('replacementHint')}</p></>}
-    <p>{t('noRefund')}</p>
-    <div className="check"><input id="lifecycle-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="lifecycle-confirm">{t('confirm')}</label></div>
+      {choiceState === 'ready' && (choices.length ? <fieldset className="replacement-choices"><legend className="field-label">{t('replacement')}</legend>
+        {choices.map(item => <label key={item.policyId} className="replacement-choice">
+          <input type="radio" name="lifecycle-replacement" value={item.policyId} checked={replacement === item.policyId} disabled={busy} onChange={() => { setReplacement(item.policyId); setConfirmed(false); }} />
+          <span><strong className="mono">{shortId(item.policyId)}</strong>
+            <span className="note">{intl.formatDate(item.effectiveFrom, { dateStyle: 'medium' })} – {intl.formatDate(item.effectiveUntil, { dateStyle: 'medium' })} · {money(item.premium)}</span></span>
+        </label>)}
+      </fieldset> : <p className="note" role="status">{t('noReplacements')}</p>)}
+      {choiceState === 'failed' && <><p role="status">{t('choicesFailed')}</p>
+        <div className="field"><label htmlFor="lifecycle-replacement">{t('replacement')}</label><input id="lifecycle-replacement" className="mono-input" value={replacement} disabled={busy} onChange={event => { setReplacement(event.target.value.trim()); setConfirmed(false); }} placeholder="00000000-0000-4000-8000-000000000000" /></div></>}
+    </>}
+    {action && <><p>{action === 'cancelled' ? t('cancelEffect') : t('noRefund')}</p>
+      <div className="check"><input id="lifecycle-confirm" type="checkbox" checked={confirmed} disabled={busy || !eligible} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="lifecycle-confirm">{t('confirm')}</label></div></>}
     {error && <p role="alert">{t(error)}</p>}
-    <div className="actions"><button type="button" className="btn btn-secondary" disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
-      onClick={() => void submit()}>{busy ? t('saving') : t(`submit.${action}`)}</button></div>
+    {action && <div className="actions"><button type="button" className={`btn ${action === 'cancelled' ? 'btn-danger' : 'btn-primary'}`} disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
+      onClick={() => void submit()}>{busy ? t('saving') : t(`submit.${action}`)}</button></div>}
   </section>;
 }
