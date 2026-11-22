@@ -33,6 +33,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const [period, setPeriod] = useState(periods[0]);
   const [destination, setDestination] = useState<Destination>('regulator');
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(true);
@@ -120,9 +121,15 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
             <td className="reports-actions" data-label={t('col.actions')}><div>
               <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
               <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
-              {!isFinal(report) && <button type="button" className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void send(report)}>
+              {!isFinal(report) && confirming !== report.reportId && <button type="button" className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
+                onClick={() => { if (status && status !== 'pending') void send(report); else setConfirming(report.reportId); }}>
                 {busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
-            </div></td>
+            </div>
+            {confirming === report.reportId && <div className="reports-confirm" role="group" aria-label={t('confirmTitle')}>
+              <p className="note">{t('confirmSend', { month: month(report.period), revision: report.revision, rows: report.manifest.rowCount, destination: t(`destination.${report.destination}`) })}</p>
+              <div><button type="button" className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}>{t('confirmButton')}</button>
+                <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => setConfirming(null)}>{t('cancelSend')}</button></div>
+            </div>}</td>
           </tr>; })}</tbody></table></div>
         {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}
       </> : <div className="audit-state" role="status"><p>{filter === 'all' ? t('empty') : t('emptyFiltered')}</p></div>)}

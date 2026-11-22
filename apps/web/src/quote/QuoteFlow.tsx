@@ -1,3 +1,4 @@
+import { groupedDigits } from './estimate-api';
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { consentApi, reconcileConsent, type Consent, type ConsentApi } from '../consent/api';
@@ -64,7 +65,9 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
     setFocusRequest(field ? { field } : null);
   }
 
-  async function submit(next: 'result' | 'offer' = 'result') {
+  async function submit(next: 'result' | 'offer' = 'result', current = values) {
+    const values = { ...current, amount: groupedDigits(current.amount) };
+    if (values.amount !== current.amount) setValues(values);
     const local = checkLocally(values);
     if (local.length) { showProblems(local); setBanner('fields'); announce(intl.formatMessage({ id: 'live.quoteError' })); return; }
     setProblems([]); setFocusRequest(null); setBanner('none'); setPhase('loading');

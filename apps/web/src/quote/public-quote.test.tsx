@@ -222,3 +222,16 @@ describe('public estimate and sign-in handoff', () => {
     expect(readEstimateDraft()).toBeNull();
   });
 });
+
+it('accepts an amount typed key by key with thousands separators', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/api/v1/quote-estimates' ? json({ ...result, sumInsured: 322000000 }) : json({}, 401));
+  const user = userEvent.setup();
+  render(<I18n initial="es-CO"><LiveRegion><PublicQuoteFlow initialValues={null} /></LiveRegion></I18n>);
+  await user.type(screen.getByLabelText(/Edad/), '34');
+  await user.type(screen.getByLabelText(/Monto/), '322.000.000');
+  await user.type(screen.getByLabelText(/Plazo/), '180');
+  await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
+  await waitFor(() => expect(fetch.mock.calls.some(([path]) => String(path) === '/api/v1/quote-estimates')).toBe(true));
+  const call = fetch.mock.calls.find(([path]) => String(path) === '/api/v1/quote-estimates');
+  expect(JSON.parse(String((call?.[1] as RequestInit).body)).amount).toBe(322000000);
+});

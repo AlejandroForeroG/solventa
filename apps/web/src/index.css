@@ -30,13 +30,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .channel-line .product { font-size: 15px; font-weight: 600; color: #12151a; }
 @media (max-width: 600px) { .content { padding: 24px 16px 48px; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.btn { display: inline-flex; align-items: center; justify-content: center; width: auto; padding: 11px 18px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid transparent; cursor: pointer; text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; min-height: 44px; padding: 11px 18px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid transparent; cursor: pointer; text-decoration: none; }
 .access-panel a:not(.btn) { color: #0b6b5f; font: inherit; text-underline-offset: 3px; }
 .btn-primary { background: #0b6b5f; color: #fff; border-color: #0b6b5f; }
 @media (hover: hover) and (pointer: fine) { .btn-primary:hover:not(:disabled) { background: #08544a; } .btn-secondary:hover:not(:disabled) { background: #e4f1ee; } .locale-btn:hover { background: #f1efea; } .btn-danger:hover:not(:disabled) { background: #f6d6d1; } }
 .btn-primary:disabled { background: #edebe6; color: #56616f; border-color: #edebe6; opacity: 1; cursor: not-allowed; }
 .btn-secondary { background: #fff; color: #0b6b5f; border-color: #cbe5e0; }
-.btn-small { padding: 8px 14px; font-size: 13px; }
+.btn-small { min-height: 36px; padding: 8px 14px; font-size: 13px; }
 .locale-switch { display: inline-flex; gap: 4px; }
 .locale-btn { width: auto; padding: 6px 10px; border-radius: 8px; background: #fff; color: #3a424e; border: 1px solid #cfccc5; font: 600 12px 'IBM Plex Sans', sans-serif; }
 .locale-btn[aria-pressed='true'] { background: #0b6b5f; color: #fff; border-color: #0b6b5f; }
@@ -253,3 +253,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .denied-icon svg, .warning-icon svg { stroke-width: 2.5; }
 .policy-back, .audit-back { display: inline-flex; align-items: center; gap: 6px; }
 .document-navigation .btn { padding: 8px; }
+.check { position: relative; }
+.check label { cursor: pointer; padding: 2px 0; }
+@media (pointer: coarse) { .check { min-height: 44px; align-items: center; } }
+label.field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+label.field input, label.field select, label.field textarea { font-weight: 400; color: var(--ink); }

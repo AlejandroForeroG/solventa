@@ -17,7 +17,7 @@ function downloadDocument(policy: Policy) {
   URL.revokeObjectURL(url);
 }
 
-export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
+export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack, assisted = false }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; assisted?: boolean; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
   const intl = useIntl();
   const { copDecimal, copDecimalAmount, dayMonthYear, dateTime } = useFormatters();
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
@@ -31,7 +31,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
           <p className="offer-billing">{t('document.billing')}</p>
-          <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>
+          {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p> : <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>}
         </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
@@ -78,6 +78,10 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
     previousPage.current = page;
   }, [page]);
   const [now, setNow] = useState(Date.now());
+  const codeInput = useRef<HTMLInputElement>(null);
+  const challengeId = challenge?.challengeId;
+  useEffect(() => { if (challengeId) codeInput.current?.focus(); }, [challengeId]);
+  useEffect(() => { if (error && challengeId) codeInput.current?.focus(); }, [error, challengeId]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
   const document = JSON.parse(policy.document) as Record<string, unknown>;
@@ -133,14 +137,15 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
         {!challenge && <button type="button" className="btn btn-secondary review-confirm" onClick={onBegin} disabled={!checked || busy}>{t('policy.requestCode')}</button>}
         {challenge && <>
           <label className="section-label" htmlFor="policy-code">{t('policy.authCode')}</label>
-          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy}
+          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy} ref={codeInput}
+            aria-invalid={error ? true : undefined} aria-describedby={error ? 'policy-code-error' : undefined}
             value={code} onChange={event => onCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
           <p className="note" role="status">{t('policy.demoCode', { code: challenge.demoCode })}</p>
           <p className="note mono">{t('policy.expiresIn', { time: `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}` })}</p>
           <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
           <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel} disabled={busy}>{t('policy.cancelSignature')}</button>
         </>}
-        {(error || (challenge && secondsLeft === 0)) && <p className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
+        {(error || (challenge && secondsLeft === 0)) && <p id="policy-code-error" className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
         </>}
         <p className="note">{t('policy.mock')}</p>
       </div>
@@ -153,7 +158,6 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
   const { copDecimal, dayMonthYear } = useFormatters();
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step">
-    <div className="banner banner-ok"><Icon name="check" size={18} className="banner-icon" /><p><strong>{t('issued.onceTitle')}</strong> {t('issued.onceDetail')}</p></div>
     <div className="card">
       <div className="result-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('issued.title')}</h1>
@@ -167,11 +171,12 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
       </dl>
       <details className="document-verification"><summary>{t('issued.proof')}</summary>
         <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+        <p className="note">{t('issued.onceDetail')}</p>
       </details>
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
-        <a className="btn btn-primary" href="/polizas">{t('policies.open')}</a>
+        <a className="btn btn-primary" href={`/polizas#policy=${policy.policyId}&section=info`}>{t('issued.viewPolicy')}</a>
       </div>
     </div>
   </section>;

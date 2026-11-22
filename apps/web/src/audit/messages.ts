@@ -2,7 +2,7 @@ export const auditEs = {
   'audit.details': 'Ver detalles', 'audit.hideDetails': 'Ocultar detalles',
   'audit.technicalReference': 'Referencia técnica', 'audit.sourceKey': 'Clave de la fuente',
   'audit.showingPage': 'Mostrando {count} de {total} decisiones de esta página.', 'audit.showMore': 'Mostrar más decisiones',
-  'audit.sections': 'Secciones de la decisión', 'audit.paginationTop': 'Paginación antes de los resultados',
+  'audit.sections': 'Secciones de la decisión', 'audit.pagination': 'Páginas de decisiones', 'audit.previous': 'Página anterior',
   'audit.sourceName.income': 'Ingresos y obligaciones (12 meses)', 'audit.sourceName.payments': 'Historial de pagos y puntaje',
   'audit.sourceName.affiliation': 'Afiliación y régimen', 'audit.sourceName.identity': 'Validación de identidad',
   'audit.ppmHint': 'ppm significa partes por millón: 1.000.000 ppm equivale al 100 %.',
@@ -11,7 +11,7 @@ export const auditEs = {
 
   'audit.reference': 'ID de decisión, oferta o cotización', 'audit.product': 'Producto', 'audit.outcome': 'Resultado', 'audit.from': 'Desde', 'audit.to': 'Hasta',
 
-  'audit.all': 'Todos', 'audit.search': 'Buscar', 'audit.reset': 'Limpiar', 'audit.next': 'Siguientes', 'audit.back': 'Volver a decisiones',
+  'audit.all': 'Todos', 'audit.search': 'Buscar', 'audit.reset': 'Limpiar', 'audit.next': 'Página siguiente', 'audit.back': 'Volver a decisiones',
 
   'audit.accepted': 'Aceptada', 'audit.declined': 'Rechazada', 'audit.preliminary': 'Preliminar', 'audit.vida_hipotecario': 'Seguro de vida hipotecario', 'audit.flight_delay': 'Retraso de vuelo',
 
@@ -58,7 +58,7 @@ export const auditEn: Record<keyof typeof auditEs, string> = {
   'audit.details': 'View details', 'audit.hideDetails': 'Hide details',
   'audit.technicalReference': 'Technical reference', 'audit.sourceKey': 'Source key',
   'audit.showingPage': 'Showing {count} of {total} decisions on this page.', 'audit.showMore': 'Show more decisions',
-  'audit.sections': 'Decision sections', 'audit.paginationTop': 'Pagination before results',
+  'audit.sections': 'Decision sections', 'audit.pagination': 'Decision pages', 'audit.previous': 'Previous page',
   'audit.sourceName.income': 'Income and obligations (12 months)', 'audit.sourceName.payments': 'Payment history and score',
   'audit.sourceName.affiliation': 'Affiliation and regime', 'audit.sourceName.identity': 'Identity validation',
   'audit.ppmHint': 'ppm means parts per million: 1,000,000 ppm equals 100%.',
@@ -67,7 +67,7 @@ export const auditEn: Record<keyof typeof auditEs, string> = {
 
   'audit.reference': 'Decision, offer or quote ID', 'audit.product': 'Product', 'audit.outcome': 'Outcome', 'audit.from': 'From', 'audit.to': 'To',
 
-  'audit.all': 'All', 'audit.search': 'Search', 'audit.reset': 'Clear', 'audit.next': 'Next', 'audit.back': 'Back to decisions',
+  'audit.all': 'All', 'audit.search': 'Search', 'audit.reset': 'Clear', 'audit.next': 'Next page', 'audit.back': 'Back to decisions',
 
   'audit.accepted': 'Accepted', 'audit.declined': 'Declined', 'audit.preliminary': 'Preliminary', 'audit.vida_hipotecario': 'Mortgage life', 'audit.flight_delay': 'Flight delay',
 
