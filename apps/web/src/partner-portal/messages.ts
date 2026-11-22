@@ -27,7 +27,7 @@ export const portalEn = {
   'partnerPortal.unavailable': 'The integration could not be loaded.', 'partnerPortal.invalid': 'Check the period: up to 31 days.', 'partnerPortal.retry': 'Retry',
   'partnerPortal.updated': 'Updated:', 'partnerPortal.metrics': 'Period activity', 'partnerPortal.completed': 'Completed quotes', 'partnerPortal.accepted': 'Favorable evaluations',
   'partnerPortal.preliminary': 'Preliminary evaluations', 'partnerPortal.declined': 'Declined evaluations',
-  'partnerPortal.result.completed': 'Completed', 'partnerPortal.result.accepted': 'Favorable', 'partnerPortal.result.preliminary': 'Preliminary', 'partnerPortal.result.declined': 'Declined',
+  'partnerPortal.result.completed': 'Completed', 'partnerPortal.result.accepted': 'Approved', 'partnerPortal.result.preliminary': 'Preliminary', 'partnerPortal.result.declined': 'Declined',
   'partnerPortal.metricLimit': 'Recorded channel facts. A favorable evaluation does not establish customer acceptance, payment or issuance. Request failures are outside these counts.',
   'partnerPortal.transactions': 'Recent transactions', 'partnerPortal.reference': 'Reference', 'partnerPortal.kind': 'Type', 'partnerPortal.date': 'Date', 'partnerPortal.result': 'Result', 'partnerPortal.rule': 'Rule',
   'partnerPortal.quote': 'Quote', 'partnerPortal.offer_decision': 'Offer evaluation', 'partnerPortal.empty': 'No transactions in this period.',
