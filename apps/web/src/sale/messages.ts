@@ -1,5 +1,5 @@
 export const saleEs = {
-  'sale.title': 'Venta asistida', 'sale.authorizeTitle': 'Autorizar a un asesor',
+  'sale.title': 'Mi asesor', 'sale.authorizeTitle': 'Autorizar a un asesor',
   'sale.authorizeScope': 'El asesor podrá preparar una cotización y una oferta a tu nombre, solo por el tiempo que elijas. No puede aceptarla, pagarla ni firmarla por ti, y puedes revocarlo cuando quieras.',
   'sale.reference': 'Referencia del asesor', 'sale.validity': 'Vigencia', 'sale.days': '{count, plural, one {# día} other {# días}}',
   'sale.confirm': 'Autorizo a este asesor a preparar una cotización y una oferta a mi nombre', 'sale.authorize': 'Autorizar', 'sale.saving': 'Guardando…',
@@ -20,7 +20,7 @@ export const saleEs = {
   'sale.unavailable': 'No se confirmó la operación. Reintenta con los mismos datos.',
 };
 export const saleEn = {
-  'sale.title': 'Assisted sale', 'sale.authorizeTitle': 'Authorize an advisor',
+  'sale.title': 'My advisor', 'sale.authorizeTitle': 'Authorize an advisor',
   'sale.authorizeScope': 'The advisor can prepare a quote and an offer in your name, only for the time you choose. They cannot accept, pay or sign it for you, and you can revoke it at any time.',
   'sale.reference': 'Advisor reference', 'sale.validity': 'Validity', 'sale.days': '{count, plural, one {# day} other {# days}}',
   'sale.confirm': 'I authorize this advisor to prepare a quote and an offer in my name', 'sale.authorize': 'Authorize', 'sale.saving': 'Saving…',

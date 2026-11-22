@@ -333,7 +333,7 @@ describe('privacy dashboard in the application', () => {
     serve(200);
     const user = userEvent.setup();
     const { container } = render(<App />);
-    const open = await screen.findByRole('button', { name: 'Panel de privacidad' });
+    const open = await screen.findByRole('button', { name: 'Privacidad' });
     await user.type(screen.getByLabelText(/Nombre completo/), 'Cliente Sintetico Uno');
 
     await user.click(open);
@@ -350,14 +350,14 @@ describe('privacy dashboard in the application', () => {
     serve(401);
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Calcular estimación' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Panel de privacidad' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Privacidad' })).toBeNull();
   });
 
   it('follows the language of the interface', async () => {
     serve(200);
     window.localStorage.setItem('solventa.locale', 'en-US');
     render(<App />);
-    expect(await screen.findByRole('button', { name: 'Privacy dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Privacy' })).toBeInTheDocument();
   });
 });
 

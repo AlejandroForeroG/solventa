@@ -63,3 +63,7 @@
   .channel-layout:not(.channel-layout-signed-in) .channel-topbar .locale-btn { min-width: 40px; }
   .channel-layout-signed-in .content { padding-top: 24px; }
 }
+.navigation-cta { display: flex; gap: 10px; justify-content: center; margin: -20px 0 28px; min-height: 46px; background: #12d9b8; border-color: #12d9b8; color: #062f2a; }
+.navigation-cta[aria-current='page'] { box-shadow: inset 0 0 0 2px #fff; }
+@media (hover: hover) and (pointer: fine) { .navigation-cta:hover:not([aria-disabled='true']) { background: #4fe3ca; } }
+.navigation-cta:focus-visible { outline-color: #7fc7bc; outline-offset: 3px; }
