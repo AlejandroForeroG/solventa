@@ -52,3 +52,8 @@
 .replacement-choice input { margin-top: 3px; accent-color: var(--brand); }
 .replacement-choice > span { display: grid; gap: 2px; }
 .replacement-choice .note { font-size: 13px; }
+.copy-value { display: grid; gap: 6px; margin: 12px 0; }
+.copy-value-label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.copy-value-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.copy-value-text { flex: 1 1 220px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f7; font-size: 13px; overflow-wrap: anywhere; user-select: all; }
+.copy-value-status { min-height: 1.2em; margin: 0; font-size: 12.5px; }

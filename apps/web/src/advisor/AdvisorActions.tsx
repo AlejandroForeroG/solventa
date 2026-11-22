@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
 import { AdvisorSale } from '../sale/AdvisorSale';
+import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
 
 export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSessionLost():void}) {
@@ -47,7 +48,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
     {page&&<>
       {!page.authorizations.length&&<p>{t('empty')}</p>}
-      {page.advisorReference&&<details className="document-verification"><summary>{t('reference')}</summary><p className="mono audit-id">{page.advisorReference}</p></details>}
+      {page.advisorReference&&<CopyValue label={t('reference')} value={page.advisorReference}/>}
       <ul className="policy-documents">{page.authorizations.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
         {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}

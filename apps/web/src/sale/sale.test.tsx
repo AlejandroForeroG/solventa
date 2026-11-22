@@ -110,7 +110,7 @@ it('the advisor prepares the offer, retries with the same key and shows only wha
   expect(bodies[0]).toEqual({ authorizationId, product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
     credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } });
   expect(screen.getByText(offerId)).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Entrega este código al cliente');
+  expect(screen.getByRole('status')).toHaveTextContent('Comparte el enlace con el cliente');
   expect(await axe(container)).toHaveNoViolations();
   fill('Monto del crédito (COP)', '300000000');
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -145,4 +145,19 @@ it('a reload during the purchase of an assisted offer resumes at its policy inst
     await waitFor(() => expect(requests.some(url => url.includes('/policies/by-acceptance/77777777-7777-4777-8777-777777777777/policy'))).toBe(true));
     expect(screen.queryByLabelText('Referencia del asesor')).not.toBeInTheDocument();
   } finally { clearPurchaseDraft(); }
+});
+
+it('the customer link from the advisor opens the offer on its own without the authorization form', async () => {
+  window.history.replaceState(null, '', `/venta-asistida?oferta=${offerId}`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/v1/me/advisor-sale-authorizations') return json({ items: [] });
+    if (url === `/api/v1/offers/${offerId}`) return json({ offerId, offerVersion: 1, quoteId: 'COT-2026-00001', product: 'vida_hipotecario', status: 'definitive', premium: '120000.0000', currency: 'COP',
+      coverage: { kind: 'mortgage_life', sumInsured: '200000000.0000' }, effectiveFrom: '2026-11-12T00:00:00.000Z', effectiveUntil: '2036-11-12T00:00:00.000Z', expiresAt: '2099-11-12T00:00:00.000Z',
+      ruleVersion: 'academic-mortgage-1', synthetic: true });
+    return json({ error: 'not_found' }, 404);
+  }));
+  render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
+  await waitFor(() => expect(screen.queryByLabelText('Código de la oferta')).not.toBeInTheDocument());
+  expect(screen.queryByRole('heading', { name: 'Autorizar a un asesor' })).not.toBeInTheDocument();
+  window.history.replaceState(null, '', '/');
 });
