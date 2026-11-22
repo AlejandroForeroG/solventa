@@ -22,12 +22,20 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
   const money = (value: string) => intl.formatNumber(Number(value), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
   useEffect(() => {
     const controller = new AbortController();
-    void listPolicies(controller.signal).then(result => {
-      if (controller.signal.aborted) return;
-      if (result.kind === 'ok') { setChoices(result.value.policies.filter(item => item.policyId !== policy.policyId && !item.contractStatus && item.product === policy.product)); setChoiceState('ready'); }
-      else if (result.kind === 'unauthenticated') onSessionLost();
-      else setChoiceState('failed');
-    }).catch(() => { if (!controller.signal.aborted) setChoiceState('failed'); });
+    void (async () => {
+      const found: PolicySummary[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 50; page++) {
+        const result = await listPolicies(controller.signal, cursor === undefined ? undefined : { cursor });
+        if (controller.signal.aborted) return;
+        if (result.kind === 'unauthenticated') { onSessionLost(); return; }
+        if (result.kind !== 'ok') { setChoiceState('failed'); return; }
+        found.push(...result.value.policies);
+        if (!result.value.hasMore || !result.value.nextCursor) break;
+        cursor = result.value.nextCursor;
+      }
+      setChoices(found.filter(item => item.policyId !== policy.policyId && !item.contractStatus && item.product === policy.product)); setChoiceState('ready');
+    })().catch(() => { if (!controller.signal.aborted) setChoiceState('failed'); });
     return () => controller.abort();
   }, [policy.policyId, policy.product, onSessionLost]);
   async function submit() {

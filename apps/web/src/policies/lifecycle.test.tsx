@@ -69,3 +69,14 @@ it('offers eligible replacements by short reference instead of a raw identifier'
   await user.click(screen.getByRole('checkbox', { name: 'Confirmo esta operación' }));
   expect(screen.getByRole('button', { name: 'Confirmar modificación' })).toBeEnabled();
 });
+
+it('offers a replacement that only appears on a later page of issued policies', async () => {
+  const later = { ...policy, policyId: '30000000-0000-4000-8000-000000000003' };
+  const fetch = vi.fn(async (url: string) => url.includes('cursor=') ? json({ policies: [later], hasMore: false, nextCursor: null, traceId })
+    : json({ policies: [policy], hasMore: true, nextCursor: policyId, traceId }));
+  vi.stubGlobal('fetch', fetch);
+  render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
+  await userEvent.setup().selectOptions(screen.getByRole('combobox'), 'modified');
+  expect(await screen.findByRole('radio', { name: /POL-30000000/ })).toBeInTheDocument();
+  expect(fetch.mock.calls.some(([url]) => String(url).includes(`cursor=${policyId}`))).toBe(true);
+});
