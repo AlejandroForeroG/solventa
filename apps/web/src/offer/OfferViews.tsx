@@ -176,7 +176,7 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
-        <a className="btn btn-primary" href="/polizas">{t('policies.open')}</a>
+        <a className="btn btn-primary" href={`/polizas#policy=${policy.policyId}&section=info`}>{t('issued.viewPolicy')}</a>
       </div>
     </div>
   </section>;

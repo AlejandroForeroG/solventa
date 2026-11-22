@@ -81,7 +81,7 @@ function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyI
       return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={`${t('open.detail', { product })} · POL-${policy.policyId.slice(0, 8).toUpperCase()} · ${t(`state.${status}`)}`} onClick={() => onOpen(policy.policyId)}>
         <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
         <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
-        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
+        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)} <span className="note">{t('oneOff')}</span></span></span>
       </button></li>;
     })}</ul> : <div className="card policy-empty"><p>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</p>
       {cursors.length === 1 && <a className="btn btn-primary" href="/cotizar">{t('quote')}</a>}</div>)}
