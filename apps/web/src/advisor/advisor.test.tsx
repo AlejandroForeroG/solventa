@@ -26,6 +26,7 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   fireEvent.change(screen.getByLabelText('Referencia del asesor'),{target:{value:reference}});
   await userEvent.setup().click(screen.getByLabelText('Autorizo esta actuación y el reemplazo indicado'));
   await userEvent.setup().click(button);expect(await screen.findByRole('alert')).toHaveTextContent('No se confirmó');
+  vi.setSystemTime(new Date('2026-11-11T00:03:00Z'));
   await userEvent.setup().click(button);await waitFor(()=>expect(posts).toHaveLength(2));
   expect(posts[0].headers).toEqual(posts[1].headers);expect(posts[0].body).toEqual(posts[1].body);
   expect(String(posts[0].body)).not.toContain('clientId');
