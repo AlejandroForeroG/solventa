@@ -105,7 +105,8 @@ export const claimsEs = {
   'claims.details': 'Ver detalles', 'claims.hideDetails': 'Ocultar detalles',
   'claims.fullPolicyId': 'ID completo de la póliza',
   'claims.open': 'Siniestros', 'claims.nav': 'Siniestros', 'claims.console': 'Consola operativa', 'claims.title': 'Bandeja de siniestros',
-  'claims.subtitle': 'Siniestros abiertos · ordenados por prioridad de atención',
+  'claims.subtitle': 'Siniestros abiertos · ordenados por prioridad de atención. Los aprobados pendientes de pago se gestionan desde su expediente.',
+  'claims.preview': 'Resumen del expediente', 'claims.evidenceRequired': '{required, plural, one {# archivo requerido} other {# archivos requeridos}}', 'claims.noEvidenceRequired': 'Sin evidencia requerida',
 
   'claims.filterGroup': 'Estado', 'claims.filter.all': 'Todos', 'claims.filter.unassigned': 'Sin asignar', 'claims.filter.pending_information': 'Pendiente info', 'claims.filter.overdue': 'Vencidos',
   'claims.search': 'Buscar por N.º de siniestro o ID completo de póliza', 'claims.searchButton': 'Buscar', 'claims.searchInvalid': 'Escribe un N.º de siniestro (SIN-AAAA-NNNNN) o el ID completo de la póliza.',
@@ -237,7 +238,8 @@ export const claimsEn: Record<keyof typeof claimsEs, string> = {
   'claims.details': 'View details', 'claims.hideDetails': 'Hide details',
   'claims.fullPolicyId': 'Full policy ID',
   'claims.open': 'Claims', 'claims.nav': 'Claims', 'claims.console': 'Operations console', 'claims.title': 'Claims inbox',
-  'claims.subtitle': 'Open claims · sorted by handling priority',
+  'claims.subtitle': 'Open claims · sorted by handling priority. Approved claims awaiting payment are handled from their case.',
+  'claims.preview': 'Case summary', 'claims.evidenceRequired': '{required, plural, one {# required file} other {# required files}}', 'claims.noEvidenceRequired': 'No evidence required',
 
   'claims.filterGroup': 'Status', 'claims.filter.all': 'All', 'claims.filter.unassigned': 'Unassigned', 'claims.filter.pending_information': 'Pending info', 'claims.filter.overdue': 'Overdue',
   'claims.search': 'Search by claim number or full policy ID', 'claims.searchButton': 'Search', 'claims.searchInvalid': 'Enter a claim number (SIN-YYYY-NNNNN) or the full policy ID.',

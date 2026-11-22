@@ -34,11 +34,11 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
       {page && <ul className="case-list">{page.items.map(item => {
         return <li key={item.claimId}><div>
           {claimId ? <span>{item.claimNumber}</span> : <a href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
-          <p className="claim-payment-amount">{intl.formatNumber(Number(item.payment.amount), { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 2 })} COP</p>
+          <p className="claim-payment-amount">{intl.formatNumber(Number(item.payment.amount), { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 2 })}</p>
           {/\.\d{2}[1-9]|\.\d{3}[1-9]/.test(item.payment.amount) && <p className="note">{t('exact')}: {formatters.copDecimal(item.payment.amount)}</p>}
           <p className="note">{t('simulated')}</p>
           {item.payment.reference && <p className="mono">{t('reference')}: {item.payment.reference}</p>}
-          <p>{t('updated')}: <time dateTime={item.updatedAt}>{intl.formatDate(item.updatedAt, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Bogota' })}</time></p>
+          <p>{t('updated')}: <time dateTime={item.updatedAt}>{formatters.dateTime(new Date(item.updatedAt))}</time></p>
         </div><span className={'claims-badge claim-payment-' + item.payment.status}>{t(item.payment.status)}</span></li>;
       })}</ul>}
       <div className="claims-filters">
