@@ -6,6 +6,7 @@ import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import { getAuditDecision, listAuditDecisions, type AuditDetail, type AuditOutcome, type AuditPage } from './api';
 import { AccessDenied } from '../navigation/AccessDenied';
 import './audit.css';
+import { Icon } from '../navigation/Icon';
 
 const sourceLabels: Record<string, string> = { 'signal:income_obligations_12m': 'income', 'signal:payment_history_score': 'payments', 'signal:affiliation_regime': 'affiliation', 'signal:identity_validation': 'identity' };
 
@@ -80,7 +81,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const nextPage = () => { if (!page?.next) return; const params = new URLSearchParams(query); params.set('before', page.next); setVisibleCount(5); setQuery(params.toString()); };
   return <main className="audit-shell">
     <div className="audit-main">
-      {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}>{'← ' + t('back')}</button>}
+      {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}><Icon name="back" size={16} />{t('back')}</button>}
       <div className="audit-heading"><div><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <><p className="mono audit-id">{detail.quoteId ?? detail.decisionId}</p>{detail.quoteId && <details className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{detail.decisionId}</span></details>}</>}<p className="note audit-mode">{t('simulated')}</p></div>
         {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}>{t(exporting ? 'exporting' : 'export')}</button>}
       </div>

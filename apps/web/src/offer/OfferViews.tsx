@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Offer, Policy, SignatureChallenge } from './api';
 import { DocumentFields } from './DocumentFields';
+import { Icon } from '../navigation/Icon';
 
 // Offers the exact reviewed bytes as a file; nothing is reformatted or re-signed in the browser.
 function downloadDocument(policy: Policy) {
@@ -82,7 +83,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const document = JSON.parse(policy.document) as Record<string, unknown>;
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   return <section className="step">
-    {documentChanged && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t('policy.documentChanged')}</p></div>}
+    {documentChanged && <div className="banner banner-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><p>{t('policy.documentChanged')}</p></div>}
     <header className="review-heading"><h1 ref={heading} tabIndex={-1} className="h-card">{t(stage === 'sign' ? 'policy.signatureTitle' : 'policy.reviewTitle')}</h1>
       <p className="note">{t(stage === 'sign' ? 'policy.signatureSubtitle' : 'policy.reviewSubtitle')}</p>
       {stage === 'sign' && page !== 2 && !challenge && <p id="policy-page-instruction" className="banner banner-info">{t('policy.readBothPages')}</p>}
@@ -92,9 +93,9 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
         <div className="document-bar">
           <span className="document-name">{t('policy.document')}</span>
           <div className="document-navigation">
-            <button type="button" className="btn btn-secondary btn-small" disabled={page === 1} onClick={() => setPage(1)} aria-label={t('policy.previousPage')}>‹</button>
+            <button type="button" className="btn btn-secondary btn-small" disabled={page === 1} onClick={() => setPage(1)} aria-label={t('policy.previousPage')}><Icon name="back" size={16} /></button>
             <span className="mono">{t('policy.page', { current: String(page), total: '2' })}</span>
-            <button type="button" className="btn btn-secondary btn-small" disabled={page === 2} onClick={() => setPage(2)} aria-label={t('policy.nextPage')}>›</button>
+            <button type="button" className="btn btn-secondary btn-small" disabled={page === 2} onClick={() => setPage(2)} aria-label={t('policy.nextPage')}><Icon name="next" size={16} /></button>
           </div>
           <button type="button" className="btn btn-secondary btn-small" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
         </div>
@@ -152,7 +153,7 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
   const { copDecimal, dayMonthYear } = useFormatters();
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step">
-    <div className="banner banner-ok"><span aria-hidden="true" className="banner-icon">✓</span><p><strong>{t('issued.onceTitle')}</strong> {t('issued.onceDetail')}</p></div>
+    <div className="banner banner-ok"><Icon name="check" size={18} className="banner-icon" /><p><strong>{t('issued.onceTitle')}</strong> {t('issued.onceDetail')}</p></div>
     <div className="card">
       <div className="result-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('issued.title')}</h1>
@@ -187,18 +188,18 @@ export function ChargePending({ heading, policy, idempotencyKey, busy, uncertain
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step card" aria-busy={busy}>
     <div className="status-head">
-      {busy ? <span className="spinner" aria-hidden="true" /> : <span className="status-icon status-icon-pending" aria-hidden="true">…</span>}
+      {busy ? <span className="spinner" aria-hidden="true" /> : <span className="status-icon status-icon-pending" aria-hidden="true"><Icon name="pending" size={18} /></span>}
       <div>
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.pendingTitle')}</h1>
         <p className="note">{t('charge.pendingDetail')}</p>
       </div>
     </div>
-    {uncertain && <div className="banner banner-error" role="alert"><span aria-hidden="true" className="banner-icon">!</span><p>{t('policy.uncertain')}</p></div>}
+    {uncertain && <div className="banner banner-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><p>{t('policy.uncertain')}</p></div>}
     <dl className="facts">
       <div><dt>{t('charge.amount')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
       <div><dt>{t('charge.key')}</dt><dd className="mono charge-key">{idempotencyKey}</dd></div>
     </dl>
-    <div className="banner banner-info"><span aria-hidden="true" className="banner-icon">i</span><p><strong>{t('charge.waitStrong')}</strong> {t('charge.waitDetail')}</p></div>
+    <div className="banner banner-info"><Icon name="info" size={18} className="banner-icon" /><p><strong>{t('charge.waitStrong')}</strong> {t('charge.waitDetail')}</p></div>
     <p className="note">{t('policy.mock')}</p>
     <div className="actions">
       <button type="button" className="btn btn-primary" aria-disabled={busy} onClick={busy ? undefined : onRefresh}>{t('policy.refresh')}</button>
@@ -211,7 +212,7 @@ export function ChargeDeclined({ heading, policy, onRetry, onBack }: ChargeProps
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step card card-error">
     <div className="denied-head">
-      <span aria-hidden="true" className="denied-icon">×</span>
+      <span aria-hidden="true" className="denied-icon"><Icon name="close" size={14} /></span>
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.declinedTitle')}</h1>
     </div>
     <div className="denied-body">
@@ -231,10 +232,10 @@ export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }:
   const { copDecimal } = useFormatters();
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step">
-    {policy.replayed && <div className="banner banner-ok"><span aria-hidden="true" className="banner-icon">✓</span><p><strong>{t('charge.replayedTitle')}</strong> {t('charge.replayedDetail')}</p></div>}
+    {policy.replayed && <div className="banner banner-ok"><Icon name="check" size={18} className="banner-icon" /><p><strong>{t('charge.replayedTitle')}</strong> {t('charge.replayedDetail')}</p></div>}
     <div className="card">
       <div className="status-head">
-        <span className="status-icon status-icon-ok" aria-hidden="true">✓</span>
+        <span className="status-icon status-icon-ok" aria-hidden="true"><Icon name="check" size={18} /></span>
         <div>
           <h1 ref={heading} tabIndex={-1} className="h-card">{t('charge.okTitle')}</h1>
           <p className="note">{t('charge.okDetail')}</p>

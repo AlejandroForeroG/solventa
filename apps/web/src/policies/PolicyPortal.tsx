@@ -7,6 +7,7 @@ import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
 import type { PolicyDocumentDestination } from './document-destination';
 import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
+import { Icon } from '../navigation/Icon';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -196,7 +197,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
   const policy = state.kind === 'ready' ? state.value : null;
   const status = policy ? policyState(policy, now) : null;
   return <main className="content policies">
-    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}>‹ {t('back')}</button>
+    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}><Icon name="back" size={16} />{t('back')}</button>
     <p className="section-label">{t('label')}</p>
     <h1 ref={heading} tabIndex={-1}>{policy ? t(`product.${policy.product}`) : t('title')}</h1>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}

@@ -4,6 +4,7 @@ import { useIntl } from 'react-intl';
 import type { QuoteValues } from './api';
 import { type FieldKey, type FieldProblem } from './fields';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
+import { Icon } from '../navigation/Icon';
 
 type Props = {
   values: QuoteValues;
@@ -57,7 +58,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
     <h1 ref={heading} tabIndex={-1}>{intl.formatMessage({ id: 'form.title' })}</h1>
     <p className="lede">{intl.formatMessage({ id: 'form.lede' })}</p>
     {banner !== 'none' && <div className="banner banner-error">
-      <span aria-hidden="true" className="banner-icon">×</span>
+      <Icon name="alert" size={18} className="banner-icon" />
       <p><strong>{intl.formatMessage({ id: 'form.errorTitle' })}</strong> {bannerText}</p>
     </div>}
     <form className="card" noValidate onSubmit={event => { event.preventDefault(); onSubmit(); }}>

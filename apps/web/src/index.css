@@ -242,3 +242,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .document-pager .btn { min-height: 44px; }
 @media (max-width: 480px) { .document-pager .btn { width: 100%; } }
 @media (pointer: coarse) { .btn-small { min-height: 44px; } .check input { width: 22px; height: 22px; margin-top: 0; } }
+.banner-icon { flex: none; margin-top: 1px; }
+.banner-error .banner-icon { color: #a32b22; }
+.banner-ok .banner-icon { color: #1f7a4d; }
+.banner-info .banner-icon { color: #23557e; }
+.denied-icon svg, .warning-icon svg { stroke-width: 2.5; }
+.policy-back, .audit-back { display: inline-flex; align-items: center; gap: 6px; }
+.document-navigation .btn { padding: 8px; }

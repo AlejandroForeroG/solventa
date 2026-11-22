@@ -58,7 +58,7 @@ describe('my policies', () => {
     expect(screen.getByRole('button', { name: 'Descargar PDF: Póliza firmada' })).toBeVisible();
     expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/policies/${policyId}/detail`, expect.objectContaining({ method: 'GET', cache: 'no-store' }));
     expect(screen.queryByRole('heading', { name: 'Mis pólizas' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Mis pólizas$/ }));
     await userEvent.click(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ }));
     expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
   });
@@ -97,7 +97,7 @@ describe('my policies', () => {
     expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
     expect(screen.getByRole('heading', { name: 'Mis pólizas' })).toHaveFocus();
     await user.click(older);
-    await user.click(await screen.findByRole('button', { name: /‹ Mis pólizas/i }));
+    await user.click(await screen.findByRole('button', { name: /^Mis pólizas$/i }));
     expect(await screen.findByText('Página 2')).toBeVisible();
     expect(await screen.findByRole('button', { name: /^Ver detalle de Retraso de vuelo/ })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Anterior' }));

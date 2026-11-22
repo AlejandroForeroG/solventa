@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
 import { consentApi, reconcileConsent, type Consent, type ConsentApi } from './api';
+import { Icon } from '../navigation/Icon';
 
 type Load = 'loading' | 'ready' | 'error';
 
@@ -104,7 +105,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
     <p className="lede">{intl.formatMessage({ id: 'privacy.lede' })}</p>
     {load === 'loading' && <p aria-busy="true">{intl.formatMessage({ id: 'privacy.loading' })}</p>}
     {load === 'error' && <div>
-      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{intl.formatMessage({ id: 'privacy.error' })}</p></div>
+      <div className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><p>{intl.formatMessage({ id: 'privacy.error' })}</p></div>
       <button type="button" className="btn btn-secondary" disabled={busy} onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
     </div>}
     {load === 'ready' && items.length === 0 && <p className="note">{intl.formatMessage({ id: 'privacy.empty' })}</p>}

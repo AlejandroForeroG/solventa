@@ -189,7 +189,7 @@ describe('my policies route in the application', () => {
     });
     render(<App />);
     await screen.findByRole('tab', { name: 'Documentos', selected: true });
-    const back = screen.getByRole('button', { name: /‹ Mis pólizas/ });
+    const back = screen.getByRole('button', { name: /^Mis pólizas$/ });
     // The detail also fetches issued policies, so expire the session on navigation.
     back.addEventListener('click', () => { expired = true; }, { once: true });
     await userEvent.click(back);
