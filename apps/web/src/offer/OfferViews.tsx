@@ -78,6 +78,10 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
     previousPage.current = page;
   }, [page]);
   const [now, setNow] = useState(Date.now());
+  const codeInput = useRef<HTMLInputElement>(null);
+  const challengeId = challenge?.challengeId;
+  useEffect(() => { if (challengeId) codeInput.current?.focus(); }, [challengeId]);
+  useEffect(() => { if (error && challengeId) codeInput.current?.focus(); }, [error, challengeId]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
   const document = JSON.parse(policy.document) as Record<string, unknown>;
@@ -133,14 +137,15 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
         {!challenge && <button type="button" className="btn btn-secondary review-confirm" onClick={onBegin} disabled={!checked || busy}>{t('policy.requestCode')}</button>}
         {challenge && <>
           <label className="section-label" htmlFor="policy-code">{t('policy.authCode')}</label>
-          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy}
+          <input id="policy-code" className="signature-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy} ref={codeInput}
+            aria-invalid={error ? true : undefined} aria-describedby={error ? 'policy-code-error' : undefined}
             value={code} onChange={event => onCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
           <p className="note" role="status">{t('policy.demoCode', { code: challenge.demoCode })}</p>
           <p className="note mono">{t('policy.expiresIn', { time: `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}` })}</p>
           <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
           <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel} disabled={busy}>{t('policy.cancelSignature')}</button>
         </>}
-        {(error || (challenge && secondsLeft === 0)) && <p className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
+        {(error || (challenge && secondsLeft === 0)) && <p id="policy-code-error" className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
         </>}
         <p className="note">{t('policy.mock')}</p>
       </div>
