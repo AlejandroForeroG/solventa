@@ -53,7 +53,7 @@ The retained underwriting decision records `channel: { kind: 'advisor', advisorR
 
 ## Handoff to the customer
 
-The advisor sees the offer code (`offerId`) with a copy button and gives it to the customer outside Solventa. The customer's authorization code and the advisor reference are also shown with copy buttons. In the web application the customer opens **Venta asistida** and enters the code; the offer then replaces the authorization form on the page. The page reads the offer by its code (`GET /api/v1/offers/{offerId}`, owner only) and continues in the existing review, acceptance, payment, signature and issuance steps. The customer needs their own current consent; without it the offer is not prepared in the first place.
+The advisor sees the offer code (`offerId`) with a copy button and gives it to the customer outside Solventa. The customer's authorization code and the advisor reference are also shown with copy buttons. In the web application the customer opens **Mi asesor**, where reviewing an offer comes first and previous authorizations are folded, and enters the code; the offer then replaces the authorization form on the page. The page reads the offer by its code (`GET /api/v1/offers/{offerId}`, owner only) and continues in the existing review, acceptance, payment, signature and issuance steps. The customer needs their own current consent; without it the offer is not prepared in the first place.
 
 ## Data
 
