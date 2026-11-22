@@ -14,8 +14,12 @@ export const locales = ['es-CO', 'en-US'] as const;
 export type Locale = (typeof locales)[number];
 
 const esCO = {
-  'landing.accountHeading': 'Pólizas y cotizaciones',
-  'landing.accountIntro': 'Consulta tus pólizas emitidas o inicia una cotización.',
+  'landing.accountHeading': 'Tu cuenta',
+  'home.summary': 'Resumen de tu cuenta', 'home.loading': 'Consultando…', 'home.unavailable': 'No se pudo consultar ahora. Abre la sección para reintentar.',
+  'home.policies': 'Pólizas vigentes', 'home.policiesDetail': 'Coberturas, documentos y pagos.',
+  'home.claims': 'Siniestros en curso', 'home.claimsDetail': 'Estado, tareas e indemnizaciones.',
+  'home.quote': 'Cotizar un seguro', 'home.quoteDetail': 'Vida hipotecaria con oferta definitiva en minutos.',
+  'landing.accountIntro': 'Tus pólizas, siniestros y cotizaciones en un solo lugar.',
   'consent.simulated': 'Simulación académica: las fuentes nombradas usan datos de prueba. No accedemos a cuentas bancarias ni registros reales.',
   'policy.readBothPages': 'Abre la página 2 del documento para habilitar la aceptación y solicitar el código.',
   'live.signatureReady': 'Revisa las dos páginas del documento antes de aceptar y solicitar el código de firma simulado.',
@@ -364,8 +368,12 @@ const esCO = {
 };
 
 const enUS: typeof esCO = {
-  'landing.accountHeading': 'Policies and quotes',
-  'landing.accountIntro': 'View your issued policies or start a quote.',
+  'landing.accountHeading': 'Your account',
+  'home.summary': 'Account summary', 'home.loading': 'Loading…', 'home.unavailable': 'Could not load right now. Open the section to retry.',
+  'home.policies': 'Active policies', 'home.policiesDetail': 'Coverage, documents and payments.',
+  'home.claims': 'Open claims', 'home.claimsDetail': 'Status, tasks and indemnities.',
+  'home.quote': 'Get a quote', 'home.quoteDetail': 'Mortgage life insurance with a definitive offer in minutes.',
+  'landing.accountIntro': 'Your policies, claims and quotes in one place.',
   'consent.simulated': 'Academic simulation: the named sources use test data. We do not access real bank accounts or personal records.',
   'policy.readBothPages': 'Open page 2 of the document to enable acceptance and request the code.',
   'live.signatureReady': 'Review both pages of the document before accepting and requesting the simulated signature code.',

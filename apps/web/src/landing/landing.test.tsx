@@ -19,7 +19,7 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.getByText(/Iniciar sesión no concede esa autorización/)).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
-    expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
+    expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session' || (status === 200 && (path === '/api/v1/policies/issued' || String(path).startsWith('/api/v1/claims/customer/cases'))))).toBe(true);
   });
 
   it('exposes session failures and retries without treating an unknown session as anonymous', async () => {
@@ -38,9 +38,10 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
     expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: 'Pólizas y cotizaciones' })).toBeVisible();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
+    expect(screen.getByRole('heading', { level: 1, name: 'Tu cuenta' })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Pólizas vigentes/ })).toHaveAttribute('href', '/polizas');
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/auth/session')).toHaveLength(2);
+    expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session' || path === '/api/v1/policies/issued' || String(path).startsWith('/api/v1/claims/customer/cases'))).toBe(true);
   });
 
   it('keeps the language switch and native navigation usable from the keyboard', async () => {
