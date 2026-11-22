@@ -3,7 +3,7 @@
 .policies h1:focus, .policies h1:focus-visible { outline: none; }
 .policy-list { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
 .policy-card { display: grid; gap: 10px; width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; }
-.policy-card:hover { border-color: #0b6b5f; }
+@media (hover: hover) and (pointer: fine) { .policy-card:hover { border-color: #0b6b5f; } }
 .policy-card:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
 .policy-card .h-card { font: 600 20px/1.2 'Space Grotesk', sans-serif; letter-spacing: -.02em; }
 .policy-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }

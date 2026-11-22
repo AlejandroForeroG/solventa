@@ -9,7 +9,7 @@
 .audit-heading .section-label { margin: 0; }
 .audit-id { overflow-wrap: anywhere; margin-top: 12px; font-weight: 400; }
 .audit-filters { display: grid; grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(145px, 1fr)); gap: 16px; padding: 22px; background: #fff; border: 1px solid #e3e1dc; border-radius: 10px; margin-bottom: 24px; }
-.audit-filters select { width: 100%; min-height: 41px; padding: 9px 12px; border: 1px solid #cfccc5; border-radius: 10px; color: #12151a; background: #fff; font: inherit; font-size: 14px; }
+.audit-filters select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line-input); border-radius: 10px; color: #12151a; background: #fff; font: inherit; font-size: 16px; }
 .audit-filters select:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
 .audit-filter-actions { display: flex; align-items: flex-end; gap: 8px; }
 .audit-filters .field { min-width: 0; }
@@ -19,7 +19,7 @@
 .audit-table th { background: #faf9f7; color: #485563; font-weight: 600; font-size: 14px; white-space: nowrap; }
 .audit-table th, .audit-table td { padding: 16px 18px; border-bottom: 1px solid #e3e1dc; vertical-align: top; }
 .audit-table tr:last-child td { border-bottom: 0; }
-.audit-table tbody tr:hover { background: #faf9f7; }
+@media (hover: hover) and (pointer: fine) { .audit-table tbody tr:hover { background: #faf9f7; } }
 .audit-link, .audit-back { width: auto; background: transparent; border: 0; border-radius: 3px; padding: 0; color: #0b6b5f; text-align: left; font-weight: 500; }
 .audit-link { font-size: 14px; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; min-width: 170px; }
 .audit-back { margin-bottom: 24px; font-size: 13px; }
