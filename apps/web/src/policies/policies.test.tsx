@@ -45,7 +45,7 @@ describe('my policies', () => {
     rendered.unmount();
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=renewal');
     show();
-    expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
+    expect(await screen.findByRole('tab', { name: 'Gestionar', selected: true })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
     expect(screen.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
     expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
@@ -208,7 +208,7 @@ describe('my policies', () => {
     await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Documentos', selected: true })).toHaveFocus();
     await user.keyboard('{ArrowLeft}{ArrowLeft}');
-    expect(screen.getByRole('tab', { name: 'Historial', selected: true })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Gestionar', selected: true })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: /Mis pólizas/ }));
     expect(await screen.findByRole('heading', { name: 'Mis pólizas' })).toBeVisible();
   });
