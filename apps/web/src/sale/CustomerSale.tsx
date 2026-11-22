@@ -49,12 +49,21 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     {error && <p role="alert">{t(error)}</p>}
     {load.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {load.kind === 'failed' && <p role="alert">{t(load.reason)}</p>}
-    {load.kind === 'ready' && (load.items.length ? <ul className="policy-documents">{load.items.map(item => <li key={item.authorizationId}><div>
+    {load.kind === 'ready' && (load.items.length ? <>
+      {load.items.some(item => item.status === 'active') && <ul className="policy-documents">{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId}><div>
       <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
       <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
-    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>}
+      {load.items.some(item => item.status !== 'active') && <details className="document-verification sale-history"><summary>{t('history')}</summary>
+        <ul className="policy-documents">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId}><div>
+      <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
+      <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
+      {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
+      {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul></details>}
+    </>
       : <p>{t('empty')}</p>)}
   </section>;
 }
@@ -106,7 +115,7 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
   }
   return <main className="content policies">
     {!offerOpen && <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>}
-    {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
     <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
+    {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
   </main>;
 }
