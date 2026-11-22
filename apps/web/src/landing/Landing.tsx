@@ -1,5 +1,4 @@
 import { useIntl } from 'react-intl';
-import { AccountHome } from './AccountHome';
 import './landing.css';
 
 export function Landing({ authenticated = false, sessionUnavailable, onRetry }: { authenticated?: boolean; sessionUnavailable: boolean; onRetry: () => void }) {
@@ -20,16 +19,17 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
           <a className="landing-text-link" href={authenticated ? '/cotizar' : '#how-it-works'}>{authenticated ? intl.formatMessage({ id: 'navigation.quote' }) : t('how')}</a>
         </div>
       </div>
-      {authenticated ? <AccountHome /> : <aside className="landing-preparation" aria-labelledby="landing-prepare-title">
+      <aside className="landing-preparation" aria-labelledby="landing-prepare-title">
         <p className="section-label">{t('prepareLabel')}</p>
         <h2 id="landing-prepare-title">{t('prepareTitle')}</h2>
         <ul>
-          <li>{t('age')}</li>
+          <li>{t(authenticated ? 'identityDetails' : 'age')}</li>
+          {authenticated && <li>{t('city')}</li>}
           <li>{t('amount')}</li>
           <li>{t('term')}</li>
         </ul>
         <p>{t('preliminary')}</p>
-      </aside>}
+      </aside>
     </section>
     {!authenticated && <section className="landing-process" id="how-it-works" aria-labelledby="landing-how-title">
       <h2 id="landing-how-title">{t('how')}</h2>

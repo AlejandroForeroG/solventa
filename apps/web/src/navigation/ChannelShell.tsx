@@ -5,7 +5,7 @@ import { useLocale } from '../i18n/I18n';
 import { locales } from '../i18n/messages';
 import './channel-shell.css';
 
-type IconName = 'home' | 'quote' | 'policy' | 'location' | 'claims' | 'audit' | 'reports' | 'advisor' | 'partner' | 'privacy' | 'menu' | 'close' | 'exit' | 'arrow';
+type IconName = 'home' | 'quote' | 'policy' | 'location' | 'claims' | 'audit' | 'reports' | 'advisor' | 'partner' | 'menu' | 'close' | 'exit' | 'arrow';
 const paths: Record<IconName, string> = {
   home: 'm3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9',
   quote: 'M7 3h10v18H7zM10 7h4M10 11h4M10 15h1M13 15h1',
@@ -16,7 +16,6 @@ const paths: Record<IconName, string> = {
   reports: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6M9 9h2',
   advisor: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v2',
   partner: 'M3 21V7l9-4 9 4v14M3 11h18M7 15h2M15 15h2M10 21v-3h4v3',
-  privacy: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2',
   menu: 'M4 6h16M4 12h16M4 18h16',
   close: 'm6 6 12 12M6 18 18 6',
   exit: 'M10 4H4v16h6M14 8l4 4-4 4M8 12h12',
@@ -44,7 +43,6 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/cotizar', label: 'navigation.quote', icon: 'quote' },
   { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
   { href: '/prestadores', label: 'assistance.title', icon: 'location' },
-  { href: '/privacidad', label: 'privacy.open', icon: 'privacy' },
 ];
 const workspaceLinks: typeof customerLinks = [
   { href: '/siniestros', label: 'claims.open', icon: 'claims' },
