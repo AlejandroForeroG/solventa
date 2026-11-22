@@ -42,7 +42,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     return grantApproval(policy.policyId,payload,command.current.key);
   });
   return <section className="card policy-section" aria-labelledby="advisor-heading">
-    {policy ? <h2 id="advisor-heading" className="h-card">{t('authorizations')}</h2> : <h1 id="advisor-heading" className="h-card">{t('title')}</h1>}
+    <h2 id="advisor-heading" className="h-card">{t(policy ? 'authorizations' : 'pending')}</h2>
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
     <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
@@ -72,5 +72,6 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
   </section>;
 }
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
-  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/><AdvisorSale onSessionLost={onSessionLost}/></main>;
+  const intl=useIntl();
+  return <main className="content policies"><h1>{intl.formatMessage({id:'advisor.console'})}</h1><AdvisorSale onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost}/></main>;
 }

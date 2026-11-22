@@ -1,6 +1,6 @@
 export const advisorEs={
   'advisor.previous':'Anteriores', 'advisor.next':'Siguientes',
-  'advisor.title':'Actuaciones de asesor', 'advisor.authorizations':'Autorizaciones de asesor', 'advisor.reference':'Referencia del asesor',
+  'advisor.title':'Asesor', 'advisor.console':'Consola del asesor', 'advisor.pending':'Actuaciones sobre pólizas de tus clientes', 'advisor.authorizations':'Autorizaciones de asesor', 'advisor.reference':'Referencia del asesor',
   'advisor.scope':'Autoriza una actuación concreta sobre esta póliza. El reemplazo, si corresponde, debe estar emitido por ti.',
   'advisor.confirm':'Autorizo esta actuación y el reemplazo indicado', 'advisor.grant':'Autorizar', 'advisor.revoke':'Revocar', 'advisor.execute':'Ejecutar actuación autorizada',
   'advisor.expires':'Vence', 'advisor.validity':'Vigencia de la aprobación', 'advisor.bogota':'(hora de Bogotá)', 'advisor.replacement':'ID de la póliza de reemplazo', 'advisor.action':'Actuación', 'advisor.refresh':'Actualizar',
@@ -13,7 +13,7 @@ export const advisorEs={
 };
 export const advisorEn={
   'advisor.previous':'Previous', 'advisor.next':'Next',
-  'advisor.title':'Advisor actions', 'advisor.authorizations':'Advisor authorizations', 'advisor.reference':'Advisor reference',
+  'advisor.title':'Advisor', 'advisor.console':'Advisor console', 'advisor.pending':'Actions on your customers’ policies', 'advisor.authorizations':'Advisor authorizations', 'advisor.reference':'Advisor reference',
   'advisor.scope':'Authorize one specific action on this policy. You must have issued its replacement, when applicable.',
   'advisor.confirm':'I authorize this action and the specified replacement', 'advisor.grant':'Authorize', 'advisor.revoke':'Revoke', 'advisor.execute':'Execute authorized action',
   'advisor.expires':'Expires', 'advisor.validity':'Approval validity', 'advisor.bogota':'(Bogotá time)', 'advisor.replacement':'Replacement policy ID', 'advisor.action':'Action', 'advisor.refresh':'Refresh',
