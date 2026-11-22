@@ -66,7 +66,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
       <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']|'');setConfirmed(false);}}><option value="" disabled>{intl.formatMessage({id:'policies.lifecycle.choose'})}</option>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
       {action&&action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
       <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={e=>{const count=Number(e.target.value);setDays(count);setExpiresAt(validUntil(count));setConfirmed(false);}}>{[1,2,3,7].map(value=><option key={value} value={value}>{intl.formatMessage({id:'sale.days'},{count:value})}</option>)}</select></label>
-      <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t('confirm')}</label></div>
+      <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t(action==='cancelled'?'confirmCancel':'confirm')}</label></div>
       <button className="btn btn-secondary" disabled={busy||!confirmed||!action} type="submit">{busy?t('saving'):t('grant')}</button>
     </form>}
     {error&&<p role="alert">{t(error)}</p>}

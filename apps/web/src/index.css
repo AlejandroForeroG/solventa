@@ -252,3 +252,5 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .check { position: relative; }
 .check label { cursor: pointer; padding: 2px 0; }
 @media (pointer: coarse) { .check { min-height: 44px; align-items: center; } }
+label.field { display: grid; gap: 6px; margin-bottom: 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+label.field input, label.field select, label.field textarea { font-weight: 400; color: var(--ink); }
