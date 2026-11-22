@@ -33,7 +33,17 @@ export function useFormatters() {
       minimumFractionDigits: fraction.length, maximumFractionDigits: fraction.length })
       .formatToParts(BigInt(value.slice(0, -5))).map(part => part.type === 'fraction' ? fraction : part.value).join('');
   };
+  const copRounded = (value: string) => {
+    if (!/^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(value)) throw new RangeError('Invalid owner decimal amount');
+    const [whole, fraction] = value.split('.');
+    const cents = BigInt(whole) * 100n + BigInt(fraction.slice(0, 2)) + (Number(fraction[2]) >= 5 ? 1n : 0n);
+    const units = cents / 100n, rest = (cents % 100n).toString().padStart(2, '0');
+    const digits = rest === '00' ? 0 : 2;
+    return new Intl.NumberFormat(intl.locale, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', minimumFractionDigits: digits, maximumFractionDigits: digits })
+      .formatToParts(units).map(part => part.type === 'fraction' ? rest : part.value).join('');
+  };
   return {
+    copRounded,
     copAmount: (value: number) => intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }),
     cop: (value: number) => `${intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })} COP`,
     copDecimalAmount,
