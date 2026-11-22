@@ -209,14 +209,14 @@ describe('definitive offer journey', () => {
     await user.type(await screen.findByLabelText('Código de autenticación'), challenge.demoCode);
     await user.click(screen.getByRole('button', { name: 'Firmar póliza' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Póliza emitida' })).toBeInTheDocument();
-    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 7: Firma');
+    expect(screen.queryByRole('listitem', { current: 'step' })).toBeNull();
     expect(screen.getByText(/Emitida · cobrada y firmada/)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(issued.traceId))).toBeInTheDocument();
     expect(screen.getByText(/cobro y firma simulados/)).toBeInTheDocument();
     expect(api.createOffer).toHaveBeenCalledTimes(1);
     expect(api.acceptOffer).toHaveBeenCalledWith(offer.offerId, expect.any(String), expect.any(AbortSignal));
     expect(api.issuePolicy).toHaveBeenCalledWith(charged, expect.any(String), challenge.challengeId, challenge.demoCode, expect.any(AbortSignal));
-    await waitFor(() => expect(live()).toHaveTextContent('Póliza emitida una sola vez.'));
+    await waitFor(() => expect(live()).toHaveTextContent('Póliza emitida y activa.'));
   });
 
   it('keeps step 6 pending until the charge command confirms payment', async () => {

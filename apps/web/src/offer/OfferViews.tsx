@@ -158,7 +158,6 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
   const { copDecimal, dayMonthYear } = useFormatters();
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step">
-    <div className="banner banner-ok"><Icon name="check" size={18} className="banner-icon" /><p><strong>{t('issued.onceTitle')}</strong> {t('issued.onceDetail')}</p></div>
     <div className="card">
       <div className="result-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('issued.title')}</h1>
@@ -172,6 +171,7 @@ export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadi
       </dl>
       <details className="document-verification"><summary>{t('issued.proof')}</summary>
         <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
+        <p className="note">{t('issued.onceDetail')}</p>
       </details>
       <p className="note">{t('issued.mock')}</p>
       <div className="actions">

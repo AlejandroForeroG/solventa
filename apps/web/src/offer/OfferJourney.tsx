@@ -36,7 +36,8 @@ function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
   if (phase.name === 'preparing' || phase.name === 'review') return 5;
   if (['awaitingPayment', 'charging', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
-  if (['signing', 'issued', 'recovering', 'refunded'].includes(phase.name)) return 7;
+  if (phase.name === 'issued') return 8;
+  if (['signing', 'recovering', 'refunded'].includes(phase.name)) return 7;
   return 4;
 }
 
