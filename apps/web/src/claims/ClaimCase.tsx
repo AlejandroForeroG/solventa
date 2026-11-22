@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
 import '../audit/audit.css';
+import '../policies/policies.css';
 import './claims.css';
 import { ClaimDisbursement } from './ClaimDisbursement';
 import { OwnClaimPayments } from './OwnClaimPayments';
@@ -92,11 +93,16 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
       {audience === 'customer' && claim.state === 'unassigned' && <p className="note">{t('customerState.unassignedHint')}</p>}
       {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
       {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} /> : <>
-        <div role="group" className="claims-filters" aria-label={t('caseSections')}>
-          {tabs.map(section => <button key={section} type="button" className="claims-filter" aria-pressed={tab === section} onClick={() => setTab(section)}>{t('section.' + section)}</button>)}
+        <div role="tablist" className="policy-tabs" aria-label={t('caseSections')}>
+          {tabs.map(section => <button key={section} type="button" role="tab" id={`claim-tab-${section}`} aria-selected={tab === section} aria-controls="claim-tab-panel" tabIndex={tab === section ? 0 : -1}
+            onClick={() => setTab(section)} onKeyDown={event => {
+              if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+              const next = tabs[(tabs.indexOf(section) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+              setTab(next); document.getElementById(`claim-tab-${next}`)?.focus();
+            }}>{t('section.' + section)}</button>)}
         </div>
         <div className="claim-case-grid">
-          <section className="case-card">
+          <section className="case-card" role="tabpanel" id="claim-tab-panel" aria-labelledby={`claim-tab-${tab}`}>
             <h2>{t('section.' + tab)}</h2>
             {tab === 'overview' && <><dl className="case-fields">
               <div><dt>{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>

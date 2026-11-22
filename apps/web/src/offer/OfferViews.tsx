@@ -103,7 +103,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
           <h2 ref={pageHeading} tabIndex={-1} className="document-title">{t('policy.conditions')}</h2>
           <p className="mono note">{t('policy.version', { version: String(document.offerVersion ?? 1) })}</p>
           <dl className="facts">
-            <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
+            <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
             <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
             <div><dt>{t('offer.period')}</dt><dd className="mono">{t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) })}</dd></div>
             <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-value">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage && typeof document.coverage.sumInsured === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(document.coverage.sumInsured) ? copDecimal(document.coverage.sumInsured) : '—'}</dd></div>
@@ -216,7 +216,7 @@ export function ChargeDeclined({ heading, policy, onRetry, onBack }: ChargeProps
     </div>
     <div className="denied-body">
       <p>{t('charge.declinedDetail')} <strong>{t('charge.declinedNoCharge')}</strong></p>
-      <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('issued.reference')}: {policy.traceId}</p>
+      <details className="document-verification"><summary>{t('charge.support')}</summary><p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('issued.reference')}: {policy.traceId}</p></details>
       <p className="note">{t('charge.retryNote')}</p>
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={onRetry}>{t('charge.retry')}</button>
@@ -243,9 +243,11 @@ export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }:
       <dl className="facts facts-pairs">
         <div><dt>{t('charge.receipt')}</dt><dd className="mono">{policy.payment?.reference}</dd></div>
         <div><dt>{t('charge.charged')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
-        {idempotencyKey && <div><dt>{t('charge.key')}</dt><dd className="mono charge-key">{idempotencyKey}</dd></div>}
-        <div><dt>{t('issued.policy')}</dt><dd className="mono">{policy.policyId}</dd></div>
+        <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
       </dl>
+      <details className="document-verification"><summary>{t('charge.support')}</summary>
+        <p className="trace mono">{t('issued.policy')}: {policy.policyId}{idempotencyKey && <><br />{t('charge.key')}: <span className="charge-key">{idempotencyKey}</span></>}</p>
+      </details>
       <p className="note">{t('policy.mock')}</p>
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={onContinue}>{t('charge.continue')}</button>

@@ -29,7 +29,7 @@ it.each([claimId, claimId.toUpperCase()])('opens the exact receipt and timeline 
   expect(await screen.findByText('Pago simulado')).toBeVisible();
   expect(screen.getByText(new RegExp(receipt.payment.reference))).toBeVisible();
   expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/v1/claims/customer/disbursements?claimId=' + claimId);
-  await user.click(screen.getByRole('button', { name: 'Historial' }));
+  await user.click(screen.getByRole('tab', { name: 'Historial' }));
   expect(screen.getByText('Desembolso simulado confirmado.')).toBeVisible();
   expect(screen.getByText('Radicación')).toBeVisible();
   expect(screen.queryByText('Pago simulado')).toBeNull();
@@ -64,7 +64,7 @@ it('reconciles a replacement selection after an upload fails', async () => {
     return value;
   };
   showCase('customer');
-  await user.click(await screen.findByRole('button', { name: 'Tareas' }));
+  await user.click(await screen.findByRole('tab', { name: 'Tareas' }));
   const chooser = screen.getByLabelText(/Adjuntar imágenes o videos/);
   await user.upload(chooser, file([1, 2, 3], 'original.png'));
   await user.click(screen.getByRole('button', { name: 'Enviar respuesta' }));
@@ -126,7 +126,7 @@ it('shows the owner the requested information and confirms their response', asyn
     return json({ ...examples.caseFile, access: 'customer', state: received ? 'in_review' : 'pending_information', requirements: [result] });
   }));
   showCase('customer');
-  await user.click(await screen.findByRole('button', { name: 'Tareas' }));
+  await user.click(await screen.findByRole('tab', { name: 'Tareas' }));
   expect(screen.getByText(requirement.details)).toBeVisible();
   expect(screen.getByText('Titular de la póliza')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();

@@ -25,6 +25,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
   const t = (key: string, values?: Record<string, string | number>) => intl.formatMessage({ id: `reports.${key}`, defaultMessage: key }, values);
   const periods = useRef(recentPeriods(new Date())).current;
+  const month = (value: string) => intl.formatDate(Date.UTC(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, 1), { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const [filter, setFilter] = useState<Filter>('all');
   const [before, setBefore] = useState<string | undefined>();
   const [refresh, setRefresh] = useState(0);
@@ -88,7 +89,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
       <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
-        <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
+        <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{month(option)}</option>)}</select></label>
         <label>{t('destination')}<select value={destination} onChange={event => setDestination(event.target.value as Destination)}>
           {DESTINATIONS.map(option => <option key={option} value={option}>{t(`destination.${option}`)}</option>)}</select></label>
         <p className="reports-format"><span>{t('format')}</span>{t('formatValue')}</p>
@@ -108,7 +109,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table reports-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['period', 'destination', 'revision', 'generated', 'hash', 'rows', 'delivery', 'actions'].map(key => <th key={key} scope="col">{t(`col.${key}`)}</th>)}</tr></thead>
           <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
-            <td className="mono" data-label={t('col.period')}><span id={label}>{report.period} · {t(`destination.${report.destination}`)}</span></td>
+            <td data-label={t('col.period')}><span id={label}>{month(report.period)} · {t(`destination.${report.destination}`)}</span></td>
             <td data-label={t('col.destination')}>{t(`destination.${report.destination}`)}</td>
             <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
             <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
