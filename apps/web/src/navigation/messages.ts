@@ -1,7 +1,7 @@
 export const navigationEs = {
   'navigation.primary': 'Navegación principal',
   'navigation.account': 'Mi cuenta',
-  'navigation.workspace': 'Área de trabajo',
+  'navigation.workspace': 'Consola de operaciones',
   'navigation.home': 'Inicio',
   'navigation.quote': 'Cotizar',
   'navigation.open': 'Abrir menú',
@@ -19,7 +19,7 @@ export const navigationEs = {
 export const navigationEn: Record<keyof typeof navigationEs, string> = {
   'navigation.primary': 'Main navigation',
   'navigation.account': 'My account',
-  'navigation.workspace': 'Workspace',
+  'navigation.workspace': 'Operations console',
   'navigation.home': 'Home',
   'navigation.quote': 'Get a quote',
   'navigation.open': 'Open menu',
