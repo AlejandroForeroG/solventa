@@ -11,7 +11,7 @@ describe('channel navigation', () => {
     const nav = within(screen.getByRole('complementary', { name: 'Mi cuenta' }));
     expect(nav.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('aria-current', 'page');
     expect(nav.queryByRole('link', { name: 'Auditoría' })).toBeNull();
-    expect(nav.getByRole('link', { name: 'Área de trabajo' })).toHaveAttribute('href', '/siniestros');
+    expect(nav.getByRole('link', { name: 'Consola de operaciones' })).toHaveAttribute('href', '/siniestros');
   });
   it('keeps a single operational navigation with a return to the customer policies', () => {
     window.history.replaceState({}, '', '/auditoria'); renderShell();
