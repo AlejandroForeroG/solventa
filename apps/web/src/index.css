@@ -238,3 +238,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .assistance-result { margin-top: 16px; }
 .assistance-result p { margin: 6px 0; }
 .date-format { display: block; margin-top: 5px; }
+.document-pager { display: flex; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.document-pager .btn { min-height: 44px; }
+@media (max-width: 480px) { .document-pager .btn { width: 100%; } }

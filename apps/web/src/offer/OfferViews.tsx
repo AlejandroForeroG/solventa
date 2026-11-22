@@ -115,11 +115,15 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
           <h2 ref={pageHeading} tabIndex={-1} className="section-label">{t('policy.document')}</h2>
           <DocumentFields document={document} verification={<p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>} />
           </>}
+          <div className="document-pager">
+            {page === 1 ? <button type="button" className="btn btn-secondary" onClick={() => setPage(2)}>{t('policy.continueReading')}</button>
+              : <button type="button" className="btn btn-secondary" onClick={() => setPage(1)}>{t('policy.backToFirst')}</button>}
+          </div>
         </div>
       </div>
       <div className="card review-panel">
         {stage === 'review' ? <button type="button" className="btn btn-primary review-confirm" onClick={onContinue}>
-          {t('policy.continueToPayment')}
+          {t('policy.continueToPayment', { amount: copDecimal(policy.premium) })}
         </button> : <>
         <div className="check review-check">
           <input id="policy-review-cb" type="checkbox" aria-describedby={page !== 2 && !challenge ? 'policy-page-instruction' : undefined} checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
