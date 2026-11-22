@@ -97,10 +97,10 @@ it('retains the analyst’s reason and command key when an approval succeeds aft
   await user.click(await screen.findByRole('button', { name: 'Aprobar' }));
   await user.type(screen.getByRole('textbox', { name: 'Motivo' }), 'Evidence evaluated by the assigned analyst.');
   await user.click(screen.getByRole('checkbox', { name: 'Documento 1' }));
-  await user.click(screen.getByRole('button', { name: 'Confirmar acción' }));
+  await user.click(screen.getByRole('button', { name: 'Aprobar siniestro' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos confirmar el resultado');
   expect(screen.getByRole('textbox', { name: 'Motivo' })).toHaveValue('Evidence evaluated by the assigned analyst.');
-  await user.click(screen.getByRole('button', { name: 'Confirmar acción' }));
+  await user.click(screen.getByRole('button', { name: 'Aprobar siniestro' }));
   expect(await screen.findByText('Siniestro aprobado.')).toBeVisible();
   expect(bodies).toEqual([bodies[0], bodies[0]]);
   expect(keys[1]).toBe(keys[0]);

@@ -74,3 +74,10 @@
 .report-in-app { margin: 16px 0 8px; padding: 20px 22px; border-color: #cbe5e0; background: var(--brand-tint); }
 .report-in-app .h-card { margin: 0 0 6px; font: 600 18px/1.3 'Space Grotesk', sans-serif; }
 .report-in-app .note { margin: 0; color: var(--ink-2); }
+.claim-actions .field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.claim-actions .field textarea, .claim-actions .field select, .claim-actions .field input { font-weight: 400; color: var(--ink); }
+.claim-actions textarea, .requirement-form textarea { padding: 10px 12px; border: 1px solid var(--line-input); border-radius: 10px; background: #fff; font-size: 16px; }
+.case-evidence-choice { display: grid; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.case-evidence-choice .case-checkbox { min-height: 32px; }
+.case-action-options .btn { justify-content: flex-start; }
+.case-action-options .btn[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--brand-strong); }

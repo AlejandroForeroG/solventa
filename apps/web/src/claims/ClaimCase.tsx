@@ -97,7 +97,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
           <section className="case-card">
             <h2>{t('section.' + tab)}</h2>
             {tab === 'overview' && <><dl className="case-fields">
-              <div><dt>{t('col.policy')}</dt><dd className="mono">{claim.policyId}</dd></div>
+              <div><dt>{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>
               <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
               {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
               {claim.place && <div><dt>{t('place')}</dt><dd>{claim.place}</dd></div>}
@@ -199,29 +199,29 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
     {claim.access === 'unassigned' ? <><p className="note">{t('takeHint')}</p><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
-      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className="btn btn-secondary"
+      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}>{t('action.' + option)}</button>)}</div>}
     {blocked && claim.access !== 'unassigned' && <p className="note">{t('missingEvidence')}</p>}
     {action && <form onSubmit={event => { event.preventDefault(); void submit(action); }}>
-      <label>{t(action === 'request_information' ? 'requiredDetails' : 'reason')}
+      <label className="field">{t(action === 'request_information' ? 'requiredDetails' : 'reason')}
         <textarea value={reason} onChange={event => setReason(event.target.value)} disabled={busy} minLength={10} maxLength={1000} required />
       </label>
-      {decision && <fieldset><legend>{t('section.documents')}</legend>{claim.evidence.slice(0, 20).map((file, i) => <label className="case-checkbox" key={file.id}>
+      {decision && <fieldset className="case-evidence-choice"><legend className="field-label">{t('section.documents')}</legend>{claim.evidence.slice(0, 20).map((file, i) => <label className="case-checkbox" key={file.id}>
         <input type="checkbox" disabled={busy} checked={selected.includes(file.id)}
           onChange={event => setSelected(items => event.target.checked ? [...items, file.id] : items.filter(id => id !== file.id))} />
         {t('documentNumber', { number: i + 1 })}
       </label>)}</fieldset>}
-      {action === 'assign_expert' && <label>{t('expert')}
+      {action === 'assign_expert' && <label className="field">{t('expert')}
         <select value={expertId} required disabled={busy || directoryError} onChange={event => setExpertId(event.target.value)}>
           <option value="">{t('chooseExpert')}</option>{experts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
         {directoryError && <button className="btn btn-secondary" type="button" onClick={() => { setDirectoryError(false); setDirectoryRevision(n => n + 1); }}>{t('retry')}</button>}
       </label>}
       {(action === 'request_information' || action === 'extend_requirement') && <>
-        <p>{t('recipient')} · {t('owner')}</p><label>{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
+        <p>{t('recipient')} · {t('owner')}</p><label className="field">{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
       </>}
-      <button className="btn btn-primary" type="submit" disabled={busy || (decision && selected.length === 0)}>{t('confirmAction')}</button>
+      <button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} type="submit" disabled={busy || (decision && selected.length === 0)}>{t('submit.' + action)}</button>
     </form>}
     {error && <p role="alert" className="claims-error">{t('caseError.' + error)}</p>}
   </aside>;
