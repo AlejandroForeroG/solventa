@@ -5,6 +5,7 @@ import { useAnnounce } from './Live';
 import { displayGrouped, estimateFields, groupedDigits, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
 import { clearEstimateDraft, saveEstimateDraft } from './estimate-draft';
 import { Stepper } from './Stepper';
+import { Icon } from '../navigation/Icon';
 
 export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValues: EstimateValues | null; onValuesChange?: (values: EstimateValues) => void }) {
   const intl = useIntl();
@@ -73,22 +74,22 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
             aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : undefined} />
           {invalid.includes(key) && <p className="field-error" id={`estimate-${key}-error`}>{t(`estimate.error.${key}`)}</p>}
         </div>)}</div>
-        <div className="form-footer"><p className="note">{t('estimate.noSources')}</p><button className="btn btn-primary" disabled={busy}>{t(busy ? 'live.calculating' : 'estimate.calculate')}</button></div>
+        <div className="form-footer"><p className="note">{t('estimate.noSources')}</p><button className="btn btn-primary" disabled={busy}><Icon name="calculator" size={18} />{t(busy ? 'live.calculating' : 'estimate.calculate')}</button></div>
       </form>
     </> : <div className="card">
       {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{copAmount(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
         <dl className="facts"><div><dt>{t('estimate.amount')}</dt><dd>{cop(estimate.sumInsured)}</dd></div><div><dt>{t('estimate.termMonths')}</dt><dd>{estimate.termMonths}</dd></div></dl></>}
-      <p className="banner banner-info">{t('estimate.disclaimer')}</p>
+      <p className="banner banner-info"><Icon name="info" size={18} className="banner-icon" /><span>{t('estimate.disclaimer')}</span></p>
       {phase === 'result' ? <div className="actions">
-        <button type="button" className="btn btn-primary" onClick={() => setPhase('login')}>{t('estimate.continue')}</button>
-        <button type="button" className="btn btn-secondary" onClick={() => setPhase('form')}>{t('result.fix')}</button>
+        <button type="button" className="btn btn-primary" onClick={() => setPhase('login')}>{t('estimate.continue')}<Icon name="forward" size={18} /></button>
+        <button type="button" className="btn btn-secondary" onClick={() => setPhase('form')}><Icon name="back" size={18} />{t('result.fix')}</button>
       </div> : <>
         <ol className="login-instructions"><li>{t('estimate.loginExisting')}</li><li>{t('estimate.loginNew')}</li><li>{t('estimate.loginReturn')}</li></ol>
         <p>{t('estimate.consentIntro')}</p>
         <p className="note">{t('estimate.consentChoice')}</p>
         {storageFailed && <p className="banner banner-error" role="alert">{t('estimate.storageFailed')}</p>}
         <div className="actions">
-          <a className="btn btn-primary" href="/auth/login" onClick={beginLogin}>{t('estimate.signIn')}</a>
+          <a className="btn btn-primary" href="/auth/login" onClick={beginLogin}><Icon name="user" size={18} />{t('estimate.signIn')}</a>
           <button type="button" className="btn btn-secondary" onClick={() => setPhase('result')}>{t('estimate.back')}</button>
           {storageFailed && <a className="btn btn-secondary" href="/auth/login" onClick={clearEstimateDraft}>{t('estimate.signInWithoutDraft')}</a>}
         </div>

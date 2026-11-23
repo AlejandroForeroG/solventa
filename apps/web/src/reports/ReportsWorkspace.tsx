@@ -91,12 +91,12 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
     <div className="audit-main">
       <div className="audit-heading"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="reports" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
-      <form className="reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
+      <form className="card reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
         <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{month(option)}</option>)}</select></label>
         <label>{t('destination')}<select value={destination} onChange={event => setDestination(event.target.value as Destination)}>
           {DESTINATIONS.map(option => <option key={option} value={option}>{t(`destination.${option}`)}</option>)}</select></label>
         <p className="reports-format"><span>{t('format')}</span>{t('formatValue')}</p>
-        <button className="btn btn-primary" type="submit" disabled={busy !== null}>{busy === 'generate' ? t('generating') : t('generate')}</button>
+        <button className="btn btn-primary" type="submit" disabled={busy !== null}><Icon name="file" size={18} />{busy === 'generate' ? t('generating') : t('generate')}</button>
       </form>
       {notice && notice.text && <p className={notice.kind === 'alert' ? 'claims-error' : 'note'} role={notice.kind}>{notice.text}</p>}
       <div role="group" aria-label={t('filterGroup')} className="claims-filters reports-filters">
@@ -120,15 +120,15 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
             <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>
               {report.delivery?.rejectionCode && <span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span>}</td>
             <td className="reports-actions" data-label={t('col.actions')}><div>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}><Icon name="download" size={16} />{t('downloadCsv')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}><Icon name="download" size={16} />{t('downloadManifest')}</button>
               {!isFinal(report) && confirming !== report.reportId && <button type="button" id={`report-send-${report.reportId}`} className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
                 onClick={() => { if (status && status !== 'pending') void send(report); else setConfirming(report.reportId); }}>
-                {busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
+                <Icon name={status && status !== 'pending' ? 'refresh' : 'send'} size={16} />{busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
             </div>
             {confirming === report.reportId && <div className="reports-confirm" role="group" aria-label={t('confirmTitle')}>
               <p className="note">{t('confirmSend', { month: month(report.period), revision: report.revision, rows: report.manifest.rowCount, destination: t(`destination.${report.destination}`) })}</p>
-              <div><button type="button" id={`report-confirm-${report.reportId}`} className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}>{t('confirmButton')}</button>
+              <div><button type="button" id={`report-confirm-${report.reportId}`} className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}><Icon name="send" size={16} />{t('confirmButton')}</button>
                 <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => { const id = confirming; setConfirming(null); requestAnimationFrame(() => document.getElementById(`report-send-${id}`)?.focus()); }}>{t('cancelSend')}</button></div>
             </div>}</td>
           </tr>; })}</tbody></table></div>

@@ -379,3 +379,10 @@ label.field input, label.field select, label.field textarea { font-weight: 400; 
 .consent-item .btn-danger { gap: 8px; }
 .access-panel h1 { margin-bottom: 12px; }
 .access-panel > .note { margin: 0 0 20px; }
+.audit-denied .access-denied-support { justify-self: center; text-align: center; }
+.audit-denied .access-denied-support summary { justify-content: center; }
+@media (max-width: 480px) {
+  .consent-foot { padding: 18px 20px; }
+  .consent-foot .actions { width: 100%; flex-direction: column-reverse; align-items: stretch; }
+  .consent-foot .actions .btn { width: 100%; }
+}

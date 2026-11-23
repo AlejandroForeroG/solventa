@@ -26,3 +26,5 @@
 .reports-table td:first-child span, .reports-table td:nth-child(2) { white-space: nowrap; }
 .reports-table td.reports-actions { min-width: 220px; }
 .reports-table .audit-id { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.reports-form.card { padding: 18px 20px; margin-bottom: 16px; }
+.reports-actions .btn { gap: 6px; }

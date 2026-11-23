@@ -83,9 +83,9 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const previousPage = () => { const previous = pageHistory.at(-1); if (previous === undefined) return; setPageHistory(history => history.slice(0, -1)); setVisibleCount(5); setQuery(previous); };
   return <main className="audit-shell">
     <div className="audit-main">
-      {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}><Icon name="back" size={16} />{t('back')}</button>}
+      {selection && <button className="btn btn-secondary btn-small audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}><Icon name="back" size={16} />{t('back')}</button>}
       <div className="audit-heading"><span className="page-icon page-icon-green" aria-hidden="true"><Icon name="audit" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <><p className="mono audit-id">{detail.quoteId ?? detail.decisionId}</p>{detail.quoteId && <details className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{detail.decisionId}</span></details>}</>}<p className="note audit-mode">{t('simulated')}</p></div>
-        {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}>{t(exporting ? 'exporting' : 'export')}</button>}
+        {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}><Icon name="download" size={16} />{t(exporting ? 'exporting' : 'export')}</button>}
       </div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       {!selection && <form className="audit-filters" onReset={event => {

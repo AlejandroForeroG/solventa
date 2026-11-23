@@ -135,3 +135,5 @@
   .case-files li { grid-template-columns: auto minmax(0, 1fr); }
   .case-files li > .note { grid-column: 2; }
 }
+.claim-case-heading h1 { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 600px) { .claim-case-heading .page-icon { align-self: flex-start; } }

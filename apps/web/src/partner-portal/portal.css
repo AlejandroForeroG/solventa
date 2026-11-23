@@ -13,3 +13,15 @@
 .portal-metrics dd { font: 600 28px 'Space Grotesk', sans-serif; font-variant-numeric: tabular-nums; }
 .portal-period { align-items: start; }
 .portal-period > .btn { margin-top: 24px; }
+.portal-period.card { padding: 18px 20px; }
+.portal-section-title { display: flex; align-items: center; gap: 10px; }
+.portal-reset { margin: 8px 0 4px; color: var(--ink); font-weight: 500; }
+.portal-result-accepted, .portal-result-completed { background: #e6f3ec; color: #175c3a; }
+.portal-result-preliminary { background: #fbf0dc; color: #7a4e05; }
+.portal-result-declined { background: #fbe9e7; color: #8a241c; }
+.portal-product { margin: 0 0 8px; font-weight: 600; color: var(--ink); }
+.portal-operations, .portal-versions { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.portal-operations li, .portal-versions li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.portal-operations .mono { font-weight: 500; overflow-wrap: anywhere; }
+.portal-method { padding: 2px 8px; border-radius: 6px; background: var(--brand); color: #fff; font: 700 11px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .04em; }
+.portal-version { font-weight: 600; color: var(--ink); }

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Approval } from './api';
+import { Icon } from '../navigation/Icon';
 
 const statusClass: Record<Approval['status'], string> = {
   active: 'pill-ok',
@@ -48,7 +49,7 @@ export function OwnerApprovalTable({ approvals, feedback, busy, t, timestamp, on
         <td data-label={t('grantedAt')}><time dateTime={approval.grantedAt}>{timestamp(approval.grantedAt)}</time></td>
         <td data-label={t('expires')}><time dateTime={approval.expiresAt}>{timestamp(approval.expiresAt)}</time></td>
         <td data-label={t('options')}>{approval.revokedAt ? '—' : <button type="button" className="btn btn-secondary btn-small"
-          disabled={busy} onClick={() => onRevoke(approval)}>{t('revoke')}</button>}</td>
+          disabled={busy} onClick={() => onRevoke(approval)}><Icon name="ban" size={16} />{t('revoke')}</button>}</td>
       </tr>)}
         {feedback && <tr className="advisor-table-feedback"><td colSpan={columns.length}>{feedback}</td></tr>}
       </tbody>

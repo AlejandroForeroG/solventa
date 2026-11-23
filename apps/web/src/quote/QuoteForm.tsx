@@ -75,7 +75,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
       </div>
       <div className="form-footer">
         <p className="note">{intl.formatMessage({ id: 'form.requiredNote' })}</p>
-        <button type="submit" className="btn btn-primary" disabled={busy}>{intl.formatMessage({ id: 'form.submit' })}</button>
+        <button type="submit" className="btn btn-primary" disabled={busy}><Icon name="calculator" size={18} />{intl.formatMessage({ id: 'form.submit' })}</button>
       </div>
     </form>
   </section>;

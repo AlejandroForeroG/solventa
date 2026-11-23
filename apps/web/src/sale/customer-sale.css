@@ -52,3 +52,7 @@
   .sale-authorization { grid-template-columns: auto minmax(0, 1fr); }
   .sale-authorization > .btn { grid-column: 1 / -1; justify-self: stretch; }
 }
+@media (max-width: 600px) {
+  .sale-authorization { grid-template-columns: minmax(0, 1fr); padding: 14px 12px; }
+  .sale-authorization > .icon-chip { display: none; }
+}
