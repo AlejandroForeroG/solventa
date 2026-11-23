@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
-import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, type PolicyDocumentId, type PolicyFile, type PolicyOutcome, type PolicySummary } from './api';
+import { downloadDocument, listPolicies, readPolicyDetail, readPolicyFingerprint, type PolicyDetail, type PolicyDocumentId, type PolicyOutcome, type PolicySummary } from './api';
 import './policies.css';
 import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
 import type { PolicyDocumentDestination } from './document-destination';
 import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
-import { Icon } from '../navigation/Icon';
-import { DocumentSheet } from '../offer/DocumentSheet';
+import { Icon, type IconName } from '../navigation/Icon';
+import { DocClauses, DocSection, DocSignature, DocTable, DocVerification, DocumentSheet, type SheetStatus } from '../offer/DocumentSheet';
+import { policyNumber, savePdf, signatureStroke, usePrintSheet } from '../offer/document-tools';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -42,10 +43,13 @@ function policyState(policy: PolicySummary, now: number): 'active' | 'upcoming' 
   return now < Date.parse(policy.effectiveUntil) ? 'active' : 'expired';
 }
 const stateClass = { active: 'pill-ok', upcoming: 'pill-pending', expired: 'pill-status-expired', cancelled: 'pill-status-expired', modified: 'pill-pending', renewed: 'pill-pending' } as const;
+const productIcon: Record<PolicySummary['product'], IconName> = { vida_hipotecario: 'policy', flight_delay: 'plane', weather_event: 'rain' };
+const sheetStatus = { active: 'signed', upcoming: 'signed', modified: 'signed', renewed: 'signed', expired: 'expired', cancelled: 'cancelled' } as const satisfies Record<ReturnType<typeof policyState>, SheetStatus>;
+const fileKey: Record<PolicyDocumentId, string> = { signed_policy: 'sheet.fileSignedPolicy', general_conditions: 'sheet.fileGeneralConditions', premium_receipt: 'sheet.filePremiumReceipt' };
 
 function Failed({ kind, onRetry }: { kind: Failure; onRetry: () => void }) {
   const t = useTranslate();
-  return <div className="banner banner-error" role="alert"><p>{t(kind === 'unavailable' ? 'unavailable' : kind)}</p>
+  return <div className="banner banner-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><p>{t(kind === 'unavailable' ? 'unavailable' : kind)}</p>
     {kind === 'unavailable' && <button type="button" className="btn btn-secondary btn-small" onClick={onRetry}>{t('retry')}</button>}</div>;
 }
 
@@ -79,76 +83,138 @@ function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyI
     {state.kind === 'ready' && (state.value.policies.length ? <ul className="policy-list">{state.value.policies.map(policy => {
       const status = policyState(policy, now), product = t(`product.${policy.product}`);
       return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={`${t('open.detail', { product })} · POL-${policy.policyId.slice(0, 8).toUpperCase()} · ${t(`state.${status}`)}`} onClick={() => onOpen(policy.policyId)}>
-        <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
-        <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
-        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)} <span className="note">{t('oneOff')}</span></span></span>
+        <span className="policy-card-head"><span className={`policy-card-icon policy-card-icon-${policy.product}`} aria-hidden="true"><Icon name={productIcon[policy.product]} size={22} /></span>
+          <span className="policy-card-title"><span className="h-card">{product}</span><span className="mono policy-id">{policyNumber(policy.policyId)}</span></span>
+          <span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
+        <span className="policy-card-meta"><span className="policy-card-fact"><Icon name="calendar" size={16} /><Validity policy={policy} /></span><span className="policy-card-fact mono"><Icon name="coins" size={16} />{format.copDecimalAmount(policy.premium)} <span className="note">{t('oneOff')}</span></span></span>
+        <Icon name="arrow" size={18} className="policy-card-arrow" />
       </button></li>;
-    })}</ul> : <div className="card policy-empty"><p>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</p>
-      {cursors.length === 1 && <a className="btn btn-primary" href="/cotizar">{t('quote')}</a>}</div>)}
+    })}</ul> : <div className="card empty-state policy-empty"><span className="empty-state-art" aria-hidden="true"><Icon name="policy" size={30} /></span><h2>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</h2>
+      {cursors.length === 1 && <><p className="note">{t('emptyHint')}</p><a className="btn btn-primary" href="/cotizar"><Icon name="quote" size={18} />{t('quote')}</a></>}</div>)}
     {(cursors.length > 1 || state.kind === 'ready' && state.value.hasMore) && <nav className="actions" aria-label={t('pagination')}>
       <button type="button" className="btn btn-secondary" disabled={state.kind === 'loading' || cursors.length === 1}
-        onClick={() => changePage(cursors.slice(0, -1))}>{t('previousPage')}</button>
+        onClick={() => changePage(cursors.slice(0, -1))}><Icon name="back" size={16} />{t('previousPage')}</button>
       <span className="note" role="status">{t('page', { number: cursors.length })}</span>
       <button type="button" className="btn btn-secondary" disabled={state.kind !== 'ready' || !state.value.nextCursor}
-        onClick={() => { if (state.kind === 'ready' && state.value.nextCursor) changePage([...cursors, state.value.nextCursor]); }}>{t('nextPage')}</button>
+        onClick={() => { if (state.kind === 'ready' && state.value.nextCursor) changePage([...cursors, state.value.nextCursor]); }}>{t('nextPage')}<Icon name="next" size={16} /></button>
     </nav>}
   </main>;
 }
 
-function Coverage({ policy }: { policy: PolicyDetail }) {
+function useFingerprint(policyId: string) {
+  const [hash, setHash] = useState<string | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    void readPolicyFingerprint(policyId, abort.signal).then(value => { if (!abort.signal.aborted) setHash(value); });
+    return () => abort.abort();
+  }, [policyId]);
+  return hash;
+}
+
+function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: ReturnType<typeof policyState>; hash: string | null }) {
   const intl = useIntl();
   const t = useTranslate();
   const format = useFormatters();
-  const rows: [string, React.ReactNode][] = [['coverage.type', t(`product.${policy.product}`)]];
-  if (policy.coverage.kind === 'mortgage_life') rows.push(['coverage.sumInsured', format.copDecimalAmount(policy.coverage.sumInsured)]);
-  else if (policy.coverage.kind === 'flight_delay') rows.push(['coverage.payout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.threshold', t('coverage.thresholdValue', { minutes: policy.coverage.thresholdMinutes })],
-    ['coverage.flight', <span className="mono" key="flight">{policy.coverage.flightReference}</span>]);
-  else rows.push(['coverage.rainPayout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.rainThreshold', t('coverage.rainValue', { mm: policy.coverage.threshold })],
-    ['coverage.station', <span className="mono" key="station">{policy.coverage.stationId}</span>]);
-  rows.push(['coverage.validity', <Validity policy={policy} key="validity" />], ['coverage.premium', format.copDecimalAmount(policy.premium)]);
-  return <DocumentSheet title={intl.formatMessage({ id: 'sheet.policyTitle' })} seal={intl.formatMessage({ id: 'sheet.sealSigned' })}>
-    <section className="sheet-section" aria-labelledby="policy-coverage"><h2 id="policy-coverage" className="h-card"><Icon name="policy" size={18} />{t('coverage')}</h2>
-      <dl className="policy-facts">{rows.map(([key, value]) => <div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>)}</dl></section>
-    <section className="sheet-section" aria-labelledby="policy-exclusions"><h2 id="policy-exclusions" className="h-card"><Icon name="alert" size={18} />{t('exclusions')}</h2>
-      <ul className="policy-exclusions">{policy.exclusions.map(item => <li key={item.code}><span className="mono">{item.code}</span><span>{item.text}</span></li>)}</ul>
-      {intl.locale === 'en-US' && <p className="note">{t('contractLanguage')}</p>}
+  const sheet = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
+  const rows: { label: string; value: React.ReactNode; mono?: boolean }[] = [{ label: t('coverage.type'), value: t(`product.${policy.product}`) }];
+  if (policy.coverage.kind === 'mortgage_life') rows.push({ label: t('coverage.sumInsured'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.sumInsured)}</span> });
+  else if (policy.coverage.kind === 'flight_delay') rows.push({ label: t('coverage.payout'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.payoutAmount)}</span> },
+    { label: t('coverage.threshold'), value: t('coverage.thresholdValue', { minutes: policy.coverage.thresholdMinutes }) },
+    { label: t('coverage.flight'), value: policy.coverage.flightReference, mono: true });
+  else rows.push({ label: t('coverage.rainPayout'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.payoutAmount)}</span> },
+    { label: t('coverage.rainThreshold'), value: t('coverage.rainValue', { mm: policy.coverage.threshold }) },
+    { label: t('coverage.station'), value: policy.coverage.stationId, mono: true });
+  rows.push({ label: t('coverage.validity'), value: <Validity policy={policy} /> }, { label: t('coverage.premium'), value: <span className="doc-amount">{format.copDecimalAmount(policy.premium)}</span> });
+  const signed = policy.documents.find(item => item.documentId === 'signed_policy');
+  const signedAt = signed ? sheet('sheet.bogotaTime', { time: format.dateTime(new Date(signed.issuedAt)) }) : null;
+  const payment = policy.payments[0];
+  const mortgage = policy.product === 'vida_hipotecario';
+  return <DocumentSheet kicker={sheet('sheet.kicker')} title={mortgage ? sheet('sheet.policyTitle') : sheet('sheet.parametricTitle', { product: t(`product.${policy.product}`) })}
+    number={policyNumber(policy.policyId)} meta={signedAt ? <span>{sheet('sheet.issuedOn', { date: signedAt })}</span> : undefined}
+    status={sheetStatus[status]} statusLabel={t(`state.${status}`)} page={1} total={1}>
+    <DocSection number={1} title={sheet('sheet.sectionGeneral')}>
+      <DocTable rows={[
+        { label: sheet('sheet.product'), value: t(`product.${policy.product}`) },
+        { label: t('reference'), value: policyNumber(policy.policyId), mono: true },
+        { label: sheet('sheet.holder'), value: sheet('sheet.holderAccount') },
+        { label: sheet('sheet.status'), value: t(`state.${status}`) },
+      ]} />
+    </DocSection>
+    <DocSection number={2} title={t('coverage')} id="policy-coverage"><DocTable rows={rows} /></DocSection>
+    <DocSection number={3} title={sheet('sheet.sectionPremium')}>
+      <DocTable rows={[
+        { label: sheet('sheet.paymentTerms'), value: sheet('sheet.coverageNote') },
+        ...(payment ? [{ label: sheet('sheet.paymentState'), value: t(`payment.${payment.status}`) },
+          { label: sheet('charge.receipt'), value: payment.reference ?? t('noReference'), mono: !!payment.reference }] : []),
+      ]} />
+    </DocSection>
+    <DocSection number={4} title={t('exclusions')} id="policy-exclusions">
+      <p className="doc-section-intro">{sheet('sheet.exclusionsIntro')}</p>
+      <DocClauses items={policy.exclusions} />
+      {intl.locale === 'en-US' && <p className="doc-section-intro">{t('contractLanguage')}</p>}
       <details className="document-verification"><summary>{intl.formatMessage({ id: 'document.verification' })}</summary>
-        <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details></section>
+        <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details>
+    </DocSection>
+    <DocSection number={5} title={sheet('sheet.sectionSignature')}>
+      <DocSignature signed name={sheet('sheet.holderAccount')} role={sheet('sheet.holderRole')} signedAt={signedAt} method={sheet('sheet.signatureMethodValue')}
+        reference={hash ? `SHA-256 ${hash.slice(0, 16)}…` : undefined} stroke={signatureStroke(hash ?? policy.policyId.replace(/-/g, ''))} />
+    </DocSection>
+    <DocSection number={6} title={sheet('sheet.sectionVerification')}>
+      <DocVerification hash={hash} rows={[
+        { label: sheet('issued.policy'), value: policy.policyId, mono: true },
+        { label: sheet('sheet.conditionsVersion'), value: policy.conditionsVersion, mono: true },
+      ]} />
+    </DocSection>
   </DocumentSheet>;
 }
 
-function savePdf(file: PolicyFile) {
-  const url = URL.createObjectURL(file.blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = file.fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+function Coverage({ policy, status }: { policy: PolicyDetail; status: ReturnType<typeof policyState> }) {
+  const intl = useIntl();
+  const hash = useFingerprint(policy.policyId);
+  const { print, portal } = usePrintSheet();
+  const sheet = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
+  const number = policyNumber(policy.policyId);
+  return <div className="card doc-viewer">
+    <div className="doc-toolbar">
+      <p className="doc-toolbar-name"><Icon name="file" size={18} />{sheet('sheet.policyDocumentName', { number })}</p>
+      <div className="doc-toolbar-tools">
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => print(sheet('sheet.fileSignedPolicy', { number }), <PolicySheet policy={policy} status={status} hash={hash} />)}>
+          <Icon name="printer" size={16} />{sheet('sheet.printSheet')}</button>
+      </div>
+    </div>
+    <div className="doc-desk"><PolicySheet policy={policy} status={status} hash={hash} /></div>
+    {portal}
+  </div>;
 }
 
 function Documents({ policy, onSessionLost }: { policy: PolicyDetail; onSessionLost(): void }) {
+  const intl = useIntl();
   const t = useTranslate();
   const format = useFormatters();
   const [busy, setBusy] = useState<PolicyDocumentId | null>(null);
   const [failed, setFailed] = useState(false);
+  const [saved, setSaved] = useState('');
+  const fileName = (documentId: PolicyDocumentId) => `${intl.formatMessage({ id: fileKey[documentId] }, { number: policyNumber(policy.policyId) })}.pdf`;
   async function download(documentId: PolicyDocumentId) {
     setBusy(documentId);
     setFailed(false);
+    setSaved('');
     const outcome = await downloadDocument(policy.policyId, documentId);
     setBusy(null);
-    if (outcome.kind === 'ok') savePdf(outcome.value);
+    if (outcome.kind === 'ok') { savePdf(outcome.value.blob, fileName(documentId)); setSaved(intl.formatMessage({ id: 'sheet.downloaded' }, { file: fileName(documentId) })); }
     else if (outcome.kind === 'unauthenticated') onSessionLost();
     else setFailed(true);
   }
   return <section className="card policy-section" aria-labelledby="policy-documents"><h2 id="policy-documents" className="h-card">{t('documents')}</h2>
-    {failed && <div className="banner banner-error" role="alert"><p>{t('downloadFailed')}</p></div>}
-    <ul className="policy-documents">{policy.documents.map(item => <li key={item.documentId}>
-      <span><strong>{t(`document.${item.documentId}`)}</strong><span className="note">{t('documentIssued', { date: format.dateTime(new Date(item.issuedAt)) })}</span></span>
+    {failed && <div className="banner banner-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><p>{t('downloadFailed')}</p></div>}
+    <ul className="policy-documents doc-files">{policy.documents.map(item => <li key={item.documentId}>
+      <span className="doc-file-icon" aria-hidden="true"><Icon name="file" size={22} /><span>PDF</span></span>
+      <span className="doc-file-copy"><strong>{t(`document.${item.documentId}`)}</strong><span className="note">{t('documentIssued', { date: format.dateTime(new Date(item.issuedAt)) })}</span>
+        <span className="doc-file-name mono">{fileName(item.documentId)}</span></span>
       <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} aria-label={t('downloadLabel', { document: t(`document.${item.documentId}`) })}
-        onClick={() => void download(item.documentId)}>{busy === item.documentId ? t('downloading') : t('download')}</button>
-    </li>)}</ul></section>;
+        onClick={() => void download(item.documentId)}><Icon name="download" size={16} />{busy === item.documentId ? t('downloading') : t('download')}</button>
+    </li>)}</ul>
+    <p className="note doc-saved" role="status">{saved}</p></section>;
 }
 
 function History({ policy }: { policy: PolicyDetail }) {
@@ -207,7 +273,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
       <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>
       <Tabs tab={tab} onChange={setTab} />
       <div role="tabpanel" id={`policy-panel-${tab}`} aria-labelledby={`policy-tab-${tab}`}>
-        {tab === 'info' && <Coverage policy={policy} />}
+        {tab === 'info' && <Coverage policy={policy} status={status} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
         {tab === 'manage' && <AdvisorActions key={policy.policyId} policy={policy} openRenewal={renewal} onSessionLost={onSessionLost}>

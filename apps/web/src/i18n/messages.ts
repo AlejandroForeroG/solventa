@@ -8,6 +8,7 @@ import { policiesEs, policiesEn } from '../policies/messages';
 import { assistanceEs, assistanceEn } from '../assistance/messages';
 import { navigationEs, navigationEn } from '../navigation/messages';
 import { documentEs, documentEn } from '../offer/document-messages';
+import { sheetEs, sheetEn } from '../offer/sheet-messages';
 // Catalogues for the commercial front end. Texts come from the approved prototype
 // dictionary; parameters use ICU placeholders. Currency is always COP in both locales.
 export const locales = ['es-CO', 'en-US'] as const;
@@ -18,7 +19,7 @@ const esCO = {
   'home.greeting': '¡Hola! Cotiza tu seguro aquí', 'home.greetingDetail': 'Calcula tu prima en minutos y contrata en línea.',
   'home.tile.policies': 'Consulta tus pólizas y descarga sus documentos.', 'home.tile.claims': 'Sigue el estado de tus siniestros.', 'home.tile.assistance': 'Encuentra prestadores cerca de ti.',
   'home.tile.sale': 'Contrata con el acompañamiento de un asesor.', 'home.tile.privacy': 'Revisa y administra tus autorizaciones.',
-  'sheet.issuer': 'Solventa Seguros', 'sheet.issuerDetail': 'Seguro de vida hipotecario · Colombia', 'sheet.kicker': 'Documento de póliza', 'sheet.policyTitle': 'Póliza de seguro de vida grupo deudores',
+  'sheet.issuer': 'Solventa Seguros', 'sheet.issuerDetail': 'Entidad aseguradora académica simulada', 'sheet.kicker': 'Documento de póliza', 'sheet.policyTitle': 'Póliza de seguro de vida grupo deudores',
   'sheet.number': 'N.º {number}', 'sheet.sealDraft': 'Pendiente de firma', 'sheet.sealIssued': 'Emitida', 'sheet.sealSigned': 'Firmada',
   'sheet.legend': 'Documento de simulación académica. No constituye un contrato de seguro real ni tiene validez legal.',
   'sheet.coverage': 'Cobertura', 'sheet.coverageNote': 'Pago único por toda la vigencia.', 'sheet.verificationTitle': 'Datos de verificación del documento',
@@ -379,7 +380,7 @@ const enUS: typeof esCO = {
   'home.greeting': 'Hi! Get your insurance quote here', 'home.greetingDetail': 'Calculate your premium in minutes and buy online.',
   'home.tile.policies': 'View your policies and download their documents.', 'home.tile.claims': 'Track the status of your claims.', 'home.tile.assistance': 'Find providers near you.',
   'home.tile.sale': 'Buy with the help of an advisor.', 'home.tile.privacy': 'Review and manage your authorizations.',
-  'sheet.issuer': 'Solventa Insurance', 'sheet.issuerDetail': 'Mortgage life insurance · Colombia', 'sheet.kicker': 'Policy document', 'sheet.policyTitle': 'Group mortgage life insurance policy',
+  'sheet.issuer': 'Solventa Insurance', 'sheet.issuerDetail': 'Simulated academic insurer', 'sheet.kicker': 'Policy document', 'sheet.policyTitle': 'Group mortgage life insurance policy',
   'sheet.number': 'No. {number}', 'sheet.sealDraft': 'Pending signature', 'sheet.sealIssued': 'Issued', 'sheet.sealSigned': 'Signed',
   'sheet.legend': 'Academic simulation document. It is not a real insurance contract and has no legal validity.',
   'sheet.coverage': 'Coverage', 'sheet.coverageNote': 'Single payment for the whole period.', 'sheet.verificationTitle': 'Document verification data',
@@ -736,6 +737,6 @@ const enUS: typeof esCO = {
 };
 
 export const messages: Record<Locale, Record<string, string>> = {
-  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs, ...navigationEs, ...documentEs },
-  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn, ...navigationEn, ...documentEn },
+  'es-CO': { ...esCO, ...auditEs, ...claimsEs, ...reportsEs, ...policiesEs, ...assistanceEs, ...navigationEs, ...documentEs, ...sheetEs },
+  'en-US': { ...enUS, ...auditEn, ...claimsEn, ...reportsEn, ...policiesEn, ...assistanceEn, ...navigationEn, ...documentEn, ...sheetEn },
 };

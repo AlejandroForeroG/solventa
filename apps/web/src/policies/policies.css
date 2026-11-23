@@ -104,3 +104,34 @@
 .copy-value-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .copy-value-text { flex: 1 1 220px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f7; font-size: 13px; overflow-wrap: anywhere; user-select: all; }
 .copy-value-status { min-height: 1.2em; margin: 0; font-size: 12.5px; }
+.policy-card { position: relative; padding-right: 52px; }
+.policy-card-head { flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 14px; }
+.policy-card-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 13px; background: var(--mint-tint); color: var(--brand-strong); }
+.policy-card-icon-flight_delay { background: var(--blue-tint); color: var(--blue-ink); }
+.policy-card-icon-weather_event { background: var(--violet-tint); color: var(--violet-ink); }
+.policy-card-title { display: grid; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.policy-card-head > .pill { margin-left: auto; }
+.policy-card-meta { padding-top: 12px; border-top: 1px solid #edebe6; }
+.policy-card-fact { display: inline-flex; align-items: center; gap: 8px; }
+.policy-card-fact svg { flex: none; color: var(--ink-3); }
+.policy-card-arrow { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: var(--brand); transition: transform 160ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .policy-card:hover .policy-card-arrow { transform: translate(3px, -50%); } }
+.policy-list .policy-card .note { font-size: 12px; }
+.doc-files li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.doc-file-icon { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; height: 50px; border: 1px solid #e0ddd6; border-radius: 8px; background: #fff; color: var(--ink-3); }
+.doc-file-icon > span { position: absolute; bottom: -6px; padding: 1px 5px; border-radius: 4px; background: #8a241c; color: #fff; font: 700 9px/1.3 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; }
+.doc-file-copy { display: grid; gap: 2px; min-width: 0; }
+.doc-file-copy strong { color: var(--ink); }
+.doc-file-name { font-size: 11.5px; font-weight: 400; color: var(--ink-3); overflow-wrap: anywhere; }
+.doc-saved:empty { display: none; }
+.doc-saved { margin-top: 12px; }
+.policy-empty h2 { text-wrap: balance; }
+@media (max-width: 600px) {
+  .policy-card { padding: 20px 44px 20px 18px; }
+  .policy-card-arrow { right: 14px; }
+  .policy-card-head { flex-wrap: wrap; }
+  .policy-card-head > .pill { margin-left: 58px; }
+  .policy-card-meta { flex-direction: column; gap: 6px; }
+  .doc-files li { grid-template-columns: auto minmax(0, 1fr); }
+  .doc-files li > .btn { grid-column: 1 / -1; justify-self: stretch; }
+}

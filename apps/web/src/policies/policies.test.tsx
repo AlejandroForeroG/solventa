@@ -160,7 +160,7 @@ describe('my policies', () => {
       [`/api/v1/policies/${policyId}/documents/signed_policy`]: () => pdf });
     const createObjectURL = vi.fn(() => 'blob:synthetic'), revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { expect(this.download).toBe('signed-policy-10000000.pdf'); });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { expect(this.download).toBe('poliza-POL-10000000.pdf'); });
     show(); const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /^Ver detalle de/ }));
     await user.click(await screen.findByRole('tab', { name: 'Documentos' }));

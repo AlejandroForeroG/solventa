@@ -8,7 +8,6 @@ import { ClaimsInbox } from './claims/ClaimsInbox';
 import { ReportsWorkspace } from './reports/ReportsWorkspace';
 import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
-import { brandAssets } from '@solventa/assets/web';
 import { ChannelShell } from './navigation/ChannelShell';
 import { IconButton } from './navigation/IconAction';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
@@ -143,7 +142,7 @@ function Shell() {
       : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
-        <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
+        <div className="channel-line"><span className="product">{t('brand.product')}</span>
           <IconButton className="btn-privacy" label={t('privacy.open')} icon="privacy" current={view === 'privacy'} onClick={() => setView('privacy')} />
         </div>
         <div hidden={view === 'privacy'}><QuoteFlow initialEstimate={estimateDraft} consentUpdates={consentUpdates} uncertainConsents={uncertainConsents} onOpenPrivacy={() => setView('privacy')} onSessionLost={sessionLost} /></div>

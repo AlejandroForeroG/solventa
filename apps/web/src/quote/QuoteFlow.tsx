@@ -109,7 +109,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
     {phase === 'result' && quote && <QuoteResult quote={quote} onFix={() => setPhase('form')} onContinue={() => setPhase('consent')} />}
     {phase === 'consent' && quote && <ConsentStep quoteRef={quote.quoteId} api={consent} onGranted={result => { setGranted(result); setPhase('granted'); }} onDeclined={() => setPhase('declined')} onSessionLost={onSessionLost} />}
     {phase === 'granted' && currentConsent && <ConsentGranted consent={currentConsent} uncertain={uncertainConsents[currentConsent.consentId]} onPanel={onOpenPrivacy} onBack={() => setPhase('result')} onOffer={() => setPhase('offer')} />}
-    {phase === 'offer' && quote && <OfferJourney key={quote.quoteId} quote={quote} api={financial} onRequote={requote} onConsentRequired={() => setPhase('consent')} onBack={() => setPhase('result')} onSessionLost={onSessionLost} />}
+    {phase === 'offer' && quote && <OfferJourney key={quote.quoteId} quote={quote} holderName={values.fullName} api={financial} onRequote={requote} onConsentRequired={() => setPhase('consent')} onBack={() => setPhase('result')} onSessionLost={onSessionLost} />}
     {phase === 'offer' && !quote && resume && <OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} api={financial} onRequote={requote}
       onConsentRequired={() => setPhase('form')} onBack={() => setPhase('form')} onSessionLost={onSessionLost} />}
     {phase === 'declined' && quote && <ConsentDeclined premium={quote.premiumMonthly} onReview={() => setPhase('consent')} onBack={() => setPhase('result')} />}

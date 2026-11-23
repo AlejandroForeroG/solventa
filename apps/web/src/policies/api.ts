@@ -112,3 +112,12 @@ export async function downloadDocument(policyId: string, documentId: PolicyDocum
     return { kind: 'ok', value: { blob: await response.blob(), fileName } };
   } catch { return { kind: 'unavailable' }; }
 }
+
+export async function readPolicyFingerprint(policyId: string, signal: AbortSignal): Promise<string | null> {
+  try {
+    const response = await fetchWithSession(`/api/v1/policies/${encodeURIComponent(policyId)}`, { method: 'GET', signal, cache: 'no-store', headers: { accept: 'application/json' } });
+    if (response.status !== 200) return null;
+    const body: unknown = await response.json();
+    return record(body) && body.policyId === policyId && typeof body.documentHash === 'string' && /^[0-9a-f]{64}$/.test(body.documentHash) ? body.documentHash : null;
+  } catch { return null; }
+}
