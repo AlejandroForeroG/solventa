@@ -4,17 +4,21 @@ import { useFormatters } from '../i18n/I18n';
 import type { Offer, Policy, SignatureChallenge } from './api';
 import { DocumentFields } from './DocumentFields';
 import { Icon } from '../navigation/Icon';
+import { CopyValue } from '../forms/CopyValue';
+import { downloadDocument as downloadPolicyFile } from '../policies/api';
+import { DocumentSheet, SheetBlock, SheetSection, printSheet } from './DocumentSheet';
 
-// Offers the exact reviewed bytes as a file; nothing is reformatted or re-signed in the browser.
-function downloadDocument(policy: Policy) {
-  const url = URL.createObjectURL(new Blob([policy.document], { type: 'application/json' }));
+async function downloadSignedPdf(policyId: string) {
+  const outcome = await downloadPolicyFile(policyId, 'signed_policy').catch(() => null);
+  if (outcome?.kind !== 'ok') { printSheet(); return; }
+  const url = URL.createObjectURL(outcome.value.blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `poliza-${policy.policyId}.json`;
+  link.download = outcome.value.fileName;
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, onBack, assisted = false }: { heading: RefObject<HTMLHeadingElement | null>; offer: Offer; assisted?: boolean; accepting: boolean; onAccept: () => void; onReevaluate: () => void; onBack: () => void }) {
@@ -106,21 +110,21 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
             <span className="mono">{t('policy.page', { current: String(page), total: '2' })}</span>
             <button type="button" className="btn btn-secondary btn-small" disabled={page === 2} onClick={() => setPage(2)} aria-label={t('policy.nextPage')}><Icon name="next" size={16} /></button>
           </div>
-          <button type="button" className="btn btn-secondary btn-small" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
+          <button type="button" className="btn btn-secondary btn-small" onClick={printSheet}><Icon name="download" size={16} />{t('policy.download')}</button>
         </div>
-        <div className="document-body document-sheet">
+        <DocumentSheet title={t('sheet.policyTitle')} seal={t(stage === 'sign' ? 'sheet.sealDraft' : 'policy.pendingIssuance')} sealTone="pending">
           {page === 1 ? <>
           <h2 ref={pageHeading} tabIndex={-1} className="document-title">{t('policy.conditions')}</h2>
           <p className="mono note">{t('policy.version', { version: String(document.offerVersion ?? 1) })}</p>
-          <dl className="facts">
-            <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
-            <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
-            <div><dt>{t('offer.period')}</dt><dd className="mono">{t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) })}</dd></div>
-            <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-value">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage && typeof document.coverage.sumInsured === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(document.coverage.sumInsured) ? copDecimal(document.coverage.sumInsured) : '—'}</dd></div>
+          <dl className="sheet-blocks">
+            <SheetBlock icon="policy" label={t('policies.reference')}><span className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></SheetBlock>
+            <SheetBlock icon="privacy" label={t('offer.sumInsured')} note={t('offer.coverageValue')}><span className="mono-value">{typeof document.coverage === 'object' && document.coverage !== null && 'sumInsured' in document.coverage && typeof document.coverage.sumInsured === 'string' && /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/.test(document.coverage.sumInsured) ? copDecimal(document.coverage.sumInsured) : '—'}</span></SheetBlock>
+            <SheetBlock icon="calendar" label={t('offer.period')}><span className="mono">{t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) })}</span></SheetBlock>
+            <SheetBlock icon="coins" label={t('issued.premium')} note={t('sheet.coverageNote')}><span className="mono-value">{copDecimal(policy.premium)}</span></SheetBlock>
           </dl>
-          <details className="document-verification"><summary>{t('document.verification')}</summary>
-            <p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>
-          </details>
+          <SheetSection icon="fingerprint" title={t('sheet.verificationTitle')}>
+            <CopyValue label={t('policy.hash')} value={policy.documentHash} />
+          </SheetSection>
           </> : <>
           <h2 ref={pageHeading} tabIndex={-1} className="section-label">{t('policy.document')}</h2>
           <DocumentFields document={document} verification={<p className="seal-line mono">{t('policy.hash')}: {policy.documentHash}</p>} />
@@ -129,12 +133,20 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
             {page === 1 ? <button type="button" className="btn btn-secondary" onClick={() => setPage(2)}>{t('policy.continueReading')}</button>
               : <button type="button" className="btn btn-secondary" onClick={() => setPage(1)}>{t('policy.backToFirst')}</button>}
           </div>
-        </div>
+        </DocumentSheet>
       </div>
       <div className="card review-panel">
         {stage === 'review' ? <button type="button" className="btn btn-primary review-confirm" onClick={onContinue}>
-          {t('policy.continueToPayment', { amount: copDecimal(policy.premium) })}
+          <Icon name="card" size={18} />{t('policy.continueToPayment', { amount: copDecimal(policy.premium) })}
         </button> : <>
+        <div className="sign-summary">
+          <p className="sign-summary-title"><Icon name="signature" size={16} />{t('sheet.signSummary')}</p>
+          <dl>
+            <div><dt>{t('sheet.signDocument')}</dt><dd>{t('sheet.kicker')}</dd></div>
+            <div><dt>{t('charge.amount')}</dt><dd className="mono">{copDecimal(policy.premium)}</dd></div>
+            <div><dt>{t('sheet.signFingerprint')}</dt><dd className="mono">{policy.documentHash.slice(0, 12)}…</dd></div>
+          </dl>
+        </div>
         <div className="check review-check">
           <input id="policy-review-cb" type="checkbox" aria-describedby={page !== 2 && !challenge ? 'policy-page-instruction' : undefined} checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
           <label htmlFor="policy-review-cb">{t('policy.check')}</label>
@@ -147,7 +159,7 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
             value={code} onChange={event => onCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
           <p className="note" role="status">{t('policy.demoCode', { code: challenge.demoCode })}</p>
           <p className="note mono">{t('policy.expiresIn', { time: `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}` })}</p>
-          <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}>{t('policy.confirm')}</button>
+          <button type="button" className="btn btn-primary review-confirm" onClick={onConfirm} disabled={busy || !checked || code.length !== 6 || secondsLeft === 0}><Icon name="signature" size={18} />{t('policy.confirm')}</button>
           <button type="button" className="btn btn-secondary review-confirm" onClick={onCancel} disabled={busy}>{t('policy.cancelSignature')}</button>
         </>}
         {(error || (challenge && secondsLeft === 0)) && <p id="policy-code-error" className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
@@ -161,28 +173,42 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
 export function PolicyIssued({ heading, policy }: { heading: RefObject<HTMLHeadingElement | null>; policy: Policy }) {
   const intl = useIntl();
   const { copDecimal, dayMonthYear } = useFormatters();
+  const [downloading, setDownloading] = useState(false);
   const t = (id: string) => intl.formatMessage({ id });
+  async function download() {
+    setDownloading(true);
+    await downloadSignedPdf(policy.policyId);
+    setDownloading(false);
+  }
   return <section className="step">
-    <div className="card">
-      <div className="result-head">
-        <h1 ref={heading} tabIndex={-1} className="h-card">{t('issued.title')}</h1>
-        <span className="pill pill-ok">{t('issued.badge')}</span>
-      </div>
-      <dl className="facts">
-        <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
-        <div><dt>{t('issued.premium')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
-        <div><dt>{t('issued.start')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveFrom))}</dd></div>
-        <div><dt>{t('issued.end')}</dt><dd className="mono">{dayMonthYear(new Date(policy.effectiveUntil))}</dd></div>
-      </dl>
-      <details className="document-verification"><summary>{t('issued.proof')}</summary>
-        <p className="trace mono">{t('issued.policy')}: {policy.policyId}<br />{t('policy.hash')}: {policy.documentHash}<br />{t('issued.reference')}: {policy.traceId}</p>
-        <p className="note">{t('issued.onceDetail')}</p>
-      </details>
-      <p className="note">{t('issued.mock')}</p>
-      <div className="actions">
-        <button type="button" className="btn btn-secondary" onClick={() => downloadDocument(policy)}>{t('policy.download')}</button>
-        <a className="btn btn-primary" href={`/polizas#policy=${policy.policyId}&section=info`}>{t('issued.viewPolicy')}</a>
-      </div>
+    <div className="issued-head">
+      <h1 ref={heading} tabIndex={-1} className="h-card">{t('issued.title')}</h1>
+      <span className="pill pill-ok">{t('issued.badge')}</span>
+    </div>
+    <div className="sheet-host">
+      <DocumentSheet title={t('sheet.policyTitle')} seal={t('sheet.sealIssued')}>
+        <dl className="sheet-blocks">
+          <SheetBlock icon="policy" label={t('policies.reference')}><span className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></SheetBlock>
+          <SheetBlock icon="coins" label={t('issued.premium')}><span className="mono-value">{copDecimal(policy.premium)}</span></SheetBlock>
+          <SheetBlock icon="calendar" label={t('issued.start')}><span className="mono">{dayMonthYear(new Date(policy.effectiveFrom))}</span></SheetBlock>
+          <SheetBlock icon="calendar" label={t('issued.end')}><span className="mono">{dayMonthYear(new Date(policy.effectiveUntil))}</span></SheetBlock>
+        </dl>
+        <div className="sheet-signature">
+          <Icon name="signature" size={20} />
+          <p><strong>{t('sheet.signatureTitle')}</strong><span>{t('sheet.signatureDetail')}</span></p>
+        </div>
+        <SheetSection icon="audit" title={t('issued.proof')}>
+          <CopyValue label={t('issued.policy')} value={policy.policyId} />
+          <CopyValue label={t('policy.hash')} value={policy.documentHash} />
+          <CopyValue label={t('issued.reference')} value={policy.traceId} />
+          <p className="note">{t('issued.onceDetail')}</p>
+        </SheetSection>
+      </DocumentSheet>
+    </div>
+    <p className="note">{t('issued.mock')}</p>
+    <div className="actions">
+      <button type="button" className="btn btn-secondary" aria-disabled={downloading} onClick={downloading ? undefined : () => void download()}><Icon name="download" size={18} />{t(downloading ? 'sheet.pdfBusy' : 'sheet.pdf')}</button>
+      <a className="btn btn-primary" href={`/polizas#policy=${policy.policyId}&section=info`}><Icon name="policy" size={18} />{t('issued.viewPolicy')}</a>
     </div>
   </section>;
 }
@@ -243,7 +269,7 @@ export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }:
   const t = (id: string) => intl.formatMessage({ id });
   return <section className="step">
     {policy.replayed && <div className="banner banner-ok"><Icon name="check" size={18} className="banner-icon" /><p><strong>{t('charge.replayedTitle')}</strong> {t('charge.replayedDetail')}</p></div>}
-    <div className="card">
+    <div className="card receipt-card">
       <div className="status-head">
         <span className="status-icon status-icon-ok" aria-hidden="true"><Icon name="check" size={18} /></span>
         <div>
@@ -251,17 +277,19 @@ export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }:
           <p className="note">{t('charge.okDetail')}</p>
         </div>
       </div>
+      <div className="receipt-body">
       <dl className="facts facts-pairs">
-        <div><dt>{t('charge.receipt')}</dt><dd className="mono">{policy.payment?.reference}</dd></div>
-        <div><dt>{t('charge.charged')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
-        <div><dt>{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
+        <div><dt><Icon name="reports" size={16} />{t('charge.receipt')}</dt><dd className="mono">{policy.payment?.reference}</dd></div>
+        <div><dt><Icon name="card" size={16} />{t('charge.charged')}</dt><dd className="mono-value">{copDecimal(policy.premium)}</dd></div>
+        <div><dt><Icon name="policy" size={16} />{t('policies.reference')}</dt><dd className="mono">POL-{policy.policyId.slice(0, 8).toUpperCase()}</dd></div>
       </dl>
       <details className="document-verification"><summary>{t('charge.support')}</summary>
         <p className="trace mono">{t('issued.policy')}: {policy.policyId}{idempotencyKey && <><br />{t('charge.key')}: <span className="charge-key">{idempotencyKey}</span></>}</p>
       </details>
       <p className="note">{t('policy.mock')}</p>
       <div className="actions">
-        <button type="button" className="btn btn-primary" onClick={onContinue}>{t('charge.continue')}</button>
+        <button type="button" className="btn btn-primary" onClick={onContinue}><Icon name="signature" size={18} />{t('charge.continue')}</button>
+      </div>
       </div>
     </div>
   </section>;

@@ -55,7 +55,7 @@ async function signFromReview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('checkbox'));
   await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
   await user.type(await screen.findByLabelText('Código de autenticación'), challenge.demoCode);
-  await user.click(screen.getByRole('button', { name: 'Firmar póliza' }));
+  await user.click(screen.getByRole('button', { name: 'Firmar documento' }));
 }
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -207,7 +207,7 @@ describe('definitive offer journey', () => {
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
     await user.type(await screen.findByLabelText('Código de autenticación'), challenge.demoCode);
-    await user.click(screen.getByRole('button', { name: 'Firmar póliza' }));
+    await user.click(screen.getByRole('button', { name: 'Firmar documento' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Póliza emitida' })).toBeInTheDocument();
     expect(screen.queryByRole('listitem', { current: 'step' })).toBeNull();
     expect(screen.getByText(/Emitida · cobrada y firmada/)).toBeInTheDocument();
@@ -269,13 +269,13 @@ describe('definitive offer journey', () => {
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await signFromReview(user);
     expect(screen.getByRole('alert')).toHaveTextContent('El código expiró. Cancela este intento y solicita uno nuevo.');
-    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Firmar documento' })).toBeDisabled();
     expect(api.issuePolicy).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Cancelar firma' }));
     await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Obtener código de prueba' }));
     await user.type(await screen.findByLabelText('Código de autenticación'), challenge.demoCode);
-    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Firmar documento' })).toBeEnabled();
     expect(api.chargePolicy).toHaveBeenCalledTimes(1);
     expect(api.beginSignatureChallenge).toHaveBeenCalledTimes(2);
   });
@@ -415,7 +415,7 @@ describe('definitive offer journey', () => {
     await signFromReview(user);
     expect(await screen.findByRole('alert')).toHaveTextContent('Volvimos a consultar el documento');
     expect(screen.queryByRole('checkbox')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Firmar póliza' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Firmar documento' })).toBeNull();
     expect(api.policyForAcceptance).toHaveBeenCalledTimes(2);
     expect(screen.getByText(new RegExp(changed.documentHash))).toBeInTheDocument();
     await signFromReview(user);
@@ -558,7 +558,7 @@ describe('definitive offer journey', () => {
     const { user } = journey(api);
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await signFromReview(user);
-    const confirm = screen.getByRole('button', { name: 'Firmar póliza' });
+    const confirm = screen.getByRole('button', { name: 'Firmar documento' });
     const cancel = screen.getByRole('button', { name: 'Cancelar firma' });
     expect(confirm).toBeDisabled();
     expect(cancel).toBeDisabled();
@@ -580,7 +580,7 @@ describe('definitive offer journey', () => {
     const cancel = screen.getByRole('button', { name: 'Cancelar firma' });
     await user.click(cancel);
     expect(cancel).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Firmar documento' })).toBeDisabled();
     await user.click(cancel);
     expect(api.cancelSignatureChallenge).toHaveBeenCalledTimes(1);
     expect(api.issuePolicy).toHaveBeenCalledTimes(1);
@@ -609,7 +609,7 @@ describe('definitive offer journey', () => {
     await user.click(await screen.findByRole('button', { name: 'Aceptar oferta' }));
     await signFromReview(user);
     const refresh = await screen.findByRole('button', { name: 'Actualizar estado' });
-    expect(screen.getByRole('button', { name: 'Firmar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Firmar documento' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancelar firma' })).toBeDisabled();
     await user.click(refresh);
     expect(refresh).toHaveAttribute('aria-disabled', 'true');

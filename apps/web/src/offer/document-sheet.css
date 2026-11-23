@@ -1,0 +1,75 @@
+.sheet { position: relative; max-width: 760px; margin: 0 auto; padding: 36px 40px 28px; background: #fff; border: 1px solid #e0ddd7; border-radius: 6px; box-shadow: 0 1px 2px #12151a0a, 0 10px 30px #12151a14; overflow-wrap: anywhere; }
+.sheet::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; border-radius: 6px 6px 0 0; background: linear-gradient(90deg, var(--brand) 0%, #12d9b8 100%); }
+.sheet-letterhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.sheet-letterhead img { display: block; max-width: 100%; height: auto; }
+.sheet-issuer { display: grid; gap: 2px; margin: 0; text-align: right; font-size: 12.5px; color: var(--ink-3); }
+.sheet-issuer strong { color: var(--ink); font-size: 13.5px; }
+.sheet-title-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px 20px; margin: 22px 0 20px; }
+.sheet-title-copy { min-width: 0; flex: 1 1 260px; }
+.sheet-kicker { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); }
+.sheet-title { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--ink); }
+.sheet-number { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.sheet-seal { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1.5px solid currentColor; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; transform: rotate(-2deg); }
+.sheet-seal-ok { color: #175c3a; background: #e6f3ec; }
+.sheet-seal-pending { color: #7a5200; background: #fdf3dc; }
+.sheet-blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin: 0 0 20px; padding: 0; }
+.sheet-block { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 14px; border: 1px solid #edebe6; border-radius: 10px; background: #faf9f7; }
+.sheet-block-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #e3f3ef; color: var(--brand); }
+.sheet-block-copy { min-width: 0; }
+.sheet-block dt { font-size: 12.5px; color: var(--ink-3); }
+.sheet-block dd { margin: 3px 0 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.sheet-block-note { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--ink-3); }
+.sheet-verification { margin: 0 0 20px; padding: 16px; border: 1px dashed #cfccc5; border-radius: 10px; background: #fcfbf9; }
+.sheet-verification .copy-value { margin: 10px 0 0; }
+.sheet-verification .copy-value-text { word-break: break-all; }
+.sheet-verification .note { margin: 12px 0 0; }
+.sheet-section-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.sheet-section-title svg { color: var(--brand); flex: none; }
+.sheet-signature { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 20px; padding: 14px 16px; border: 1.5px solid #9fd3c1; border-radius: 10px; background: linear-gradient(135deg, #f1faf6 0%, #fff 100%); }
+.sheet-signature svg { flex: none; margin-top: 2px; color: var(--brand); }
+.sheet-signature p { margin: 0; min-width: 0; display: grid; gap: 2px; font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.sheet-signature strong { font-size: 14.5px; color: var(--ink); }
+.sheet-footer { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.sheet-footer svg { flex: none; margin-top: 2px; }
+.sheet .document-title { margin-top: 0; }
+.sheet .policy-id, .sheet .mono { overflow-wrap: anywhere; word-break: break-word; }
+.sheet-section + .sheet-section { margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
+.sheet-section { margin-bottom: 18px; }
+.sheet-section > h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.sheet-section > h2 svg { color: var(--brand); flex: none; }
+.sheet .policy-exclusions { counter-reset: exclusion; }
+.document-card .sheet { margin: 20px; }
+.sheet-host { margin-bottom: 20px; }
+.issued-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 18px; }
+.issued-head h1 { margin: 0; }
+.sign-summary { display: grid; gap: 8px; margin: 0 0 16px; padding: 14px; border: 1px solid #edebe6; border-radius: 10px; background: #faf9f7; }
+.sign-summary-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.sign-summary-title svg { color: var(--brand); }
+.sign-summary dl { display: grid; gap: 6px; margin: 0; }
+.sign-summary dl div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: 13px; }
+.sign-summary dt { color: var(--ink-3); }
+.sign-summary dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; word-break: break-all; text-align: right; }
+.receipt-card { padding: 0; overflow: hidden; }
+.receipt-card .status-head { margin: 0; padding: 22px 24px; background: linear-gradient(135deg, #e3f5ee 0%, #f3fbf8 55%, #fff 100%); border-bottom: 1px solid #dcebe5; }
+.receipt-body { padding: 22px 24px 24px; }
+.receipt-card .facts dt { display: flex; align-items: center; gap: 8px; }
+.receipt-card .facts dt svg { flex: none; color: var(--brand); }
+.receipt-card .document-verification { margin-bottom: 16px; padding: 12px 14px; border: 1px dashed #cfccc5; border-radius: 10px; background: #fcfbf9; }
+.receipt-card .trace { margin-bottom: 0; overflow-wrap: anywhere; word-break: break-all; }
+@media (max-width: 720px) {
+  .sheet { padding: 26px 18px 20px; }
+  .document-card .sheet { margin: 10px; }
+  .sheet-issuer { text-align: left; }
+  .sheet-title { font-size: 18px; }
+  .receipt-card .status-head, .receipt-body { padding-left: 16px; padding-right: 16px; }
+}
+@media print {
+  body * { visibility: hidden !important; }
+  .sheet, .sheet * { visibility: visible !important; }
+  .sheet { position: absolute; left: 0; top: 0; width: 100%; max-width: none; margin: 0 !important; border: 0; box-shadow: none; }
+  .sheet .icon-action, .sheet .document-pager, .sheet .copy-value-status { display: none !important; }
+  @page { margin: 16mm; }
+}
+@media (min-width: 721px) { .sheet-verification .copy-value-row { flex-wrap: nowrap; align-items: flex-start; } .sheet-verification .copy-value-text { flex: 1 1 0; } }
+.sheet-verification .copy-value-status { min-height: 0; }
+.document-card .sheet-issuer { text-align: left; }
