@@ -26,6 +26,9 @@
   .claims-table .audit-id { white-space: normal; overflow-wrap: anywhere; }
 }
 .audit-state .note + .btn { margin-top: 14px; }
+.claims-policy-reference summary { display: list-item; min-height: 44px; padding: 12px 0; color: #0b6b5f; cursor: pointer; }
+.claims-policy-reference summary:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.claims-policy-reference > span { display: block; padding-bottom: 8px; white-space: normal; overflow-wrap: anywhere; }
 .claim-case {
   width: min(100%, 72rem);
   margin-inline: auto;

@@ -28,8 +28,8 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
 ];
 const workspaceLinks: (typeof customerLinks[number] & { workspace: OperationalWorkspace })[] = [
   { workspace: 'claims', href: '/siniestros', label: 'claims.open', icon: 'claims' },
-  { workspace: 'reports', href: '/reportes', label: 'reports.open', icon: 'reports' },
   { workspace: 'audit', href: '/auditoria', label: 'audit.open', icon: 'audit' },
+  { workspace: 'reports', href: '/reportes', label: 'reports.open', icon: 'reports' },
   { workspace: 'advisor', href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { workspace: 'partner', href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];

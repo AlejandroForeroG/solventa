@@ -21,7 +21,7 @@ describe('channel navigation', () => {
     expect(nav.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('aria-current', 'page');
     expect(nav.queryByRole('link', { name: 'Auditoría' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Menú de mi cuenta' }));
-    expect(screen.getByRole('menuitem', { name: 'Consola de operaciones' })).toHaveAttribute('href', '/reportes');
+    expect(screen.getByRole('menuitem', { name: 'Consola de operaciones' })).toHaveAttribute('href', '/auditoria');
     expect(screen.getByRole('menuitem', { name: 'Cerrar sesión' })).toBeVisible();
   });
   it('keeps a single operational navigation with a return to the customer policies', () => {
