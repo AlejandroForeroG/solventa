@@ -14,7 +14,7 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
     </div>}
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-intro">
-        <p className="section-label">{t('product')}</p>
+        <p className="landing-badge"><Icon name="policy" size={16} />{t('product')}</p>
         <h1 id="landing-title">{t(authenticated ? 'accountHeading' : 'title')}</h1>
         <p className="landing-lede">{t(authenticated ? 'accountIntro' : 'intro')}</p>
         <div className="landing-actions">
@@ -28,10 +28,10 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
         <p className="section-label">{t('prepareLabel')}</p>
         <h2 id="landing-prepare-title">{t('prepareTitle')}</h2>
         <ul>
-          <li>{t(authenticated ? 'identityDetails' : 'age')}</li>
-          {authenticated && <li>{t('city')}</li>}
-          <li>{t('amount')}</li>
-          <li>{t('term')}</li>
+          <li><span className="landing-chip landing-chip-violet" aria-hidden="true"><Icon name="advisor" size={18} /></span>{t(authenticated ? 'identityDetails' : 'age')}</li>
+          {authenticated && <li><span className="landing-chip landing-chip-amber" aria-hidden="true"><Icon name="location" size={18} /></span>{t('city')}</li>}
+          <li><span className="landing-chip landing-chip-green" aria-hidden="true"><Icon name="coins" size={18} /></span>{t('amount')}</li>
+          <li><span className="landing-chip landing-chip-blue" aria-hidden="true"><Icon name="calendar" size={18} /></span>{t('term')}</li>
         </ul>
         <p>{t('preliminary')}</p>
       </aside>
@@ -39,7 +39,8 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
     {!authenticated && <section className="landing-process" id="how-it-works" aria-labelledby="landing-how-title">
       <h2 id="landing-how-title">{t('how')}</h2>
       <div className="landing-process-grid">
-        {['estimate', 'account', 'consent'].map(topic => <article key={topic}>
+        {([['estimate', 'calculator', 'green'], ['account', 'advisor', 'blue'], ['consent', 'privacy', 'violet']] as const).map(([topic, icon, tone], index) => <article key={topic} className="landing-step">
+          <span className={`landing-chip landing-chip-${tone} landing-step-icon`} aria-hidden="true"><Icon name={icon} size={22} /><span className="landing-step-number">{index + 1}</span></span>
           <h3>{t(`${topic}Title`)}</h3>
           <p>{t(`${topic}Detail`)}</p>
         </article>)}
