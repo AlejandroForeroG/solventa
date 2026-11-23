@@ -12,7 +12,6 @@
 @container (max-width: 760px) {
   .reports-table td:first-child { display: block; padding: 14px 16px; background: #faf9f7; font-weight: 600; font-size: 15px; }
   .reports-table td:first-child::before, .reports-table td.reports-actions::before { display: none; }
-  .reports-table td:nth-child(2) { display: none; }
   .reports-table td.reports-actions { display: block; }
   .reports-actions .btn { flex: 1 1 140px; min-height: 44px; }
 }
@@ -23,5 +22,7 @@
 .reports-confirm { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px solid #edd8ae; border-radius: 10px; background: #fbf0dc; }
 .reports-confirm .note { margin: 0; color: #5c3b04; }
 .reports-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; }
-.reports-table td.mono, .reports-table .mono { font-family: 'IBM Plex Sans', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reports-table td.mono, .reports-table .mono { font-family: 'IBM Plex Sans', sans-serif; font-variant-numeric: tabular-nums; }
+.reports-table td:first-child span, .reports-table td:nth-child(2) { white-space: nowrap; }
+.reports-table td.reports-actions { min-width: 220px; }
 .reports-table .audit-id { font-family: 'IBM Plex Mono', ui-monospace, monospace; }

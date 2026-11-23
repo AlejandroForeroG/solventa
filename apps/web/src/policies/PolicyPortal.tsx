@@ -72,7 +72,7 @@ function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyI
   const [now] = useState(Date.now);
   return <main className="content policies">
     <p className="section-label">{t('label')}</p>
-    <h1 ref={heading} tabIndex={-1}>{t('title')}</h1>
+    <div className="page-title"><span className="page-icon page-icon-green" aria-hidden="true"><Icon name="policy" size={22} /></span><h1 ref={heading} tabIndex={-1}>{t('title')}</h1></div>
     <p className="lede">{t('subtitle')}</p>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}

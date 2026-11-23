@@ -1,10 +1,12 @@
 import { useIntl } from 'react-intl';
 import { Icon } from '../navigation/Icon';
+import { AccountHome } from './AccountHome';
 import './landing.css';
 
 export function Landing({ authenticated = false, sessionUnavailable, onRetry }: { authenticated?: boolean; sessionUnavailable: boolean; onRetry: () => void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `landing.${key}` });
+  if (authenticated && !sessionUnavailable) return <AccountHome />;
   return <main className="landing">
     {sessionUnavailable && <div className="banner banner-error" role="alert">
       <p>{intl.formatMessage({ id: 'session.unavailable' })}</p>
@@ -18,6 +20,8 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
         <div className="landing-actions">
           <a className="btn btn-primary" href={authenticated ? '/polizas' : '/cotizar'}>{authenticated ? intl.formatMessage({ id: 'policies.open' }) : t('start')} <Icon name="forward" size={18} /></a>
           <a className="landing-text-link" href={authenticated ? '/cotizar' : '#how-it-works'}>{authenticated ? intl.formatMessage({ id: 'navigation.quote' }) : t('how')}</a>
+          {authenticated && <a className="landing-text-link" href="/mis-siniestros">{intl.formatMessage({ id: 'claims.customerCases' })}</a>}
+          {authenticated && <a className="landing-text-link" href="/prestadores">{intl.formatMessage({ id: 'assistance.title' })}</a>}
         </div>
       </div>
       <aside className="landing-preparation" aria-labelledby="landing-prepare-title">

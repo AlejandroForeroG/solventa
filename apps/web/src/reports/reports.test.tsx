@@ -22,7 +22,7 @@ describe('protected reports workspace', () => {
     const table = await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' });
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
-    expect(within(rows[0]).getByText('Regulador')).toBeVisible();
+    expect(within(rows[0]).getByText(/· Regulador$/)).toBeVisible();
     expect(within(rows[0]).getByText('Revisión 1')).toBeVisible();
     expect(within(rows[0]).getByText(sent.contentHash.slice(0, 12))).toBeVisible();
     expect(within(rows[0]).getByText('Acuse recibido')).toBeVisible();

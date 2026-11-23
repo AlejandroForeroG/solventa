@@ -6,6 +6,7 @@ import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './portal.css';
+import { Icon } from '../navigation/Icon';
 
 export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
@@ -37,10 +38,11 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   }, []);
   const state = result?.key === key ? result.value : null;
   const page = state?.kind === 'ok' ? state.value : null;
+  const day = (value: string) => { const [y, m, d] = value.split('-'); return intl.locale === 'es-CO' ? `${d}/${m}/${y}` : `${m}/${d}/${y}`; };
   const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
-      <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
+      <div className="audit-heading"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="partner" size={22} /></span><h1 className="audit-heading-text">{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
       {state?.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="portal-period" noValidate onSubmit={event => {
         event.preventDefault();
@@ -61,7 +63,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
         {state && 'traceId' in state && state.traceId && <p className="mono">{state.traceId}</p>}
       </div>}
       {page && <>
-        <div className="portal-context"><span className="pill pill-ok mono">{page.partner.code}</span><p className="note">{t('appliedPeriod')} {page.period.from} – {page.period.to} UTC</p><p className="note">{t('updated')} {timestamp(page.updatedAt)}</p></div>
+        <div className="portal-context"><span className="pill pill-ok mono">{page.partner.code}</span><p className="note">{t('appliedPeriod')} {day(page.period.from)} – {day(page.period.to)} UTC</p><p className="note">{t('updated')} {timestamp(page.updatedAt)}</p></div>
         <section aria-labelledby="portal-metrics"><h2 id="portal-metrics">{t('metrics')}</h2>
           <dl className="portal-metrics">{(['completed','accepted','preliminary','declined'] as const).map(k => <div key={k}><dt>{t(k)}</dt><dd className="mono">{intl.formatNumber(page.totals[k])}</dd></div>)}</dl>
           <p className="note">{t('metricLimit')}</p>

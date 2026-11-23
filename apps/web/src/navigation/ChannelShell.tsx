@@ -4,16 +4,16 @@ import { brandAssets } from '@solventa/assets/web';
 import { useLocale } from '../i18n/I18n';
 import { locales } from '../i18n/messages';
 import { Icon, type IconName } from './Icon';
+import { MenuButton } from './MenuButton';
 import './channel-shell.css';
 
 export function LocaleSwitch() {
   const intl = useIntl();
   const { locale, setLocale } = useLocale();
-  return <div className="locale-switch" role="group" aria-label={intl.formatMessage({ id: 'locale.group' })}>
-    {locales.map(code => <button key={code} type="button" className="locale-btn" aria-pressed={locale === code} lang={code.slice(0, 2)}
-      aria-label={intl.formatMessage({ id: 'locale.switchTo' }, { language: intl.formatMessage({ id: `locale.name.${code}` }) })}
-      onClick={() => setLocale(code)}>{code === 'es-CO' ? 'ES' : 'EN'}</button>)}
-  </div>;
+  const name = (code: string) => intl.formatMessage({ id: `locale.short.${code}` });
+  return <MenuButton className="locale-menu" label={intl.formatMessage({ id: 'locale.menu' }, { language: name(locale) })}
+    content={<><Icon name="globe" size={18} /><span className="locale-code">{locale === 'es-CO' ? 'ES' : 'EN'}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
+    entries={locales.map(code => ({ kind: 'radio' as const, label: name(code), lang: code.slice(0, 2), checked: locale === code, onSelect: () => setLocale(code) }))} />;
 }
 
 const customerLinks: { href: string; label: string; icon: IconName }[] = [
@@ -60,10 +60,6 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
         <Icon name={item.icon} /><span>{t(item.label)}</span>
       </a>)}
     </nav>
-    <div className="navigation-footer">
-      <a href={workspace ? '/polizas' : '/siniestros'} className="navigation-context" aria-disabled={busy || undefined} onClick={stopBusyNavigation}><Icon name={workspace ? 'policy' : 'workspace'} /><span>{t(workspace ? 'navigation.backToAccount' : 'navigation.workspace')}</span><Icon name="arrow" /></a>
-      <button type="button" className="navigation-logout" onClick={onLogout} disabled={busy}><Icon name="exit" /><span>{t(busy ? 'session.loggingOut' : 'session.logout')}</span></button>
-    </div>
   </>;
 
   return <div className={`channel-layout${authenticated ? ' channel-layout-signed-in' : ''}`}>
@@ -76,6 +72,13 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
         {authenticated && <div className="channel-breadcrumb"><span>{area}</span><span aria-hidden="true">/</span><span>{t(current?.label ?? 'navigation.home')}</span></div>}
         <div className="channel-topbar-tools"><LocaleSwitch />
           {canLogin && <a className="btn btn-primary btn-small" href="/auth/login" onClick={onLogin}>{t('session.title')}</a>}
+          {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
+            content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
+            entries={[
+              { kind: 'link', label: t('privacy.open'), href: '/privacidad', icon: <Icon name="privacy" size={18} />, disabled: busy },
+              { kind: 'link', label: t(workspace ? 'navigation.backToAccount' : 'navigation.workspace'), href: workspace ? '/polizas' : '/siniestros', icon: <Icon name={workspace ? 'policy' : 'workspace'} size={18} />, disabled: busy },
+              { kind: 'action', label: t(busy ? 'session.loggingOut' : 'session.logout'), onSelect: onLogout, icon: <Icon name="exit" size={18} />, disabled: busy },
+            ]} />}
         </div>
       </header>
       <div id="channel-content" tabIndex={-1} className="channel-content">{children}</div>
