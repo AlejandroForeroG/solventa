@@ -27,12 +27,13 @@ import { clearEstimateDraft, readEstimateDraft, saveEstimateDraft } from './quot
 import { invalidEstimateFields } from './quote/estimate-api';
 import { clearCustomerDestination, customerDestination, customerDestinationPath, readCustomerDestination, saveCustomerDestination } from './navigation/customer-destination';
 
-type Session = 'loading' | SessionStatus;
+type Session = { status: 'loading' } | SessionStatus;
 
 function Shell() {
   const intl = useIntl();
   const announce = useAnnounce();
-  const [session, setSession] = useState<Session>('loading');
+  const [sessionState, setSession] = useState<Session>({ status: 'loading' });
+  const session = sessionState.status;
   const [busy, setBusy] = useState(false);
   const [estimateDraft, setEstimateDraft] = useState(readEstimateDraft);
   const [loginStorageFailed, setLoginStorageFailed] = useState(false);
@@ -48,7 +49,7 @@ function Shell() {
     setUncertainConsents(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.consentId, false])) }));
   }, []);
   const consentUncertain = useCallback((id: string) => setUncertainConsents(current => ({ ...current, [id]: true })), []);
-  const sessionLost = useCallback(() => { setSessionExpired(true); setSession('anonymous'); }, []);
+  const sessionLost = useCallback(() => { setSessionExpired(true); setSession({ status: 'anonymous' }); }, []);
   const abandonDestination = useCallback(() => {
     clearCustomerDestination();
     setDestination(null);
@@ -76,7 +77,7 @@ function Shell() {
   const knownPath = path === '/' || path === '/cotizar' || isConsole || path.startsWith('/auth/');
   const isLanding = !isConsole && window.location.pathname !== '/cotizar' && !failed && !estimateDraft && !purchaseInProgress;
   async function load() {
-    setSession('loading');
+    setSession({ status: 'loading' });
     setSession(await fetchSession());
   }
   useEffect(() => { void load(); }, []);
@@ -106,9 +107,9 @@ function Shell() {
     setBusy(true);
     try {
       const result = await requestLogout();
-      if (result.status === 'anonymous') { setSession('anonymous'); return; }
+      if (result.status === 'anonymous') { setSession({ status: 'anonymous' }); return; }
       window.location.assign(result.logoutUrl);
-    } catch { setSession('unavailable'); }
+    } catch { setSession({ status: 'unavailable' }); }
     finally { setBusy(false); }
   }
   const t = (id: string) => intl.formatMessage({ id });
@@ -120,7 +121,7 @@ function Shell() {
     if (!current) clearCustomerDestination();
     if (estimateDraft && !invalidEstimateFields(estimateDraft).length && !saveEstimateDraft(estimateDraft)) { event.preventDefault(); setLoginStorageFailed(true); }
   }
-  return <ChannelShell authenticated={session === 'authenticated'} canLogin={session === 'anonymous'} busy={busy} onLogout={() => void logout()} onLogin={prepareLogin}>
+  return <ChannelShell authenticated={session === 'authenticated'} workspaces={sessionState.status === 'authenticated' ? sessionState.workspaces : []} canLogin={session === 'anonymous'} busy={busy} onLogout={() => void logout()} onLogin={prepareLogin}>
     {restoringDestination && session === 'authenticated'
       ? <main className="access-panel"><p role="status">{t('navigation.openingDestination')}</p></main>
       : isConsole ? (session === 'authenticated' && !busy

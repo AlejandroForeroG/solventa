@@ -82,7 +82,7 @@ describe('public estimate and sign-in handoff', () => {
       await user.click(screen.getByRole('button', { name: 'Reintentar' }));
     }
     await fill(user);
-    await act(async () => { finish?.(json({}, 200)); });
+    await act(async () => { finish?.(json({ authenticated: true }, 200)); });
     await screen.findByLabelText(/Nombre completo/);
     expect(screen.getByLabelText(/Monto/)).toHaveValue('320.000.000');
     expect(screen.getByLabelText(/Plazo/)).toHaveValue('180');
@@ -129,7 +129,7 @@ describe('public estimate and sign-in handoff', () => {
   it('preserves only calculator inputs across login, recalculates the saved quote and then shows explicit consent', async () => {
     let authenticated = false;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async path => {
-      if (String(path) === '/auth/session') return json({}, authenticated ? 200 : 401);
+      if (String(path) === '/auth/session') return json({ authenticated }, authenticated ? 200 : 401);
       if (String(path) === '/api/v1/quote-estimates') return json(result);
       if (String(path) === '/api/v1/me/quotes') return json({ ...result, quoteId: 'COT-2026-00001', validUntil: '2026-11-14T15:00:00Z' }, 201);
       if (String(path) === '/api/v1/consents/terms') return json(SUPPORTED_TERMS);

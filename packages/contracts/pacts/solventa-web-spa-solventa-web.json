@@ -3079,14 +3079,26 @@
       "description": "a session check with an active session",
       "providerStates": [
         {
-          "name": "an active session"
+          "name": "an active session with reports access"
         }
       ],
       "request": {
+        "headers": {
+          "X-Solventa-Session-Include": "operations"
+        },
         "method": "GET",
         "path": "/auth/session"
       },
       "response": {
+        "body": {
+          "authenticated": true,
+          "workspaces": [
+            "reports"
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "status": 200
       }
     },
