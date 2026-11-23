@@ -156,3 +156,15 @@
 }
 .copy-value-row { flex-wrap: nowrap; align-items: flex-start; }
 .copy-value-text { flex: 1 1 0; }
+.policy-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; }
+.policy-card-head > .pill { margin-left: 0; }
+@media (max-width: 600px) {
+  .policy-card-head { grid-template-columns: auto minmax(0, 1fr); row-gap: 8px; }
+  .policy-card-icon { align-self: start; }
+  .policy-card-head > .pill { grid-column: 2; justify-self: start; margin-left: 0; }
+  .policy-card-icon { width: 40px; height: 40px; }
+}
+.advisor-approval-header { flex-wrap: nowrap; align-items: flex-start; }
+.advisor-approval-header .h-card { flex: 1 1 auto; min-width: 0; }
+.advisor-approval-actions { flex: none; flex-wrap: nowrap; }
+@media (max-width: 600px) { .advisor-approval-header:has(.btn-primary) { flex-wrap: wrap; } }

@@ -129,6 +129,7 @@ function Shell() {
       : <main className="access-panel">
         <span className="access-panel-icon" aria-hidden="true"><Icon name={isPolicies && destination?.kind === 'policy' && destination.section === 'documents' ? 'file' : 'privacy'} size={26} /></span>
         <h1>{t(isPolicies && failed && destination?.kind === 'policy' && destination.section === 'documents' ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
+        {!(isPolicies && destination?.kind === 'policy') && session === 'anonymous' && <p className="note">{t('navigation.signInRequired')}</p>}
         {isPolicies && destination?.kind === 'policy' && <><p>{t(destination.section === 'documents' ? 'policies.documentSignIn' : 'navigation.destinationSignIn')}</p>
           {failed && <p className="mono">POL-{destination.policyId.slice(0, 8).toUpperCase()}</p>}</>}
         {failed && <p className="banner banner-error" role="alert">{t('session.failed')}</p>}
@@ -138,7 +139,7 @@ function Shell() {
           : session === 'unavailable' ? <>
             <p role="alert">{t('session.unavailable')}</p>
             <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
-          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}><Icon name="exit" size={18} />{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
+          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}><Icon name="login" size={18} />{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
         {failed && isPolicies && destination && <p><a href="/" onClick={clearCustomerDestination}>{t('policies.backHome')}</a></p>}
       </main>)
       : !knownPath ? <main className="access-panel"><span className="access-panel-icon access-panel-icon-red" aria-hidden="true"><Icon name="search" size={26} /></span><h1>{t('navigation.notFound')}</h1><p className="note">{t('navigation.notFoundDetail')}</p><a className="btn btn-primary" href="/"><Icon name="home" size={18} />{t('navigation.goHome')}</a></main>

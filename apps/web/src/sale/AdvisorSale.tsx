@@ -39,7 +39,6 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
     {reference && <CopyValue label={t('yourReference')} value={reference} />}
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <h3 className="section-label sale-form-label"><Icon name="key" size={16} />{t('code')}</h3>
       <div className="grid">
       <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></div>
       </div>
