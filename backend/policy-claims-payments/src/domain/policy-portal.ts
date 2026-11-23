@@ -11,7 +11,7 @@ export type PolicyPaymentEntry = { date: string; amount: string; currency: 'COP'
 export type PolicyDetail = { lifecycle?: import('./policy-lifecycle').LifecycleChange; policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: Coverage; exclusions: Exclusion[]; conditionsVersion: string;
   documents: PolicyDocumentEntry[]; payments: PolicyPaymentEntry[]; parametricPayment?: PolicyPaymentEntry };
-export type DocumentFile = { fileName: string; title: string; lines: string[] };
+export type DocumentFile = { fileName: string; title: string; lines: string[]; kicker?: string; signature?: { signedAt: string; fingerprint: string } };
 type Failure = Extract<FinancialResult, { status: 'denied' | 'unavailable' }>;
 export type PolicyDetailResult = { status: 'ok'; detail: PolicyDetail } | Failure;
 export type PolicyDocumentResult = { status: 'ok'; file: DocumentFile } | Failure;
@@ -63,18 +63,20 @@ export function policyDetail(facts: IssuedPolicyFacts, versions: readonly Condit
 export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts, versions: readonly ConditionsVersion[] = CONDITIONS_VERSIONS): DocumentFile | null {
   const conditions = conditionsFor(facts.offer.product, facts.signedAt, versions);
   const fileName = `${kind.replace(/_/g, '-')}-${facts.policyId.slice(0, 8)}.pdf`;
-  if (kind === 'signed_policy') return { fileName, title: 'Póliza ' + conditions.productName, lines: [
-    'Número de póliza: ' + facts.policyId, 'Emitida: ' + colombiaTime(facts.signedAt),
+  const reference = 'POL-' + facts.policyId.slice(0, 8).toUpperCase();
+  if (kind === 'signed_policy') return { fileName, title: 'Póliza ' + conditions.productName, kicker: 'Documento de póliza',
+    signature: { signedAt: colombiaTime(facts.signedAt), fingerprint: facts.documentHash }, lines: [
+    'Referencia de póliza: ' + reference, 'Número de póliza: ' + facts.policyId, 'Emitida: ' + colombiaTime(facts.signedAt),
     'Vigencia: ' + colombiaTime(facts.effectiveFrom) + ' hasta ' + colombiaTime(facts.effectiveUntil),
     'Prima: ' + pesos(facts.premium) + ' (pago único)', ...coverageLines(facts.offer.coverage),
     'Exclusiones: las señaladas en la cláusula 7 de las condiciones generales.',
     'Huella del documento firmado: ' + facts.documentHash, '', NOTICE] };
-  if (kind === 'general_conditions') return { fileName, title: 'Condiciones generales · ' + conditions.productName, lines: [
+  if (kind === 'general_conditions') return { fileName, title: 'Condiciones generales · ' + conditions.productName, kicker: 'Condiciones generales', lines: [
     'Versión de las condiciones: ' + conditions.version, '',
     ...conditions.clauses.flatMap(clause => [clause.title, ...clause.lines, '']),
     'Cláusula 7 · Exclusiones', ...conditions.exclusions.map(item => item.code + ' ' + item.text), '', NOTICE] };
   if (facts.payment.status !== 'confirmed') return null;
-  return { fileName, title: 'Recibo de pago de la prima', lines: [
-    'Póliza: ' + facts.policyId, 'Referencia del recibo: ' + (facts.payment.reference ?? 'sin referencia'),
+  return { fileName, title: 'Recibo de pago de la prima', kicker: 'Comprobante de pago', lines: [
+    'Referencia de póliza: ' + reference, 'Póliza: ' + facts.policyId, 'Referencia del recibo: ' + (facts.payment.reference ?? 'sin referencia'),
     'Monto: ' + pesos(facts.payment.amount), 'Fecha: ' + colombiaTime(facts.payment.at), 'Estado: pagado', '', NOTICE] };
 }
