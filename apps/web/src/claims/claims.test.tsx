@@ -29,7 +29,7 @@ describe('protected claims inbox', () => {
     expect(within(rows[0]).getByText('En análisis')).toBeVisible();
     expect(within(rows[0]).getByText('9 días')).toHaveClass('claims-overdue');
     expect(within(rows[0]).getByText(/148\.000\.000 COP$/)).toBeVisible();
-    expect(within(rows[0]).getByText('4 de 5 · incompleta')).toBeVisible();
+    expect(within(rows[0]).getByText('4 archivos (mínimo 5) · incompleta')).toBeVisible();
     expect(within(rows[0]).getByText('Alta')).toBeVisible();
     expect(within(rows[1]).getByText('Escalado')).toBeVisible();
     expect(within(rows[1]).getByText('2 días')).not.toHaveClass('claims-overdue');
@@ -113,7 +113,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.forbidden, 403)));
     const denied = show();
     expect(await screen.findByRole('alert')).toHaveTextContent('Tu cuenta no tiene permiso para consultar siniestros.');
-    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeVisible();
+    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeInTheDocument(); expect(screen.getByRole('link', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas'); expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
     denied.unmount();
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response({ error: 'unauthorized', traceId }, 401)));
     const expired = show();
@@ -165,7 +165,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.page)));
     const { container } = show(true);
     const table = await screen.findByRole('table', { name: 'Claims inbox' });
-    expect(within(table).getByText('Under review')).toBeVisible(); expect(within(table).getByText('4 of 5 · incomplete')).toBeVisible();
+    expect(within(table).getByText('Under review')).toBeVisible(); expect(within(table).getByText('4 files (minimum 5) · incomplete')).toBeVisible();
     expect(within(table).getByText('1 day')).toBeVisible(); expect(screen.getByText('Showing 3 claims')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Overdue' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();

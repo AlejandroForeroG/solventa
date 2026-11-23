@@ -76,6 +76,7 @@ it('the customer opens the offer an advisor prepared without creating another on
   fireEvent.change(screen.getByLabelText('Código de la oferta'), { target: { value: offerId } });
   await user.click(screen.getByRole('button', { name: 'Revisar oferta' }));
   await waitFor(() => expect(screen.queryByLabelText('Código de la oferta')).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Autorizar a un asesor' })).not.toBeInTheDocument());
   expect(requests.some(request => request.startsWith('POST'))).toBe(false);
   expect(requests).toContain(`GET /api/v1/offers/${offerId}`);
   expect(requests.some(request => request.includes('/quotes/'))).toBe(false);
@@ -84,7 +85,7 @@ it('the customer opens the offer an advisor prepared without creating another on
 const fill = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const fillSale = () => {
   fill('Código de autorización', authorizationId); fill('Nombre completo del cliente', 'Ana Prueba'); fill('Número de documento (CC)', '1000000001');
-  fill('Fecha de nacimiento', '1990-05-17'); fill('Ciudad', 'Bogota'); fill('Identificador del crédito', 'CR-1'); fill('Monto del crédito (COP)', '200000000');
+  fill('Fecha de nacimiento', '1990-05-17'); fill('Ciudad', 'Bogota'); fill('Identificador del crédito (opcional)', 'CR-1'); fill('Monto del crédito (COP)', '200000000');
 };
 
 it('the advisor prepares the offer, retries with the same key and shows only what the customer needs to continue', async () => {
@@ -110,7 +111,7 @@ it('the advisor prepares the offer, retries with the same key and shows only wha
   expect(bodies[0]).toEqual({ authorizationId, product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
     credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } });
   expect(screen.getByText(offerId)).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Entrega este código al cliente');
+  expect(screen.getByRole('status')).toHaveTextContent('Código de la oferta');
   expect(await axe(container)).toHaveNoViolations();
   fill('Monto del crédito (COP)', '300000000');
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -145,4 +146,23 @@ it('a reload during the purchase of an assisted offer resumes at its policy inst
     await waitFor(() => expect(requests.some(url => url.includes('/policies/by-acceptance/77777777-7777-4777-8777-777777777777/policy'))).toBe(true));
     expect(screen.queryByLabelText('Referencia del asesor')).not.toBeInTheDocument();
   } finally { clearPurchaseDraft(); }
+});
+
+
+it('the advisor can leave the credit identifier empty and a stable one is sent on retry', async () => {
+  const posts: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') { posts.push(String(init.body)); return json({ error: 'unavailable' }, 503); }
+    return json({ error: 'not_found' }, 404);
+  }));
+  render(<I18n><AdvisorSale onSessionLost={() => {}} /></I18n>);
+  fill('Código de autorización', authorizationId); fill('Nombre completo del cliente', 'Ana Prueba'); fill('Número de documento (CC)', '1000000001');
+  fill('Fecha de nacimiento', '1990-05-17'); fill('Ciudad', 'Bogota'); fill('Monto del crédito (COP)', '200000000');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Preparar oferta' }));
+  await screen.findByRole('alert');
+  await user.click(screen.getByRole('button', { name: 'Preparar oferta' }));
+  await waitFor(() => expect(posts).toHaveLength(2));
+  expect(JSON.parse(posts[0]).credit.partnerCreditId).toMatch(/^ASE-[0-9A-F]{12}$/);
+  expect(posts[1]).toBe(posts[0]);
 });

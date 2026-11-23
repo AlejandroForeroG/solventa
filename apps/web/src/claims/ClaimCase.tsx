@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { caseCommand, getCase, getExperts, getOwnedCases, prepareRequirementFile, selectRequirementFiles, sendRequirementFile, type CaseAudience, type CaseRecord, type Expert, type OwnedCase } from './case-api';
 import '../audit/audit.css';
+import '../policies/policies.css';
 import './claims.css';
 import { ClaimDisbursement } from './ClaimDisbursement';
 import { OwnClaimPayments } from './OwnClaimPayments';
+import { Icon } from '../navigation/Icon';
 
 type ViewTab = 'overview' | 'documents' | 'tasks' | 'history';
 type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information' | 'extend_requirement';
@@ -32,13 +34,20 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
   }, [onSessionLost, revision]);
 
   return <main className="audit-main claim-case">
-    <h1>{t('customerCases')}</h1>
+    <div className="page-title"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{t('customerCases')}</h1></div>
+    <section className="card report-in-app" aria-labelledby="report-in-app-title">
+      <h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
+      <p className="note">{t('reportInApp.body')}</p>
+    </section>
     {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
-    {claims?.length === 0 && <p>{t('customerEmpty')}</p>}
-    {claims && <ul className="case-list">{claims.map(claim => <li key={claim.claimId}>
-      <a className="mono" href={'/mis-siniestros/' + claim.claimId}>{claim.claimNumber}</a>
-      <span className={'claims-badge claims-state-' + claim.state}>{t('state.' + claim.state)}</span>
+    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2></div>}
+    {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
+      <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
+        <span className="mono own-claim-number">{claim.claimNumber}</span>
+        <span className={'claims-badge claims-state-' + claim.state}>{t((claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span>
+        <span className="own-claim-open" aria-hidden="true">{t('openCase')}</span>
+      </a>
     </li>)}</ul>}
     <OwnClaimPayments onSessionLost={onSessionLost} />
   </main>;
@@ -73,23 +82,40 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
-    <a href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
-    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + error)}</p>{trace && <p className="mono">{trace}</p>}
-      <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
+    {error !== 'not_found' && <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}><Icon name="back" size={16} />{t('caseBack')}</a>}
+    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + (error === 'not_found' && audience === 'case' ? 'not_found_case' : error))}</p>
+      {error === 'not_found' ? <a className="btn btn-secondary" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
+        : <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button>}
+      {trace && <details className="audit-reference-details"><summary>{t('supportDetails')}</summary><span className="mono">{trace}</span></details>}</div>}
     {!claim && !error && <p role="status">{t('loading')}</p>}
     {claim && <>
       <header className="claim-case-heading"><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
-        <span className={'claims-badge claims-state-' + claim.state}>{t('state.' + claim.state)}</span></header>
+        <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
       {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
-      {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} /> : <>
-        <div role="group" className="claims-filters" aria-label={t('caseSections')}>
-          {tabs.map(section => <button key={section} type="button" className="claims-filter" aria-pressed={tab === section} onClick={() => setTab(section)}>{t('section.' + section)}</button>)}
+      {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <div className="claim-case-grid">
+        <section className="case-card" aria-labelledby="claim-preview-title"><h2 id="claim-preview-title">{t('preview')}</h2>
+          <dl className="case-fields">
+            <div><dt>{t('col.policy')}</dt><dd className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</dd></div>
+            <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
+            {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
+            <div><dt>{t('col.evidence')}</dt><dd>{claim.requiredEvidence ? t('evidenceRequired', { required: claim.requiredEvidence }) : t('noEvidenceRequired')}</dd></div>
+          </dl>
+        </section>
+        <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} />
+      </div> : <>
+        <div role="tablist" className="policy-tabs" aria-label={t('caseSections')}>
+          {tabs.map(section => <button key={section} type="button" role="tab" id={`claim-tab-${section}`} aria-selected={tab === section} aria-controls="claim-tab-panel" tabIndex={tab === section ? 0 : -1}
+            onClick={() => setTab(section)} onKeyDown={event => {
+              if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+              const next = tabs[(tabs.indexOf(section) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+              setTab(next); document.getElementById(`claim-tab-${next}`)?.focus();
+            }}>{t('section.' + section)}</button>)}
         </div>
         <div className="claim-case-grid">
-          <section className="case-card">
+          <section className="case-card" role="tabpanel" id="claim-tab-panel" aria-labelledby={`claim-tab-${tab}`}>
             <h2>{t('section.' + tab)}</h2>
             {tab === 'overview' && <><dl className="case-fields">
-              <div><dt>{t('col.policy')}</dt><dd className="mono">{claim.policyId}</dd></div>
+              <div><dt>{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>
               <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
               {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
               {claim.place && <div><dt>{t('place')}</dt><dd>{claim.place}</dd></div>}
@@ -190,30 +216,30 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   }
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
-    {claim.access === 'unassigned' ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button>
-      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className="btn btn-secondary"
+    {claim.access === 'unassigned' ? <><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
+      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}>{t('action.' + option)}</button>)}</div>}
     {blocked && claim.access !== 'unassigned' && <p className="note">{t('missingEvidence')}</p>}
     {action && <form onSubmit={event => { event.preventDefault(); void submit(action); }}>
-      <label>{t(action === 'request_information' ? 'requiredDetails' : 'reason')}
+      <label className="field">{t(action === 'request_information' ? 'requiredDetails' : 'reason')}
         <textarea value={reason} onChange={event => setReason(event.target.value)} disabled={busy} minLength={10} maxLength={1000} required />
       </label>
-      {decision && <fieldset><legend>{t('section.documents')}</legend>{claim.evidence.slice(0, 20).map((file, i) => <label className="case-checkbox" key={file.id}>
+      {decision && <fieldset className="case-evidence-choice"><legend className="field-label">{t('section.documents')}</legend>{claim.evidence.slice(0, 20).map((file, i) => <label className="case-checkbox" key={file.id}>
         <input type="checkbox" disabled={busy} checked={selected.includes(file.id)}
           onChange={event => setSelected(items => event.target.checked ? [...items, file.id] : items.filter(id => id !== file.id))} />
         {t('documentNumber', { number: i + 1 })}
       </label>)}</fieldset>}
-      {action === 'assign_expert' && <label>{t('expert')}
+      {action === 'assign_expert' && <label className="field">{t('expert')}
         <select value={expertId} required disabled={busy || directoryError} onChange={event => setExpertId(event.target.value)}>
           <option value="">{t('chooseExpert')}</option>{experts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
         {directoryError && <button className="btn btn-secondary" type="button" onClick={() => { setDirectoryError(false); setDirectoryRevision(n => n + 1); }}>{t('retry')}</button>}
       </label>}
       {(action === 'request_information' || action === 'extend_requirement') && <>
-        <p>{t('recipient')} · {t('owner')}</p><label>{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
+        <p>{t('recipient')} · {t('owner')}</p><label className="field">{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
       </>}
-      <button className="btn btn-primary" type="submit" disabled={busy || (decision && selected.length === 0)}>{t('confirmAction')}</button>
+      <button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} type="submit" disabled={busy || (decision && selected.length === 0)}>{t('submit.' + action)}</button>
     </form>}
     {error && <p role="alert" className="claims-error">{t('caseError.' + error)}</p>}
   </aside>;

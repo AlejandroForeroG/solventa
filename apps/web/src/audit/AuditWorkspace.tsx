@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
+import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import { getAuditDecision, listAuditDecisions, type AuditDetail, type AuditOutcome, type AuditPage } from './api';
+import { AccessDenied } from '../navigation/AccessDenied';
 import './audit.css';
+import { Icon } from '../navigation/Icon';
 
 const sourceLabels: Record<string, string> = { 'signal:income_obligations_12m': 'income', 'signal:payment_history_score': 'payments', 'signal:affiliation_regime': 'affiliation', 'signal:identity_validation': 'identity' };
 
@@ -16,12 +19,14 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const t = (key: string, values?: Record<string, number>) => intl.formatMessage({ id: `audit.${key}`, defaultMessage: key }, values);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(emptyFilters);
+  const [rangeProblem, setRangeProblem] = useState<DateRangeProblem>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [visibleCount, setVisibleCount] = useState(5);
+  const [pageHistory, setPageHistory] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const revealFocus = useRef<string | null>(null);
   const generation = useRef(0);
@@ -74,36 +79,46 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   }
   const detail = state.kind === 'ready' && state.data.kind === 'detail' ? state.data.detail : null;
   const page = state.kind === 'ready' && state.data.kind === 'page' ? state.data.page : null;
-  const nextPage = () => { if (!page?.next) return; const params = new URLSearchParams(query); params.set('before', page.next); setVisibleCount(5); setQuery(params.toString()); };
+  const nextPage = () => { if (!page?.next) return; const params = new URLSearchParams(query); params.set('before', page.next); setPageHistory(history => [...history, query]); setVisibleCount(5); setQuery(params.toString()); };
+  const previousPage = () => { const previous = pageHistory.at(-1); if (previous === undefined) return; setPageHistory(history => history.slice(0, -1)); setVisibleCount(5); setQuery(previous); };
   return <main className="audit-shell">
     <div className="audit-main">
-      {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}>{'← ' + t('back')}</button>}
-      <div className="audit-heading"><div><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <><p className="mono audit-id">{detail.quoteId ?? detail.decisionId}</p>{detail.quoteId && <details className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{detail.decisionId}</span></details>}</>}<p className="note audit-mode">{t('simulated')}</p></div>
+      {selection && <button className="audit-back" type="button" onClick={() => { setSelection(null); setNotice(''); }}><Icon name="back" size={16} />{t('back')}</button>}
+      <div className="audit-heading"><span className="page-icon page-icon-green" aria-hidden="true"><Icon name="audit" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('open')}</p><h1 ref={heading} tabIndex={-1}>{t(selection ? 'decision' : 'title')}</h1>{detail && <><p className="mono audit-id">{detail.quoteId ?? detail.decisionId}</p>{detail.quoteId && <details className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{detail.decisionId}</span></details>}</>}<p className="note audit-mode">{t('simulated')}</p></div>
         {detail && <button className="btn btn-secondary" type="button" disabled={exporting} onClick={() => void download(detail.decisionId)}>{t(exporting ? 'exporting' : 'export')}</button>}
       </div>
+      {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       {!selection && <form className="audit-filters" onReset={event => {
-        event.preventDefault(); setFilters(emptyFilters()); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
+        event.preventDefault(); setRangeProblem(null); setFilters(emptyFilters()); setPageHistory([]); setQuery(''); setVisibleCount(5); setRefresh(value => value + 1);
       }} onSubmit={event => {
-        event.preventDefault(); const params = new URLSearchParams();
+        event.preventDefault();
+        const found = dateRangeProblem(filters.from.trim(), filters.to.trim());
+        setRangeProblem(found);
+        if (found) { document.getElementById(`audit-${found.field}`)?.focus(); return; }
+        const params = new URLSearchParams();
         for (const [key, value] of Object.entries(filters)) if (value.trim()) params.set(key, value.trim());
-        setQuery(params.toString()); setVisibleCount(5); setRefresh(value => value + 1);
+        setPageHistory([]); setQuery(params.toString()); setVisibleCount(5); setRefresh(value => value + 1);
       }}>
         <div className="field audit-reference"><label htmlFor="audit-reference">{t('reference')}</label><input id="audit-reference" name="reference" value={filters.reference} onChange={event => setFilters(current => ({ ...current, reference: event.target.value }))} maxLength={64} autoComplete="off" /></div>
         <div className="field"><label htmlFor="audit-product">{t('product')}</label><select id="audit-product" name="product" value={filters.product} onChange={event => setFilters(current => ({ ...current, product: event.target.value }))}><option value="">{t('all')}</option>{['vida_hipotecario', 'flight_delay'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
         <div className="field"><label htmlFor="audit-outcome">{t('outcome')}</label><select id="audit-outcome" name="outcome" value={filters.outcome} onChange={event => setFilters(current => ({ ...current, outcome: event.target.value }))}><option value="">{t('all')}</option>{['accepted', 'declined', 'preliminary'].map(value => <option key={value} value={value}>{t(value)}</option>)}</select></div>
-        {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><CalendarDateInput id={`audit-${key}`} name={key} value={filters[key]} onChange={value => setFilters(current => ({ ...current, [key]: value }))} /></div>)}
+        {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><CalendarDateInput id={`audit-${key}`} name={key} value={filters[key]} aria-invalid={rangeProblem?.field === key || undefined} aria-describedby={rangeProblem?.field === key ? 'audit-range-error' : undefined}
+          onChange={value => { setFilters(current => ({ ...current, [key]: value })); setRangeProblem(null); }} />
+          {rangeProblem?.field === key && <p className="field-error" id="audit-range-error" role="alert">{intl.formatMessage({ id: `form.range.${rangeProblem.reason}` }, { days: 31 })}</p>}</div>)}
         <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="reset">{t('reset')}</button></div>
       </form>}
-      {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
-        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}>{t('retry')}</button>}
+      {state.kind !== 'ready' && <div className="audit-state" role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
+        <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && state.kind !== 'invalid' && <button type="button" className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}>{t('retry')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
-      {page && (page.items.length ? <><p className="note" role="status">{t('showingPage', { count: Math.min(visibleCount, page.items.length), total: page.items.length })}</p>{page.next && <nav className="audit-pagination audit-pagination-top" aria-label={t('paginationTop')}><button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button></nav>}<div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption><thead><tr>{['decision', 'product', 'outcome', 'rule', 'date'].map(key => <th key={key} scope="col">{t(key)}</th>)}</tr></thead><tbody>
-        {page.items.slice(0, visibleCount).map(item => <tr key={item.decisionId} className={`compact-record ${expanded[item.decisionId] ? 'record-expanded' : ''}`}><td data-label={t('decision')}><div><button type="button" id={`audit-decision-${item.decisionId}`} className="audit-link mono" aria-label={`${t('decision')}: ${item.quoteId ?? item.decisionId}`} onClick={() => setSelection(item.decisionId)}>{item.quoteId ?? item.decisionId.slice(0, 8)}</button><button type="button" className="record-toggle"
+      {page && (page.items.length ? <><p className="note" role="status">{t('showingPage', { count: Math.min(visibleCount, page.items.length), total: page.items.length })}</p><div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption><thead><tr>{['decision', 'product', 'outcome', 'rule', 'date'].map(key => <th key={key} scope="col">{t(key)}</th>)}</tr></thead><tbody>
+        {page.items.slice(0, visibleCount).map(item => <tr key={item.decisionId} className={`compact-record ${expanded[item.decisionId] ? 'record-expanded' : ''}`}><td data-label={t('decision')}><div><button type="button" id={`audit-decision-${item.decisionId}`} className="audit-link mono" aria-label={`${t('decision')}: ${item.quoteId ?? item.decisionId} · DEC-${item.decisionId.slice(0, 8).toUpperCase()}`} onClick={() => setSelection(item.decisionId)}>DEC-{item.decisionId.slice(0, 8).toUpperCase()}</button>{item.quoteId && <span className="audit-secondary">{item.quoteId}</span>}<button type="button" className="record-toggle"
           aria-expanded={!!expanded[item.decisionId]} aria-label={`${t(expanded[item.decisionId] ? 'hideDetails' : 'details')}: ${item.quoteId ?? item.decisionId.slice(0, 8)}`}
           aria-controls={`audit-rule-${item.decisionId} audit-date-${item.decisionId} audit-reference-${item.decisionId}`}
           onClick={() => setExpanded(current => ({ ...current, [item.decisionId]: !current[item.decisionId] }))}>{t(expanded[item.decisionId] ? 'hideDetails' : 'details')}</button><details id={`audit-reference-${item.decisionId}`} data-secondary className="audit-reference-details"><summary>{t('technicalReference')}</summary><span className="mono">{item.decisionId}</span></details></div></td><td data-label={t('product')}>{item.product ? t(item.product) : t('unknown')}</td><td data-label={t('outcome')}><span className={`audit-outcome audit-${item.outcome}`}>{t(item.outcome)}</span></td><td id={`audit-rule-${item.decisionId}`} data-secondary data-label={t('rule')} className="mono">{item.ruleVersion}</td><td id={`audit-date-${item.decisionId}`} data-secondary data-label={t('date')}>{format.dateTime(new Date(item.decidedAt))}</td></tr>)}
-      </tbody></table></div>{visibleCount < page.items.length && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { revealFocus.current = `audit-decision-${page.items[visibleCount].decisionId}`; setVisibleCount(count => count + 5); }}>{t('showMore')}</button></div>}{page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button></div>}</> : <div className="audit-state" role="status">{t('empty')}</div>)}
+      </tbody></table></div>{visibleCount < page.items.length && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { revealFocus.current = `audit-decision-${page.items[visibleCount].decisionId}`; setVisibleCount(count => count + 5); }}>{t('showMore')}</button></div>}{(pageHistory.length > 0 || (page.next && visibleCount >= page.items.length)) && <nav className="audit-pagination" aria-label={t('pagination')}>
+        {pageHistory.length > 0 && <button className="btn btn-secondary" type="button" onClick={previousPage}>{t('previous')}</button>}
+        {page.next && visibleCount >= page.items.length && <button className="btn btn-secondary" type="button" onClick={nextPage}>{t('next')}</button>}</nav>}</> : <div className="audit-state" role="status">{t('empty')}</div>)}
       {detail && <>
         <nav className="audit-section-links" aria-label={t('sections')}>
           {['reconstruction', 'inputs', 'sources', 'rule', 'consent', 'revisions'].map(section => <a key={section} href={`#audit-${section}`} onClick={() => {
@@ -125,6 +140,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
           <section id="audit-consent" tabIndex={-1} className="audit-section"><h2>{t('consent')}</h2><p>{detail.consent ? t(detail.consent.status) : t('unknown')}</p>{detail.consent?.id && <p className="mono">{detail.consent.id} / {detail.consent.version}</p>}<p className="note">{t('historicalConsent')}</p></section></div>
         <section id="audit-revisions" tabIndex={-1} className="audit-section"><h2>{t('revisions')}</h2>{detail.revisions.length ? <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><thead><tr>{['decision', 'version', 'premium'].map(key => <th key={key} scope="col">{t(key === 'decision' ? 'offer' : key)}</th>)}</tr></thead><tbody>{detail.revisions.map(revision => <tr key={`${revision.offerId}-${revision.version}`}><td data-label={t('offer')} className="mono">{revision.offerId}{revision.flightReference && <span className="audit-secondary">{t('flightReference')}: {revision.flightReference}</span>}</td><td data-label={t('version')}>{revision.version}</td><td data-label={t('premium')}>{revision.currency === 'COP' ? format.copDecimal(revision.premium) : `${revision.premium} ${revision.currency}`}</td></tr>)}</tbody></table></div> : <p>—</p>}</section>
         <p className="note audit-id">{t('trace')}: <span className="mono">{detail.correlationId}</span></p>
+      </>}
       </>}
       <p role="status" className="note">{notice && t(notice)}</p>
     </div>

@@ -45,9 +45,9 @@ describe('my policies', () => {
     rendered.unmount();
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=renewal');
     show();
-    expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
+    expect(await screen.findByRole('tab', { name: 'Gestionar', selected: true })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
-    expect(screen.getByRole('button', { name: 'Renovar póliza' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
     expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
   });
   it('opens the requested documents and abandons that selection when returning to the list', async () => {
@@ -58,7 +58,7 @@ describe('my policies', () => {
     expect(screen.getByRole('button', { name: 'Descargar PDF: Póliza firmada' })).toBeVisible();
     expect(fetch).toHaveBeenNthCalledWith(1, `/api/v1/policies/${policyId}/detail`, expect.objectContaining({ method: 'GET', cache: 'no-store' }));
     expect(screen.queryByRole('heading', { name: 'Mis pólizas' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: /‹ Mis pólizas/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Mis pólizas$/ }));
     await userEvent.click(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ }));
     expect(await screen.findByRole('tab', { name: 'Información', selected: true })).toBeVisible();
   });
@@ -97,7 +97,7 @@ describe('my policies', () => {
     expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
     expect(screen.getByRole('heading', { name: 'Mis pólizas' })).toHaveFocus();
     await user.click(older);
-    await user.click(await screen.findByRole('button', { name: /‹ Mis pólizas/i }));
+    await user.click(await screen.findByRole('button', { name: /^Mis pólizas$/i }));
     expect(await screen.findByText('Página 2')).toBeVisible();
     expect(await screen.findByRole('button', { name: /^Ver detalle de Retraso de vuelo/ })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Anterior' }));
@@ -208,7 +208,7 @@ describe('my policies', () => {
     await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Documentos', selected: true })).toHaveFocus();
     await user.keyboard('{ArrowLeft}{ArrowLeft}');
-    expect(screen.getByRole('tab', { name: 'Historial', selected: true })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Gestionar', selected: true })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: /Mis pólizas/ }));
     expect(await screen.findByRole('heading', { name: 'Mis pólizas' })).toBeVisible();
   });

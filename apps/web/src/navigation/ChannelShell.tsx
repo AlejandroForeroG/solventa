@@ -3,49 +3,31 @@ import { useIntl } from 'react-intl';
 import { brandAssets } from '@solventa/assets/web';
 import { useLocale } from '../i18n/I18n';
 import { locales } from '../i18n/messages';
+import { Icon, type IconName } from './Icon';
+import { MenuButton } from './MenuButton';
+import { IconLink } from './IconAction';
 import './channel-shell.css';
-
-type IconName = 'home' | 'quote' | 'policy' | 'location' | 'claims' | 'audit' | 'advisor' | 'partner' | 'menu' | 'close' | 'exit' | 'arrow';
-const paths: Record<IconName, string> = {
-  home: 'm3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9',
-  quote: 'M7 3h10v18H7zM10 7h4M10 11h4M10 15h1M13 15h1',
-  policy: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6zM8 12l3 3 5-6',
-  location: 'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0ZM10 10h4M12 8v4',
-  claims: 'M5 5h14v16H5zM9 5V3h6v2M9 10h6M9 14h6M9 18h3',
-  audit: 'M10 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM15 15l6 6M7 10l2 2 4-4',
-  advisor: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v2',
-  partner: 'M3 21V7l9-4 9 4v14M3 11h18M7 15h2M15 15h2M10 21v-3h4v3',
-  menu: 'M4 6h16M4 12h16M4 18h16',
-  close: 'm6 6 12 12M6 18 18 6',
-  exit: 'M10 4H4v16h6M14 8l4 4-4 4M8 12h12',
-  arrow: 'm9 5 7 7-7 7',
-};
-
-function Icon({ name }: { name: IconName }) {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
-}
 
 export function LocaleSwitch() {
   const intl = useIntl();
   const { locale, setLocale } = useLocale();
-  return <div className="locale-switch" role="group" aria-label={intl.formatMessage({ id: 'locale.group' })}>
-    {locales.map(code => <button key={code} type="button" className="locale-btn" aria-pressed={locale === code} lang={code.slice(0, 2)}
-      aria-label={intl.formatMessage({ id: 'locale.switchTo' }, { language: intl.formatMessage({ id: `locale.name.${code}` }) })}
-      onClick={() => setLocale(code)}>{code === 'es-CO' ? 'ES' : 'EN'}</button>)}
-  </div>;
+  const name = (code: string) => intl.formatMessage({ id: `locale.short.${code}` });
+  return <MenuButton className="locale-menu" label={intl.formatMessage({ id: 'locale.menu' }, { language: name(locale) })}
+    content={<><Icon name="globe" size={18} /><span className="locale-code">{locale === 'es-CO' ? 'ES' : 'EN'}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
+    entries={locales.map(code => ({ kind: 'radio' as const, label: name(code), lang: code.slice(0, 2), checked: locale === code, onSelect: () => setLocale(code) }))} />;
 }
 
 const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/', label: 'navigation.home', icon: 'home' },
   { href: '/polizas', label: 'policies.open', icon: 'policy' },
   { href: '/mis-siniestros', label: 'claims.customerCases', icon: 'claims' },
-  { href: '/cotizar', label: 'navigation.quote', icon: 'quote' },
-  { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
   { href: '/prestadores', label: 'assistance.title', icon: 'location' },
+  { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
+  { href: '/privacidad', label: 'privacy.open', icon: 'privacy' },
 ];
 const workspaceLinks: typeof customerLinks = [
   { href: '/siniestros', label: 'claims.open', icon: 'claims' },
-  { href: '/reportes', label: 'reports.open', icon: 'audit' },
+  { href: '/reportes', label: 'reports.open', icon: 'reports' },
   { href: '/auditoria', label: 'audit.open', icon: 'audit' },
   { href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
@@ -61,7 +43,7 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
   const workspace = workspaceLinks.some(item => matchesPath(item.href));
   const area = t(workspace ? 'navigation.workspace' : 'navigation.account');
   const links = workspace ? workspaceLinks : customerLinks;
-  const current = links.find(item => matchesPath(item.href));
+  const current = links.find(item => matchesPath(item.href)) ?? (matchesPath('/cotizar') ? { label: 'navigation.quote' } : undefined);
   const dialog = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const stopBusyNavigation = (event: MouseEvent<HTMLAnchorElement>) => { if (busy) event.preventDefault(); };
@@ -72,19 +54,16 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
 
   const navigation = <>
     <a className="navigation-brand" href="/" aria-label={t('landing.home')} aria-disabled={busy || undefined} onClick={stopBusyNavigation}><img src={brandAssets.logo.white} width={150} alt="Solventa" /></a>
+    {!workspace && <a className="btn navigation-cta" href="/cotizar" aria-current={matchesPath('/cotizar') ? 'page' : undefined} aria-disabled={busy || undefined} onClick={stopBusyNavigation}><Icon name="quote" size={18} /><span>{t('navigation.quote')}</span></a>}
     <p className="navigation-section">{area}</p>
     <nav aria-label={t('navigation.primary')} className="navigation-links">
       {links.map(item => <a key={item.href} href={item.href} aria-current={matchesPath(item.href) ? 'page' : undefined} aria-disabled={busy || undefined} onClick={stopBusyNavigation}>
         <Icon name={item.icon} /><span>{t(item.label)}</span>
       </a>)}
     </nav>
-    <div className="navigation-footer">
-      <a href={workspace ? '/polizas' : '/siniestros'} className="navigation-context" aria-disabled={busy || undefined} onClick={stopBusyNavigation}><Icon name={workspace ? 'policy' : 'partner'} /><span>{t(workspace ? 'navigation.backToAccount' : 'navigation.workspace')}</span><Icon name="arrow" /></a>
-      <button type="button" className="navigation-logout" onClick={onLogout} disabled={busy}><Icon name="exit" /><span>{t(busy ? 'session.loggingOut' : 'session.logout')}</span></button>
-    </div>
   </>;
 
-  return <div className={`channel-layout${authenticated ? ' channel-layout-signed-in' : ''}`}>
+  return <div className={`channel-layout${authenticated ? ' channel-layout-signed-in' : ''} ${workspace ? 'channel-area-workspace' : 'channel-area-customer'}`}>
     <a href="#channel-content" className="skip-link">{t('navigation.skip')}</a>
     {authenticated && <aside className="channel-sidebar" aria-label={workspace ? t('claims.console') : area}>{navigation}</aside>}
     <div className="channel-workspace">
@@ -94,6 +73,13 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
         {authenticated && <div className="channel-breadcrumb"><span>{area}</span><span aria-hidden="true">/</span><span>{t(current?.label ?? 'navigation.home')}</span></div>}
         <div className="channel-topbar-tools"><LocaleSwitch />
           {canLogin && <a className="btn btn-primary btn-small" href="/auth/login" onClick={onLogin}>{t('session.title')}</a>}
+          {authenticated && !workspace && path !== '/cotizar' && <IconLink label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
+          {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
+            content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
+            entries={[
+              { kind: 'link', label: t(workspace ? 'navigation.backToAccount' : 'navigation.workspace'), href: workspace ? '/polizas' : '/siniestros', icon: <Icon name={workspace ? 'policy' : 'workspace'} size={18} />, disabled: busy },
+              { kind: 'action', label: t(busy ? 'session.loggingOut' : 'session.logout'), onSelect: onLogout, icon: <Icon name="exit" size={18} />, disabled: busy },
+            ]} />}
         </div>
       </header>
       <div id="channel-content" tabIndex={-1} className="channel-content">{children}</div>

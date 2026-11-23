@@ -11,13 +11,16 @@ describe('channel navigation', () => {
     const nav = within(screen.getByRole('complementary', { name: 'Mi cuenta' }));
     expect(nav.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('aria-current', 'page');
     expect(nav.queryByRole('link', { name: 'Auditoría' })).toBeNull();
-    expect(nav.getByRole('link', { name: 'Área de trabajo' })).toHaveAttribute('href', '/siniestros');
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de mi cuenta' }));
+    expect(screen.getByRole('menuitem', { name: 'Consola de operaciones' })).toHaveAttribute('href', '/siniestros');
+    expect(screen.getByRole('menuitem', { name: 'Cerrar sesión' })).toBeVisible();
   });
   it('keeps a single operational navigation with a return to the customer policies', () => {
     window.history.replaceState({}, '', '/auditoria'); renderShell();
     const nav = within(screen.getByRole('complementary', { name: 'Consola operativa' }));
     expect(nav.getByRole('link', { name: 'Auditoría' })).toHaveAttribute('aria-current', 'page');
-    expect(nav.getByRole('link', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas');
+    fireEvent.click(screen.getByRole('button', { name: 'Menú de mi cuenta' }));
+    expect(screen.getByRole('menuitem', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas');
   });
   it('opens the native modal and clears expanded state when it is dismissed', () => {
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
@@ -27,12 +30,13 @@ describe('channel navigation', () => {
     const dialog = screen.getByRole('dialog', { name: 'Menú de navegación' });
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const close = within(dialog).getByRole('button', { name: 'Cerrar menú' });
-    const logout = within(dialog).getByRole('button', { name: 'Cerrar sesión' });
-    logout.focus();
-    fireEvent.keyDown(logout, { key: 'Tab' });
+    const links = within(dialog).getAllByRole('link');
+    const last = links[links.length - 1];
+    last.focus();
+    fireEvent.keyDown(last, { key: 'Tab' });
     expect(close).toHaveFocus();
     fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
-    expect(logout).toHaveFocus();
+    expect(last).toHaveFocus();
     fireEvent.click(close);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog')).toBeNull();

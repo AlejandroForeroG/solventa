@@ -4,7 +4,9 @@ import { OfferJourney } from '../offer/OfferJourney';
 import { readOffer, type Offer } from '../offer/api';
 import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
+import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
 type Load = { kind: 'loading' } | { kind: 'ready'; items: SaleAuthorization[] } | { kind: 'failed'; reason: string };
 
@@ -21,7 +23,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     }).catch(() => { if (!abort.signal.aborted) setLoad({ kind: 'failed', reason: 'unavailable' }); });
     return () => abort.abort();
   }, [refresh, onSessionLost]);
-  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   async function run(work: () => Promise<Outcome<unknown>>) {
     if (busy) return;
     setBusy(true); setError('');
@@ -48,19 +50,28 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     {error && <p role="alert">{t(error)}</p>}
     {load.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {load.kind === 'failed' && <p role="alert">{t(load.reason)}</p>}
-    {load.kind === 'ready' && (load.items.length ? <ul className="policy-documents">{load.items.map(item => <li key={item.authorizationId}><div>
+    {load.kind === 'ready' && (load.items.length ? <>
+      {load.items.some(item => item.status === 'active') && <ul className="policy-documents">{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId}><div>
       <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
       <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
-      {item.status === 'active' && <details className="document-verification"><summary>{t('code')}</summary><p className="mono audit-id">{item.authorizationId}</p></details>}
-    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>
+      {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>}
+      {load.items.some(item => item.status !== 'active') && <details className="document-verification sale-history"><summary>{t('history')}</summary>
+        <ul className="policy-documents">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId}><div>
+      <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
+      <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
+      {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
+      {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul></details>}
+    </>
       : <p>{t('empty')}</p>)}
   </section>;
 }
 
 type Continue = { kind: 'idle' } | { kind: 'loading' } | { kind: 'ready'; offer: Offer; run: number } | { kind: 'failed'; reason: string };
 
-function Continuation({ onSessionLost }: { onSessionLost(): void }) {
+function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; onOpenChange(open: boolean): void }) {
   const intl = useIntl(), t = (key: string) => intl.formatMessage({ id: `sale.${key}` });
   const [offerId, setOfferId] = useState(''), [state, setState] = useState<Continue>({ kind: 'idle' }), run = useRef(0);
   async function open() {
@@ -73,7 +84,10 @@ function Continuation({ onSessionLost }: { onSessionLost(): void }) {
       setState(outcome.kind === 'ok' ? { kind: 'ready', offer: outcome.value, run: run.current } : { kind: 'failed', reason: outcome.kind === 'notFound' || outcome.kind === 'forbidden' ? 'offerNotFound' : outcome.kind });
     } catch { setState({ kind: 'failed', reason: 'unavailable' }); }
   }
-  const back = useCallback(() => { setState({ kind: 'idle' }); setOfferId(''); }, []);
+  const back = useCallback(() => {
+    setState({ kind: 'idle' }); setOfferId('');
+  }, []);
+  useEffect(() => { onOpenChange(state.kind === 'ready'); }, [state.kind, onOpenChange]);
   if (state.kind === 'ready') {
     // Consent, acceptance, payment and signature are the customer's own steps, exactly as in their own purchase.
     return <OfferJourney key={state.run} quote={{ quoteId: state.offer.quoteId }} initialOffer={state.offer} onRequote={back} onBack={back} onSessionLost={onSessionLost}
@@ -81,7 +95,6 @@ function Continuation({ onSessionLost }: { onSessionLost(): void }) {
   }
   return <section className="card policy-section" aria-labelledby="sale-continue-heading">
     <h2 id="sale-continue-heading" className="h-card">{t('continueTitle')}</h2>
-    <p className="note">{t('continueScope')}</p>
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
       <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
       <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
@@ -95,13 +108,14 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
   // A purchase interrupted by a reload resumes at its policy: the draft keeps only server references and command keys.
   const [resume, setResume] = useState(readPurchaseDraft);
   const leave = useCallback(() => { clearPurchaseDraft(); setResume(null); }, []);
+  const [offerOpen, setOfferOpen] = useState(false);
   if (resume) {
     return <main className="content policies"><OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} onRequote={leave} onBack={leave} onSessionLost={onSessionLost}
       onConsentRequired={leave} /></main>;
   }
   return <main className="content policies">
-    <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>
-    <Authorizations onSessionLost={onSessionLost} />
-    <Continuation onSessionLost={onSessionLost} />
+    {!offerOpen && <div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({ id: 'sale.title' })}</h1></div>}
+    <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
+    {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
   </main>;
 }

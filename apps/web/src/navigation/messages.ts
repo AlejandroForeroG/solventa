@@ -1,7 +1,7 @@
 export const navigationEs = {
   'navigation.primary': 'Navegación principal',
   'navigation.account': 'Mi cuenta',
-  'navigation.workspace': 'Área de trabajo',
+  'navigation.workspace': 'Consola de operaciones',
   'navigation.home': 'Inicio',
   'navigation.quote': 'Cotizar',
   'navigation.open': 'Abrir menú',
@@ -9,6 +9,7 @@ export const navigationEs = {
   'navigation.menu': 'Menú de navegación',
   'navigation.skip': 'Ir al contenido',
   'navigation.backToAccount': 'Volver a mi cuenta',
+  'navigation.notFound': 'No encontramos esta página', 'navigation.goHome': 'Ir al inicio',
   'navigation.expired': 'Tu sesión terminó. Inicia sesión para continuar.',
   'navigation.openingDestination': 'Abriendo el detalle…',
   'navigation.destinationSignIn': 'Inicia sesión para abrir el detalle seleccionado.',
@@ -18,7 +19,7 @@ export const navigationEs = {
 export const navigationEn: Record<keyof typeof navigationEs, string> = {
   'navigation.primary': 'Main navigation',
   'navigation.account': 'My account',
-  'navigation.workspace': 'Workspace',
+  'navigation.workspace': 'Operations console',
   'navigation.home': 'Home',
   'navigation.quote': 'Get a quote',
   'navigation.open': 'Open menu',
@@ -26,6 +27,7 @@ export const navigationEn: Record<keyof typeof navigationEs, string> = {
   'navigation.menu': 'Navigation menu',
   'navigation.skip': 'Skip to content',
   'navigation.backToAccount': 'Back to my account',
+  'navigation.notFound': 'We could not find this page', 'navigation.goHome': 'Go to the home page',
   'navigation.expired': 'Your session ended. Sign in to continue.',
   'navigation.openingDestination': 'Opening the details…',
   'navigation.destinationSignIn': 'Sign in to open the selected details.',

@@ -7,11 +7,12 @@ import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
 import type { PolicyDocumentDestination } from './document-destination';
 import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
+import { Icon } from '../navigation/Icon';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
-type Tab = 'info' | 'documents' | 'history';
-const TABS: readonly Tab[] = ['info', 'documents', 'history'];
+type Tab = 'info' | 'documents' | 'history' | 'manage';
+const TABS: readonly Tab[] = ['info', 'documents', 'history', 'manage'];
 
 function useTranslate() {
   const intl = useIntl();
@@ -71,16 +72,15 @@ function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyI
   const [now] = useState(Date.now);
   return <main className="content policies">
     <p className="section-label">{t('label')}</p>
-    <h1 ref={heading} tabIndex={-1}>{t('title')}</h1>
-    <p className="lede">{t('subtitle')}</p>
+    <div className="page-title"><span className="page-icon page-icon-green" aria-hidden="true"><Icon name="policy" size={22} /></span><h1 ref={heading} tabIndex={-1}>{t('title')}</h1></div>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
     {state.kind === 'ready' && (state.value.policies.length ? <ul className="policy-list">{state.value.policies.map(policy => {
       const status = policyState(policy, now), product = t(`product.${policy.product}`);
-      return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={t('open.detail', { product }) + ' · ' + policy.policyId.slice(0, 8)} onClick={() => onOpen(policy.policyId)}>
+      return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={`${t('open.detail', { product })} · POL-${policy.policyId.slice(0, 8).toUpperCase()} · ${t(`state.${status}`)}`} onClick={() => onOpen(policy.policyId)}>
         <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
         <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
-        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
+        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)} <span className="note">{t('oneOff')}</span></span></span>
       </button></li>;
     })}</ul> : <div className="card policy-empty"><p>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</p>
       {cursors.length === 1 && <a className="btn btn-primary" href="/cotizar">{t('quote')}</a>}</div>)}
@@ -172,7 +172,7 @@ function History({ policy }: { policy: PolicyDetail }) {
 
 function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
   const t = useTranslate();
-  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null });
+  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null, manage: null });
   function move(event: KeyboardEvent, from: Tab) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
     if (!step) return;
@@ -196,7 +196,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
   const policy = state.kind === 'ready' ? state.value : null;
   const status = policy ? policyState(policy, now) : null;
   return <main className="content policies">
-    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}>‹ {t('back')}</button>
+    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}><Icon name="back" size={16} />{t('back')}</button>
     <p className="section-label">{t('label')}</p>
     <h1 ref={heading} tabIndex={-1}>{policy ? t(`product.${policy.product}`) : t('title')}</h1>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
@@ -209,9 +209,11 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
         {tab === 'info' && <Coverage policy={policy} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
+        {tab === 'manage' && <>
+          <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
+          <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
+        </>}
       </div>
-      <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
-      <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }
@@ -226,7 +228,7 @@ export function PolicyPortal({ onSessionLost, documentDestination, destination: 
   const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const section = selected === destination?.policyId ? destination.section : 'info';
-  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'info' : section} renewal={section === 'renewal'} onBack={() => {
+  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'manage' : section} renewal={section === 'renewal'} onBack={() => {
     window.history.replaceState(null, '', '/polizas'); setDestination(null); setSelected(null); onBackToList?.();
   }} onSessionLost={onSessionLost} />
     : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;

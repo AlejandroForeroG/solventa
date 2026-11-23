@@ -7,6 +7,7 @@ import type { Quote } from '../quote/api';
 import { financialApi, newIdempotencyKey, type Acceptance, type FinancialApi, type FinancialOutcome, type Offer, type Policy, type SignatureChallenge } from './api';
 import { ChargeConfirmed, ChargeDeclined, ChargePending, OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
 import { clearPurchaseDraft, savePurchaseDraft, type PurchaseDraft } from './purchase-draft';
+import { Icon } from '../navigation/Icon';
 
 type Step = 4 | 5 | 6 | 7;
 type Phase =
@@ -35,7 +36,8 @@ function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
   if (phase.name === 'preparing' || phase.name === 'review') return 5;
   if (['awaitingPayment', 'charging', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
-  if (['signing', 'issued', 'recovering', 'refunded'].includes(phase.name)) return 7;
+  if (phase.name === 'issued') return 8;
+  if (['signing', 'recovering', 'refunded'].includes(phase.name)) return 7;
   return 4;
 }
 
@@ -375,7 +377,7 @@ export function OfferJourney(props: {
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.loading')}</h1>
       <p>{t('offer.loadingDetail')}</p>
     </section>}
-    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
+    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} assisted={props.initialOffer !== undefined} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
     {phase.name === 'declined' && <section className="step card declined-card">
       <header className="consent-head"><h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.declinedTitle')}</h1></header>
       <div className="declined-body">
@@ -385,7 +387,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'expired' && <section className="step card card-warning">
       <div className="warning-head">
-        <span aria-hidden="true" className="warning-icon">!</span>
+        <span aria-hidden="true" className="warning-icon"><Icon name="alert" size={14} /></span>
         <h1 ref={heading} tabIndex={-1} className="h-card">{phase.offerId ? t('offer.expiredTitleId', { id: phase.offerId }) : t('offer.expiredTitle')}</h1>
       </div>
       <div className="denied-body">
@@ -445,7 +447,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'failed' && <section className="step card card-error">
       <div className="denied-head">
-        <span aria-hidden="true" className="denied-icon">×</span>
+        <span aria-hidden="true" className="denied-icon"><Icon name="close" size={14} /></span>
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('policy.failedTitle')}</h1>
       </div>
       <div className="denied-body">
@@ -458,7 +460,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'unavailable' && <section className="step">
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('financial.unavailableTitle')}</h1>
-      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{t('financial.unavailable')}</p></div>
+      <div className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><p>{t('financial.unavailable')}</p></div>
       {phase.traceId && <p className="trace mono">{t('denied.trace')}: {phase.traceId}</p>}
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={phase.retry}>{t('financial.retry')}</button>

@@ -1,9 +1,9 @@
 export const advisorEs={
   'advisor.previous':'Anteriores', 'advisor.next':'Siguientes',
-  'advisor.title':'Actuaciones de asesor', 'advisor.authorizations':'Autorizaciones de asesor', 'advisor.reference':'Referencia del asesor',
+  'advisor.title':'Asesor', 'advisor.console':'Consola del asesor', 'advisor.pending':'Actuaciones sobre pólizas de tus clientes', 'advisor.authorizations':'Autorizaciones de asesor', 'advisor.reference':'Referencia del asesor',
   'advisor.scope':'Autoriza una actuación concreta sobre esta póliza. El reemplazo, si corresponde, debe estar emitido por ti.',
-  'advisor.confirm':'Autorizo esta actuación y el reemplazo indicado', 'advisor.grant':'Autorizar', 'advisor.revoke':'Revocar', 'advisor.execute':'Ejecutar actuación autorizada',
-  'advisor.expires':'Vence (UTC)', 'advisor.replacement':'ID de la póliza de reemplazo', 'advisor.action':'Actuación', 'advisor.refresh':'Actualizar',
+  'advisor.confirm':'Autorizo esta actuación y el reemplazo indicado', 'advisor.confirmCancel':'Autorizo a mi asesor a cancelar esta póliza', 'advisor.grant':'Autorizar', 'advisor.revoke':'Revocar', 'advisor.execute':'Ejecutar actuación autorizada',
+  'advisor.expires':'Vence', 'advisor.validity':'Vigencia de la aprobación', 'advisor.bogota':'(hora de Bogotá)', 'advisor.replacement':'ID de la póliza de reemplazo', 'advisor.action':'Actuación', 'advisor.refresh':'Actualizar',
   'advisor.loading':'Consultando autorizaciones…', 'advisor.saving':'Guardando…', 'advisor.empty':'Sin autorizaciones.', 'advisor.more':'Se muestran hasta 20 autorizaciones por página.',
   'advisor.unavailable':'No se confirmó la operación. Actualiza o reintenta la misma actuación.', 'advisor.forbidden':'No tienes permiso vigente para esta actuación.',
   'advisor.invalid':'Revisa los datos y la vigencia de hasta 7 días.', 'advisor.conflict':'La póliza o el reemplazo cambió. Actualiza y verifica.', 'advisor.unauthenticated':'Inicia sesión para continuar.',
@@ -13,10 +13,10 @@ export const advisorEs={
 };
 export const advisorEn={
   'advisor.previous':'Previous', 'advisor.next':'Next',
-  'advisor.title':'Advisor actions', 'advisor.authorizations':'Advisor authorizations', 'advisor.reference':'Advisor reference',
+  'advisor.title':'Advisor', 'advisor.console':'Advisor console', 'advisor.pending':'Actions on your customers’ policies', 'advisor.authorizations':'Advisor authorizations', 'advisor.reference':'Advisor reference',
   'advisor.scope':'Authorize one specific action on this policy. You must have issued its replacement, when applicable.',
-  'advisor.confirm':'I authorize this action and the specified replacement', 'advisor.grant':'Authorize', 'advisor.revoke':'Revoke', 'advisor.execute':'Execute authorized action',
-  'advisor.expires':'Expires (UTC)', 'advisor.replacement':'Replacement policy ID', 'advisor.action':'Action', 'advisor.refresh':'Refresh',
+  'advisor.confirm':'I authorize this action and the specified replacement', 'advisor.confirmCancel':'I authorize my advisor to cancel this policy', 'advisor.grant':'Authorize', 'advisor.revoke':'Revoke', 'advisor.execute':'Execute authorized action',
+  'advisor.expires':'Expires', 'advisor.validity':'Approval validity', 'advisor.bogota':'(Bogotá time)', 'advisor.replacement':'Replacement policy ID', 'advisor.action':'Action', 'advisor.refresh':'Refresh',
   'advisor.loading':'Loading authorizations…', 'advisor.saving':'Saving…', 'advisor.empty':'No authorizations.', 'advisor.more':'Showing up to 20 authorizations per page.',
   'advisor.unavailable':'The operation was not confirmed. Refresh or retry the same action.', 'advisor.forbidden':'You do not have current permission for this action.',
   'advisor.invalid':'Check the fields and validity of up to 7 days.', 'advisor.conflict':'The policy or replacement changed. Refresh and check.', 'advisor.unauthenticated':'Sign in to continue.',

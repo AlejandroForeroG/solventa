@@ -1,5 +1,5 @@
 export const assistanceEs = {
-  'assistance.title': "Prestadores cercanos",
+  'assistance.title': "Asistencia",
   'assistance.simulation': "Directorio simulado",
   'assistance.place': "Ciudad o dirección",
   'assistance.search': "Buscar",
@@ -14,7 +14,7 @@ export const assistanceEs = {
 };
 
 export const assistanceEn: Record<keyof typeof assistanceEs, string> = {
-  'assistance.title': "Nearby providers",
+  'assistance.title': "Assistance",
   'assistance.simulation': "Simulated directory",
   'assistance.place': "City or address",
   'assistance.search': "Search",

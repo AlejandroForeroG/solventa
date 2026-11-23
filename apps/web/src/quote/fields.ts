@@ -1,3 +1,4 @@
+import { groupedDigits } from './estimate-api';
 import type { QuoteValues, ServerFieldError } from './api';
 
 export type FieldKey = keyof QuoteValues;
@@ -21,7 +22,7 @@ export function checkLocally(values: QuoteValues): FieldProblem[] {
   for (const key of fieldOrder) if (!values[key].trim()) problems.push({ key, message: 'field.required' });
   const has = (key: FieldKey) => problems.some(p => p.key === key);
   if (!has('documentNumber') && !/^[0-9]{6,10}$/.test(values.documentNumber.trim())) problems.push({ key: 'documentNumber', message: 'field.invalidDocument' });
-  if (!has('amount') && !/^[1-9][0-9]*$/.test(values.amount.trim())) problems.push({ key: 'amount', message: 'field.amount' });
+  if (!has('amount') && !/^[1-9][0-9]*$/.test(groupedDigits(values.amount.trim()))) problems.push({ key: 'amount', message: 'field.amount' });
   if (!has('termMonths') && !/^[0-9]+$/.test(values.termMonths.trim())) problems.push({ key: 'termMonths', message: 'field.term', values: { min: 12, max: 240 } });
   return problems;
 }

@@ -1,8 +1,10 @@
+import { displayGrouped } from './estimate-api';
 import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import type { QuoteValues } from './api';
 import { type FieldKey, type FieldProblem } from './fields';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
+import { Icon } from '../navigation/Icon';
 
 type Props = {
   values: QuoteValues;
@@ -42,7 +44,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
       {key === 'birthDate' ? <CalendarDateInput id={id} name={key} className="mono-input" autoComplete="bday" required value={values[key]}
         onChange={value => onChange(key, value)} aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
       : <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
-        value={values[key]} onChange={event => onChange(key, event.target.value)}
+        value={values[key]} onChange={event => onChange(key, event.target.value)} onBlur={key === 'amount' ? event => { const value = displayGrouped(event.target.value, intl.locale); if (value !== event.target.value) onChange(key, value); } : undefined}
         aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />}
       {problem && <p className="field-error" id={`${id}-error`}>{intl.formatMessage({ id: problem.message }, problem.values)}</p>}
     </div>;
@@ -56,7 +58,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
     <h1 ref={heading} tabIndex={-1}>{intl.formatMessage({ id: 'form.title' })}</h1>
     <p className="lede">{intl.formatMessage({ id: 'form.lede' })}</p>
     {banner !== 'none' && <div className="banner banner-error">
-      <span aria-hidden="true" className="banner-icon">×</span>
+      <Icon name="alert" size={18} className="banner-icon" />
       <p><strong>{intl.formatMessage({ id: 'form.errorTitle' })}</strong> {bannerText}</p>
     </div>}
     <form className="card" noValidate onSubmit={event => { event.preventDefault(); onSubmit(); }}>

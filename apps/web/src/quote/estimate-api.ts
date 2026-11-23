@@ -4,7 +4,12 @@ export type EstimateField = keyof EstimateValues;
 export type EstimateOutcome = { kind: 'estimate'; estimate: Estimate } | { kind: 'invalid'; fields: EstimateField[] } | { kind: 'unavailable' };
 export const estimateFields: EstimateField[] = ['ageYears', 'amount', 'termMonths'];
 
-export function invalidEstimateFields(values: EstimateValues): EstimateField[] {
+export const groupedDigits = (value: string) => /^\d{1,3}([.,\s]\d{3})+$/.test(value.trim()) ? value.replace(/[.,\s]/g, '') : value;
+
+export const displayGrouped = (value: string, locale: string) => { const digits = groupedDigits(value.trim()); return /^\d{1,16}$/.test(digits) ? BigInt(digits).toLocaleString(locale) : value; };
+
+export function invalidEstimateFields(input: EstimateValues): EstimateField[] {
+  const values = { ...input, amount: groupedDigits(input.amount.trim()) };
   return estimateFields.filter(key => {
     const value = Number(values[key]);
     return !/^[0-9]+$/.test(values[key]) || !Number.isSafeInteger(value)
@@ -16,7 +21,7 @@ export async function requestEstimate(values: EstimateValues, signal?: AbortSign
   try {
     const response = await fetch('/api/v1/quote-estimates', {
       method: 'POST', credentials: 'omit', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ageYears: Number(values.ageYears), amount: Number(values.amount), termMonths: Number(values.termMonths) }), signal
+      body: JSON.stringify({ ageYears: Number(values.ageYears), amount: Number(groupedDigits(values.amount.trim())), termMonths: Number(values.termMonths) }), signal
     });
     const body: unknown = await response.json();
     if (typeof body !== 'object' || body === null || Array.isArray(body)) return { kind: 'unavailable' };
@@ -27,7 +32,7 @@ export async function requestEstimate(values: EstimateValues, signal?: AbortSign
     }
     if (response.status !== 200 || result.currency !== 'COP' || result.basis !== 'minimum_data'
       || typeof result.premiumMonthly !== 'number' || !Number.isSafeInteger(result.premiumMonthly) || result.premiumMonthly < 0
-      || result.sumInsured !== Number(values.amount) || result.termMonths !== Number(values.termMonths)
+      || result.sumInsured !== Number(groupedDigits(values.amount.trim())) || result.termMonths !== Number(values.termMonths)
       || typeof result.ruleVersion !== 'string' || !result.ruleVersion.length
       || typeof result.traceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result.traceId)) return { kind: 'unavailable' };
     return { kind: 'estimate', estimate: result as Estimate };
