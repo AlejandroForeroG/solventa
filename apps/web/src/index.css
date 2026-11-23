@@ -1,8 +1,7 @@
 :root { --ink: #12151a; --ink-2: #3a424e; --ink-3: #56616f; --paper: #f7f6f3; --surface: #fff; --line: #e3e1dc; --line-input: #8c9089; --brand: #0b6b5f; --brand-strong: #08544a; --brand-tint: #e4f1ee; --ease-out: cubic-bezier(.23, 1, .32, 1);
   color: var(--ink); background: var(--paper); font-family: 'IBM Plex Sans', sans-serif; font-synthesis: none; -webkit-tap-highlight-color: transparent; text-size-adjust: 100%; }
 body { background: var(--paper); }
-a { color: var(--brand); text-underline-offset: 3px; }
-a:visited { color: var(--brand-strong); }
+:where(a) { color: var(--brand); text-underline-offset: 3px; }
 .btn, button { transition: transform 160ms var(--ease-out), background-color 160ms ease, border-color 160ms ease; touch-action: manipulation; }
 .btn:active:not(:disabled), button:active:not(:disabled) { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) { .btn, button { transition: none; } .btn:active:not(:disabled), button:active:not(:disabled) { transform: none; } }
