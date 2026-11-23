@@ -96,3 +96,7 @@
   .channel-layout-signed-in .menu-caret, .channel-layout-signed-in .locale-code { display: none; }
   .channel-layout-signed-in .menu-trigger { padding: 6px; min-width: 44px; justify-content: center; }
 }
+.menu-panel { max-width: calc(100vw - 24px); }
+@media (max-width: 400px) {
+  .channel-layout:not(.channel-layout-signed-in) .locale-menu .menu-panel { right: auto; left: 0; transform-origin: top left; }
+}
