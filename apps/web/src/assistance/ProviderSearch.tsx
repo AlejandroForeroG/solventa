@@ -70,7 +70,7 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
         <h2>{provider.name}</h2>
         <ul className="assistance-facts">
           <li><Icon name="location" size={16} /><span>{provider.address}, {provider.city}</span></li>
-          <li><Icon name="phone" size={16} /><span>{t('contact')} · {provider.phone}</span></li>
+          <li><Icon name="phone" size={16} /><a href={`tel:${provider.phone}`}>{t('contact')} · {provider.phone}</a></li>
           <li><Icon name="clock" size={16} /><span>{t('hours')} · {provider.hours}</span></li>
         </ul>
       </div>
