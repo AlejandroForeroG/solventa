@@ -97,3 +97,8 @@
   .account-process-steps li + li::before { top: -8px; left: 19px; right: auto; width: 2px; height: 16px; }
   .account-process-name { display: flex; align-items: baseline; gap: 8px; }
 }
+@media (min-width: 1000px) {
+  .account-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .account-tile { grid-column: span 2; }
+  .account-tile:nth-child(n + 4) { grid-column: span 3; }
+}

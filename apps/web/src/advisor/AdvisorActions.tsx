@@ -6,6 +6,7 @@ import { AdvisorSale } from '../sale/AdvisorSale';
 import { IconButton } from '../navigation/IconAction';
 import '../policies/policies.css';
 import { Icon } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 import { OwnerApprovalTable } from './OwnerApprovalTable';
 
 const pageSize = 20;
@@ -75,7 +76,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
   const visiblePage = Math.min(filteredPage, lastFilteredPage);
   const visibleApprovals = filter === 'all' ? page?.authorizations ?? []
     : page?.authorizations.slice(visiblePage * pageSize, (visiblePage + 1) * pageSize) ?? [];
-  const timestamp=(v:string)=>intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'})+' '+t('bogota');
+  const timestamp=(v:string)=>keepMeridiem(intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'}))+' '+t('bogota');
   const reload=()=>{setResult(null);setRefresh(v=>v+1);};
   function changeFilter(value: ApprovalFilter) {
     setResult(null);

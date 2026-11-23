@@ -58,3 +58,4 @@
 }
 .sale-choice-copy { display: grid; gap: 2px; }
 .sale-choice-copy small { font-size: 13px; font-weight: 400; line-height: 1.4; color: var(--ink-3); }
+.sale-code-hint { margin: 4px 0 0; font-size: 12.5px; }

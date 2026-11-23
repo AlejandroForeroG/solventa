@@ -63,6 +63,7 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
     {result.state === 'loading' && <p role="status" className="assistance-status"><span className="spinner" aria-hidden="true" />{t('loading')}</p>}
     {result.state === 'unavailable' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t('unavailable')}</span></p>}
     {result.state === 'ready' && result.providers.length === 0 && <p role="status" className="empty-inline"><Icon name="search" size={18} />{t('empty')}</p>}
+    {result.state === 'ready' && result.providers.length > 0 && <p className="note assistance-count" role="status">{intl.formatMessage({ id: 'assistance.count' }, { count: result.providers.length })}</p>}
     {result.state === 'ready' && result.providers.length > 0 && <ul className="assistance-results">{result.providers.map(provider => <li key={provider.id}><article className="card assistance-result">
       <span className={`icon-chip icon-chip-${kindStyle[provider.kind].tone}`} aria-hidden="true"><Icon name={kindStyle[provider.kind].icon} size={20} /></span>
       <div className="assistance-result-copy">

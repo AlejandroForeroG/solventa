@@ -7,6 +7,7 @@ import './claims.css';
 import { ClaimDisbursement } from './ClaimDisbursement';
 import { OwnClaimPayments } from './OwnClaimPayments';
 import { Icon, type IconName } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 
 type ViewTab = 'overview' | 'documents' | 'tasks' | 'history';
 type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information' | 'extend_requirement';
@@ -79,8 +80,8 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
     return () => abort.abort();
   }, [claimId, audience, onSessionLost, revision]);
 
-  const clock = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
+  const clock = (value: string) => keepMeridiem(intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })) + ' ' + t('bogota');
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
@@ -296,8 +297,10 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
         || selected.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) { setError('invalid'); event.target.value = ''; return; }
       setError(''); setFiles(selected);
     }} /></label>
+    <p className="note file-picker-state">{files.length ? t('filesSelected', { count: files.length }) : t('noFiles')}</p>
     {files.length > 0 && <ul className="case-list case-files">{files.map(file => <li key={file.name + ':' + file.lastModified + ':' + file.size}><span className="icon-label"><Icon name="file" size={16} />{file.name}</span></li>)}</ul>}
-    <button className="btn btn-primary" type="submit" disabled={busy || !valid}><Icon name="send" size={18} />{t('sendResponse')}</button>
+    <button className="btn btn-primary" type="submit" disabled={busy || !valid} aria-describedby={!valid ? 'requirement-hint' : undefined}><Icon name="send" size={18} />{t('sendResponse')}</button>
+    {!valid && <p id="requirement-hint" className="note icon-label"><Icon name="info" size={16} />{t('responseHint')}</p>}
     {error && <p role="alert" className="claims-error icon-label"><Icon name="alert" size={16} />{t('caseError.' + error)}</p>}
   </form>;
 }

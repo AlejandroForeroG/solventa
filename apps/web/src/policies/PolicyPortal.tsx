@@ -42,7 +42,7 @@ function policyState(policy: PolicySummary, now: number): 'active' | 'upcoming' 
   if (now < Date.parse(policy.effectiveFrom)) return 'upcoming';
   return now < Date.parse(policy.effectiveUntil) ? 'active' : 'expired';
 }
-const stateClass = { active: 'pill-ok', upcoming: 'pill-pending', expired: 'pill-status-expired', cancelled: 'pill-status-expired', modified: 'pill-pending', renewed: 'pill-pending' } as const;
+const stateClass = { active: 'pill-ok', upcoming: 'pill-pending', expired: 'pill-status-expired', cancelled: 'pill-status-revoked', modified: 'pill-pending', renewed: 'pill-pending' } as const;
 const productIcon: Record<PolicySummary['product'], IconName> = { vida_hipotecario: 'policy', flight_delay: 'plane', weather_event: 'rain' };
 const sheetStatus = { active: 'signed', upcoming: 'signed', modified: 'signed', renewed: 'signed', expired: 'expired', cancelled: 'cancelled' } as const satisfies Record<ReturnType<typeof policyState>, SheetStatus>;
 const fileKey: Record<PolicyDocumentId, string> = { signed_policy: 'sheet.fileSignedPolicy', general_conditions: 'sheet.fileGeneralConditions', premium_receipt: 'sheet.filePremiumReceipt' };
@@ -124,9 +124,10 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
   else rows.push({ label: t('coverage.rainPayout'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.payoutAmount)}</span> },
     { label: t('coverage.rainThreshold'), value: t('coverage.rainValue', { mm: policy.coverage.threshold }) },
     { label: t('coverage.station'), value: policy.coverage.stationId, mono: true });
-  rows.push({ label: t('coverage.validity'), value: <Validity policy={policy} /> }, { label: t('coverage.premium'), value: <span className="doc-amount">{format.copDecimalAmount(policy.premium)}</span> });
+  rows.push({ label: t('coverage.validity'), value: sheet('offer.periodValue', { from: format.longDate(new Date(policy.effectiveFrom)), until: format.longDate(new Date(policy.effectiveUntil)) }) },
+    { label: t('coverage.premium'), value: <span className="doc-amount">{format.copDecimalAmount(policy.premium)}</span> });
   const signed = policy.documents.find(item => item.documentId === 'signed_policy');
-  const signedAt = signed ? sheet('sheet.bogotaTime', { time: format.dateTime(new Date(signed.issuedAt)) }) : null;
+  const signedAt = signed ? sheet('sheet.bogotaTime', { time: format.longDateTime(new Date(signed.issuedAt)) }) : null;
   const payment = policy.payments[0];
   const mortgage = policy.product === 'vida_hipotecario';
   return <DocumentSheet kicker={sheet('sheet.kicker')} title={mortgage ? sheet('sheet.policyTitle') : sheet('sheet.parametricTitle', { product: t(`product.${policy.product}`) })}
@@ -149,11 +150,9 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
       ]} />
     </DocSection>
     <DocSection number={4} title={t('exclusions')} id="policy-exclusions">
-      <p className="doc-section-intro">{sheet('sheet.exclusionsIntro')}</p>
+      <p className="doc-section-intro">{sheet('sheet.exclusionsIntro')} {t('exclusionsNote', { version: policy.conditionsVersion })}</p>
       <DocClauses items={policy.exclusions} />
       {intl.locale === 'en-US' && <p className="doc-section-intro">{t('contractLanguage')}</p>}
-      <details className="document-verification"><summary>{intl.formatMessage({ id: 'document.verification' })}</summary>
-        <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details>
     </DocSection>
     <DocSection number={5} title={sheet('sheet.sectionSignature')}>
       <DocSignature signed name={sheet('sheet.holderAccount')} role={sheet('sheet.holderRole')} signedAt={signedAt} method={sheet('sheet.signatureMethodValue')}
@@ -168,20 +167,31 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
   </DocumentSheet>;
 }
 
-function Coverage({ policy, status }: { policy: PolicyDetail; status: ReturnType<typeof policyState> }) {
+function Coverage({ policy, status, onSessionLost }: { policy: PolicyDetail; status: ReturnType<typeof policyState>; onSessionLost(): void }) {
   const intl = useIntl();
   const hash = useFingerprint(policy.policyId);
   const { print, portal } = usePrintSheet();
+  const [download, setDownload] = useState<'idle' | 'busy' | 'failed'>('idle');
   const sheet = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
   const number = policyNumber(policy.policyId);
+  async function save() {
+    setDownload('busy');
+    const outcome = await downloadDocument(policy.policyId, 'signed_policy');
+    if (outcome.kind === 'ok') { savePdf(outcome.value.blob, `${sheet('sheet.fileSignedPolicy', { number })}.pdf`); setDownload('idle'); return; }
+    if (outcome.kind === 'unauthenticated') onSessionLost();
+    setDownload('failed');
+  }
   return <div className="card doc-viewer">
     <div className="doc-toolbar">
-      <p className="doc-toolbar-name"><Icon name="file" size={18} />{sheet('sheet.policyDocumentName', { number })}</p>
+      <p className="doc-toolbar-name"><Icon name="file" size={18} />{sheet('sheet.viewerName')}</p>
       <div className="doc-toolbar-tools">
+        <button type="button" className="btn btn-primary btn-small" aria-disabled={download === 'busy'} onClick={download === 'busy' ? undefined : () => void save()}>
+          <Icon name="download" size={16} />{sheet(download === 'busy' ? 'sheet.pdfBusy' : 'sheet.pdf')}</button>
         <button type="button" className="btn btn-secondary btn-small" onClick={() => print(sheet('sheet.fileSignedPolicy', { number }), <PolicySheet policy={policy} status={status} hash={hash} />)}>
           <Icon name="printer" size={16} />{sheet('sheet.printSheet')}</button>
       </div>
     </div>
+    {download === 'failed' && <p className="banner banner-error doc-download-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><span>{sheet('sheet.downloadFailed')}</span></p>}
     <div className="doc-desk"><PolicySheet policy={policy} status={status} hash={hash} /></div>
     {portal}
   </div>;
@@ -279,7 +289,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
       <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>
       <Tabs tab={tab} onChange={setTab} />
       <div role="tabpanel" id={`policy-panel-${tab}`} aria-labelledby={`policy-tab-${tab}`}>
-        {tab === 'info' && <Coverage policy={policy} status={status} />}
+        {tab === 'info' && <Coverage policy={policy} status={status} onSessionLost={onSessionLost} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
         {tab === 'manage' && <AdvisorActions key={policy.policyId} policy={policy} openRenewal={renewal} onSessionLost={onSessionLost}>

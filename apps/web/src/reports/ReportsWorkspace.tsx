@@ -6,6 +6,7 @@ import '../audit/audit.css';
 import '../claims/claims.css';
 import './reports.css';
 import { Icon } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 
 type Filter = 'all' | Destination;
 type State = { kind: 'loading' | 'hidden' } | { kind: 'ready'; page: ReportsPage } | Exclude<ReportsOutcome<never>, { kind: 'ok' }>;
@@ -116,7 +117,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
           <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
             <td data-label={t('col.period')}><span id={label}>{month(report.period)} · {t(`destination.${report.destination}`)}</span></td>
             <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
-            <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })}</td>
+            <td className="mono" data-label={t('col.generated')}>{keepMeridiem(intl.formatDate(report.generatedAt, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }))}</td>
             <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
             <td className="mono" data-label={t('col.rows')}>{t('rows', { count: report.manifest.rowCount })}</td>
             <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>

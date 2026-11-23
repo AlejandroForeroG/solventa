@@ -39,7 +39,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <ul className="kept">
           <li><span aria-hidden="true" className="mark mark-ok"><Icon name="check" size={16} /></span>{t('offer.basisConsent')}</li>
           <li><span aria-hidden="true" className="mark mark-ok"><Icon name="check" size={16} /></span>{t('offer.basisRule')}</li>
-          <li><span aria-hidden="true" className="mark mark-no"><Icon name="alert" size={16} /></span>{t('offer.basisMock')}</li>
+          <li><span aria-hidden="true" className="mark mark-info"><Icon name="info" size={16} /></span>{t('offer.basisMock')}</li>
         </ul>
         <p className="note">{t(offer.status === 'preliminary' ? 'offer.preliminaryDetail' : 'offer.nextSteps')}</p>
       </div>
@@ -93,7 +93,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
     {documentChanged && <div className="banner banner-error" role="alert"><Icon name="alert" size={18} className="banner-icon" /><p>{t('policy.documentChanged')}</p></div>}
     <header className="review-heading"><h1 ref={heading} tabIndex={-1} className="h-card">{t(stage === 'sign' ? 'policy.signatureTitle' : 'policy.reviewTitle')}</h1>
       <p className="note">{t(stage === 'sign' ? 'policy.signatureSubtitle' : 'policy.reviewSubtitle')}</p>
-      {stage === 'sign' && page !== 2 && !challenge && <p id="policy-page-instruction" className="banner banner-info"><Icon name="info" size={18} className="banner-icon" /><span>{t('policy.readBothPages')}</span></p>}
+
     </header>
     <div className={`review-grid review-grid-${stage}`}>
       <div className="card doc-viewer">
@@ -117,7 +117,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
           </div>
         </div>
       </div>
-      <div className="card review-panel">
+      <div className={`card review-panel${stage === 'review' ? ' review-panel-sticky' : ''}`}>
         {stage === 'review' ? <>
           <ol className="review-steps">
             <li data-current={!readSecond || undefined} data-done={readSecond || undefined}>{t('sheet.reviewStepRead')}</li>
@@ -136,6 +136,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
             <div><dt>{t('sheet.signFingerprint')}</dt><dd className="mono">{policy.documentHash.slice(0, 12)}…</dd></div>
           </dl>
         </div>
+        {page !== 2 && !challenge && <p id="policy-page-instruction" className="review-hint"><Icon name="info" size={16} /><span>{t('policy.readBothPages')}</span></p>}
         <div className="check review-check">
           <input id="policy-review-cb" type="checkbox" aria-describedby={page !== 2 && !challenge ? 'policy-page-instruction' : undefined} checked={checked} disabled={page !== 2 || !!challenge || busy} onChange={event => onCheck(event.target.checked)} />
           <label htmlFor="policy-review-cb">{t('policy.check')}</label>
@@ -155,9 +156,10 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
         </>}
         {(error || (challenge && secondsLeft === 0)) && <p id="policy-code-error" className="banner banner-error" role="alert">{t(`policy.challenge.${challenge && secondsLeft === 0 ? 'challenge_expired' : error}`)}</p>}
         </>}
-        <p className="note review-mock"><Icon name="info" size={16} />{t('policy.mock')}</p>
+        {stage === 'sign' && <p className="note review-mock"><Icon name="info" size={16} />{t('policy.mock')}</p>}
       </div>
     </div>
+    {stage === 'review' && <p className="note review-mock"><Icon name="info" size={16} />{t('policy.mock')}</p>}
     {portal}
   </section>;
 }
@@ -214,7 +216,7 @@ export function PolicyIssued({ heading, policy, holderName }: { heading: RefObje
       <button type="button" className="btn btn-secondary btn-small" onClick={() => void save()}>{t('sheet.downloadRetry')}</button>
     </div>}
     <div className="card doc-viewer doc-viewer-spaced">
-      <div className="doc-toolbar"><p className="doc-toolbar-name"><Icon name="file" size={18} />{fileName}</p></div>
+      <div className="doc-toolbar"><p className="doc-toolbar-name"><Icon name="file" size={18} />{t('sheet.viewerName')}</p></div>
       <div className="doc-desk"><IssuedPolicyPage policy={policy} holderName={holderName} signedAt={signedAt} /></div>
     </div>
   </section>;

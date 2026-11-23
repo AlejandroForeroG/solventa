@@ -28,16 +28,16 @@ function usePolicyText() {
 
 export function PolicyGeneralSections({ policy, holderName, statusText, fingerprint = false }: { policy: Policy; holderName?: string; statusText: string; fingerprint?: boolean }) {
   const t = usePolicyText();
-  const { copDecimal, dayMonthYear } = useFormatters();
+  const { copDecimal, longDate } = useFormatters();
   const document = parsedDocument(policy);
   const insured = sumInsured(document);
   return <>
     <DocSection number={1} title={t('sheet.sectionGeneral')}>
       <DocTable rows={[
-        { label: t('sheet.product'), value: t('sheet.policyTitle') },
+        { label: t('sheet.product'), value: t('policies.product.vida_hipotecario') },
         { label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true },
         { label: t('sheet.holder'), value: holderName?.trim() || t('sheet.holderAccount') },
-        { label: t('offer.period'), value: t('offer.periodValue', { from: dayMonthYear(new Date(policy.effectiveFrom)), until: dayMonthYear(new Date(policy.effectiveUntil)) }) },
+        { label: t('offer.period'), value: t('offer.periodValue', { from: longDate(new Date(policy.effectiveFrom)), until: longDate(new Date(policy.effectiveUntil)) }) },
         { label: t('sheet.status'), value: statusText },
         ...(fingerprint ? [{ label: t('policy.hash'), value: <span className="doc-hash">{policy.documentHash}</span>, mono: true }] : []),
       ]} />
@@ -72,7 +72,7 @@ export function DraftPolicyPage({ policy, page, holderName, stage, headingRef }:
   const t = usePolicyText();
   const document = parsedDocument(policy);
   const version = String(document.offerVersion ?? 1);
-  return <DocumentSheet kicker={t('sheet.kickerDraft')} title={t('sheet.policyTitle')} number={policyNumber(policy.policyId)}
+  return <DocumentSheet kicker={t(stage === 'sign' ? 'sheet.kickerSign' : 'sheet.kickerDraft')} title={t('sheet.policyTitle')} number={policyNumber(policy.policyId)}
     meta={<span>{t('policy.version', { version })}</span>} status="draft" statusLabel={t(stage === 'sign' ? 'sheet.sealDraft' : 'policy.pendingIssuance')}
     watermark={t('sheet.watermarkDraft')} page={page} total={2} label={t('sheet.pageLabel', { current: String(page), total: '2' })}>
     {page === 1 ? <>
@@ -107,7 +107,7 @@ export function IssuedPolicyPage({ policy, holderName, signedAt }: { policy: Pol
         reference={`SHA-256 ${policy.documentHash.slice(0, 16)}…`} stroke={signatureStroke(policy.documentHash)} />
     </DocSection>
     <DocSection number={5} title={t('sheet.sectionVerification')}>
-      <DocVerification hash={policy.documentHash} rows={[
+      <DocVerification hash={policy.documentHash} rows={[{ label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true }]} support={[
         { label: t('sheet.internalId'), value: policy.policyId, mono: true },
         { label: t('issued.reference'), value: policy.traceId, mono: true },
       ]} note={t('issued.onceDetail')} />
@@ -118,12 +118,12 @@ export function IssuedPolicyPage({ policy, holderName, signedAt }: { policy: Pol
 export function ReceiptPage({ policy }: { policy: Policy }) {
   const t = usePolicyText();
   const { copDecimal } = useFormatters();
-  return <DocumentSheet kicker={t('sheet.kickerReceipt')} title={t('sheet.receiptTitle')} number={policyNumber(policy.policyId)} status="paid"
+  return <DocumentSheet kicker={t('sheet.kickerReceipt')} title={t('sheet.receiptTitle')} meta={<span>{t('sheet.receiptFor', { number: policyNumber(policy.policyId) })}</span>} status="paid"
     statusLabel={t('sheet.paymentPaid')} page={1} total={1}>
     <DocSection number={1} title={t('sheet.sectionPayment')}>
       <DocTable rows={[
         { label: t('sheet.concept'), value: t('sheet.conceptValue') },
-        { label: t('sheet.product'), value: t('sheet.policyTitle') },
+        { label: t('sheet.product'), value: t('policies.product.vida_hipotecario') },
         { label: t('charge.charged'), value: <span className="doc-amount">{copDecimal(policy.premium)}</span> },
         { label: t('sheet.paymentMethod'), value: t('sheet.paymentMethodValue') },
         { label: t('charge.receipt'), value: policy.payment?.reference ?? '—', mono: true },

@@ -51,7 +51,7 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
         {page?.next && <button type="button" className="btn btn-secondary" onClick={() => {
           setPrevious(items => [...items, cursor]); setCursor(page.next ?? undefined); setPage(undefined); setError('');
         }}>{t('next')}</button>}
-        <button type="button" className="btn btn-secondary" onClick={() => { setPage(undefined); setError(''); setRevision(n => n + 1); }}><Icon name="refresh" size={16} />{t('refresh')}</button>
+        {(error || (page && page.items.length > 0)) && <button type="button" className="btn btn-secondary" onClick={() => { setPage(undefined); setError(''); setRevision(n => n + 1); }}><Icon name="refresh" size={16} />{t('refresh')}</button>}
       </div>
     </>}
   </section>;

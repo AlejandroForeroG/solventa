@@ -76,7 +76,7 @@ export function DocSignature({ signed, name, role, signedAt, reference, method, 
   </div>;
 }
 
-export function DocVerification({ hash, rows, note }: { hash: string | null; rows: DocRow[]; note?: string }) {
+export function DocVerification({ hash, rows, note, support }: { hash: string | null; rows: DocRow[]; note?: string; support?: DocRow[] }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   return <div className="doc-verify">
@@ -86,6 +86,8 @@ export function DocVerification({ hash, rows, note }: { hash: string | null; row
         {rows.map(row => <div key={row.label}><dt>{row.label}</dt><dd className={row.mono ? 'doc-mono' : undefined}>{row.value}</dd></div>)}
       </dl>
       {note && <p className="doc-verify-note">{note}</p>}
+      {support && support.length > 0 && <details className="doc-support"><summary>{t('sheet.supportDetails')}</summary>
+        <dl>{support.map(row => <div key={row.label}><dt>{row.label}</dt><dd className={row.mono ? 'doc-mono' : undefined}>{row.value}</dd></div>)}</dl></details>}
     </div>
   </div>;
 }

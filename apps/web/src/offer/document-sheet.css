@@ -181,4 +181,32 @@
   .doc-table th, .doc-table td { border: 0; }
   .doc-table th { padding: 6px 10px 2px; }
   .doc-table td { padding: 2px 10px 7px; }
+}.content:has(.review-grid) { max-width: 900px; }
+.review-grid, .review-grid-review { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.review-grid > .review-panel { position: static; order: 0; }
+.review-grid > .review-panel-sticky { position: sticky; bottom: 12px; z-index: 5; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 20px; padding: 16px 18px; box-shadow: 0 -2px 4px rgb(18 21 26 / 4%), 0 12px 30px rgb(6 47 42 / 16%); }
+.review-panel-sticky .review-steps { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.review-panel-sticky .review-steps li { grid-template-columns: 22px auto; gap: 6px; font-size: 12.5px; }
+.review-panel-sticky .review-steps li::before { width: 22px; height: 22px; font-size: 11px; }
+.review-panel-sticky .review-confirm { width: auto; margin: 0; white-space: nowrap; }
+.review-grid-sign > .review-panel { max-width: 560px; }
+.review-hint { display: flex; align-items: flex-start; gap: 8px; margin: 14px 0 0; font-size: 13px; color: var(--blue-ink); }
+.review-hint svg { flex: none; margin-top: 2px; }
+.review-hint + .review-check { margin-top: 8px; }
+.doc-support { margin-top: 10px; font-size: 12px; }
+.doc-support summary { display: inline-flex; align-items: center; min-height: 32px; color: var(--brand); font-weight: 600; }
+.doc-support dl { display: grid; gap: 6px; margin: 6px 0 0; }
+.doc-support dl > div { display: grid; grid-template-columns: minmax(110px, 30%) minmax(0, 1fr); gap: 10px; }
+.doc-support dt { color: var(--doc-ink-3); }
+.doc-support dd { margin: 0; overflow-wrap: anywhere; }
+.doc-annex .document-fields-group { padding: 8px 0; border-bottom: 1px solid #e6e2da; }
+.doc-annex .document-fields-group .document-fields { padding-left: 0; border-left: 0; }
+.doc-annex .document-fields-group .document-fields > div { padding: 6px 0; border-bottom: 0; }
+.doc-annex .document-fields-group > dt { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--doc-ink-3); }
+.doc-annex .document-verification summary { display: inline-flex; align-items: center; }
+@media (max-width: 600px) {
+  .review-grid > .review-panel-sticky { grid-template-columns: minmax(0, 1fr); bottom: 8px; padding: 12px 14px; }
+  .review-panel-sticky .review-steps { display: none; }
+  .review-panel-sticky .review-confirm { width: 100%; white-space: normal; }
+  .doc-support dl > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }

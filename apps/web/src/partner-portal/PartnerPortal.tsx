@@ -7,6 +7,7 @@ import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './portal.css';
 import { Icon } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 
 export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
@@ -39,7 +40,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const state = result?.key === key ? result.value : null;
   const page = state?.kind === 'ok' ? state.value : null;
   const day = (value: string) => { const [y, m, d] = value.split('-'); return intl.locale === 'es-CO' ? `${d}/${m}/${y}` : `${m}/${d}/${y}`; };
-  const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
+  const timestamp = (value: string) => keepMeridiem(intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })) + ' ' + t('bogota');
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
       <div className="audit-heading"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="partner" size={22} /></span><h1 className="audit-heading-text">{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal"><Icon name="file" size={16} />{t('documentation')}</a></div>

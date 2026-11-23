@@ -399,3 +399,29 @@ label.field input, label.field select, label.field textarea { font-weight: 400; 
 .policy-lifecycle-banner p { line-height: 1.5; }
 .field-hint { margin: 6px 0 0; font-size: 12px; color: var(--ink-3); }
 .seal-line.privacy-period { font-family: 'IBM Plex Sans', sans-serif; font-size: 12.5px; }
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: ''; display: inline-block; flex: none; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 5 7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 5 7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform 160ms var(--ease-out); }
+details[open] > summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { details > summary::before { transition: none; } }
+select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-right: 38px !important; font-weight: 400 !important; font-size: 16px; color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b6b5f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 18px !important; }
+.skip-link:focus { top: -100px; }
+.skip-link:focus-visible { top: 12px; }
+.mark-info { color: var(--ink-3); }
+.granted-head { margin: 0; }
+.estimate-next { margin: 4px 0 16px; align-items: flex-start; }
+.estimate-next svg { margin-top: 3px; }
+.source-pills { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.source-simulated { font-size: 10.5px; padding: 4px 8px; }
+.privacy-sources .source-simulated { align-self: center; }
+.policy-empty.empty-state { justify-items: center; text-align: center; }
+.policy-empty.empty-state .note { max-width: 420px; }
+@media (max-width: 360px) {
+  .channel-layout-signed-in .channel-topbar-tools > .icon-action { display: none; }
+}
+.assistance-count { margin: 16px 0 -4px; }

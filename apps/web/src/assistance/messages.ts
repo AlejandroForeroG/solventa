@@ -12,6 +12,7 @@ export const assistanceEs = {
   'assistance.expert': "Perito",
   'assistance.roadside': "Asistencia vial",
   'assistance.idleTitle': "Busca prestadores cerca de ti",
+  'assistance.count': "{count, plural, one {# prestador encontrado} other {# prestadores encontrados}}",
   'assistance.idleDetail': "Escribe una ciudad o una dirección para ver talleres, peritos y asistencia en vía del directorio simulado.",
 };
 
@@ -29,5 +30,6 @@ export const assistanceEn: Record<keyof typeof assistanceEs, string> = {
   'assistance.expert': "Expert",
   'assistance.roadside': "Roadside assistance",
   'assistance.idleTitle': "Find providers near you",
+  'assistance.count': "{count, plural, one {# provider found} other {# providers found}}",
   'assistance.idleDetail': "Type a city or an address to see workshops, experts and roadside assistance from the simulated directory.",
 };

@@ -22,6 +22,8 @@ export function I18n({ children, initial }: { children: ReactNode; initial?: Loc
   </LocaleContext.Provider>;
 }
 
+export const keepMeridiem = (text: string) => text.replace(/\s([ap])\.\s?m\./g, '\u00a0$1.\u00a0m.');
+
 // Amounts are always Colombian pesos; the locale only changes the separators.
 export function useFormatters() {
   const intl = useIntl();
@@ -48,7 +50,9 @@ export function useFormatters() {
     cop: (value: number) => `${intl.formatNumber(value, { style: 'currency', currency: 'COP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })} COP`,
     copDecimalAmount,
     copDecimal: (value: string) => `${copDecimalAmount(value)} COP`,
-    dateTime: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
+    dateTime: (date: Date) => keepMeridiem(intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })),
+    longDate: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }),
+    longDateTime: (date: Date) => keepMeridiem(intl.formatDate(date, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })),
     monthYear: (date: Date) => intl.formatDate(date, { month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
     dayMonthYear: (date: Date) => intl.formatDate(date, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' }),
     shortDate: (date: Date) => intl.formatDate(date, intl.locale.startsWith('es')

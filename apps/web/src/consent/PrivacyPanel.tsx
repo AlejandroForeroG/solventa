@@ -10,7 +10,7 @@ type Load = 'loading' | 'ready' | 'error';
 
 export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsentsChanged, onConsentUncertain }: {
   api?: Pick<ConsentApi, 'listConsents' | 'revokeConsent'>;
-  onBack: () => void;
+  onBack?: () => void;
   onSessionLost?: () => void;
   onConsentsChanged?: (items: Consent[]) => void;
   onConsentUncertain?: (id: string) => void;
@@ -125,7 +125,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
               <span className={`pill pill-status-${item.status}`}>{intl.formatMessage({ id: `status.${item.status}` })}</span>
             </div>
             <p className="consent-item-purpose">{intl.formatMessage({ id: 'consent.purposeShort' })}</p>
-            <p className="privacy-sources">{item.sources.map(code => <span key={code} className="privacy-source"><span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[code]?.icon ?? 'link'} size={15} /></span>{intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })}</span>)}</p>
+            <p className="privacy-sources">{item.sources.map(code => <span key={code} className="privacy-source"><span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[code]?.icon ?? 'link'} size={15} /></span>{intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })}</span>)}<span className="pill pill-pending source-simulated">{intl.formatMessage({ id: 'consent.sourceSimulated' })}</span></p>
             <p className="note">{intl.formatMessage({ id: 'privacy.scopes' }, { scopes })}</p>
             <p className="mono seal-line privacy-period"><Icon name="calendar" size={14} />{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
           </div>
@@ -150,6 +150,6 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
       {nextCursor && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage([...pageCursors, nextCursor])}>{intl.formatMessage({ id: 'privacy.next' })}</button>}
     </div>}
     <p className="note privacy-foot icon-label"><Icon name="info" size={16} />{intl.formatMessage({ id: 'privacy.foot' })}</p>
-    <div className="actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={onBack}><Icon name="back" size={16} />{intl.formatMessage({ id: 'privacy.back' })}</button></div>
+    {onBack && <div className="actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={onBack}><Icon name="back" size={16} />{intl.formatMessage({ id: 'privacy.back' })}</button></div>}
   </section>;
 }

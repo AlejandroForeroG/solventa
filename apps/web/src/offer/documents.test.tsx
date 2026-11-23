@@ -39,7 +39,7 @@ describe('policy documents', () => {
     vi.stubGlobal('print', print);
     const { container } = render(<I18n initial="es-CO"><PolicyIssued heading={createRef()} policy={policy} holderName="María Fernanda Rodríguez" /></I18n>);
     const sheet = screen.getByRole('article', { name: 'Póliza de seguro de vida grupo deudores' });
-    expect(within(sheet).getByText('Firmado electrónicamente')).toBeVisible();
+    expect(within(sheet).getByText('Firmado electrónicamente (simulado)')).toBeVisible();
     expect(within(sheet).getAllByText('María Fernanda Rodríguez')).toHaveLength(2);
     expect(within(sheet).getByRole('img', { name: /Trazo ilustrativo/ })).toBeInTheDocument();
     expect(await within(sheet).findByText(/22 de nov de 2026.*\(hora de Bogotá\)/, { selector: 'dd' })).toBeVisible();

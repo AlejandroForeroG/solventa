@@ -134,7 +134,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
                 <span className="source-name">{intl.formatMessage({ id: `source.${source.code}.name`, defaultMessage: source.code })}</span>
                 <span className="note">{intl.formatMessage({ id: `source.${source.code}.detail`, defaultMessage: source.scope })}</span>
               </span>
-              <span className={`pill pill-${source.kind}`}>{intl.formatMessage({ id: `kind.${source.kind}` })}</span>
+              <span className="source-pills"><span className={`pill pill-${source.kind}`}>{intl.formatMessage({ id: `kind.${source.kind}` })}</span><span className="pill pill-pending source-simulated">{intl.formatMessage({ id: 'consent.sourceSimulated' })}</span></span>
             </li>)}
           </ul>
           <p className="note consent-dane"><Icon name="info" size={16} /><span>{intl.formatMessage({ id: 'consent.dane' })}</span></p>

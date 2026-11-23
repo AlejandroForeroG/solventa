@@ -79,7 +79,8 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
       </form>
     </> : <div className="card">
       {estimate && <><p className="section-label">{t('result.premium')}</p><p className="premium-value">{copAmount(estimate.premiumMonthly)} <span className="note">{t('result.perMonth')}</span></p>
-        <dl className="facts"><div><dt>{t('estimate.amount')}</dt><dd>{cop(estimate.sumInsured)}</dd></div><div><dt>{t('estimate.termMonths')}</dt><dd>{estimate.termMonths}</dd></div></dl></>}
+        <dl className="facts"><div><dt>{t('estimate.ageYears')}</dt><dd>{values.ageYears}</dd></div><div><dt>{t('estimate.amount')}</dt><dd>{cop(estimate.sumInsured)}</dd></div><div><dt>{t('estimate.termMonths')}</dt><dd>{estimate.termMonths}</dd></div></dl>
+        <p className="note icon-label estimate-next"><Icon name="info" size={16} />{t('estimate.definitiveNote')}</p></>}
       <p className="banner banner-info"><Icon name="info" size={18} className="banner-icon" /><span>{t('estimate.disclaimer')}</span></p>
       {phase === 'result' ? <div className="actions">
         <button type="button" className="btn btn-primary" onClick={() => setPhase('login')}>{t('estimate.continue')}<Icon name="forward" size={18} /></button>

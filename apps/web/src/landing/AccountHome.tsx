@@ -20,7 +20,7 @@ export function AccountHome() {
         <h1 id="account-home-title">{t('home.greeting')}</h1>
         <p className="account-hero-detail">{t('home.greetingDetail')}</p>
       </div>
-      <a className="btn account-hero-cta" href="/cotizar"><Icon name="quote" size={18} />{t('home.quote')}<Icon name="forward" size={18} /></a>
+      <a className="btn account-hero-cta" href="/cotizar">{t('home.quote')}<Icon name="forward" size={18} /></a>
     </section>
     <nav className="account-tiles" aria-label={t('home.shortcuts')}>
       {tiles.map(tile => <a key={tile.href} className={`account-tile account-tile-${tile.tone}`} href={tile.href}>

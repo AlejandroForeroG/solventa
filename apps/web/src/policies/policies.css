@@ -168,3 +168,6 @@
 .advisor-approval-header .h-card { flex: 1 1 auto; min-width: 0; }
 .advisor-approval-actions { flex: none; flex-wrap: nowrap; }
 @media (max-width: 600px) { .advisor-approval-header:has(.btn-primary) { flex-wrap: wrap; } }
+@media (max-width: 360px) {
+  .policy-tabs { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 24px; }
+}
