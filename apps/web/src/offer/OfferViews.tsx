@@ -165,7 +165,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
 }
 
 function useSignedAt(policyId: string) {
-  const { dateTime } = useFormatters();
+  const { longDateTime } = useFormatters();
   const intl = useIntl();
   const [signedAt, setSignedAt] = useState<string | null>(null);
   useEffect(() => {
@@ -177,7 +177,7 @@ function useSignedAt(policyId: string) {
     }).catch(() => {});
     return () => abort.abort();
   }, [policyId]);
-  return signedAt ? intl.formatMessage({ id: 'sheet.bogotaTime' }, { time: dateTime(new Date(signedAt)) }) : null;
+  return signedAt ? intl.formatMessage({ id: 'sheet.bogotaTime' }, { time: longDateTime(new Date(signedAt)) }) : null;
 }
 
 export function PolicyIssued({ heading, policy, holderName }: { heading: RefObject<HTMLHeadingElement | null>; policy: Policy; holderName?: string }) {

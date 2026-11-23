@@ -42,7 +42,7 @@ describe('policy documents', () => {
     expect(within(sheet).getByText('Firmado electrónicamente (simulado)')).toBeVisible();
     expect(within(sheet).getAllByText('María Fernanda Rodríguez')).toHaveLength(2);
     expect(within(sheet).getByRole('img', { name: /Trazo ilustrativo/ })).toBeInTheDocument();
-    expect(await within(sheet).findByText(/22 de nov de 2026.*\(hora de Bogotá\)/, { selector: 'dd' })).toBeVisible();
+    expect(await within(sheet).findByText(/22 de noviembre de 2026.*\(hora de Bogotá\)/, { selector: 'dd' })).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: 'Descargar PDF' }));
     await waitFor(() => expect(saved).toEqual(['poliza-POL-10000000.pdf']));
     expect(fetch).toHaveBeenCalledWith(`/api/v1/policies/${policyId}/documents/signed_policy`, expect.objectContaining({ method: 'GET', headers: { accept: 'application/pdf' } }));
