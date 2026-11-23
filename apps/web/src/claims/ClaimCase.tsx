@@ -41,7 +41,7 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
     </section>
     {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
-    {claims?.length === 0 && <p>{t('customerEmpty')}</p>}
+    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2><p className="note">{t('customerEmptyHint')}</p></div>}
     {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
       <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
         <span className="mono own-claim-number">{claim.claimNumber}</span>
