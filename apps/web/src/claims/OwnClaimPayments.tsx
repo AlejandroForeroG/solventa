@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { ClaimPaymentPage } from '@solventa/contracts';
 import { getOwnClaimPayments } from './disbursement-api';
+import { Icon } from '../navigation/Icon';
 
 export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): void; claimId?: string }) {
   const intl = useIntl();
@@ -26,20 +27,22 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
     return () => { abort.abort(); document.removeEventListener('visibilitychange', visibility); };
   }, [cursor, hidden, onSessionLost, revision, claimId]);
   return <section className="case-card claim-payment" aria-labelledby="own-payments-title">
-    <h2 id="own-payments-title">{t(claimId ? 'title' : 'ownerTitle')}</h2>
+    <h2 id="own-payments-title" className="claim-payment-title"><span className="icon-chip icon-chip-sm" aria-hidden="true"><Icon name="coins" size={16} /></span>{t(claimId ? 'title' : 'ownerTitle')}</h2>
     {hidden ? <p role="status">{t('hidden')}</p> : <>
       {!page && !error && <p role="status">{t('loading')}</p>}
       {error && <p role="alert" className="claims-error">{t(error === 'unavailable' ? 'queryUnavailable' : 'error.' + error)}</p>}
-      {page?.items.length === 0 && <p>{t('empty')}</p>}
+      {page?.items.length === 0 && <p className="empty-inline"><Icon name="coins" size={18} />{t('empty')}</p>}
       {page && <ul className="case-list">{page.items.map(item => {
-        return <li key={item.claimId}><div>
-          {claimId ? <span>{item.claimNumber}</span> : <a href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
+        return <li key={item.claimId} className="claim-payment-item"><div className="claim-payment-main">
+          <div className="claim-payment-head">{claimId ? <span className="mono">{item.claimNumber}</span> : <a className="mono" href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
+            <span className={'claims-badge claim-payment-' + item.payment.status}>{t(item.payment.status)}</span><span className="claims-badge">{t('simulated')}</span></div>
           <p className="claim-payment-amount">{formatters.copRounded(item.payment.amount)}</p>
           {/\.\d{2}[1-9]|\.\d{3}[1-9]/.test(item.payment.amount) && <p className="note">{t('exact')}: {formatters.copDecimal(item.payment.amount)}</p>}
-          <p className="note">{t('simulated')}</p>
-          {item.payment.reference && <p className="mono">{t('reference')}: {item.payment.reference}</p>}
-          <p>{t('updated')}: <time dateTime={item.updatedAt}>{formatters.dateTime(new Date(item.updatedAt))}</time></p>
-        </div><span className={'claims-badge claim-payment-' + item.payment.status}>{t(item.payment.status)}</span></li>;
+          <dl className="claim-payment-facts">
+            {item.payment.reference && <div><dt>{t('reference')}</dt><dd className="mono">{item.payment.reference}</dd></div>}
+            <div><dt>{t('updated')}</dt><dd><time dateTime={item.updatedAt}>{formatters.dateTime(new Date(item.updatedAt))}</time></dd></div>
+          </dl>
+        </div></li>;
       })}</ul>}
       <div className="claims-filters">
         {previous.length > 0 && <button type="button" className="btn btn-secondary" onClick={() => {
@@ -48,7 +51,7 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
         {page?.next && <button type="button" className="btn btn-secondary" onClick={() => {
           setPrevious(items => [...items, cursor]); setCursor(page.next ?? undefined); setPage(undefined); setError('');
         }}>{t('next')}</button>}
-        <button type="button" className="btn btn-secondary" onClick={() => { setPage(undefined); setError(''); setRevision(n => n + 1); }}>{t('refresh')}</button>
+        <button type="button" className="btn btn-secondary" onClick={() => { setPage(undefined); setError(''); setRevision(n => n + 1); }}><Icon name="refresh" size={16} />{t('refresh')}</button>
       </div>
     </>}
   </section>;

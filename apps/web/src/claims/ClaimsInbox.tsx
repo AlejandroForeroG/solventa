@@ -78,7 +78,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
           <label htmlFor="claims-search">{t('search')}</label>
           <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} maxLength={64} autoComplete="off"
             aria-invalid={searchInvalid} aria-describedby={searchInvalid ? 'claims-search-error' : undefined} />
-          <button className="btn btn-secondary" type="submit">{t('searchButton')}</button>
+          <button className="btn btn-secondary" type="submit"><Icon name="search" size={16} />{t('searchButton')}</button>
         </form>
       </div>
       {searchInvalid && <p id="claims-search-error" className="claims-error" role="alert">{t('searchInvalid')}</p>}

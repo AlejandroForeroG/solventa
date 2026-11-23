@@ -135,3 +135,14 @@
   .doc-files li { grid-template-columns: auto minmax(0, 1fr); }
   .doc-files li > .btn { grid-column: 1 / -1; justify-self: stretch; }
 }
+.sale-form-label { display: flex; align-items: center; gap: 8px; margin: 18px 0 12px; }
+.sale-form-label svg { color: var(--brand); }
+.policy-section form > .sale-form-label:first-child { margin-top: 4px; }
+.sale-offer { display: grid; gap: 4px; margin-top: 16px; padding: 16px; border-radius: 14px; border: 1px solid; }
+.sale-offer p { margin: 0; }
+.sale-offer-ok { background: #f1faf6; border-color: #bfe0cd; }
+.sale-offer-pending { background: var(--amber-tint); border-color: #edd8ae; }
+.sale-offer-head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.sale-offer-ok .sale-offer-head svg { color: #1f7a4d; }
+.sale-offer-pending .sale-offer-head svg { color: var(--amber-ink); }
+.sale-offer .copy-value { margin-bottom: 0; }

@@ -5,6 +5,7 @@ import { useAnnounce } from '../quote/Live';
 import { consentApi, newIdempotencyKey, type Consent, type ConsentApi, type Terms } from './api';
 import { SUPPORTED_TEXT_VERSION } from './wording';
 import { Icon } from '../navigation/Icon';
+import { sourceIcon } from './source-icons';
 
 type Load = 'loading' | 'ready' | 'error' | 'mismatch';
 type Problem = 'none' | 'grant' | 'decline' | 'outdated';
@@ -110,14 +111,14 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
       <header className="consent-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'consent.title' })}</h1>
         <p className="note">{intl.formatMessage({ id: 'consent.subtitle' })}</p>
-        <p className="banner banner-info">{intl.formatMessage({ id: 'consent.simulated' })}</p>
+        <p className="consent-simulated"><Icon name="info" size={16} />{intl.formatMessage({ id: 'consent.simulated' })}</p>
       </header>
       <div className="consent-body">
         <div>
-          <h2 className="section-label">{intl.formatMessage({ id: 'consent.purpose' })}</h2>
+          <h2 className="section-label consent-label"><Icon name="audit" size={16} />{intl.formatMessage({ id: 'consent.purpose' })}</h2>
           <p className="consent-text">{intl.formatMessage({ id: 'consent.purposeText' })}</p>
           <p className="note">{intl.formatMessage({ id: 'consent.purposeNote' })}</p>
-          <h2 className="section-label consent-gap">{intl.formatMessage({ id: 'consent.validity' })}</h2>
+          <h2 className="section-label consent-label consent-gap"><Icon name="calendar" size={16} />{intl.formatMessage({ id: 'consent.validity' })}</h2>
           <p className="validity">
             <span className="pill pill-open_finance">{intl.formatMessage({ id: 'consent.validityDays' }, { days: terms.validityDays })}</span>
             <span>{intl.formatMessage({ id: 'consent.validityStart' })}</span>
@@ -125,17 +126,18 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
           <p className="note">{intl.formatMessage({ id: 'consent.revokeNote' })}</p>
         </div>
         <div>
-          <h2 className="section-label">{intl.formatMessage({ id: 'consent.sources' })}</h2>
+          <h2 className="section-label consent-label"><Icon name="link" size={16} />{intl.formatMessage({ id: 'consent.sources' })}</h2>
           <ul className="sources">
             {terms.sources.map(source => <li key={source.code} className="source-row">
-              <span>
+              <span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[source.code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[source.code]?.icon ?? 'link'} size={18} /></span>
+              <span className="source-copy">
                 <span className="source-name">{intl.formatMessage({ id: `source.${source.code}.name`, defaultMessage: source.code })}</span>
                 <span className="note">{intl.formatMessage({ id: `source.${source.code}.detail`, defaultMessage: source.scope })}</span>
               </span>
               <span className={`pill pill-${source.kind}`}>{intl.formatMessage({ id: `kind.${source.kind}` })}</span>
             </li>)}
           </ul>
-          <p className="note">{intl.formatMessage({ id: 'consent.dane' })}</p>
+          <p className="note consent-dane"><Icon name="info" size={16} /><span>{intl.formatMessage({ id: 'consent.dane' })}</span></p>
         </div>
       </div>
       <div className="consent-foot">
@@ -144,9 +146,9 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
           <label htmlFor="consent-cb">{intl.formatMessage({ id: 'consent.check' })}</label>
         </div>
         <div className="actions actions-end">
-          <button type="button" className="btn btn-secondary" onClick={() => void decline()} disabled={busy !== 'idle'}>{intl.formatMessage({ id: 'consent.decline' })}</button>
+          <button type="button" className="btn btn-secondary" onClick={() => void decline()} disabled={busy !== 'idle'}><Icon name="close" size={16} />{intl.formatMessage({ id: 'consent.decline' })}</button>
           <button type="button" className="btn btn-primary" onClick={() => void authorize()} disabled={!checked || busy !== 'idle'}>
-            {intl.formatMessage({ id: busy === 'authorizing' ? 'consent.submitting' : 'consent.authorize' })}
+            <Icon name="check" size={16} />{intl.formatMessage({ id: busy === 'authorizing' ? 'consent.submitting' : 'consent.authorize' })}
           </button>
         </div>
       </div>

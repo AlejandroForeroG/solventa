@@ -37,7 +37,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
   }
   const valid = uuid(reference) && confirmed;
   return <section className="card sale-flow" aria-labelledby="sale-flow-title">
-    <p className="note">{t('authorizeScope')}</p>
+    <p className="sale-scope"><Icon name="info" size={18} /><span>{t('authorizeScope')}</span></p>
     <form onSubmit={event => { event.preventDefault(); if (valid) void run(() => grantSaleAuthorization({ advisorReference: reference.toLowerCase(), validityDays: days })); }}>
       <div className="grid">
       <div className="field"><label htmlFor="sale-cus-1">{t('reference')}</label><input id="sale-cus-1" required value={reference} disabled={busy} autoComplete="off" onChange={event => { setReference(event.target.value.trim()); setConfirmed(false); }} /></div>
@@ -45,29 +45,29 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
         {[1, 2, 3, 7].map(value => <option key={value} value={value}>{intl.formatMessage({ id: 'sale.days' }, { count: value })}</option>)}</select></div>
       </div>
       <div className="check"><input id="sale-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor="sale-confirm">{t('confirm')}</label></div>
-      <div className="actions"><button className="btn btn-secondary" type="submit" disabled={busy || !valid}>{busy ? t('saving') : t('authorize')}</button></div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !valid}><Icon name="check" size={18} />{busy ? t('saving') : t('authorize')}</button></div>
     </form>
-    {error && <p role="alert">{t(error)}</p>}
+    {error && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(error)}</span></p>}
     <div className="sale-authorization-history">
     <h2 className="h-card">{t('myAuthorizations')}</h2>
     {load.kind === 'loading' && <p role="status">{t('loading')}</p>}
-    {load.kind === 'failed' && <p role="alert">{t(load.reason)}</p>}
+    {load.kind === 'failed' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(load.reason)}</span></p>}
     {load.kind === 'ready' && (load.items.length ? <>
-      {load.items.some(item => item.status === 'active') && <ul className="policy-documents">{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId}><div>
-      <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
-      <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
-      {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
+      {load.items.some(item => item.status === 'active') && <ul className="sale-authorizations" aria-label={t('advisor')}>{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
+      <p className="sale-authorization-head"><span className="mono">{item.advisorReference}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
+      {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
-    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul>}
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}><Icon name="ban" size={16} />{t('revoke')}</button>}</li>)}</ul>}
       {load.items.some(item => item.status !== 'active') && <details className="document-verification sale-history"><summary>{t('history')}</summary>
-        <ul className="policy-documents">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId}><div>
-      <p>{t('advisor')}: <span className="mono">{item.advisorReference}</span></p>
-      <p>{t(item.status)} · {t('expires')}: {timestamp(item.expiresAt)}</p>
-      {item.revokedAt && <p>{t('revoked')}: {timestamp(item.revokedAt)}</p>}
+        <ul className="sale-authorizations">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
+      <p className="sale-authorization-head"><span className="mono">{item.advisorReference}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
+      {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
-    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul></details>}
+    </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}><Icon name="ban" size={16} />{t('revoke')}</button>}</li>)}</ul></details>}
     </>
-      : <p>{t('empty')}</p>)}
+      : <p className="empty-inline"><Icon name="user" size={18} />{t('empty')}</p>)}
     </div>
   </section>;
 }
@@ -99,9 +99,9 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   return <section className="card sale-flow" aria-labelledby="sale-flow-title">
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
       <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
-      <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}><Icon name="file" size={18} />{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
     </form>
-    {state.kind === 'failed' && <p role="alert">{t(state.reason)}</p>}
+    {state.kind === 'failed' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(state.reason)}</span></p>}
   </section>;
 }
 

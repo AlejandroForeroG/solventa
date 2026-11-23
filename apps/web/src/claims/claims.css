@@ -81,3 +81,57 @@
 .case-evidence-choice .case-checkbox { min-height: 32px; }
 .case-action-options .btn { justify-content: flex-start; }
 .case-action-options .btn[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--brand-strong); }
+.claim-case-heading { margin: 18px 0 12px; padding: 0; background: transparent; border: 0; }
+.claim-case-heading h1 { font-size: clamp(24px, 6vw, 30px); overflow-wrap: anywhere; }
+.claim-case .back-link { margin-top: 4px; }
+.claim-case-grid:not(:has(> :nth-child(2))) { grid-template-columns: minmax(0, 1fr); }
+.case-card h2 { font: 600 20px/1.25 'Space Grotesk', sans-serif; letter-spacing: -.01em; }
+.case-card h3 { font: 600 16px/1.35 'Space Grotesk', sans-serif; }
+.case-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 14px 24px; margin: 0 0 16px; }
+.case-fields dt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.case-fields dt svg { flex: none; color: var(--brand); }
+.case-fields dd { margin: 4px 0 0; color: var(--ink); }
+.case-note { padding: 12px 14px; border-radius: 10px; background: #faf9f7; border: 1px solid #edebe6; color: var(--ink-2); }
+.case-list li { align-items: center; }
+.case-files li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
+.case-task { display: grid; gap: 8px; padding: 14px 0; }
+.case-task-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
+.case-timeline { position: relative; margin: 0; padding: 0 0 0 22px; list-style: none; }
+.case-timeline::before { content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: #e3e1dc; }
+.case-timeline li { position: relative; padding: 0 0 16px; border: 0 !important; }
+.case-timeline li::before { content: ''; position: absolute; left: -21px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid var(--brand); }
+.case-timeline time { color: var(--ink-3); font-size: 13px; }
+.claim-confirmation { display: flex; align-items: center; gap: 8px; color: #175c3a; }
+.claim-actions h2 { margin-bottom: 12px; }
+.case-action-options .btn { gap: 10px; }
+.file-picker { position: relative; display: grid; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.file-picker-button { justify-self: start; }
+.file-picker-input { position: absolute; inset: auto 0 0 0; width: 100%; height: 44px; opacity: 0; cursor: pointer; }
+.file-picker:focus-within .file-picker-button { outline: 3px solid var(--brand); outline-offset: 2px; }
+.requirement-form label:not(.file-picker) { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.requirement-form .btn { justify-self: start; }
+.report-in-app { display: flex; align-items: center; gap: 14px; }
+.own-claim { gap: 10px 14px; }
+.own-claim-open { display: inline-flex; align-items: center; gap: 4px; }
+.claims-banner { align-items: center; }
+.claims-banner .btn { margin-left: auto; }
+.claim-payment-title { display: flex; align-items: center; gap: 10px; }
+.claim-payment-item { display: block !important; }
+.claim-payment-main { display: grid; gap: 6px; min-width: 0; }
+.claim-payment-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.claim-payment-head a, .claim-payment-head > .mono { font-weight: 600; }
+.claim-payment-amount { margin: 4px 0; font: 700 26px/1.15 'Space Grotesk', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.claim-payment-facts { display: grid; gap: 6px; margin: 0; font-size: 13px; }
+.claim-payment-facts > div { display: grid; grid-template-columns: minmax(120px, auto) minmax(0, 1fr); gap: 10px; }
+.claim-payment-facts dt { color: var(--ink-3); }
+.claim-payment-facts dd { margin: 0; overflow-wrap: anywhere; }
+.claim-payment-facts .mono { font-weight: 500; font-size: 12.5px; }
+.claims-search { position: relative; }
+@media (max-width: 600px) {
+  .claim-case { padding: 16px; }
+  .claim-payment-facts > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .own-claim-open { margin-left: 0; width: 100%; }
+  .report-in-app { align-items: flex-start; }
+  .case-files li { grid-template-columns: auto minmax(0, 1fr); }
+  .case-files li > .note { grid-column: 2; }
+}

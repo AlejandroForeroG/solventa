@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useIntl } from 'react-intl';
 import { fetchWithSession } from '../session-fetch';
+import { Icon, type IconName } from '../navigation/Icon';
+
+const kindStyle: Record<AssistanceProviderMatch['kind'], { icon: IconName; tone: string }> = {
+  workshop: { icon: 'wrench', tone: 'amber' }, expert: { icon: 'user', tone: 'violet' }, roadside: { icon: 'truck', tone: 'blue' },
+};
 
 type Results = { state: 'idle' | 'loading' | 'unavailable' } | { state: 'ready'; providers: AssistanceProviderMatch[] };
 
@@ -44,23 +49,30 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
     } finally { clearTimeout(timer); }
   }
 
-  return <main className="content">
-    <h1>{t('title')}</h1>
-    <p>{t('simulation')}</p>
+  return <main className="content assistance">
+    <div className="page-title"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="location" size={22} /></span><h1>{t('title')}</h1></div>
+    <p className="assistance-simulated"><span className="pill pill-pending"><Icon name="info" size={14} />{t('simulation')}</span></p>
     <form className="card field assistance-search" onSubmit={event => void submit(event)}>
       <label htmlFor="provider-place">{t('place')}</label>
-      <input id="provider-place" value={query} onChange={event => setQuery(event.target.value)} maxLength={160} />
-      <button className="btn btn-primary" type="submit" disabled={query.trim().length < 2}>{t('search')}</button>
+      <div className="assistance-search-row">
+        <span className="assistance-input"><Icon name="location" size={18} /><input id="provider-place" value={query} onChange={event => setQuery(event.target.value)} maxLength={160} /></span>
+        <button className="btn btn-primary" type="submit" disabled={query.trim().length < 2}><Icon name="search" size={18} />{t('search')}</button>
+      </div>
     </form>
-    {result.state === 'loading' && <p role="status">{t('loading')}</p>}
-    {result.state === 'unavailable' && <p role="alert">{t('unavailable')}</p>}
-    {result.state === 'ready' && result.providers.length === 0 && <p role="status">{t('empty')}</p>}
-    {result.state === 'ready' && result.providers.map(provider => <article className="card assistance-result" key={provider.id}>
-      <p>{t(provider.kind)}</p>
-      <h2>{provider.name}</h2>
-      <p>{provider.address}, {provider.city}</p>
-      <p>{t('contact')} · {provider.phone}</p>
-      <p>{t('hours')} · {provider.hours}</p>
-    </article>)}
+    {result.state === 'loading' && <p role="status" className="assistance-status"><span className="spinner" aria-hidden="true" />{t('loading')}</p>}
+    {result.state === 'unavailable' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t('unavailable')}</span></p>}
+    {result.state === 'ready' && result.providers.length === 0 && <p role="status" className="empty-inline"><Icon name="search" size={18} />{t('empty')}</p>}
+    {result.state === 'ready' && result.providers.length > 0 && <ul className="assistance-results">{result.providers.map(provider => <li key={provider.id}><article className="card assistance-result">
+      <span className={`icon-chip icon-chip-${kindStyle[provider.kind].tone}`} aria-hidden="true"><Icon name={kindStyle[provider.kind].icon} size={20} /></span>
+      <div className="assistance-result-copy">
+        <p className="assistance-kind">{t(provider.kind)}</p>
+        <h2>{provider.name}</h2>
+        <ul className="assistance-facts">
+          <li><Icon name="location" size={16} /><span>{provider.address}, {provider.city}</span></li>
+          <li><Icon name="phone" size={16} /><span>{t('contact')} · {provider.phone}</span></li>
+          <li><Icon name="clock" size={16} /><span>{t('hours')} · {provider.hours}</span></li>
+        </ul>
+      </div>
+    </article></li>)}</ul>}
   </main>;
 }

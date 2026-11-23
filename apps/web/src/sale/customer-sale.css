@@ -36,3 +36,19 @@
 .sale-authorization-history { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
 .sale-authorization-history > .h-card { margin: 0 0 8px; }
 .sale-authorization-history > p { margin: 0; }
+.sale-scope { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: var(--violet-tint); color: var(--violet-ink); font-size: 14px; }
+.sale-scope svg { flex: none; margin-top: 2px; }
+.sale-flow form .check { margin: 4px 0 0; }
+.sale-authorizations { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.sale-authorization { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.sale-authorization-copy { display: grid; gap: 4px; min-width: 0; }
+.sale-authorization-copy p { margin: 0; }
+.sale-authorization-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sale-authorization-head .mono { font-weight: 500; font-size: 12.5px; overflow-wrap: anywhere; }
+.sale-authorization .copy-value { margin: 6px 0 0; }
+.sale-history { margin-top: 16px; }
+.sale-history .sale-authorizations { margin-top: 8px; }
+@media (max-width: 600px) {
+  .sale-authorization { grid-template-columns: auto minmax(0, 1fr); }
+  .sale-authorization > .btn { grid-column: 1 / -1; justify-self: stretch; }
+}

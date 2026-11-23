@@ -10,6 +10,7 @@ import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { ChannelShell } from './navigation/ChannelShell';
 import { IconButton } from './navigation/IconAction';
+import { Icon } from './navigation/Icon';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
 import type { SessionStatus } from './api/auth';
@@ -126,6 +127,7 @@ function Shell() {
       : isConsole ? (session === 'authenticated' && !busy
       ? isPrivacy ? <main className="content"><PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => window.location.assign('/polizas')} onSessionLost={sessionLost} /></main> : isAdvisor ? <AdvisorPortal onSessionLost={sessionLost} /> : isSale ? <CustomerSalePortal onSessionLost={sessionLost} /> : isPartnerPortal ? <PartnerPortal onSessionLost={sessionLost} /> : isPolicies ? <PolicyPortal destination={destination?.kind === 'policy' ? destination : undefined} onBackToList={abandonDestination} onSessionLost={sessionLost} /> : isProviders ? <ProviderSearch onSessionLost={sessionLost} /> : isClaims ? uuid(caseId) ? <ClaimCase key={path} claimId={caseId} audience={caseAudience} onSessionLost={sessionLost} /> : isCustomerClaims ? <CustomerClaims onSessionLost={sessionLost} /> : <ClaimsInbox onSessionLost={sessionLost} /> : isReports ? <ReportsWorkspace onSessionLost={sessionLost} /> : <AuditWorkspace onSessionLost={sessionLost} />
       : <main className="access-panel">
+        <span className="access-panel-icon" aria-hidden="true"><Icon name={isPolicies && destination?.kind === 'policy' && destination.section === 'documents' ? 'file' : 'privacy'} size={26} /></span>
         <h1>{t(isPolicies && failed && destination?.kind === 'policy' && destination.section === 'documents' ? 'policies.documentAccessTitle' : sectionTitle)}</h1>
         {isPolicies && destination?.kind === 'policy' && <><p>{t(destination.section === 'documents' ? 'policies.documentSignIn' : 'navigation.destinationSignIn')}</p>
           {failed && <p className="mono">POL-{destination.policyId.slice(0, 8).toUpperCase()}</p>}</>}
@@ -136,10 +138,10 @@ function Shell() {
           : session === 'unavailable' ? <>
             <p role="alert">{t('session.unavailable')}</p>
             <button type="button" className="btn btn-secondary" onClick={() => void load()}>{t('session.retry')}</button>
-          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
+          </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}><Icon name="exit" size={18} />{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
         {failed && isPolicies && destination && <p><a href="/" onClick={clearCustomerDestination}>{t('policies.backHome')}</a></p>}
       </main>)
-      : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
+      : !knownPath ? <main className="access-panel"><span className="access-panel-icon access-panel-icon-red" aria-hidden="true"><Icon name="search" size={26} /></span><h1>{t('navigation.notFound')}</h1><p className="note">{t('navigation.notFoundDetail')}</p><a className="btn btn-primary" href="/"><Icon name="home" size={18} />{t('navigation.goHome')}</a></main>
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><span className="product">{t('brand.product')}</span>

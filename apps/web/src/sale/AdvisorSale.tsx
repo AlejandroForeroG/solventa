@@ -5,6 +5,7 @@ import { CopyValue } from '../forms/CopyValue';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
 import { groupedDigits } from '../quote/estimate-api';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
 const empty = { authorizationId: '', fullName: '', documentNumber: '', birthDate: '', city: '', partnerCreditId: '', amount: '', termMonths: '120' };
 
@@ -38,22 +39,29 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
     {reference && <CopyValue label={t('yourReference')} value={reference} />}
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <h3 className="section-label sale-form-label"><Icon name="key" size={16} />{t('code')}</h3>
       <div className="grid">
       <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></div>
+      </div>
+      <h3 className="section-label sale-form-label"><Icon name="user" size={16} />{t('customerSection')}</h3>
+      <div className="grid">
       <div className="field"><label htmlFor="sale-adv-2">{t('fullName')}</label><input id="sale-adv-2" required value={form.fullName} disabled={busy} autoComplete="off" onChange={set('fullName')} /></div>
       <div className="field"><label htmlFor="sale-adv-3">{t('documentNumber')}</label><input id="sale-adv-3" required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></div>
       <div className="field"><label htmlFor="sale-adv-4">{t('birthDate')}</label><CalendarDateInput id="sale-adv-4" required value={form.birthDate} disabled={busy} onChange={value => set('birthDate')({ target: { value } })} /></div>
       <div className="field"><label htmlFor="sale-adv-5">{t('city')}</label><input id="sale-adv-5" required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></div>
+      </div>
+      <h3 className="section-label sale-form-label"><Icon name="coins" size={16} />{t('creditSection')}</h3>
+      <div className="grid">
       <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></div>
       <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>
       <div className="field"><label htmlFor="sale-adv-8">{t('termMonths')}</label><input id="sale-adv-8" required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></div>
       </div>
-      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !ready}>{busy ? t('preparing') : t('prepare')}</button></div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !ready}><Icon name="file" size={18} />{busy ? t('preparing') : t('prepare')}</button></div>
     </form>
-    {error && <p role="alert">{t(error)}</p>}
-    {offer && <div role="status" className="card">
-      <p>{offer.contractable ? t('definitive') : t('preliminary')}</p>
-      <p>{t('premium')}: {intl.formatNumber(Number(offer.premium), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</p>
+    {error && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(error)}</span></p>}
+    {offer && <div role="status" className={`sale-offer ${offer.contractable ? 'sale-offer-ok' : 'sale-offer-pending'}`}>
+      <p className="sale-offer-head"><Icon name={offer.contractable ? 'check' : 'alert'} size={18} />{offer.contractable ? t('definitive') : t('preliminary')}</p>
+      <p className="sale-offer-premium">{t('premium')}: <strong className="mono">{intl.formatNumber(Number(offer.premium), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</strong></p>
       <CopyValue label={t('offerCode')} value={offer.offerId} />
     </div>}
   </section>;

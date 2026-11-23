@@ -141,7 +141,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
         {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
       </>}
     {page&&<>
-      {!policy && !visibleApprovals.length && <p role="status">{t('empty')}</p>}
+      {!policy && !visibleApprovals.length && <p role="status" className="empty-inline"><Icon name="advisor" size={18} />{t('empty')}</p>}
 
       {!policy && <ul className="policy-documents">{visibleApprovals.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>

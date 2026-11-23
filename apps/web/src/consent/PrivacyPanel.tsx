@@ -4,6 +4,7 @@ import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
 import { consentApi, reconcileConsent, type Consent, type ConsentApi } from './api';
 import { Icon } from '../navigation/Icon';
+import { sourceIcon } from './source-icons';
 
 type Load = 'loading' | 'ready' | 'error';
 
@@ -108,11 +109,11 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
       <div className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><p>{intl.formatMessage({ id: 'privacy.error' })}</p></div>
       <button type="button" className="btn btn-secondary" disabled={busy} onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
     </div>}
-    {load === 'ready' && items.length === 0 && <p className="note">{intl.formatMessage({ id: 'privacy.empty' })}</p>}
+    {load === 'ready' && items.length === 0 && <p className="empty-inline"><Icon name="privacy" size={18} />{intl.formatMessage({ id: 'privacy.empty' })}</p>}
     {load === 'ready' && items.length > 0 && <ul className="consents">
       {items.map(item => {
         const from = shortDate(new Date(item.grantedAt));
-        const sources = item.sources.map(code => intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })).join(' · ');
+
         const scopes = item.scopes.map(code => intl.formatMessage({ id: `scope.${code}`, defaultMessage: code })).join(' · ');
         const period = item.revokedAt
           ? intl.formatMessage({ id: 'privacy.periodRevoked' }, { from, date: shortDate(new Date(item.revokedAt)) })
@@ -124,13 +125,13 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
               <span className={`pill pill-status-${item.status}`}>{intl.formatMessage({ id: `status.${item.status}` })}</span>
             </div>
             <p className="consent-item-purpose">{intl.formatMessage({ id: 'consent.purposeShort' })}</p>
-            <p className="note">{sources}</p>
+            <p className="privacy-sources">{item.sources.map(code => <span key={code} className="privacy-source"><span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[code]?.icon ?? 'link'} size={15} /></span>{intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })}</span>)}</p>
             <p className="note">{intl.formatMessage({ id: 'privacy.scopes' }, { scopes })}</p>
-            <p className="mono seal-line">{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
+            <p className="mono seal-line privacy-period"><Icon name="calendar" size={14} />{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
           </div>
           {item.status === 'active' && confirming !== item.consentId &&
             <button type="button" className="btn btn-danger" disabled={busy} aria-label={intl.formatMessage({ id: 'privacy.revokeLabel' }, { id: item.consentId })} onClick={() => { setConfirming(item.consentId); setFailed(null); }}>
-              {intl.formatMessage({ id: 'privacy.revoke' })}
+              <Icon name="ban" size={16} />{intl.formatMessage({ id: 'privacy.revoke' })}
             </button>}
           {confirming === item.consentId && <div className="confirm" role="group" aria-label={intl.formatMessage({ id: 'privacy.confirmTitle' }, { id: item.consentId })}>
             <p><strong>{intl.formatMessage({ id: 'privacy.confirmTitle' }, { id: item.consentId })}</strong></p>
@@ -148,7 +149,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
       {pageCursors.length > 1 && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage(pageCursors.slice(0, -1))}>{intl.formatMessage({ id: 'privacy.previous' })}</button>}
       {nextCursor && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => changePage([...pageCursors, nextCursor])}>{intl.formatMessage({ id: 'privacy.next' })}</button>}
     </div>}
-    <p className="note privacy-foot">{intl.formatMessage({ id: 'privacy.foot' })}</p>
-    <div className="actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={onBack}>{intl.formatMessage({ id: 'privacy.back' })}</button></div>
+    <p className="note privacy-foot icon-label"><Icon name="info" size={16} />{intl.formatMessage({ id: 'privacy.foot' })}</p>
+    <div className="actions"><button type="button" className="btn btn-secondary" disabled={busy} onClick={onBack}><Icon name="back" size={16} />{intl.formatMessage({ id: 'privacy.back' })}</button></div>
   </section>;
 }
