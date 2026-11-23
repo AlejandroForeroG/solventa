@@ -336,6 +336,10 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with a stored notice': () => nativeNoticesWorld('stored'),
   'a native session with a notice offered to its device': () => nativeNoticesWorld('offered'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
+  'an active session with reports access': () => ({
+    identity: realIdentity(identityEnv, { ...activeSessionProvider, workspaces: async () => ['reports'] }),
+    sessionCookie: activeSessionCookie,
+  }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
   'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),
