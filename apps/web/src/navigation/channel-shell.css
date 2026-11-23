@@ -100,3 +100,17 @@
 @media (max-width: 400px) {
   .channel-layout:not(.channel-layout-signed-in) .locale-menu .menu-panel { right: auto; left: 0; transform-origin: top left; }
 }
+.topbar-login { gap: 6px; }
+.topbar-login-short { display: none; }
+@media (max-width: 460px) {
+  .topbar-login-long { display: none; }
+  .topbar-login-short { display: inline; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar { flex-wrap: nowrap; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar-tools { flex: none; justify-content: flex-end; margin-left: auto; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar-tools .btn { flex: none; }
+}
+@media (max-width: 340px) {
+  .channel-layout:not(.channel-layout-signed-in) .locale-code { display: none; }
+  .channel-layout:not(.channel-layout-signed-in) .channel-topbar-brand img { width: 92px; }
+}
+@media (min-width: 1080px) { .topbar-privacy { display: none; } }

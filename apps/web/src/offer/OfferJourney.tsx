@@ -58,6 +58,7 @@ export function OfferJourney(props: {
   resume?: PurchaseDraft;
   // An offer prepared for the customer, such as by an advisor: the journey starts at its review instead of creating one.
   initialOffer?: Offer;
+  holderName?: string;
   api?: FinancialApi;
   poll?: PollSchedule;
   onRequote: () => void;
@@ -409,7 +410,7 @@ export function OfferJourney(props: {
       <p>{t(phase.slow ? 'policy.slowDetail' : 'policy.preparingDetail')}</p>
       {phase.slow && <div className="actions"><button type="button" className="btn btn-primary" onClick={() => void waitForPolicy(phase.acceptance)}>{t('policy.refresh')}</button></div>}
     </section>}
-    {phase.name === 'review' && <PolicyDocument heading={heading} policy={phase.policy} stage="review" checked={checked} documentChanged={phase.documentChanged}
+    {phase.name === 'review' && <PolicyDocument heading={heading} policy={phase.policy} holderName={props.holderName} stage="review" checked={checked} documentChanged={phase.documentChanged}
       challenge={challenge} code={code} busy={challengeBusy} error={challengeError}
       onCode={setCode} onCheck={setChecked} onBegin={() => void beginChallenge(phase.policy)}
       onCancel={() => void cancelChallenge(phase.policy)} onConfirm={() => void issue(phase.policy)}
@@ -424,7 +425,7 @@ export function OfferJourney(props: {
     {phase.name === 'charged' && <ChargeConfirmed heading={heading} policy={phase.policy}
       onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); say('live.signatureReady'); }} />}
     {phase.name === 'signing' && <>
-      <PolicyDocument heading={heading} policy={phase.policy} stage="sign" checked={checked} documentChanged={false}
+      <PolicyDocument heading={heading} policy={phase.policy} holderName={props.holderName} stage="sign" checked={checked} documentChanged={false}
         challenge={challenge} code={code} busy={challengeBusy || phase.busy || phase.uncertain} error={challengeError}
         onCode={setCode} onCheck={setChecked} onBegin={() => void beginChallenge(phase.policy)}
         onCancel={() => void cancelChallenge(phase.policy)} onConfirm={() => void issue(phase.policy)} onContinue={() => {}} />
@@ -434,7 +435,7 @@ export function OfferJourney(props: {
       </div>}
     </>}
     {phase.name === 'chargeDeclined' && <ChargeDeclined heading={heading} policy={phase.policy} onRetry={onRequote} onBack={onBack} />}
-    {phase.name === 'issued' && <PolicyIssued heading={heading} policy={phase.policy} />}
+    {phase.name === 'issued' && <PolicyIssued heading={heading} policy={phase.policy} holderName={props.holderName} />}
     {(phase.name === 'recovering' || phase.name === 'refunded') && <section className="step card" aria-busy={phase.name === 'recovering' && phase.busy}>
       <h1 ref={heading} tabIndex={-1} className="h-card">{t(phase.name === 'refunded' ? 'policy.refundedTitle' : 'policy.refundingTitle')}</h1>
       <p>{t(phase.name === 'refunded' ? 'policy.refundedDetail' : 'policy.refundingDetail')}</p>

@@ -6,7 +6,8 @@ import '../policies/policies.css';
 import './claims.css';
 import { ClaimDisbursement } from './ClaimDisbursement';
 import { OwnClaimPayments } from './OwnClaimPayments';
-import { Icon } from '../navigation/Icon';
+import { Icon, type IconName } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 
 type ViewTab = 'overview' | 'documents' | 'tasks' | 'history';
 type AnalystAction = 'approve' | 'reject' | 'assign_expert' | 'request_information' | 'extend_requirement';
@@ -36,17 +37,19 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-main claim-case">
     <div className="page-title"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{t('customerCases')}</h1></div>
     <section className="card report-in-app" aria-labelledby="report-in-app-title">
-      <h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
-      <p className="note">{t('reportInApp.body')}</p>
+      <span className="report-in-app-icon" aria-hidden="true"><Icon name="info" size={20} /></span>
+      <div><h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
+      <p className="note">{t('reportInApp.body')}</p></div>
     </section>
-    {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
+    {error && <div role="alert" className="banner banner-error claims-banner"><Icon name="alert" size={18} className="banner-icon" /><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => { setError(''); setRevision(n => n + 1); }}><Icon name="refresh" size={16} />{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
-    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2></div>}
+    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2><p className="note">{t('customerEmptyHint')}</p><a className="btn btn-secondary" href="/prestadores"><Icon name="wrench" size={18} />{t('customerEmptyAction')}</a></div>}
     {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
       <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
+        <span className="icon-chip icon-chip-blue" aria-hidden="true"><Icon name="claims" size={20} /></span>
         <span className="mono own-claim-number">{claim.claimNumber}</span>
         <span className={'claims-badge claims-state-' + claim.state}>{t((claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span>
-        <span className="own-claim-open" aria-hidden="true">{t('openCase')}</span>
+        <span className="own-claim-open" aria-hidden="true">{t('openCase')}<Icon name="arrow" size={16} /></span>
       </a>
     </li>)}</ul>}
     <OwnClaimPayments onSessionLost={onSessionLost} />
@@ -77,28 +80,29 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
     return () => abort.abort();
   }, [claimId, audience, onSessionLost, revision]);
 
-  const clock = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota', timeZoneName: 'short' });
+  const clockShort = (value: string) => keepMeridiem(intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }));
+  const clock = (value: string) => clockShort(value) + ' ' + t('bogota');
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
-    {error !== 'not_found' && <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}><Icon name="back" size={16} />{t('caseBack')}</a>}
+    {error !== 'not_found' && <a className="btn btn-secondary btn-small back-link" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}><Icon name="back" size={16} />{t('caseBack')}</a>}
     {error && <div role="alert" className="audit-state"><p>{t('caseError.' + (error === 'not_found' && audience === 'case' ? 'not_found_case' : error))}</p>
       {error === 'not_found' ? <a className="btn btn-secondary" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
         : <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button>}
       {trace && <details className="audit-reference-details"><summary>{t('supportDetails')}</summary><span className="mono">{trace}</span></details>}</div>}
     {!claim && !error && <p role="status">{t('loading')}</p>}
     {claim && <>
-      <header className="claim-case-heading"><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
+      <header className="claim-case-heading"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{intl.formatMessage({ id: 'claims.caseTitle' }, { number: <span className="nowrap">{claim.claimNumber}</span> })}</h1>
         <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
-      {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
+      {confirmation && <p role="status" className="claim-confirmation"><Icon name="check" size={18} />{t('ack.' + confirmation)}</p>}
       {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <div className="claim-case-grid">
         <section className="case-card" aria-labelledby="claim-preview-title"><h2 id="claim-preview-title">{t('preview')}</h2>
           <dl className="case-fields">
-            <div><dt>{t('col.policy')}</dt><dd className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</dd></div>
-            <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
-            {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
-            <div><dt>{t('col.evidence')}</dt><dd>{claim.requiredEvidence ? t('evidenceRequired', { required: claim.requiredEvidence }) : t('noEvidenceRequired')}</dd></div>
+            <div><dt><Icon name="policy" size={16} />{t('col.policy')}</dt><dd className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</dd></div>
+            <div><dt><Icon name="calendar" size={16} />{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
+            {claim.eventType && <div><dt><Icon name="alert" size={16} />{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
+            <div><dt><Icon name="paperclip" size={16} />{t('col.evidence')}</dt><dd>{claim.requiredEvidence ? t('evidenceRequired', { required: claim.requiredEvidence }) : t('noEvidenceRequired')}</dd></div>
           </dl>
         </section>
         <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} />
@@ -114,35 +118,40 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
         <div className="claim-case-grid">
           <section className="case-card" role="tabpanel" id="claim-tab-panel" aria-labelledby={`claim-tab-${tab}`}>
             <h2>{t('section.' + tab)}</h2>
+            {tab === 'overview' && audience === 'customer' && claim.requirements.some(item => item.status === 'pending' && Date.parse(item.deadline) > Date.now()) && <div className="banner banner-info case-pending-task" role="status">
+              <Icon name="info" size={18} className="banner-icon" /><p><strong>{t('pendingTask')}</strong> {t('pendingTaskDetail')}</p>
+              <button type="button" className="btn btn-primary btn-small" onClick={() => { setTab('tasks'); document.getElementById('claim-tab-tasks')?.focus(); }}>{t('openTasks')}<Icon name="arrow" size={16} /></button>
+            </div>}
             {tab === 'overview' && <><dl className="case-fields">
-              <div><dt>{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>
-              <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
-              {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
-              {claim.place && <div><dt>{t('place')}</dt><dd>{claim.place}</dd></div>}
-            </dl>{claim.description && <p className="case-note">{claim.description}</p>}
+              <div><dt><Icon name="policy" size={16} />{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>
+              <div><dt><Icon name="calendar" size={16} />{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
+              {claim.eventType && <div><dt><Icon name="alert" size={16} />{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
+              {claim.place && <div><dt><Icon name="location" size={16} />{t('place')}</dt><dd>{claim.place}</dd></div>}
+            </dl>{claim.description && <div className="case-description"><p className="case-description-label">{t('descriptionLabel')}</p><p className="case-note">{claim.description}</p></div>}
             <h3>{t('caseNotices')}</h3>
-            {claim.notices.length === 0 && <p className="note">{t('noNotices')}</p>}
-            <ul className="case-list">{claim.notices.map(notice => <li key={notice.id}><span>{t('ack.' + notice.action)}</span><time dateTime={notice.at}>{clock(notice.at)}</time></li>)}</ul></>}
-            {tab === 'documents' && <>{claim.evidence.length === 0 && <p className="note">{t('noDocuments')}</p>}
-              <ul className="case-list">{claim.evidence.map((file, i) => <li key={file.id}>
-                <a href={download(file.id)}>{t('documentNumber', { number: i + 1 })}</a><span>{file.contentType} · {intl.formatNumber(file.byteSize / 1024, { maximumFractionDigits: 1 })} KB</span>
+            {claim.notices.length === 0 && <p className="empty-inline"><Icon name="info" size={18} />{t('noNotices')}</p>}
+            <ul className="case-list">{claim.notices.map(notice => <li key={notice.id}><span className="icon-label"><Icon name="check" size={16} />{t('ack.' + notice.action)}</span><time dateTime={notice.at}>{clock(notice.at)}</time></li>)}</ul></>}
+            {tab === 'documents' && <>{claim.evidence.length === 0 && <p className="empty-inline"><Icon name="file" size={18} />{t('noDocuments')}</p>}
+              <ul className="case-list case-files">{claim.evidence.map((file, i) => <li key={file.id}>
+                <span className="icon-chip icon-chip-sm icon-chip-slate" aria-hidden="true"><Icon name="file" size={16} /></span>
+                <a href={download(file.id)}>{t('documentNumber', { number: i + 1 })}</a><span className="note">{file.contentType} · {intl.formatNumber(file.byteSize / 1024, { maximumFractionDigits: 1 })} KB</span>
               </li>)}</ul></>}
             {tab === 'tasks' && <>
-              {!claim.requirements.length && !claim.history.some(item => item.expert) && <p className="note">{t('noTasks')}</p>}
+              {!claim.requirements.length && !claim.history.some(item => item.expert) && <p className="empty-inline"><Icon name="check" size={18} />{t('noTasks')}</p>}
               {claim.history.filter(item => item.expert).map(item => <article key={item.id} className="case-task">
-                <h3>{t('action.assign_expert')}</h3><p>{item.expert?.name}</p><p>{item.reason}</p><time dateTime={item.at}>{clock(item.at)}</time>
+                <h3 className="case-task-title"><span className="icon-chip icon-chip-sm icon-chip-violet" aria-hidden="true"><Icon name="user" size={16} /></span>{t('action.assign_expert')}</h3><p>{item.expert?.name}</p><p>{item.reason}</p><time dateTime={item.at}>{clock(item.at)}</time>
               </article>)}
               {claim.requirements.map(item => <article key={item.id} className="case-task">
-                <h3>{t('requirement')} · {t('requirement.' + item.status)}</h3><p className="case-note">{item.details}</p>
-                <dl className="case-fields"><div><dt>{t('recipient')}</dt><dd>{t('owner')}</dd></div><div><dt>{t('deadline')}</dt><dd>{clock(item.deadline)}</dd></div></dl>
+                <h3 className="case-task-title"><span className="icon-chip icon-chip-sm icon-chip-amber" aria-hidden="true"><Icon name="info" size={16} /></span>{t('requirement')} · {t('requirement.' + item.status)}</h3><p className="case-note">{item.details}</p>
+                <dl className="case-fields"><div><dt><Icon name="user" size={16} />{t('recipient')}</dt><dd>{t('owner')}</dd></div><div><dt><Icon name="clock" size={16} />{t('deadline')}</dt><dd>{clockShort(item.deadline)}</dd></div></dl>
                 {item.responseText && <p className="case-note">{item.responseText}</p>}
                 {item.evidenceIds.map((id, i) => <p key={id}><a href={download(id)}>{t('documentNumber', { number: i + 1 })}</a></p>)}
                 {audience === 'customer' && item.status === 'pending' && Date.parse(item.deadline) > Date.now()
                   && <RequirementForm key={item.id} claimId={claimId} requirementId={item.id} onDone={refresh} onSessionLost={onSessionLost} />}
-                {item.status === 'pending' && Date.parse(item.deadline) <= Date.now() && <p>{t('deadlinePassed')}</p>}
+                {item.status === 'pending' && Date.parse(item.deadline) <= Date.now() && <p className="banner banner-error"><Icon name="clock" size={18} className="banner-icon" /><span>{t('deadlinePassed')}</span></p>}
               </article>)}
             </>}
-            {tab === 'history' && <ol className="case-history">{claim.history.map(item => <li key={item.id}>
+            {tab === 'history' && <ol className="case-history case-timeline">{claim.history.map(item => <li key={item.id}>
               <strong>{t(audience === 'customer' && item.action !== 'submitted' ? 'ack.' + item.action : 'action.' + item.action)}</strong> <time dateTime={item.at}>{clock(item.at)}</time>
               {item.reason && <p className="case-note">{item.reason}</p>}
               {item.expert && <p>{item.expert.name}</p>}
@@ -161,6 +170,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
 }
 
 type ActionProps = { claimId: string; onDone(action: string): void; onSessionLost(): void };
+const actionIcon: Record<AnalystAction, IconName> = { approve: 'check', reject: 'close', assign_expert: 'user', request_information: 'send', extend_requirement: 'clock' };
 function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps & { claim: CaseRecord }) {
   const t = useClaimLabels();
   const [action, setAction] = useState<AnalystAction>();
@@ -216,11 +226,11 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   }
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
-    {claim.access === 'unassigned' ? <><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
-      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
+    {claim.access === 'unassigned' ? <><p className="note case-take-note">{t('takeHint')}</p><button type="button" className="btn btn-primary case-take" disabled={busy} onClick={() => void submit('take')}><Icon name="user" size={18} />{t('action.take')}</button></>
+      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger case-action-reject' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
-        onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}>{t('action.' + option)}</button>)}</div>}
-    {blocked && claim.access !== 'unassigned' && <p className="note">{t('missingEvidence')}</p>}
+        onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}><Icon name={actionIcon[option]} size={18} />{t('action.' + option)}</button>)}</div>}
+    {blocked && claim.access !== 'unassigned' && <p className="note icon-label"><Icon name="alert" size={16} />{t('missingEvidence')}</p>}
     {action && <form onSubmit={event => { event.preventDefault(); void submit(action); }}>
       <label className="field">{t(action === 'request_information' ? 'requiredDetails' : 'reason')}
         <textarea value={reason} onChange={event => setReason(event.target.value)} disabled={busy} minLength={10} maxLength={1000} required />
@@ -239,9 +249,9 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
       {(action === 'request_information' || action === 'extend_requirement') && <>
         <p>{t('recipient')} · {t('owner')}</p><label className="field">{t('deadline')}<input type="datetime-local" required value={deadline} disabled={busy} onChange={event => setDeadline(event.target.value)} /></label>
       </>}
-      <button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} type="submit" disabled={busy || (decision && selected.length === 0)}>{t('submit.' + action)}</button>
+      <button className={`btn ${action === 'reject' ? 'btn-danger' : 'btn-primary'}`} type="submit" disabled={busy || (decision && selected.length === 0)}><Icon name={actionIcon[action]} size={18} />{t('submit.' + action)}</button>
     </form>}
-    {error && <p role="alert" className="claims-error">{t('caseError.' + error)}</p>}
+    {error && <p role="alert" className="claims-error icon-label"><Icon name="alert" size={16} />{t('caseError.' + error)}</p>}
   </aside>;
 }
 
@@ -282,14 +292,16 @@ function RequirementForm({ claimId, requirementId, onDone, onSessionLost }: Acti
 
   return <form className="requirement-form" onSubmit={event => { event.preventDefault(); void send(); }}>
     <label>{t('response')}<textarea value={answer} maxLength={2000} disabled={busy} onChange={event => setAnswer(event.target.value)} /></label>
-    <label>{t('selectFiles')}<input type="file" multiple accept={fileTypes.join(',')} disabled={busy} onChange={event => {
+    <label className="file-picker">{t('selectFiles')}<span className="btn btn-secondary btn-small file-picker-button" aria-hidden="true"><Icon name="paperclip" size={16} />{t('chooseFiles')}</span><input className="file-picker-input" type="file" multiple accept={fileTypes.join(',')} disabled={busy} onChange={event => {
       const selected = Array.from(event.target.files ?? []);
       if (selected.length > 3 || selected.some(file => !fileTypes.includes(file.type) || file.size === 0)
         || selected.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) { setError('invalid'); event.target.value = ''; return; }
       setError(''); setFiles(selected);
     }} /></label>
-    {files.length > 0 && <ul className="case-list">{files.map(file => <li key={file.name + ':' + file.lastModified + ':' + file.size}>{file.name}</li>)}</ul>}
-    <button className="btn btn-primary" type="submit" disabled={busy || !valid}>{t('sendResponse')}</button>
-    {error && <p role="alert" className="claims-error">{t('caseError.' + error)}</p>}
+    <p className="note file-picker-state">{files.length ? t('filesSelected', { count: files.length }) : t('noFiles')}</p>
+    {files.length > 0 && <ul className="case-list case-files">{files.map(file => <li key={file.name + ':' + file.lastModified + ':' + file.size}><span className="icon-label"><Icon name="file" size={16} />{file.name}</span></li>)}</ul>}
+    <button className="btn btn-primary" type="submit" disabled={busy || !valid} aria-describedby={!valid ? 'requirement-hint' : undefined}><Icon name="send" size={18} />{t('sendResponse')}</button>
+    {!valid && <p id="requirement-hint" className="note icon-label"><Icon name="info" size={16} />{t('responseHint')}</p>}
+    {error && <p role="alert" className="claims-error icon-label"><Icon name="alert" size={16} />{t('caseError.' + error)}</p>}
   </form>;
 }

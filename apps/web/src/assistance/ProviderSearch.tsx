@@ -6,6 +6,11 @@ import { useIntl } from 'react-intl';
 import { fetchWithSession } from '../session-fetch';
 import { createRequest, listRequests, RequestError } from './requests';
 import type { RequestFailure } from './requests';
+import { Icon, type IconName } from '../navigation/Icon';
+
+const kindStyle: Record<AssistanceProviderMatch['kind'], { icon: IconName; tone: string }> = {
+  workshop: { icon: 'wrench', tone: 'amber' }, expert: { icon: 'user', tone: 'violet' }, roadside: { icon: 'truck', tone: 'blue' },
+};
 
 type Results = { state: 'idle' | 'loading' | 'unavailable' } | { state: 'ready'; providers: AssistanceProviderMatch[]; address: string };
 // What the customer is doing with a provider: reviewing the request, sending it, being told it failed, or seeing it stored.
@@ -96,9 +101,9 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
   }
 
   const busy = asking.kind !== 'idle';
-  return <main className="content">
-    <h1>{t('title')}</h1>
-    <p>{t('simulation')}</p>
+  return <main className="content assistance">
+    <div className="page-title"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="location" size={22} /></span><h1>{t('title')}</h1></div>
+    <p className="assistance-simulated"><span className="pill pill-pending"><Icon name="info" size={14} />{t('simulation')}</span></p>
     {asking.kind === 'done' && <section className="card assistance-result" aria-labelledby="assistance-done" aria-live="polite">
       <h2 id="assistance-done">{t('done.title')}</h2>
       <p>{t('reference')}</p>
@@ -121,20 +126,29 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
     {!busy && <>
     <form className="card field assistance-search" onSubmit={event => void submit(event)}>
       <label htmlFor="provider-place">{t('place')}</label>
-      <input id="provider-place" value={query} onChange={event => setQuery(event.target.value)} maxLength={160} />
-      <button className="btn btn-primary" type="submit" disabled={query.trim().length < 2}>{t('search')}</button>
+      <div className="assistance-search-row">
+        <span className="assistance-input"><Icon name="location" size={18} /><input id="provider-place" value={query} onChange={event => setQuery(event.target.value)} maxLength={160} /></span>
+        <button className="btn btn-primary" type="submit" disabled={query.trim().length < 2}><Icon name="search" size={18} />{t('search')}</button>
+      </div>
     </form>
-    {result.state === 'loading' && <p role="status">{t('loading')}</p>}
-    {result.state === 'unavailable' && <p role="alert">{t('unavailable')}</p>}
-    {result.state === 'ready' && result.providers.length === 0 && <p role="status">{t('empty')}</p>}
-    {result.state === 'ready' && result.providers.map(provider => <article className="card assistance-result" key={provider.id}>
-      <p>{t(provider.kind)}</p>
-      <h2>{provider.name}</h2>
-      <p>{provider.address}, {provider.city}</p>
-      <p>{t('contact')} · {provider.phone}</p>
-      <p>{t('hours')} · {provider.hours}</p>
-      <button className="btn btn-primary" type="button" onClick={() => review(provider, result.address)}>{t('request')}</button>
-    </article>)}
+    {result.state === 'idle' && <div className="card empty-state assistance-idle"><span className="empty-state-art" aria-hidden="true"><Icon name="search" size={30} /></span><h2>{t('idleTitle')}</h2><p className="note">{t('idleDetail')}</p></div>}
+    {result.state === 'loading' && <p role="status" className="assistance-status"><span className="spinner" aria-hidden="true" />{t('loading')}</p>}
+    {result.state === 'unavailable' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t('unavailable')}</span></p>}
+    {result.state === 'ready' && result.providers.length === 0 && <p role="status" className="empty-inline"><Icon name="search" size={18} />{t('empty')}</p>}
+    {result.state === 'ready' && result.providers.length > 0 && <p className="note assistance-count" role="status">{intl.formatMessage({ id: 'assistance.count' }, { count: result.providers.length })}</p>}
+    {result.state === 'ready' && result.providers.length > 0 && <ul className="assistance-results">{result.providers.map(provider => <li key={provider.id}><article className="card assistance-result">
+      <span className={`icon-chip icon-chip-${kindStyle[provider.kind].tone}`} aria-hidden="true"><Icon name={kindStyle[provider.kind].icon} size={20} /></span>
+      <div className="assistance-result-copy">
+        <p className="assistance-kind">{t(provider.kind)}</p>
+        <h2>{provider.name}</h2>
+        <ul className="assistance-facts">
+          <li><Icon name="location" size={16} /><span>{provider.address}, {provider.city}</span></li>
+          <li><Icon name="phone" size={16} /><a href={`tel:${provider.phone}`}>{t('contact')} · {provider.phone}</a></li>
+          <li><Icon name="clock" size={16} /><span>{t('hours')} · {provider.hours}</span></li>
+        </ul>
+        <button className="btn btn-primary" type="button" onClick={() => review(provider, result.address)}>{t('request')}</button>
+      </div>
+    </article></li>)}</ul>}
     </>}
     <section className="card assistance-result" aria-labelledby="assistance-mine">
       <h2 id="assistance-mine">{t('mine')}</h2>

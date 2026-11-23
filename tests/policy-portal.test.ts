@@ -140,7 +140,7 @@ test('the documents carry the policy facts and the product conditions', async ()
   const policy = await get('signed_policy');
   assert.equal(policy.fileName, `signed-policy-${record.policy.id.slice(0, 8)}.pdf`);
   const policyText = policy.lines.join('\n');
-  for (const expected of [record.policy.id, 'Suma asegurada: $ 320.000.000', 'Prima: $ 86.400 (pago único)', record.policy.documentHash, 'Emitida: 2026-10-15 21:00 (hora de Colombia)']) assert.ok(policyText.includes(expected), expected);
+  for (const expected of [record.policy.id, 'Suma asegurada: $ 320.000.000', 'Prima: $ 86.400 (pago único)', record.policy.documentHash, 'Emitida: 15 de octubre de 2026, 09:00 p. m. (hora de Bogotá)']) assert.ok(policyText.includes(expected), expected);
   const conditions = (await get('general_conditions')).lines.join('\n');
   assert.ok(conditions.includes(conditionsFor('vida_hipotecario', issued).version));
   for (const item of conditionsFor('vida_hipotecario', issued).exclusions) assert.ok(conditions.includes(item.code + ' ' + item.text));

@@ -13,3 +13,30 @@
 .portal-metrics dd { font: 600 28px 'Space Grotesk', sans-serif; font-variant-numeric: tabular-nums; }
 .portal-period { align-items: start; }
 .portal-period > .btn { margin-top: 24px; }
+.portal-period.card { padding: 18px 20px; }
+.portal-section-title { display: flex; align-items: center; gap: 10px; }
+.portal-reset { margin: 8px 0 4px; color: var(--ink); font-weight: 500; }
+.claims-badge.portal-result-accepted, .claims-badge.portal-result-completed { background: #e6f3ec; color: #175c3a; }
+.claims-badge.portal-result-preliminary { background: #fbf0dc; color: #7a4e05; }
+.claims-badge.portal-result-declined { background: #fbe9e7; color: #8a241c; }
+.portal-product { margin: 0 0 8px; font-weight: 600; color: var(--ink); }
+.portal-operations, .portal-versions { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.portal-operations li, .portal-versions li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.portal-operations .mono { font-weight: 500; overflow-wrap: anywhere; }
+.portal-method { padding: 2px 8px; border-radius: 6px; background: var(--brand); color: #fff; font: 700 11px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .04em; }
+.portal-version { font-weight: 600; color: var(--ink); }
+
+.portal-time-note { margin: 10px 0 0; font-size: 12.5px; }
+.portal-scopes { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.portal-scope { white-space: nowrap; padding: 2px 6px; border-radius: 6px; background: #f1efea; font: 500 12px/1.5 'IBM Plex Mono', ui-monospace, monospace; color: #3a424e; }
+.audit-card-table td .pill, .audit-card-table td .claims-badge { justify-self: start; width: fit-content; }
+@container (max-width: 760px) {
+  .audit-card-table.portal-tx-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 10px; padding: 12px 14px; }
+  .audit-card-table.portal-tx-table tbody td { display: block; padding: 0; border: 0; font-size: 13px; }
+  .audit-card-table.portal-tx-table td::before { display: none; }
+  .audit-card-table.portal-tx-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-weight: 600; font-size: 13.5px; }
+  .audit-card-table.portal-tx-table td:nth-child(4) { grid-column: 2; grid-row: 1; justify-self: end; }
+  .audit-card-table.portal-tx-table td:nth-child(2) { grid-column: 1; grid-row: 2; color: var(--ink-2); }
+  .audit-card-table.portal-tx-table td:nth-child(3) { grid-column: 2; grid-row: 2; color: var(--ink-3); text-align: right; white-space: nowrap; }
+  .audit-card-table.portal-tx-table td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; color: var(--ink-3); font-size: 12px; }
+}

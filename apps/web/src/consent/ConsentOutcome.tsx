@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Consent } from './api';
+import { Icon } from '../navigation/Icon';
 
 export function ConsentGranted({ consent, uncertain = false, onPanel, onBack, onOffer }: { consent: Consent; uncertain?: boolean; onPanel?: () => void; onBack: () => void; onOffer?: () => void }) {
   const intl = useIntl();
@@ -12,9 +13,12 @@ export function ConsentGranted({ consent, uncertain = false, onPanel, onBack, on
   const canContinue = !!onOffer && !uncertain && consent.status === 'active';
   return <section className="step card">
     <div className="result-head">
-      <div>
+      <div className="status-head granted-head">
+        <span className={`status-icon ${!uncertain && consent.status === 'active' ? 'status-icon-ok' : 'status-icon-pending'}`} aria-hidden="true"><Icon name={!uncertain && consent.status === 'active' ? 'check' : 'alert'} size={18} /></span>
+        <div>
         <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: uncertain ? 'granted.uncertain' : consent.status === 'active' ? 'granted.title' : `status.${consent.status}` })}</h1>
-        <p className="mono">{intl.formatMessage({ id: 'granted.id' })} {consent.consentId}</p>
+        <p className="granted-ref"><span>{intl.formatMessage({ id: 'granted.id' })}</span> <span className="mono">{consent.consentId}</span></p>
+        </div>
       </div>
       {!uncertain && <span className={`pill pill-status-${consent.status}`}>{consent.status === 'active'
         ? intl.formatMessage({ id: 'granted.validUntil' }, { date: dayMonthYear(new Date(consent.expiresAt)) })
@@ -22,9 +26,9 @@ export function ConsentGranted({ consent, uncertain = false, onPanel, onBack, on
     </div>
     <p>{intl.formatMessage({ id: uncertain ? 'granted.uncertainDetail' : consent.status === 'active' ? 'granted.detail' : 'granted.inactive' })}</p>
     <div className="actions">
-      {canContinue && <button type="button" className="btn btn-primary" onClick={onOffer}>{intl.formatMessage({ id: 'granted.offer' })}</button>}
-      {onPanel && <button type="button" className={`btn ${canContinue ? 'btn-secondary' : 'btn-primary'}`} onClick={onPanel}>{intl.formatMessage({ id: 'granted.panel' })}</button>}
-      <button type="button" className="btn btn-secondary" onClick={onBack}>{intl.formatMessage({ id: 'granted.back' })}</button>
+      {canContinue && <button type="button" className="btn btn-primary" onClick={onOffer}>{intl.formatMessage({ id: 'granted.offer' })}<Icon name="forward" size={18} /></button>}
+      {onPanel && <button type="button" className={`btn ${canContinue ? 'btn-secondary' : 'btn-primary'}`} onClick={onPanel}><Icon name="privacy" size={18} />{intl.formatMessage({ id: 'granted.panel' })}</button>}
+      <button type="button" className="btn btn-secondary" onClick={onBack}><Icon name="back" size={18} />{intl.formatMessage({ id: 'granted.back' })}</button>
     </div>
   </section>;
 }

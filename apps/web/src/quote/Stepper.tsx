@@ -1,4 +1,5 @@
 import { useIntl } from 'react-intl';
+import { Icon } from '../navigation/Icon';
 
 const STEPS = [1, 2, 3, 4, 5, 6, 7] as const;
 
@@ -14,7 +15,7 @@ export function Stepper({ current, available }: { current: number; available: nu
         const state = n === current ? 'current' : n < current ? 'done' : 'pending';
         return <li className={`stepper-item stepper-${state}`} key={n} aria-current={n === current ? 'step' : undefined}>
           {n > 1 && <span className={`stepper-link${n <= current ? ' stepper-link-done' : ''}`} aria-hidden="true" />}
-          <span className="stepper-dot" aria-hidden="true">{n}</span>
+          <span className="stepper-dot" aria-hidden="true">{state === 'done' ? <Icon name="check" size={14} /> : n}</span>
           <span className="stepper-name" aria-hidden="true">{name}</span>
           <span className="visually-hidden">{intl.formatMessage({ id: n > available ? 'stepper.locked' : 'stepper.step' }, { n, name })}</span>
         </li>;

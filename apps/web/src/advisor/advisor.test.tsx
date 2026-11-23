@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -20,8 +20,26 @@ it('requires explicit customer approval and retries an uncertain grant with the 
     return json({documentHash:'a'.repeat(64)});
   });vi.stubGlobal('fetch',fetch);
   // Only the policy selector and lifecycle state are consumed by this owner approval panel.
-  render(<I18n><AdvisorActions policy={{policyId} as PolicyDetail} onSessionLost={()=>{}}/></I18n>);
+  render(<I18n><AdvisorActions policy={{policyId} as PolicyDetail} onSessionLost={()=>{}}>
+    <label>Operación directa<input /></label>
+  </AdvisorActions></I18n>);
+  const user = userEvent.setup();
+  const table = screen.getByRole('table', { name: 'Autorizaciones de asesor' });
+  expect(within(table).getByRole('columnheader', { name: 'Estado' })).toBeVisible();
+  expect(screen.queryByRole('combobox', { name: '¿Quién hará la gestión?' })).not.toBeInTheDocument();
   await screen.findByText('Sin autorizaciones.');
+  await user.click(screen.getByRole('button', { name: 'Gestionar póliza' }));
+  const dialog = screen.getByRole('dialog', { name: 'Gestionar póliza' });
+  expect(dialog).toHaveAttribute('aria-modal', 'true');
+  expect(within(dialog).queryByRole('table')).not.toBeInTheDocument();
+  const mode = within(dialog).getByRole('combobox', { name: '¿Quién hará la gestión?' });
+  expect(mode).toHaveFocus();
+  await user.selectOptions(mode, 'direct');
+  expect(screen.getByRole('textbox', { name: 'Operación directa' })).toBeVisible();
+  expect(screen.queryByRole('textbox', { name: 'Referencia del asesor' })).not.toBeInTheDocument();
+  await user.selectOptions(mode, 'advisor');
+  expect(screen.queryByRole('textbox', { name: 'Operación directa' })).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Referencia del asesor' })).toBeVisible();
   const button=screen.getByRole('button',{name:'Autorizar'});expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Referencia del asesor'),{target:{value:reference}});
   expect(screen.getByLabelText('Actuación')).toHaveValue('');
@@ -32,6 +50,39 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   await userEvent.setup().click(button);await waitFor(()=>expect(posts).toHaveLength(2));
   expect(posts[0].headers).toEqual(posts[1].headers);expect(posts[0].body).toEqual(posts[1].body);
   expect(String(posts[0].body)).not.toContain('clientId');
+  await user.click(within(dialog).getByRole('button', { name: 'Cerrar gestión' }));
+  expect(screen.queryByRole('dialog', { name: 'Gestionar póliza' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Gestionar póliza' }));
+  fireEvent(screen.getByRole('dialog', { name: 'Gestionar póliza' }), new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Gestionar póliza' })).not.toBeInTheDocument();
+  expect(within(table).getByText('Sin autorizaciones.')).toBeVisible();
+});
+it('filters the owner table across pages and distinguishes approval from execution', async () => {
+  const executed = { ...approval, authorizationId: '55555555-5555-4555-8555-555555555555', status: 'executed', changeId: traceId };
+  const cursor = `${approval.grantedAt}|${approval.authorizationId}`;
+  const fetch = vi.fn(async (url: string) => url.includes('after=')
+    ? json({ authorizations: [executed], hasMore: false, nextCursor: null })
+    : json({ authorizations: [approval], hasMore: true, nextCursor: cursor }));
+  vi.stubGlobal('fetch', fetch);
+  const { container } = render(<I18n><AdvisorActions policy={{ policyId } as PolicyDetail} onSessionLost={() => {}} /></I18n>);
+  const table = screen.getByRole('table', { name: 'Autorizaciones de asesor' });
+  expect(await within(table).findByText('Aprobada', { exact: true })).toBeVisible();
+  expect(await axe(container)).toHaveNoViolations();
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por estado' }), 'executed');
+  const filtered = await screen.findByRole('table', { name: 'Autorizaciones de asesor' });
+  expect(await within(filtered).findByText('Ejecutada', { exact: true })).toBeVisible();
+  expect(within(filtered).queryByText('Aprobada', { exact: true })).not.toBeInTheDocument();
+  expect(fetch.mock.calls.some(([url]) => url.includes('after='))).toBe(true);
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por estado' }), 'revoked');
+  expect(await screen.findByText('No hay autorizaciones con este estado.')).toBeVisible();
+
+  fetch.mockResolvedValueOnce(json({ error: 'financial_unavailable' }, 503));
+  await user.click(screen.getByRole('button', { name: 'Actualizar' }));
+  expect(await within(table).findByRole('alert')).toHaveTextContent('No pudimos consultar las autorizaciones');
+  expect(within(table).getByRole('columnheader', { name: 'Estado' })).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Actualizar' }));
+  expect(await within(table).findByText('No hay autorizaciones con este estado.')).toBeVisible();
 });
 it('shows only addressed approvals, confirms the exact action and clears protected content on access revocation',async()=>{
   vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-11-11T00:00:00Z'));
@@ -54,8 +105,12 @@ it('lets the owner revoke an executed approval while preserving the execution hi
     if(init?.method==='POST'){expect(url).toContain('/revoke');revoked=true;return json({status:'ok',authorization:{...executed,revokedAt:'2026-11-11T00:00:00.000Z'},replayed:false});}
     return json({status:'ok',authorizations:[{...executed,revokedAt:revoked?'2026-11-11T00:00:00.000Z':null}],hasMore:false,nextCursor:null});
   });vi.stubGlobal('fetch',fetch);
-  render(<I18n><AdvisorActions policy={{policyId,lifecycle:{action:'cancelled'}} as PolicyDetail} onSessionLost={()=>{}}/></I18n>);
+  const lifecycle = { action: 'cancelled', at: approval.grantedAt, reason: 'customer_request', replacementPolicyId: null } as const;
+  render(<I18n><AdvisorActions policy={{policyId,lifecycle} as PolicyDetail} onSessionLost={()=>{}}/></I18n>);
   await userEvent.setup().click(await screen.findByRole('button',{name:'Revocar'}));
   await waitFor(()=>expect(screen.queryByRole('button',{name:'Revocar'})).not.toBeInTheDocument());
-  expect(screen.getByText(/Ejecutada/)).toBeVisible();expect(screen.getByText(/^Revocada:/)).toBeVisible();
+  const table = within(screen.getByRole('table', { name: 'Autorizaciones de asesor' }));
+  await table.findByText(/^Revocada:/);
+  expect(table.getByText('Ejecutada', { exact: true })).toBeVisible();
+  expect(table.getByText(/^Revocada:/)).toBeVisible();
 });

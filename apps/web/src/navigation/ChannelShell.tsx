@@ -28,8 +28,8 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
 ];
 const workspaceLinks: (typeof customerLinks[number] & { workspace: OperationalWorkspace })[] = [
   { workspace: 'claims', href: '/siniestros', label: 'claims.open', icon: 'claims' },
-  { workspace: 'audit', href: '/auditoria', label: 'audit.open', icon: 'audit' },
   { workspace: 'reports', href: '/reportes', label: 'reports.open', icon: 'reports' },
+  { workspace: 'audit', href: '/auditoria', label: 'audit.open', icon: 'audit' },
   { workspace: 'advisor', href: '/asesor', label: 'advisor.title', icon: 'advisor' },
   { workspace: 'partner', href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];
@@ -83,8 +83,8 @@ export function ChannelShell({ authenticated, workspaces, canLogin, busy, onLogo
         <a href="/" className={`channel-topbar-brand${authenticated ? ' channel-topbar-brand-mobile' : ''}`} aria-label={t('landing.home')} aria-disabled={busy || undefined} onClick={stopBusyNavigation}><img src={brandAssets.logo.green} alt="Solventa" width={150} /></a>
         {authenticated && <div className="channel-breadcrumb"><span>{area}</span><span aria-hidden="true">/</span><span>{t(current?.label ?? 'navigation.home')}</span></div>}
         <div className="channel-topbar-tools"><LocaleSwitch />
-          {canLogin && <a className="btn btn-primary btn-small" href="/auth/login" onClick={onLogin}>{t('session.title')}</a>}
-          {authenticated && !workspace && path !== '/cotizar' && <IconLink label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
+          {canLogin && <a className="btn btn-primary btn-small topbar-login" href="/auth/login" aria-label={t('session.title')} onClick={onLogin}><Icon name="login" size={16} /><span className="topbar-login-long">{t('session.title')}</span><span className="topbar-login-short" aria-hidden="true">{t('session.titleShort')}</span></a>}
+          {authenticated && !workspace && path !== '/cotizar' && <IconLink className="topbar-privacy" label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
           {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
             content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
             entries={accountEntries} />}

@@ -6,6 +6,7 @@ import '../audit/audit.css';
 import '../claims/claims.css';
 import './reports.css';
 import { Icon } from '../navigation/Icon';
+import { keepMeridiem } from '../i18n/I18n';
 
 type Filter = 'all' | Destination;
 type State = { kind: 'loading' | 'hidden' } | { kind: 'ready'; page: ReportsPage } | Exclude<ReportsOutcome<never>, { kind: 'ok' }>;
@@ -91,15 +92,17 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
     <div className="audit-main">
       <div className="audit-heading"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="reports" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
-      <form className="reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
+      <form className="card reports-form" aria-labelledby="reports-form-title" onSubmit={event => { event.preventDefault(); void generate(); }}>
+        <h2 id="reports-form-title" className="reports-form-title"><Icon name="file" size={18} />{t('form')}</h2>
         <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{month(option)}</option>)}</select></label>
         <label>{t('destination')}<select value={destination} onChange={event => setDestination(event.target.value as Destination)}>
           {DESTINATIONS.map(option => <option key={option} value={option}>{t(`destination.${option}`)}</option>)}</select></label>
         <p className="reports-format"><span>{t('format')}</span>{t('formatValue')}</p>
-        <button className="btn btn-primary" type="submit" disabled={busy !== null}>{busy === 'generate' ? t('generating') : t('generate')}</button>
+        <button className="btn btn-primary" type="submit" disabled={busy !== null}><Icon name="file" size={18} />{busy === 'generate' ? t('generating') : t('generate')}</button>
       </form>
       {notice && notice.text && <p className={notice.kind === 'alert' ? 'claims-error' : 'note'} role={notice.kind}>{notice.text}</p>}
-      <div role="group" aria-label={t('filterGroup')} className="claims-filters reports-filters">
+      <p className="section-label reports-filter-label" id="reports-filter-label">{t('filterGroup')}</p>
+      <div role="group" aria-labelledby="reports-filter-label" className="claims-filters reports-filters">
         {(['all', ...DESTINATIONS] as const).map(option => <button key={option} type="button" className="claims-filter" aria-pressed={filter === option}
           onClick={() => { moveFocus.current = true; setFilter(option); setBefore(undefined); }}>{t(`destination.${option}`)}</button>)}
       </div>
@@ -114,21 +117,21 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
           <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
             <td data-label={t('col.period')}><span id={label}>{month(report.period)} · {t(`destination.${report.destination}`)}</span></td>
             <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
-            <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
+            <td className="mono" data-label={t('col.generated')}>{keepMeridiem(intl.formatDate(report.generatedAt, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }))}</td>
             <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
             <td className="mono" data-label={t('col.rows')}>{t('rows', { count: report.manifest.rowCount })}</td>
             <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>
-              {report.delivery?.rejectionCode && <span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span>}</td>
+              {report.delivery?.rejectionCode && <><span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span><span className="note reports-next">{t('rejectionNext')}</span></>}</td>
             <td className="reports-actions" data-label={t('col.actions')}><div>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} aria-label={t('downloadCsv')} onClick={() => void download(report, 'csv')}><Icon name="download" size={16} />{t('csvShort')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} aria-label={t('downloadManifest')} onClick={() => void download(report, 'manifest')}><Icon name="download" size={16} />{t('manifestShort')}</button>
               {!isFinal(report) && confirming !== report.reportId && <button type="button" id={`report-send-${report.reportId}`} className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
                 onClick={() => { if (status && status !== 'pending') void send(report); else setConfirming(report.reportId); }}>
-                {busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
+                <Icon name={status && status !== 'pending' ? 'refresh' : 'send'} size={16} />{busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
             </div>
             {confirming === report.reportId && <div className="reports-confirm" role="group" aria-label={t('confirmTitle')}>
               <p className="note">{t('confirmSend', { month: month(report.period), revision: report.revision, rows: report.manifest.rowCount, destination: t(`destination.${report.destination}`) })}</p>
-              <div><button type="button" id={`report-confirm-${report.reportId}`} className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}>{t('confirmButton')}</button>
+              <div><button type="button" id={`report-confirm-${report.reportId}`} className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}><Icon name="send" size={16} />{t('confirmButton')}</button>
                 <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => { const id = confirming; setConfirming(null); requestAnimationFrame(() => document.getElementById(`report-send-${id}`)?.focus()); }}>{t('cancelSend')}</button></div>
             </div>}</td>
           </tr>; })}</tbody></table></div>

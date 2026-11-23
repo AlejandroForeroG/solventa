@@ -8,7 +8,7 @@ it('presents sealed values readably while retaining unknown fields and verificat
   const bytes = JSON.stringify(document);
   const { container } = render(<I18n initial="es-CO"><DocumentFields document={document} /></I18n>);
   expect(screen.getByText(/200\.000\.000,125/)).toBeInTheDocument();
-  expect(screen.getByText('Vida deudor hipotecario')).toBeInTheDocument();
+  expect(screen.getByText('Vida · saldo deudor')).toBeInTheDocument();
   expect(screen.getByText('Original clause')).toBeInTheDocument();
   expect(container.querySelector('details')).toHaveTextContent('original-offer');
   expect(container.querySelector('pre')).toBeNull();

@@ -35,6 +35,9 @@ export const assistanceEs = {
   'assistance.mineEmpty': "Aún no tienes solicitudes.",
   'assistance.mineFailed': "No pudimos cargar tus solicitudes.",
   'assistance.retry': "Reintentar",
+  'assistance.idleTitle': "Busca prestadores cerca de ti",
+  'assistance.count': "{count, plural, one {# prestador encontrado} other {# prestadores encontrados}}",
+  'assistance.idleDetail': "Escribe una ciudad o una dirección para ver talleres, peritos y asistencia en vía del directorio simulado.",
 };
 
 export const assistanceEn: Record<keyof typeof assistanceEs, string> = {
@@ -74,4 +77,7 @@ export const assistanceEn: Record<keyof typeof assistanceEs, string> = {
   'assistance.mineEmpty': "You have no requests yet.",
   'assistance.mineFailed': "We could not load your requests.",
   'assistance.retry': "Retry",
+  'assistance.idleTitle': "Find providers near you",
+  'assistance.count': "{count, plural, one {# provider found} other {# providers found}}",
+  'assistance.idleDetail': "Type a city or an address to see workshops, experts and roadside assistance from the simulated directory.",
 };

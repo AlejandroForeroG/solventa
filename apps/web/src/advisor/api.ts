@@ -29,7 +29,8 @@ async function request<T>(path:string,options:RequestInit,valid:(v:Record<string
 }
 export function readApprovals(policyId:string|null,signal?:AbortSignal,after?:string):Promise<Outcome<ApprovalList>> {
   const path=(policyId?`/api/v1/policies/${encodeURIComponent(policyId)}/advisor-authorizations`:'/api/v1/advisor-authorizations')+(after?'?'+new URLSearchParams({after}):'');
-  return request(path,{method:'GET',signal},v=>{
+  const deadline = AbortSignal.timeout(12_000);
+  return request(path,{method:'GET',signal:signal ? AbortSignal.any([signal, deadline]) : deadline},v=>{
     if(!Array.isArray(v.authorizations)||v.authorizations.length>20||!v.authorizations.every(validApproval)||typeof v.hasMore!=='boolean'||(v.hasMore&&(typeof v.nextCursor!=='string'||v.nextCursor.length>80||!/^\d{4}-.*\|[a-f0-9-]{36}$/i.test(v.nextCursor)))
       ||(policyId?v.authorizations.some(a=>a.policyId!==policyId):!uuid(v.advisorReference)||v.authorizations.some(a=>a.advisorReference!==v.advisorReference)))return null;
     return{authorizations:v.authorizations,hasMore:v.hasMore,nextCursor:typeof v.nextCursor==='string'?v.nextCursor:null,...(uuid(v.advisorReference)?{advisorReference:v.advisorReference}:{})};

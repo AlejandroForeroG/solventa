@@ -46,8 +46,9 @@ describe('my policies', () => {
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=renewal');
     show();
     expect(await screen.findByRole('tab', { name: 'Gestionar', selected: true })).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
-    expect(screen.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
+    const dialog = within(await screen.findByRole('dialog', { name: 'Gestionar póliza' }));
+    expect(dialog.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
+    expect(dialog.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
     expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
   });
   it('opens the requested documents and abandons that selection when returning to the list', async () => {
@@ -127,7 +128,6 @@ describe('my policies', () => {
     const exclusions = screen.getByRole('region', { name: 'Exclusiones' });
     expect(within(exclusions).getAllByRole('listitem')).toHaveLength(2);
     expect(within(exclusions).getByText('Actos intencionales del asegurado dirigidos a producir el siniestro.')).toBeVisible();
-    await user.click(within(exclusions).getByText('Datos de verificación'));
     expect(within(exclusions).getByText(/academic-conditions-1/)).toBeVisible();
   });
 
@@ -159,7 +159,7 @@ describe('my policies', () => {
       [`/api/v1/policies/${policyId}/documents/signed_policy`]: () => pdf });
     const createObjectURL = vi.fn(() => 'blob:synthetic'), revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { expect(this.download).toBe('signed-policy-10000000.pdf'); });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { expect(this.download).toBe('poliza-POL-10000000.pdf'); });
     show(); const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /^Ver detalle de/ }));
     await user.click(await screen.findByRole('tab', { name: 'Documentos' }));
@@ -257,7 +257,6 @@ describe('my policies', () => {
     await user.click(card);
     expect(await screen.findByRole('tab', { name: 'Information' })).toBeVisible();
     expect(screen.getByText('The original policy conditions are displayed in Spanish.')).toBeVisible();
-    await user.click(screen.getByText('Verification details'));
     expect(screen.getByText(/The contract text is shown in Spanish/)).toBeVisible();
   });
 

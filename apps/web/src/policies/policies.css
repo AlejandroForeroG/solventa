@@ -36,6 +36,49 @@
 .policy-payment-paid { background: #e6f3ec; color: #175c3a; }
 .policy-payment-pending { background: #fbf0dc; color: #7a4e05; }
 .policy-payment-failed { background: #fbe9e7; color: #8a241c; }
+.advisor-approval-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.advisor-approval-header .h-card { margin: 0; }
+.advisor-approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.advisor-approval-filter { max-width: 260px; }
+.advisor-revoked-date { display: block; margin-top: 6px; }
+.advisor-approval-references { margin-top: 6px; }
+.advisor-approval-references summary { color: var(--brand-strong); cursor: pointer; }
+.advisor-approval-references dl { margin: 6px 0 0; }
+.advisor-approval-references dt { color: var(--ink-2); }
+.advisor-approval-references dd { margin: 0 0 6px; overflow-wrap: anywhere; }
+.policy-management-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.policy-management-dialog::backdrop { background: rgb(6 28 25 / 42%); }
+.policy-management-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.policy-management-header .h-card { margin: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
+.policy-management-header .icon-action::after { left: auto; right: 0; transform: translateY(-2px); }
+.policy-management-header .icon-action:is(:hover, :focus-visible, :active)::after { transform: none; }
+.policy-management-body { padding: 16px 20px 20px; }
+.advisor-table-feedback p { margin: 0; }
 @media (max-width: 600px) {
   .policy-facts { grid-template-columns: 1fr; }
   /* Each payment becomes a labelled block so no column is squeezed; the header stays available to screen readers. */
@@ -44,6 +87,10 @@
   .policy-table tr { padding: 8px 0; border-bottom: 1px solid #e3e1dc; }
   .policy-table td { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 0; text-align: right; }
   .policy-table td::before { content: attr(data-label); flex: none; font: 600 14px/1.5 'IBM Plex Sans', sans-serif; color: #485563; text-align: left; }
+  .advisor-approval-table td { align-items: flex-start; }
+  .advisor-approval-table td > * { min-width: 0; }
+  .advisor-table-feedback td { display: block; text-align: start; }
+  .advisor-table-feedback td::before { content: none; }
 }
 @media (prefers-reduced-motion: reduce) { .policy-card { transition: none; } }
 .replacement-choices { display: grid; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
@@ -57,3 +104,81 @@
 .copy-value-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .copy-value-text { flex: 1 1 220px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f7; font-size: 13px; overflow-wrap: anywhere; user-select: all; }
 .copy-value-status { min-height: 1.2em; margin: 0; font-size: 12.5px; }
+.policy-card { position: relative; padding-right: 52px; }
+.policy-card-head { flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 14px; }
+.policy-card-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 13px; background: var(--mint-tint); color: var(--brand-strong); }
+.policy-card-icon-flight_delay { background: var(--blue-tint); color: var(--blue-ink); }
+.policy-card-icon-weather_event { background: var(--violet-tint); color: var(--violet-ink); }
+.policy-card-title { display: grid; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.policy-card-head > .pill { margin-left: auto; }
+.policy-card-meta { padding-top: 12px; border-top: 1px solid #edebe6; }
+.policy-card-fact { display: inline-flex; align-items: center; gap: 8px; }
+.policy-card-fact svg { flex: none; color: var(--ink-3); }
+.policy-card-arrow { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: var(--brand); transition: transform 160ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .policy-card:hover .policy-card-arrow { transform: translate(3px, -50%); } }
+.policy-list .policy-card .note { font-size: 12px; }
+.doc-files li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; }
+.doc-file-icon { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; height: 50px; border: 1px solid #e0ddd6; border-radius: 8px; background: #fff; color: var(--ink-3); }
+.doc-file-icon > span { position: absolute; bottom: -6px; padding: 1px 5px; border-radius: 4px; background: #8a241c; color: #fff; font: 700 9px/1.3 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; }
+.doc-file-copy { display: grid; gap: 2px; min-width: 0; }
+.doc-file-copy strong { color: var(--ink); }
+.doc-file-name { font-size: 11.5px; font-weight: 400; color: var(--ink-3); overflow-wrap: anywhere; }
+.doc-saved:empty { display: none; }
+.doc-saved { margin-top: 12px; }
+.policy-empty h2 { text-wrap: balance; }
+@media (max-width: 600px) {
+  .policy-card { padding: 20px 44px 20px 18px; }
+  .policy-card-arrow { right: 14px; }
+  .policy-card-head { flex-wrap: wrap; }
+  .policy-card-head > .pill { margin-left: 58px; }
+  .policy-card-meta { flex-direction: column; gap: 6px; }
+  .doc-files li { grid-template-columns: auto minmax(0, 1fr); }
+  .doc-files li > .btn { grid-column: 1 / -1; justify-self: stretch; }
+}
+.sale-form-label { display: flex; align-items: center; gap: 8px; margin: 18px 0 12px; }
+.sale-form-label svg { color: var(--brand); }
+.policy-section form > .sale-form-label:first-child { margin-top: 4px; }
+.sale-offer { display: grid; gap: 4px; margin-top: 16px; padding: 16px; border-radius: 14px; border: 1px solid; }
+.sale-offer p { margin: 0; }
+.sale-offer-ok { background: #f1faf6; border-color: #bfe0cd; }
+.sale-offer-pending { background: var(--amber-tint); border-color: #edd8ae; }
+.sale-offer-head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.sale-offer-ok .sale-offer-head svg { color: #1f7a4d; }
+.sale-offer-pending .sale-offer-head svg { color: var(--amber-ink); }
+.sale-offer .copy-value { margin-bottom: 0; }
+.advisor-approval-table .btn { white-space: nowrap; overflow-wrap: normal; }
+.advisor-approval-table td:last-child { overflow-wrap: normal; }
+.advisor-approval-table time { overflow-wrap: normal; }
+@media (max-width: 600px) {
+  .policy-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 0; }
+  .policy-tabs::-webkit-scrollbar { display: none; }
+  .policy-tabs [role='tab'] { flex: none; padding: 10px; font-size: 13.5px; }
+}
+.copy-value-row { flex-wrap: nowrap; align-items: flex-start; }
+.copy-value-text { flex: 1 1 0; }
+.policy-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; }
+.policy-card-head > .pill { margin-left: 0; }
+@media (max-width: 600px) {
+  .policy-card-head { grid-template-columns: auto minmax(0, 1fr); row-gap: 8px; }
+  .policy-card-icon { align-self: start; }
+  .policy-card-head > .pill { grid-column: 2; justify-self: start; margin-left: 0; }
+  .policy-card-icon { width: 40px; height: 40px; }
+}
+.advisor-approval-header { flex-wrap: nowrap; align-items: flex-start; }
+.advisor-approval-header .h-card { flex: 1 1 auto; min-width: 0; }
+.advisor-approval-actions { flex: none; flex-wrap: nowrap; }
+@media (max-width: 600px) { .advisor-approval-header:has(.btn-primary) { flex-wrap: wrap; } }
+@media (max-width: 360px) {
+  .policy-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .policy-tabs [role='tab'] { padding: 10px 6px; text-align: center; }
+}
+
+.doc-file-icon > span { background: #3d434c; }
+.advisor-approval-references summary { white-space: nowrap; }
+.table-time-note { margin: 10px 0 0; font-size: 12.5px; }
+.policy-management-intro { margin: 0 0 14px; }
+.policy-management-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px 18px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) {
+  .advisor-approval-table td.cell-empty { display: none; }
+  .policy-management-footer .btn { width: 100%; }
+}
