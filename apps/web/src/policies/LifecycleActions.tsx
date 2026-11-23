@@ -21,6 +21,8 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
   const shortId = (id: string) => `POL-${id.slice(0, 8).toUpperCase()}`;
   const money = (value: string) => intl.formatNumber(Number(value), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
   useEffect(() => {
+    if (!eligible || !action || action === 'cancelled') return;
+    setChoiceState('loading');
     const controller = new AbortController();
     void (async () => {
       const found: PolicySummary[] = [];
@@ -37,7 +39,7 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
       setChoices(found.filter(item => item.policyId !== policy.policyId && !item.contractStatus && item.product === policy.product)); setChoiceState('ready');
     })().catch(() => { if (!controller.signal.aborted) setChoiceState('failed'); });
     return () => controller.abort();
-  }, [policy.policyId, policy.product, onSessionLost]);
+  }, [action, eligible, policy.policyId, policy.product, onSessionLost]);
   async function submit() {
     if (!confirmed || busy || !eligible || !action) return;
     setBusy(true); setError('');
@@ -62,7 +64,8 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
     <p>{t('reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(policy.lifecycle.reason) : policy.lifecycle.reason}</p>{policy.lifecycle.replacementPolicyId && <p className="mono">{t('replacement')}: {policy.lifecycle.replacementPolicyId}</p>}
     <p>{t('recorded')}</p>
   </section>;
-  return <section className="card policy-section" aria-labelledby="lifecycle-title"><h2 id="lifecycle-title" className="h-card">{t('manage')}</h2>
+  return <details className="card policy-section policy-management-disclosure policy-direct-actions" open={initialAction ? true : undefined}>
+    <summary>{t('manage')}</summary>
     <div className="field"><label htmlFor="lifecycle-operation">{t('operation')}</label><select id="lifecycle-operation" value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action | ''); setConfirmed(false); setError(''); }}>
       <option value="" disabled>{t('choose')}</option>
       {actions.map(value => <option key={value} value={value}>{t(value)}</option>)}
@@ -85,5 +88,5 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
     {error && <p role="alert">{t(error)}</p>}
     {action && <div className="actions"><button type="button" className={`btn ${action === 'cancelled' ? 'btn-danger' : 'btn-primary'}`} disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
       onClick={() => void submit()}>{busy ? t('saving') : t(`submit.${action}`)}</button></div>}
-  </section>;
+  </details>;
 }

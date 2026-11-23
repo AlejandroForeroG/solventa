@@ -27,6 +27,7 @@ it('the customer authorizes an advisor only after confirming, lists it and revok
     return json({ items });
   }));
   const { container } = render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Autorizar a un asesor' }));
   await screen.findByText('Sin autorizaciones.');
   const button = screen.getByRole('button', { name: 'Autorizar' });
   expect(button).toBeDisabled();
@@ -48,6 +49,7 @@ it('the customer authorizes an advisor only after confirming, lists it and revok
 it('an unknown advisor reference is reported without creating anything', async () => {
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? json({ error: 'advisor_not_found' }, 404) : json({ items: [] })));
   render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Autorizar a un asesor' }));
   await screen.findByText('Sin autorizaciones.');
   const user = userEvent.setup();
   fireEvent.change(screen.getByLabelText('Referencia del asesor'), { target: { value: reference } });
@@ -68,8 +70,15 @@ it('the customer opens the offer an advisor prepared without creating another on
     return json({ error: 'not_found' }, 404);
   }));
   render(<I18n><CustomerSalePortal onSessionLost={() => {}} /></I18n>);
-  await screen.findByText('Sin autorizaciones.');
   const user = userEvent.setup();
+  expect(screen.queryByLabelText('Código de la oferta')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Referencia del asesor')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Continuar una oferta preparada' }));
+  expect(screen.getByRole('heading', { name: 'Continuar una oferta preparada' })).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: 'Volver a Mi asesor' }));
+  expect(screen.getByRole('heading', { name: 'Mi asesor' })).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: 'Continuar una oferta preparada' }));
+  expect(requests).not.toContain('GET /api/v1/me/advisor-sale-authorizations');
   fireEvent.change(screen.getByLabelText('Código de la oferta'), { target: { value: '66666666-6666-4666-8666-666666666666' } });
   await user.click(screen.getByRole('button', { name: 'Revisar oferta' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('No encontramos una oferta tuya con ese código.');

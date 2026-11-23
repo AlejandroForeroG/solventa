@@ -6,6 +6,7 @@ export const saleEs = {
   'sale.advisor': 'Asesor', 'sale.expires': 'Vence', 'sale.bogota': '(hora de Bogotá)', 'sale.revoked': 'Revocada', 'sale.revoke': 'Revocar', 'sale.empty': 'Sin autorizaciones.', 'sale.loading': 'Consultando…',
   'sale.code': 'Código de autorización', 'sale.active': 'Activa', 'sale.expired': 'Vencida',
   'sale.continueTitle': 'Continuar una oferta preparada',
+  'sale.backToAdvisor': 'Volver a Mi asesor', 'sale.myAuthorizations': 'Mis autorizaciones',
  
   'sale.offerCode': 'Código de la oferta', 'sale.openOffer': 'Revisar oferta',
   'sale.offerNotFound': 'No encontramos una oferta tuya con ese código.', 'sale.consentRequired': 'Necesitas tu autorización de datos vigente. Otórgala en Privacidad desde Cotizar y vuelve a abrir la oferta.',
@@ -27,6 +28,7 @@ export const saleEn = {
   'sale.advisor': 'Advisor', 'sale.expires': 'Expires', 'sale.bogota': '(Bogotá time)', 'sale.revoked': 'Revoked', 'sale.revoke': 'Revoke', 'sale.empty': 'No authorizations.', 'sale.loading': 'Loading…',
   'sale.code': 'Authorization code', 'sale.active': 'Active', 'sale.expired': 'Expired',
   'sale.continueTitle': 'Continue a prepared offer',
+  'sale.backToAdvisor': 'Back to My advisor', 'sale.myAuthorizations': 'My authorizations',
  
   'sale.offerCode': 'Offer code', 'sale.openOffer': 'Review offer',
   'sale.offerNotFound': 'We could not find an offer of yours with that code.', 'sale.consentRequired': 'You need a current data authorization. Grant it in Privacy from Quote and open the offer again.',

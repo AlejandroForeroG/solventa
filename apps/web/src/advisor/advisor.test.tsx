@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -22,6 +22,7 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   // Only the policy selector and lifecycle state are consumed by this owner approval panel.
   render(<I18n><AdvisorActions policy={{policyId} as PolicyDetail} onSessionLost={()=>{}}/></I18n>);
   await screen.findByText('Sin autorizaciones.');
+  await userEvent.setup().click(screen.getByText('Nueva autorización', { selector: 'summary' }));
   const button=screen.getByRole('button',{name:'Autorizar'});expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Referencia del asesor'),{target:{value:reference}});
   expect(screen.getByLabelText('Actuación')).toHaveValue('');
@@ -32,6 +33,26 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   await userEvent.setup().click(button);await waitFor(()=>expect(posts).toHaveLength(2));
   expect(posts[0].headers).toEqual(posts[1].headers);expect(posts[0].body).toEqual(posts[1].body);
   expect(String(posts[0].body)).not.toContain('clientId');
+});
+it('filters the owner table across pages and distinguishes approval from execution', async () => {
+  const executed = { ...approval, authorizationId: '55555555-5555-4555-8555-555555555555', status: 'executed', changeId: traceId };
+  const cursor = `${approval.grantedAt}|${approval.authorizationId}`;
+  const fetch = vi.fn(async (url: string) => url.includes('after=')
+    ? json({ authorizations: [executed], hasMore: false, nextCursor: null })
+    : json({ authorizations: [approval], hasMore: true, nextCursor: cursor }));
+  vi.stubGlobal('fetch', fetch);
+  const { container } = render(<I18n><AdvisorActions policy={{ policyId } as PolicyDetail} onSessionLost={() => {}} /></I18n>);
+  const table = await screen.findByRole('table', { name: 'Autorizaciones de asesor' });
+  expect(within(table).getByText('Aprobada', { exact: true })).toBeVisible();
+  expect(await axe(container)).toHaveNoViolations();
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por estado' }), 'executed');
+  const filtered = await screen.findByRole('table', { name: 'Autorizaciones de asesor' });
+  expect(within(filtered).getByText('Ejecutada', { exact: true })).toBeVisible();
+  expect(within(filtered).queryByText('Aprobada', { exact: true })).not.toBeInTheDocument();
+  expect(fetch.mock.calls.some(([url]) => url.includes('after='))).toBe(true);
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por estado' }), 'revoked');
+  expect(await screen.findByText('No hay autorizaciones con este estado.')).toBeVisible();
 });
 it('shows only addressed approvals, confirms the exact action and clears protected content on access revocation',async()=>{
   vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-11-11T00:00:00Z'));

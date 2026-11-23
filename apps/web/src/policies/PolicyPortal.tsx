@@ -210,8 +210,9 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
         {tab === 'manage' && <>
-          <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
+          {policy.lifecycle && <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />}
           <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
+          {!policy.lifecycle && <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />}
         </>}
       </div>
     </>}

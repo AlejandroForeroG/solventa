@@ -6,6 +6,7 @@ import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
 import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
+import './customer-sale.css';
 import { Icon } from '../navigation/Icon';
 
 type Load = { kind: 'loading' } | { kind: 'ready'; items: SaleAuthorization[] } | { kind: 'failed'; reason: string };
@@ -35,8 +36,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     finally { setBusy(false); }
   }
   const valid = uuid(reference) && confirmed;
-  return <section className="card policy-section" aria-labelledby="sale-authorizations-heading">
-    <h2 id="sale-authorizations-heading" className="h-card">{t('authorizeTitle')}</h2>
+  return <section className="card sale-flow" aria-labelledby="sale-flow-title">
     <p className="note">{t('authorizeScope')}</p>
     <form onSubmit={event => { event.preventDefault(); if (valid) void run(() => grantSaleAuthorization({ advisorReference: reference.toLowerCase(), validityDays: days })); }}>
       <div className="grid">
@@ -48,6 +48,8 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
       <div className="actions"><button className="btn btn-secondary" type="submit" disabled={busy || !valid}>{busy ? t('saving') : t('authorize')}</button></div>
     </form>
     {error && <p role="alert">{t(error)}</p>}
+    <div className="sale-authorization-history">
+    <h2 className="h-card">{t('myAuthorizations')}</h2>
     {load.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {load.kind === 'failed' && <p role="alert">{t(load.reason)}</p>}
     {load.kind === 'ready' && (load.items.length ? <>
@@ -66,6 +68,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}>{t('revoke')}</button>}</li>)}</ul></details>}
     </>
       : <p>{t('empty')}</p>)}
+    </div>
   </section>;
 }
 
@@ -93,8 +96,7 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
     return <OfferJourney key={state.run} quote={{ quoteId: state.offer.quoteId }} initialOffer={state.offer} onRequote={back} onBack={back} onSessionLost={onSessionLost}
       onConsentRequired={() => setState({ kind: 'failed', reason: 'consentRequired' })} />;
   }
-  return <section className="card policy-section" aria-labelledby="sale-continue-heading">
-    <h2 id="sale-continue-heading" className="h-card">{t('continueTitle')}</h2>
+  return <section className="card sale-flow" aria-labelledby="sale-flow-title">
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
       <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
       <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
@@ -103,19 +105,47 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   </section>;
 }
 
+const saleChoices = [
+  { flow: 'continue', message: 'continueTitle', icon: 'reports' },
+  { flow: 'authorize', message: 'authorizeTitle', icon: 'advisor' },
+] as const;
+type SaleFlow = typeof saleChoices[number]['flow'];
+
 export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
+  const t = (key: string) => intl.formatMessage({ id: `sale.${key}` });
   // A purchase interrupted by a reload resumes at its policy: the draft keeps only server references and command keys.
   const [resume, setResume] = useState(readPurchaseDraft);
   const leave = useCallback(() => { clearPurchaseDraft(); setResume(null); }, []);
   const [offerOpen, setOfferOpen] = useState(false);
+  const [flow, setFlow] = useState<SaleFlow | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!offerOpen && !resume) heading.current?.focus();
+  }, [flow, offerOpen, resume]);
   if (resume) {
     return <main className="content policies"><OfferJourney key={resume.quoteId} quote={{ quoteId: resume.quoteId }} resume={resume} onRequote={leave} onBack={leave} onSessionLost={onSessionLost}
       onConsentRequired={leave} /></main>;
   }
+  const choice = saleChoices.find(option => option.flow === flow);
   return <main className="content policies">
-    {!offerOpen && <div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({ id: 'sale.title' })}</h1></div>}
-    <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
-    {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
+    {!offerOpen && <>
+      {choice && <button type="button" className="btn btn-secondary btn-small policy-back" onClick={() => setFlow(null)}>
+        <Icon name="back" size={16} />{t('backToAdvisor')}
+      </button>}
+      <div className="page-title">
+        <span className="page-icon page-icon-violet" aria-hidden="true"><Icon name={choice?.icon ?? 'advisor'} size={22} /></span>
+        <h1 id="sale-flow-title" ref={heading} tabIndex={-1}>{t(choice?.message ?? 'title')}</h1>
+      </div>
+    </>}
+    {!flow && <ul className="sale-choices" aria-labelledby="sale-flow-title">{saleChoices.map(option => <li key={option.flow}>
+      <button className="sale-choice" type="button" onClick={() => setFlow(option.flow)}>
+        <span className="sale-choice-icon" aria-hidden="true"><Icon name={option.icon} /></span>
+        <span>{t(option.message)}</span>
+        <Icon name="arrow" size={18} className="sale-choice-arrow" />
+      </button>
+    </li>)}</ul>}
+    {flow === 'continue' && <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />}
+    {flow === 'authorize' && <Authorizations onSessionLost={onSessionLost} />}
   </main>;
 }

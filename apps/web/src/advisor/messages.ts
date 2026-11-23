@@ -10,6 +10,9 @@ export const advisorEs={
   'advisor.active':'Activa', 'advisor.revoked':'Revocada', 'advisor.expired':'Vencida', 'advisor.executed':'Ejecutada',
   'advisor.modified':'Modificar', 'advisor.renewed':'Renovar', 'advisor.cancelled':'Cancelar', 'advisor.policy':'Póliza',
   'advisor.executeConfirm':'Confirmo ejecutar la actuación y el reemplazo autorizados',
+  'advisor.filterStatus':'Filtrar por estado', 'advisor.allStatuses':'Todos los estados', 'advisor.approved':'Aprobada',
+  'advisor.filteredEmpty':'No hay autorizaciones con este estado.', 'advisor.newAuthorization':'Nueva autorización',
+  'advisor.status':'Estado', 'advisor.grantedAt':'Aprobada el', 'advisor.options':'Acciones', 'advisor.viewReferences':'Ver referencias',
 };
 export const advisorEn={
   'advisor.previous':'Previous', 'advisor.next':'Next',
@@ -23,4 +26,7 @@ export const advisorEn={
   'advisor.active':'Active', 'advisor.revoked':'Revoked', 'advisor.expired':'Expired', 'advisor.executed':'Executed',
   'advisor.modified':'Modify', 'advisor.renewed':'Renew', 'advisor.cancelled':'Cancel', 'advisor.policy':'Policy',
   'advisor.executeConfirm':'I confirm the authorized action and replacement',
+  'advisor.filterStatus':'Filter by status', 'advisor.allStatuses':'All statuses', 'advisor.approved':'Approved',
+  'advisor.filteredEmpty':'There are no authorizations with this status.', 'advisor.newAuthorization':'New authorization',
+  'advisor.status':'Status', 'advisor.grantedAt':'Approved on', 'advisor.options':'Actions', 'advisor.viewReferences':'View references',
 };

@@ -1,5 +1,7 @@
 # Assisted sale by an advisor
 
+In My advisor (`/venta-asistida`), the customer chooses Continue a prepared offer or Authorize an advisor before opening either form. The authorization option includes the customer's existing grants. A purchase already in progress resumes through the existing purchase recovery flow.
+
 An advisor with a current professional permission can prepare a quote and an offer for a customer who authorized them, using the same quote, consent-bound profiling and offer rules as the customer's own web journey. The advisor only prepares. Reviewing, accepting, paying and signing stay with the customer, in the customer's own authenticated session, through the existing offer and policy routes. No advisor session can perform those steps for the customer.
 
 The model mirrors [partner authorizations](partner-authorizations.md) with an advisor in place of a partner, and reuses the advisor's professional permission that [policy lifecycle](../policy-claims-payments/policy-lifecycle.md) already describes (`policies:manage-delegated`) instead of creating another one.
