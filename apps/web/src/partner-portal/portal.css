@@ -16,9 +16,9 @@
 .portal-period.card { padding: 18px 20px; }
 .portal-section-title { display: flex; align-items: center; gap: 10px; }
 .portal-reset { margin: 8px 0 4px; color: var(--ink); font-weight: 500; }
-.portal-result-accepted, .portal-result-completed { background: #e6f3ec; color: #175c3a; }
-.portal-result-preliminary { background: #fbf0dc; color: #7a4e05; }
-.portal-result-declined { background: #fbe9e7; color: #8a241c; }
+.claims-badge.portal-result-accepted, .claims-badge.portal-result-completed { background: #e6f3ec; color: #175c3a; }
+.claims-badge.portal-result-preliminary { background: #fbf0dc; color: #7a4e05; }
+.claims-badge.portal-result-declined { background: #fbe9e7; color: #8a241c; }
 .portal-product { margin: 0 0 8px; font-weight: 600; color: var(--ink); }
 .portal-operations, .portal-versions { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .portal-operations li, .portal-versions li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
