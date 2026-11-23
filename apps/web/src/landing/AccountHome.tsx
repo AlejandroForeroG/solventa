@@ -1,7 +1,7 @@
 import { useIntl } from 'react-intl';
 import { Icon, type IconName } from '../navigation/Icon';
 
-const steps: [number, IconName][] = [[1, 'calculator'], [2, 'reports'], [3, 'privacy'], [4, 'coins'], [5, 'policy'], [6, 'card'], [7, 'signature']];
+const steps: [number, IconName][] = [[1, 'calculator'], [2, 'reports'], [3, 'key'], [4, 'file'], [5, 'policy'], [6, 'card'], [7, 'signature']];
 
 const tiles: { href: string; icon: IconName; title: string; detail: string; tone: string }[] = [
   { href: '/polizas', icon: 'policy', title: 'policies.open', detail: 'home.tile.policies', tone: 'green' },

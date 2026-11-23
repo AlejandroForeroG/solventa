@@ -43,9 +43,9 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
       <label htmlFor={id}>{intl.formatMessage({ id: spec.label })} <span className="required" aria-hidden="true">*</span></label>
       {key === 'birthDate' ? <CalendarDateInput id={id} name={key} className="mono-input" autoComplete="bday" required value={values[key]}
         onChange={value => onChange(key, value)} aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />
-      : <input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
+      : <div className={key === 'amount' || key === 'termMonths' ? `input-adorned input-adorned-${key}` : 'input-plain'}>{key === 'amount' && <span className="input-adornment" aria-hidden="true">$</span>}<input id={id} name={key} type={spec.type} className={spec.mono ? 'mono-input' : undefined} inputMode={spec.inputMode} autoComplete={spec.autoComplete} required
         value={values[key]} onChange={event => onChange(key, event.target.value)} onBlur={key === 'amount' ? event => { const value = displayGrouped(event.target.value, intl.locale); if (value !== event.target.value) onChange(key, value); } : undefined}
-        aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />}
+        aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-error` : undefined} />{key === 'termMonths' && <span className="input-adornment" aria-hidden="true">{intl.formatMessage({ id: 'form.monthsSuffix' })}</span>}</div>}
       {problem && <p className="field-error" id={`${id}-error`}>{intl.formatMessage({ id: problem.message }, problem.values)}</p>}
     </div>;
   };

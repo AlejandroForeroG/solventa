@@ -7,7 +7,7 @@ export const portalEs = {
   'partnerPortal.unavailable': 'No se pudo consultar la integración.', 'partnerPortal.invalid': 'Revisa el período: máximo 31 días.', 'partnerPortal.retry': 'Reintentar',
   'partnerPortal.updated': 'Actualizado:', 'partnerPortal.metrics': 'Actividad del período', 'partnerPortal.completed': 'Cotizaciones completadas', 'partnerPortal.accepted': 'Evaluaciones favorables',
   'partnerPortal.preliminary': 'Evaluaciones preliminares', 'partnerPortal.declined': 'Evaluaciones rechazadas',
-  'partnerPortal.bogota': '(hora de Bogotá)', 'partnerPortal.result.completed': 'Completada', 'partnerPortal.result.accepted': 'Favorable', 'partnerPortal.result.preliminary': 'Preliminar', 'partnerPortal.result.declined': 'Rechazada',
+  'partnerPortal.bogota': '(hora de Bogotá)', 'partnerPortal.timesBogota': 'Fechas y horas de las tablas en hora de Bogotá. El filtro de período usa fechas UTC.', 'partnerPortal.result.completed': 'Completada', 'partnerPortal.result.accepted': 'Favorable', 'partnerPortal.result.preliminary': 'Preliminar', 'partnerPortal.result.declined': 'Rechazada',
  
   'partnerPortal.transactions': 'Transacciones recientes', 'partnerPortal.reference': 'Referencia', 'partnerPortal.kind': 'Tipo', 'partnerPortal.date': 'Fecha', 'partnerPortal.result': 'Resultado', 'partnerPortal.rule': 'Regla',
   'partnerPortal.quote': 'Cotización', 'partnerPortal.offer_decision': 'Evaluación de oferta', 'partnerPortal.empty': 'Sin transacciones en el período.',
@@ -27,7 +27,7 @@ export const portalEn = {
   'partnerPortal.unavailable': 'The integration could not be loaded.', 'partnerPortal.invalid': 'Check the period: up to 31 days.', 'partnerPortal.retry': 'Retry',
   'partnerPortal.updated': 'Updated:', 'partnerPortal.metrics': 'Period activity', 'partnerPortal.completed': 'Completed quotes', 'partnerPortal.accepted': 'Favorable evaluations',
   'partnerPortal.preliminary': 'Preliminary evaluations', 'partnerPortal.declined': 'Declined evaluations',
-  'partnerPortal.bogota': '(Bogotá time)', 'partnerPortal.result.completed': 'Completed', 'partnerPortal.result.accepted': 'Approved', 'partnerPortal.result.preliminary': 'Preliminary', 'partnerPortal.result.declined': 'Declined',
+  'partnerPortal.bogota': '(Bogotá time)', 'partnerPortal.timesBogota': 'Table dates and times are in Bogotá time. The period filter uses UTC dates.', 'partnerPortal.result.completed': 'Completed', 'partnerPortal.result.accepted': 'Approved', 'partnerPortal.result.preliminary': 'Preliminary', 'partnerPortal.result.declined': 'Declined',
  
   'partnerPortal.transactions': 'Recent transactions', 'partnerPortal.reference': 'Reference', 'partnerPortal.kind': 'Type', 'partnerPortal.date': 'Date', 'partnerPortal.result': 'Result', 'partnerPortal.rule': 'Rule',
   'partnerPortal.quote': 'Quote', 'partnerPortal.offer_decision': 'Offer evaluation', 'partnerPortal.empty': 'No transactions in this period.',

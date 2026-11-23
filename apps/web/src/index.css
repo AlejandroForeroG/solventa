@@ -340,15 +340,14 @@ label.field input, label.field select, label.field textarea { font-weight: 400; 
 .consent-simulated svg { flex: none; margin-top: 2px; }
 .consent-label { display: flex; align-items: center; gap: 8px; }
 .consent-label svg { color: var(--brand); }
-.source-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.source-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 6px 12px; }
+.source-row > .icon-chip { grid-row: span 2; }
+.source-row > .source-pills { grid-column: 2; justify-content: flex-start; }
+.source-name { overflow-wrap: anywhere; }
 .source-copy { min-width: 0; }
 .source-copy .note { font-size: 12.5px; line-height: 1.45; }
 .consent-dane { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; }
 .consent-dane svg { flex: none; margin-top: 3px; }
-@media (max-width: 420px) {
-  .source-row { grid-template-columns: auto minmax(0, 1fr); }
-  .source-row > .pill { grid-column: 2; justify-self: start; }
-}
 .assistance .page-title { margin-bottom: 10px; }
 .assistance-simulated { margin: 0 0 16px; }
 .assistance-simulated .pill { gap: 6px; }
@@ -430,3 +429,42 @@ select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-rig
   .step .actions > .btn { width: 100%; }
   .step .actions > .note { text-align: left; }
 }
+
+.granted-ref { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 4px 0 0; font-size: 13px; color: var(--ink-3); }
+.granted-ref .mono { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.offer-facts .offer-fact-wide { grid-column: 1 / -1; }
+.input-adorned { position: relative; display: flex; align-items: center; }
+.input-adorned > input { flex: 1 1 auto; min-width: 0; }
+.input-adorned-amount > input { padding-left: 30px; }
+.input-adorned-termMonths > input { padding-right: 68px; }
+.input-adornment { position: absolute; pointer-events: none; font: 500 14px/1 'IBM Plex Mono', ui-monospace, monospace; color: var(--ink-3); }
+.input-adorned-amount > .input-adornment { left: 13px; }
+.input-adorned-termMonths > .input-adornment { right: 14px; font-family: 'IBM Plex Sans', sans-serif; }
+@media (max-width: 480px) {
+  .actions:not(.consent-foot .actions) { flex-direction: column; align-items: stretch; }
+  .actions > .btn, .actions > a.btn, .form-footer > .btn { width: 100%; justify-content: center; }
+  .actions > .note { text-align: left; }
+  .form-footer { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 600px) {
+  .step:has(> .offer-grid) { display: flex; flex-direction: column; gap: 16px; }
+  .step > .offer-grid { display: contents; }
+  .step > .offer-grid > .offer-card { order: 1; }
+  .step:has(> .offer-grid) > .actions { order: 2; margin-top: 0; }
+  .step > .offer-grid > .offer-side { order: 3; }
+}
+.access-panel-icon-slate { background: #f1efea; color: #3d434c; }
+.access-panel-section { margin: 0 0 4px; }
+.audit-state.audit-denied { border-color: var(--line); }
+.audit-state.audit-denied::before { background-color: #f1efea; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d434c' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='10' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
+.audit-denied .access-denied-title { font-weight: 500; color: var(--ink-2); }
+.access-denied-hint { max-width: 46ch; margin: 0; text-align: center; }
+
+.estimate-chip-row { margin: 4px 0 14px; }
+
+.sale-ref { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.sale-ref-label { font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; }
+.privacy-period { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.privacy-meta-label { color: var(--ink-3); }
+.privacy-meta-sep { width: 1px; height: 12px; margin: 0 6px; background: var(--line); }
+.consent-item-head { flex-wrap: wrap; }

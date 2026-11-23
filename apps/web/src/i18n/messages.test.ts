@@ -3,7 +3,7 @@ import { messages } from './messages';
 
 const es = messages['es-CO'];
 const en = messages['en-US'];
-const SAME_IN_BOTH = new Set(['locale.es-CO', 'locale.en-US', 'locale.short.es-CO', 'locale.short.en-US', 'source.open_finance_bancolombia.name', 'source.datacredito_experian.name', 'source.registraduria.name', 'kind.open_finance', 'privacy.period', 'offer.periodValue', 'audit.no', 'audit.live', 'document.no', 'sheet.issuerPlace']);
+const SAME_IN_BOTH = new Set(['reports.csvShort', 'locale.es-CO', 'locale.en-US', 'locale.short.es-CO', 'locale.short.en-US', 'source.open_finance_bancolombia.name', 'source.datacredito_experian.name', 'source.registraduria.name', 'kind.open_finance', 'privacy.period', 'offer.periodValue', 'audit.no', 'audit.live', 'document.no', 'sheet.issuerPlace']);
 const code = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.*', '!/src/i18n/messages.ts'], { query: '?raw', import: 'default', eager: true });
 
 describe('message catalogues', () => {

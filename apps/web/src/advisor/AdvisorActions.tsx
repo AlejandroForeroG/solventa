@@ -76,7 +76,8 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
   const visiblePage = Math.min(filteredPage, lastFilteredPage);
   const visibleApprovals = filter === 'all' ? page?.authorizations ?? []
     : page?.authorizations.slice(visiblePage * pageSize, (visiblePage + 1) * pageSize) ?? [];
-  const timestamp=(v:string)=>keepMeridiem(intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'}))+' '+t('bogota');
+  const cellTime=(v:string)=>keepMeridiem(intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'}));
+  const timestamp=(v:string)=>cellTime(v)+' '+t('bogota');
   const reload=()=>{setResult(null);setRefresh(v=>v+1);};
   function changeFilter(value: ApprovalFilter) {
     setResult(null);
@@ -105,7 +106,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
   });
   const listFeedback = !result ? <p role="status">{t('loading')}</p>
     : result.kind !== 'ok' ? <p role="alert">{t(result.kind === 'unavailable' ? 'listUnavailable' : result.kind)}</p>
-    : !visibleApprovals.length ? <p role="status">{t(filter === 'all' ? 'empty' : 'filteredEmpty')}</p> : null;
+    : !visibleApprovals.length ? <><p role="status">{t(filter === 'all' ? 'empty' : 'filteredEmpty')}</p>{!policy && filter === 'all' && <p className="note advisor-empty-hint">{t('emptyHint')}</p>}</> : null;
   const recordedChange = policy?.lifecycle;
   return <><section className="card policy-section" aria-labelledby="advisor-heading">
     <div className="advisor-approval-header">
@@ -113,7 +114,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
       <div className="advisor-approval-actions">
         {canManage && <button type="button" className="btn btn-primary btn-small"
           aria-haspopup="dialog" aria-controls="policy-management" disabled={busy}
-          onClick={() => {setError('');setManagementOpen(true);}}>{t('policies.lifecycle.manage')}</button>}
+          onClick={() => {setError('');setManagementOpen(true);}}><Icon name="wrench" size={16} />{t('policies.lifecycle.manage')}</button>}
         <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
       </div>
     </div>
@@ -136,7 +137,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
       </select>
     </label>}
     {policy ? <OwnerApprovalTable approvals={visibleApprovals} feedback={listFeedback}
-      busy={busy} t={t} timestamp={timestamp} onRevoke={approval => void run(() => revokeApproval(approval))} />
+      busy={busy} t={t} timestamp={cellTime} onRevoke={approval => void run(() => revokeApproval(approval))} />
       : <>
         {!result&&<p role="status">{t('loading')}</p>}
         {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
@@ -174,6 +175,7 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
         <IconButton label={t('closeManagement')} icon="close" disabled={busy} onClick={() => setManagementOpen(false)} />
       </header>
       <div className="policy-management-body">
+        <p className="note policy-management-intro">{t('managementIntro')}</p>
         <label className="field">{t('managementMode')}
           <select ref={managementChoice} value={managementMode} disabled={busy} onChange={event => {
             const value = event.target.value;
@@ -196,6 +198,9 @@ export function AdvisorActions({policy,onSessionLost,onReference,children,openRe
           <button className="btn btn-primary" disabled={busy||!confirmed||!action} type="submit">{busy?t('saving'):t('grant')}</button>
         </form>
       </div>
+      <footer className="policy-management-footer">
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setManagementOpen(false)}>{t('cancelManagement')}</button>
+      </footer>
     </dialog>}
   </>;
 }

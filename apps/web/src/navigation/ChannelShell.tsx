@@ -84,7 +84,7 @@ export function ChannelShell({ authenticated, workspaces, canLogin, busy, onLogo
         {authenticated && <div className="channel-breadcrumb"><span>{area}</span><span aria-hidden="true">/</span><span>{t(current?.label ?? 'navigation.home')}</span></div>}
         <div className="channel-topbar-tools"><LocaleSwitch />
           {canLogin && <a className="btn btn-primary btn-small topbar-login" href="/auth/login" aria-label={t('session.title')} onClick={onLogin}><Icon name="login" size={16} /><span className="topbar-login-long">{t('session.title')}</span><span className="topbar-login-short" aria-hidden="true">{t('session.titleShort')}</span></a>}
-          {authenticated && !workspace && path !== '/cotizar' && <IconLink label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
+          {authenticated && !workspace && path !== '/cotizar' && <IconLink className="topbar-privacy" label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
           {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
             content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
             entries={accountEntries} />}

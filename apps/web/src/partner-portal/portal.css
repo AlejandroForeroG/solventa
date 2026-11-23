@@ -25,3 +25,18 @@
 .portal-operations .mono { font-weight: 500; overflow-wrap: anywhere; }
 .portal-method { padding: 2px 8px; border-radius: 6px; background: var(--brand); color: #fff; font: 700 11px 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .04em; }
 .portal-version { font-weight: 600; color: var(--ink); }
+
+.portal-time-note { margin: 10px 0 0; font-size: 12.5px; }
+.portal-scopes { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.portal-scope { white-space: nowrap; padding: 2px 6px; border-radius: 6px; background: #f1efea; font: 500 12px/1.5 'IBM Plex Mono', ui-monospace, monospace; color: #3a424e; }
+.audit-card-table td .pill, .audit-card-table td .claims-badge { justify-self: start; width: fit-content; }
+@container (max-width: 760px) {
+  .audit-card-table.portal-tx-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 10px; padding: 12px 14px; }
+  .audit-card-table.portal-tx-table tbody td { display: block; padding: 0; border: 0; font-size: 13px; }
+  .audit-card-table.portal-tx-table td::before { display: none; }
+  .audit-card-table.portal-tx-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-weight: 600; font-size: 13.5px; }
+  .audit-card-table.portal-tx-table td:nth-child(4) { grid-column: 2; grid-row: 1; justify-self: end; }
+  .audit-card-table.portal-tx-table td:nth-child(2) { grid-column: 1; grid-row: 2; color: var(--ink-2); }
+  .audit-card-table.portal-tx-table td:nth-child(3) { grid-column: 2; grid-row: 2; color: var(--ink-3); text-align: right; white-space: nowrap; }
+  .audit-card-table.portal-tx-table td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; color: var(--ink-3); font-size: 12px; }
+}

@@ -21,7 +21,7 @@ export const auditEs = {
   'audit.inputEvidence': 'Origen de las entradas recuperadas', 'audit.inputField': 'Entrada', 'audit.evidenceReference': 'Registro o artefacto',
   'audit.evidence.retained_profile': 'Perfil conservado', 'audit.evidence.historical_mock': 'Artefacto simulado histórico', 'audit.evidence.offer_revision': 'Revisión de oferta',
 
-  'audit.consent': 'Consentimiento en la decisión', 'audit.historicalConsent': 'Referencia histórica. No acredita un consentimiento vigente.',
+  'audit.consent': 'Consentimiento en la decisión', 'audit.consentAtDecision': 'Estado al decidir:', 'audit.ruleId': 'Identificador de la regla', 'audit.ruleVersion': 'Versión de la regla', 'audit.historicalConsent': 'Referencia histórica. No acredita un consentimiento vigente.',
 
   'audit.model': 'Modelo', 'audit.not_used': 'No se utilizó modelo', 'audit.unknown': 'No registrado', 'audit.recorded': 'Registrado',
 
@@ -77,7 +77,7 @@ export const auditEn: Record<keyof typeof auditEs, string> = {
   'audit.inputEvidence': 'Recovered input provenance', 'audit.inputField': 'Input', 'audit.evidenceReference': 'Record or artifact',
   'audit.evidence.retained_profile': 'Retained profile', 'audit.evidence.historical_mock': 'Historical mock artifact', 'audit.evidence.offer_revision': 'Offer revision',
 
-  'audit.consent': 'Consent at decision time', 'audit.historicalConsent': 'Historical reference. It does not establish current consent.',
+  'audit.consent': 'Consent at decision time', 'audit.consentAtDecision': 'Status when deciding:', 'audit.ruleId': 'Rule identifier', 'audit.ruleVersion': 'Rule version', 'audit.historicalConsent': 'Historical reference. It does not establish current consent.',
 
   'audit.model': 'Model', 'audit.not_used': 'No model was used', 'audit.unknown': 'Not recorded', 'audit.recorded': 'Recorded',
 

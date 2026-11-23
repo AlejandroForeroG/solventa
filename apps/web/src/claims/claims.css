@@ -15,7 +15,7 @@
 .claims-number { color: #12151a; font-weight: 600; white-space: nowrap; }
 .claims-amount { text-align: right; white-space: nowrap; }
 .claims-overdue { color: #a32b22; font-weight: 600; }
-.claims-badge { display: inline-block; padding: 4px 9px; border-radius: 6px; font-size: 12px; white-space: nowrap; background: #f1efea; color: #3a424e; }
+.claims-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: #f1efea; color: #3a424e; }
 .claims-state-pending_information, .claims-priority-medium { background: #fbf0dc; color: #7a4e05; }
 .claims-state-escalated { background: #eceafb; color: #4438b8; }
 .claims-state-unassigned { background: #e5eff7; color: #1b4266; }
@@ -71,7 +71,7 @@
 .own-claim-open { margin-left: auto; color: var(--brand); font-size: 14px; font-weight: 600; }
 .own-claim:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) { .own-claim:hover { border-color: var(--brand); } }
-.report-in-app { margin: 16px 0 8px; padding: 20px 22px; border-color: #cbe5e0; background: var(--brand-tint); }
+.report-in-app { margin: 16px 0 8px; padding: 16px 20px; border-color: var(--line); background: #faf9f7; box-shadow: none; }
 .report-in-app .h-card { margin: 0 0 6px; font: 600 18px/1.3 'Space Grotesk', sans-serif; }
 .report-in-app .note { margin: 0; color: var(--ink-2); }
 .claim-actions .field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
@@ -150,9 +150,12 @@
 }
 .case-action-options .btn { justify-content: center; }
 .file-picker-state { margin: -4px 0 0; font-size: 12.5px; }
-.record-toggle { display: inline-flex; align-items: center; gap: 4px; width: auto; min-height: 32px; margin-top: 6px; padding: 4px 10px; border: 1px solid #cbe5e0; border-radius: 999px; background: #fff; color: var(--brand); font: 600 12px 'IBM Plex Sans', sans-serif; text-decoration: none; }
+.record-toggle { align-items: center; gap: 4px; width: auto; min-height: 32px; margin-top: 6px; padding: 4px 10px; border: 1px solid #cbe5e0; border-radius: 999px; background: #fff; color: var(--brand); font: 600 12px 'IBM Plex Sans', sans-serif; text-decoration: none; }
 .record-toggle::after { content: ''; width: 12px; height: 12px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; transition: transform 160ms var(--ease-out); }
 .record-toggle[aria-expanded='true']::after { transform: rotate(180deg); }
+@container (max-width: 760px) {
+  .compact-record .record-toggle { display: inline-flex; }
+}
 .claims-policy-reference summary { display: inline-flex; align-items: center; }
 @media (max-width: 480px) {
   .own-claim { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; }
@@ -160,3 +163,16 @@
   .own-claim > .claims-badge { justify-self: start; }
   .own-claim-open { grid-column: 2; }
 }
+
+.report-in-app-icon { flex: none; display: inline-flex; color: var(--blue-ink, #1b4266); }
+.report-in-app .h-card { font-size: 16px; }
+.case-description { margin-top: 14px; }
+.case-description-label { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.case-description .case-note { margin-top: 0; }
+.empty-state > .btn { justify-self: center; margin-top: 4px; }
+.claim-payment-currency { font-size: .5em; font-weight: 600; color: var(--ink-3); letter-spacing: .04em; }
+.claim-payment-link { color: var(--brand); font-weight: 600; text-decoration: none; }
+.claim-payment-link:hover { text-decoration: underline; }
+.case-take-note { margin: 0 0 12px; }
+.case-take { width: 100%; justify-content: center; }
+.claims-updated { display: inline-flex; align-items: center; gap: 6px; }

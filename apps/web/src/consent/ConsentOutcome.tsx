@@ -17,7 +17,7 @@ export function ConsentGranted({ consent, uncertain = false, onPanel, onBack, on
         <span className={`status-icon ${!uncertain && consent.status === 'active' ? 'status-icon-ok' : 'status-icon-pending'}`} aria-hidden="true"><Icon name={!uncertain && consent.status === 'active' ? 'check' : 'alert'} size={18} /></span>
         <div>
         <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: uncertain ? 'granted.uncertain' : consent.status === 'active' ? 'granted.title' : `status.${consent.status}` })}</h1>
-        <p className="mono">{intl.formatMessage({ id: 'granted.id' })} {consent.consentId}</p>
+        <p className="granted-ref"><span>{intl.formatMessage({ id: 'granted.id' })}</span> <span className="mono">{consent.consentId}</span></p>
         </div>
       </div>
       {!uncertain && <span className={`pill pill-status-${consent.status}`}>{consent.status === 'active'

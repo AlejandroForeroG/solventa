@@ -102,3 +102,11 @@
   .account-tile { grid-column: span 2; }
   .account-tile:nth-child(n + 4) { grid-column: span 3; }
 }
+@media (min-width: 1000px) {
+  .account-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; }
+  .account-tile, .account-tile:nth-child(n + 4) { grid-column: auto; align-items: start; }
+  .account-tile-arrow { align-self: center; }
+}
+
+.landing-footer-note { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.landing-footer-note a { color: inherit; text-underline-offset: 3px; }

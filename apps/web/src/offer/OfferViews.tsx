@@ -27,7 +27,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
           <div><dt>{t('offer.coverage')}</dt><dd>{t('offer.coverageValue')}</dd></div>
-          <div><dt>{t('offer.period')}</dt><dd>{t('offer.periodValue', { from: dayMonthYear(new Date(offer.effectiveFrom)), until: dayMonthYear(new Date(offer.effectiveUntil)) })}</dd></div>
+          <div className="offer-fact-wide"><dt>{t('offer.period')}</dt><dd>{t('offer.periodValue', { from: dayMonthYear(new Date(offer.effectiveFrom)), until: dayMonthYear(new Date(offer.effectiveUntil)) })}</dd></div>
         </dl>
         <details className="offer-verification"><summary>{t('document.verification')}</summary>
           <dl className="offer-facts"><div><dt>{t('document.offerId')}</dt><dd className="offer-id">{offer.offerId}</dd></div>
@@ -105,7 +105,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
               <span className="mono">{t('policy.page', { current: String(page), total: '2' })}</span>
               <button type="button" className="btn btn-secondary btn-small" disabled={page === 2} onClick={() => turn(2)} aria-label={t('policy.nextPage')}><Icon name="next" size={16} /></button>
             </div>
-            <button type="button" className="btn btn-secondary btn-small" onClick={printPreview}><Icon name="printer" size={16} />{t('sheet.printPreview')}</button>
+            <button type="button" className="btn btn-secondary btn-small doc-print-button" aria-label={t('sheet.printPreview')} onClick={printPreview}><Icon name="printer" size={16} /><span className="doc-print-long">{t('sheet.printPreview')}</span><span className="doc-print-short" aria-hidden="true">{t('sheet.printShort')}</span></button>
           </div>
         </div>
         <p className="doc-preview-note"><Icon name="info" size={16} />{t('sheet.previewNote')}</p>
@@ -211,6 +211,7 @@ export function PolicyIssued({ heading, policy, holderName }: { heading: RefObje
       <a className="btn btn-secondary" href={`/polizas#policy=${policy.policyId}&section=info`}><Icon name="policy" size={18} />{t('issued.viewPolicy')}</a>
       <span className="note doc-file-name" role="status">{download === 'done' ? t('sheet.downloaded', { file: fileName }) : ''}</span>
     </div>
+    <p className="note doc-action-note"><Icon name="info" size={16} />{t('sheet.pdfHolderNote')}</p>
     {download === 'failed' && <div className="banner banner-error doc-download-error" role="alert"><Icon name="alert" size={18} className="banner-icon" />
       <p>{t('sheet.downloadFailed')}</p>
       <button type="button" className="btn btn-secondary btn-small" onClick={() => void save()}>{t('sheet.downloadRetry')}</button>
@@ -219,6 +220,10 @@ export function PolicyIssued({ heading, policy, holderName }: { heading: RefObje
       <div className="doc-toolbar"><p className="doc-toolbar-name"><Icon name="file" size={18} />{t('sheet.viewerName')}</p></div>
       <div className="doc-desk"><IssuedPolicyPage policy={policy} holderName={holderName} signedAt={signedAt} /></div>
     </div>
+    <p className="note doc-after-note">{t('issued.onceDetail')}</p>
+    <details className="document-verification"><summary>{t('sheet.supportDetails')}</summary>
+      <p className="trace mono">{t('sheet.internalId')}: {policy.policyId}<br />{t('issued.reference')}: {policy.traceId}</p>
+    </details>
   </section>;
 }
 
@@ -291,6 +296,7 @@ export function ChargeConfirmed({ heading, policy, idempotencyKey, onContinue }:
       <button type="button" className="btn btn-primary" onClick={onContinue}><Icon name="signature" size={18} />{t('charge.continue')}</button>
       <button type="button" className="btn btn-secondary" onClick={() => print(t('sheet.fileReceipt', { number }), <ReceiptPage policy={policy} />)}><Icon name="printer" size={18} />{t('sheet.printReceipt')}</button>
     </div>
+    <p className="note doc-action-note"><Icon name="info" size={16} />{t('sheet.receiptLater')}</p>
     <div className="card doc-viewer doc-viewer-spaced">
       <div className="doc-toolbar"><p className="doc-toolbar-name"><Icon name="file" size={18} />{t('sheet.receiptTitle')}</p></div>
       <div className="doc-desk"><ReceiptPage policy={policy} /></div>

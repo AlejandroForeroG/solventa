@@ -46,6 +46,6 @@ export function Landing({ authenticated = false, sessionUnavailable, onRetry }: 
         </article>)}
       </div>
     </section>}
-    <footer className="landing-footer"><span>Solventa</span><p>{t('footer')}</p></footer>
+    <footer className="landing-footer"><span>Solventa</span><p>{t('footer')}</p><p className="landing-footer-note">{t('footerAcademic')} <a href="/privacidad">{t('footerPrivacy')}</a></p></footer>
   </main>;
 }

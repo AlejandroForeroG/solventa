@@ -4,7 +4,7 @@ export const saleEs = {
   'sale.reference': 'Referencia del asesor', 'sale.validity': 'Vigencia', 'sale.days': '{count, plural, one {# día} other {# días}}',
   'sale.confirm': 'Autorizo a este asesor a preparar una cotización y una oferta a mi nombre', 'sale.authorize': 'Autorizar', 'sale.saving': 'Guardando…',
   'sale.advisor': 'Referencia del asesor', 'sale.expires': 'Vence', 'sale.bogota': '(hora de Bogotá)', 'sale.revoked': 'Revocada', 'sale.revoke': 'Revocar', 'sale.empty': 'Sin autorizaciones.', 'sale.loading': 'Consultando…',
-  'sale.code': 'Código de autorización', 'sale.active': 'Activa', 'sale.expired': 'Vencida',
+  'sale.code': 'Código de autorización', 'sale.requiredLegend': 'Los campos marcados con * son obligatorios.', 'sale.authorizationSection': 'Autorización del cliente', 'sale.codeOrigin': 'El cliente lo genera en Mi asesor > Autorizar a un asesor, con tu referencia.', 'sale.active': 'Activa', 'sale.expired': 'Vencida',
   'sale.continueTitle': 'Continuar una oferta preparada',
   'sale.backToAdvisor': 'Volver a Mi asesor', 'sale.myAuthorizations': 'Mis autorizaciones',
  
@@ -26,7 +26,7 @@ export const saleEn = {
   'sale.reference': 'Advisor reference', 'sale.validity': 'Validity', 'sale.days': '{count, plural, one {# day} other {# days}}',
   'sale.confirm': 'I authorize this advisor to prepare a quote and an offer in my name', 'sale.authorize': 'Authorize', 'sale.saving': 'Saving…',
   'sale.advisor': 'Advisor reference', 'sale.expires': 'Expires', 'sale.bogota': '(Bogotá time)', 'sale.revoked': 'Revoked', 'sale.revoke': 'Revoke', 'sale.empty': 'No authorizations.', 'sale.loading': 'Loading…',
-  'sale.code': 'Authorization code', 'sale.active': 'Active', 'sale.expired': 'Expired',
+  'sale.code': 'Authorization code', 'sale.requiredLegend': 'Fields marked with * are required.', 'sale.authorizationSection': 'Customer authorization', 'sale.codeOrigin': 'The customer creates it in My advisor > Authorize an advisor, using your reference.', 'sale.active': 'Active', 'sale.expired': 'Expired',
   'sale.continueTitle': 'Continue a prepared offer',
   'sale.backToAdvisor': 'Back to My advisor', 'sale.myAuthorizations': 'My authorizations',
  

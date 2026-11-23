@@ -48,11 +48,12 @@ export function OwnerApprovalTable({ approvals, feedback, busy, t, timestamp, on
         </td>
         <td data-label={t('grantedAt')}><time dateTime={approval.grantedAt}>{timestamp(approval.grantedAt)}</time></td>
         <td data-label={t('expires')}><time dateTime={approval.expiresAt}>{timestamp(approval.expiresAt)}</time></td>
-        <td data-label={t('options')}>{approval.revokedAt || approval.status === 'expired' ? '—' : <button type="button" className="btn btn-danger btn-small"
+        <td data-label={t('options')} className={approval.revokedAt || approval.status === 'expired' ? 'cell-empty' : undefined}>{approval.revokedAt || approval.status === 'expired' ? '—' : <button type="button" className="btn btn-danger btn-small"
           disabled={busy} onClick={() => onRevoke(approval)}><Icon name="ban" size={16} />{t('revoke')}</button>}</td>
       </tr>)}
         {feedback && <tr className="advisor-table-feedback"><td colSpan={columns.length}>{feedback}</td></tr>}
       </tbody>
     </table>
+    <p className="note table-time-note">{t('timesBogota')}</p>
   </div>;
 }

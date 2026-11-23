@@ -116,7 +116,7 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
   const t = useTranslate();
   const format = useFormatters();
   const sheet = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
-  const rows: { label: string; value: React.ReactNode; mono?: boolean }[] = [{ label: t('coverage.type'), value: t(`product.${policy.product}`) }];
+  const rows: { label: string; value: React.ReactNode; mono?: boolean }[] = [{ label: t('coverage.type'), value: policy.product === 'vida_hipotecario' ? sheet('offer.coverageValue') : t(`product.${policy.product}`) }];
   if (policy.coverage.kind === 'mortgage_life') rows.push({ label: t('coverage.sumInsured'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.sumInsured)}</span> });
   else if (policy.coverage.kind === 'flight_delay') rows.push({ label: t('coverage.payout'), value: <span className="doc-amount">{format.copDecimalAmount(policy.coverage.payoutAmount)}</span> },
     { label: t('coverage.threshold'), value: t('coverage.thresholdValue', { minutes: policy.coverage.thresholdMinutes }) },
@@ -160,7 +160,7 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
     </DocSection>
     <DocSection number={6} title={sheet('sheet.sectionVerification')}>
       <DocVerification hash={hash} rows={[
-        { label: sheet('sheet.internalId'), value: policy.policyId, mono: true },
+        { label: t('reference'), value: policyNumber(policy.policyId), mono: true },
         { label: sheet('sheet.conditionsVersion'), value: policy.conditionsVersion, mono: true },
       ]} />
     </DocSection>
@@ -283,7 +283,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
       <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></p>
       {policy.lifecycle && <div className={`banner ${policy.lifecycle.action === 'cancelled' ? 'banner-error' : 'banner-info'} policy-lifecycle-banner`} role="status">
         <Icon name={policy.lifecycle.action === 'cancelled' ? 'ban' : 'info'} size={18} className="banner-icon" />
-        <p><strong>{t('lifecycleBanner', { state: t(`state.${policy.lifecycle.action}`), date: format.dateTime(new Date(policy.lifecycle.at)) })}</strong><br />
+        <p><strong>{t('lifecycleBanner', { state: t(`state.${policy.lifecycle.action}`), date: format.dateTime(new Date(policy.lifecycle.at)) + ' ' + t('hourBogota') })}</strong><br />
           {t('lifecycle.reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(`lifecycle.${policy.lifecycle.reason}`) : policy.lifecycle.reason}. {t('lifecycle.recorded')}</p>
       </div>}
       <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>

@@ -41,7 +41,7 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     <p className="sale-scope"><Icon name="info" size={18} /><span>{t('authorizeScope')}</span></p>
     <form onSubmit={event => { event.preventDefault(); if (valid) void run(() => grantSaleAuthorization({ advisorReference: reference.toLowerCase(), validityDays: days })); }}>
       <div className="grid">
-      <div className="field"><label htmlFor="sale-cus-1">{t('reference')}</label><input id="sale-cus-1" className="mono-input" required value={reference} disabled={busy} autoComplete="off" spellCheck={false} aria-describedby="sale-cus-1-hint" aria-invalid={reference !== '' && !uuid(reference) ? true : undefined} onChange={event => { setReference(event.target.value.trim()); setConfirmed(false); }} />
+      <div className="field"><label htmlFor="sale-cus-1">{t('reference')}</label><input id="sale-cus-1" className="mono-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required value={reference} disabled={busy} autoComplete="off" spellCheck={false} aria-describedby="sale-cus-1-hint" aria-invalid={reference !== '' && !uuid(reference) ? true : undefined} onChange={event => { setReference(event.target.value.trim()); setConfirmed(false); }} />
         <p id="sale-cus-1-hint" className={reference !== '' && !uuid(reference) ? 'field-error' : 'field-hint'}>{t(reference !== '' && !uuid(reference) ? 'referenceInvalid' : 'referenceHint')}</p></div>
       <div className="field"><label htmlFor="sale-cus-2">{t('validity')}</label><select id="sale-cus-2" value={days} disabled={busy} onChange={event => { setDays(Number(event.target.value)); setConfirmed(false); }}>
         {[1, 2, 3, 7].map(value => <option key={value} value={value}>{intl.formatMessage({ id: 'sale.days' }, { count: value })}</option>)}</select></div>
@@ -56,14 +56,14 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     {load.kind === 'failed' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(load.reason)}</span></p>}
     {load.kind === 'ready' && (load.items.length ? <>
       {load.items.some(item => item.status === 'active') && <ul className="sale-authorizations" aria-label={t('advisor')}>{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
-      <p className="sale-authorization-head"><span className="mono" title={item.advisorReference}>{t('advisor')} {item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="sale-authorization-head"><span className="sale-ref"><span className="sale-ref-label">{t('advisor')}</span> <span className="mono" title={item.advisorReference}>{item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span></span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
       <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <><CopyValue label={t('code')} value={item.authorizationId} /><p className="note sale-code-hint">{t('codeHint')}</p></>}
     </div>{item.status === 'active' && <button type="button" className="btn btn-danger btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}><Icon name="ban" size={16} />{t('revoke')}</button>}</li>)}</ul>}
       {load.items.some(item => item.status !== 'active') && <details className="document-verification sale-history"><summary>{t('history')}</summary>
         <ul className="sale-authorizations">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
-      <p className="sale-authorization-head"><span className="mono" title={item.advisorReference}>{t('advisor')} {item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="sale-authorization-head"><span className="sale-ref"><span className="sale-ref-label">{t('advisor')}</span> <span className="mono" title={item.advisorReference}>{item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span></span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
       <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <><CopyValue label={t('code')} value={item.authorizationId} /><p className="note sale-code-hint">{t('codeHint')}</p></>}
@@ -100,7 +100,7 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   }
   return <section className="card sale-flow" aria-labelledby="sale-flow-title">
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
-      <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" className="mono-input" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" spellCheck={false} aria-describedby="sale-cus-3-hint" onChange={event => setOfferId(event.target.value.trim())} />
+      <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" className="mono-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" spellCheck={false} aria-describedby="sale-cus-3-hint" onChange={event => setOfferId(event.target.value.trim())} />
         <p id="sale-cus-3-hint" className="field-hint">{t('offerCodeHint')}</p></div>
       <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading' || offerId === ''}><Icon name="file" size={18} />{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
     </form>

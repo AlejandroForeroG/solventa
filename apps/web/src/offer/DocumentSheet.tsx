@@ -5,13 +5,13 @@ import './document-sheet.css';
 
 export type SheetStatus = 'draft' | 'paid' | 'issued' | 'signed' | 'expired' | 'cancelled';
 
-export function DocumentSheet({ kicker, title, number, meta, status, statusLabel, page, total = 1, watermark, children, label }: {
+export function DocumentSheet({ kicker, title, number, meta, status, statusLabel, page, total = 1, watermark, children, label, fit = false }: {
   kicker: string; title: string; number?: string; meta?: ReactNode; status: SheetStatus; statusLabel: string;
-  page?: number; total?: number; watermark?: string; children: ReactNode; label?: string;
+  page?: number; total?: number; watermark?: string; children: ReactNode; label?: string; fit?: boolean;
 }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string>) => intl.formatMessage({ id }, values);
-  return <article className={`doc-paper doc-paper-${status}`} aria-label={label ?? title}>
+  return <article className={`doc-paper doc-paper-${status}${fit ? ' doc-paper-fit' : ''}`} aria-label={label ?? title}>
     {watermark && <span className="doc-watermark" aria-hidden="true">{watermark}</span>}
     <header className="doc-letterhead">
       <img className="doc-logo" src={brandAssets.logo.green} alt="Solventa" width={132} height={30} />
@@ -38,6 +38,11 @@ export function DocSection({ number, title, id, children }: { number: number | s
     <h2 className="doc-section-title" id={id}><span className="doc-section-number" aria-hidden="true">{number}.</span>{title}</h2>
     {children}
   </section>;
+}
+
+export function HashText({ value }: { value: string }) {
+  const parts = value.match(/.{1,16}/g) ?? [value];
+  return <span className="doc-hash">{parts.flatMap((part, index) => index ? [<wbr key={index} />, part] : [part])}</span>;
 }
 
 export type DocRow = { label: string; value: ReactNode; mono?: boolean; wide?: boolean };
@@ -82,7 +87,7 @@ export function DocVerification({ hash, rows, note, support }: { hash: string | 
   return <div className="doc-verify">
     <div className="doc-verify-copy">
       <dl>
-        <div><dt>{t('sheet.hashLabel')}</dt><dd className="doc-mono doc-hash">{hash ?? t('sheet.hashUnavailable')}</dd></div>
+        <div><dt>{t('sheet.hashLabel')}</dt><dd className="doc-mono">{hash ? <HashText value={hash} /> : t('sheet.hashUnavailable')}</dd></div>
         {rows.map(row => <div key={row.label}><dt>{row.label}</dt><dd className={row.mono ? 'doc-mono' : undefined}>{row.value}</dd></div>)}
       </dl>
       {note && <p className="doc-verify-note">{note}</p>}

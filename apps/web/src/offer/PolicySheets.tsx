@@ -3,7 +3,7 @@ import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Policy } from './api';
 import { DocumentFields } from './DocumentFields';
-import { DocSection, DocSignature, DocTable, DocVerification, DocumentSheet } from './DocumentSheet';
+import { DocSection, DocSignature, DocTable, DocVerification, DocumentSheet, HashText } from './DocumentSheet';
 import { policyNumber, signatureStroke } from './document-tools';
 
 const MONEY = /^(0|[1-9][0-9]{0,14})\.[0-9]{4}$/;
@@ -39,7 +39,7 @@ export function PolicyGeneralSections({ policy, holderName, statusText, fingerpr
         { label: t('sheet.holder'), value: holderName?.trim() || t('sheet.holderAccount') },
         { label: t('offer.period'), value: t('offer.periodValue', { from: longDate(new Date(policy.effectiveFrom)), until: longDate(new Date(policy.effectiveUntil)) }) },
         { label: t('sheet.status'), value: statusText },
-        ...(fingerprint ? [{ label: t('policy.hash'), value: <span className="doc-hash">{policy.documentHash}</span>, mono: true }] : []),
+        ...(fingerprint ? [{ label: t('policy.hash'), value: <HashText value={policy.documentHash} />, mono: true }] : []),
       ]} />
     </DocSection>
     <DocSection number={2} title={t('sheet.sectionCoverage')}>
@@ -81,15 +81,19 @@ export function DraftPolicyPage({ policy, page, holderName, stage, headingRef }:
       <PolicyPremiumSection policy={policy} />
     </> : <>
       <h2 ref={headingRef} tabIndex={-1} className="doc-page-heading">{t('policy.document')}</h2>
-      <DocSection number={4} title={t('sheet.sectionContent')}>
-        <p className="doc-section-intro">{t('sheet.contentIntro')}</p>
-        <div className="doc-annex"><DocumentFields document={document} /></div>
+      <DocSection number={4} title={t('policies.exclusions')}>
+        <p className="doc-section-intro">{t('sheet.exclusionsIntro')}</p>
       </DocSection>
       <DocSection number={5} title={t('sheet.sectionSignature')}>
         <DocSignature signed={false} name={holderName?.trim() || t('sheet.holderAccount')} role={t('sheet.holderRole')} method={t('sheet.signatureMethodValue')} stroke="" />
       </DocSection>
       <DocSection number={6} title={t('sheet.sectionVerification')}>
         <DocVerification hash={policy.documentHash} rows={[{ label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true }]} note={t('sheet.verificationDraftNote')} />
+        <details className="doc-content">
+          <summary>{t('sheet.sectionContent')}</summary>
+          <p className="doc-section-intro">{t('sheet.contentIntro')}</p>
+          <div className="doc-annex"><DocumentFields document={document} /></div>
+        </details>
       </DocSection>
     </>}
   </DocumentSheet>;
@@ -110,10 +114,7 @@ export function IssuedPolicyPage({ policy, holderName, signedAt }: { policy: Pol
         reference={`SHA-256 ${policy.documentHash.slice(0, 16)}…`} stroke={signatureStroke(policy.documentHash)} />
     </DocSection>
     <DocSection number={6} title={t('sheet.sectionVerification')}>
-      <DocVerification hash={policy.documentHash} rows={[{ label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true }]} support={[
-        { label: t('sheet.internalId'), value: policy.policyId, mono: true },
-        { label: t('issued.reference'), value: policy.traceId, mono: true },
-      ]} note={t('issued.onceDetail')} />
+      <DocVerification hash={policy.documentHash} rows={[{ label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true }]} />
     </DocSection>
   </DocumentSheet>;
 }
@@ -122,15 +123,21 @@ export function ReceiptPage({ policy }: { policy: Policy }) {
   const t = usePolicyText();
   const { copDecimal } = useFormatters();
   return <DocumentSheet kicker={t('sheet.kickerReceipt')} title={t('sheet.receiptTitle')} meta={<span>{t('sheet.receiptFor', { number: policyNumber(policy.policyId) })}</span>} status="paid"
-    statusLabel={t('sheet.paymentPaid')} page={1} total={1}>
+    statusLabel={t('sheet.paymentPaid')} page={1} total={1} fit>
     <DocSection number={1} title={t('sheet.sectionPayment')}>
       <DocTable rows={[
         { label: t('sheet.concept'), value: t('sheet.conceptValue') },
         { label: t('sheet.product'), value: t('policies.product.vida_hipotecario') },
-        { label: t('charge.charged'), value: <span className="doc-amount">{copDecimal(policy.premium)}</span> },
+        { label: t('sheet.amount'), value: <span className="doc-amount">{copDecimal(policy.premium)}</span> },
         { label: t('sheet.paymentMethod'), value: t('sheet.paymentMethodValue') },
-        { label: t('charge.receipt'), value: policy.payment?.reference ?? '—', mono: true },
+        { label: t('sheet.receiptReference'), value: policy.payment?.reference ?? '—', mono: true },
         { label: t('sheet.paymentState'), value: t('sheet.paymentPaid') },
+      ]} />
+    </DocSection>
+    <DocSection number={2} title={t('sheet.sectionVerificationShort')}>
+      <DocTable rows={[
+        { label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true },
+        { label: t('policy.hash'), value: <HashText value={policy.documentHash} />, mono: true },
       ]} />
     </DocSection>
   </DocumentSheet>;

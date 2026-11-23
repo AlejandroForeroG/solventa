@@ -34,13 +34,13 @@ export function OwnClaimPayments({ onSessionLost, claimId }: { onSessionLost(): 
       {page?.items.length === 0 && <p className="empty-inline"><Icon name="coins" size={18} />{t('empty')}</p>}
       {page && <ul className="case-list">{page.items.map(item => {
         return <li key={item.claimId} className="claim-payment-item"><div className="claim-payment-main">
-          <div className="claim-payment-head">{claimId ? <span className="mono">{item.claimNumber}</span> : <a className="mono" href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
+          <div className="claim-payment-head">{claimId ? <span className="mono">{item.claimNumber}</span> : <a className="mono claim-payment-link" href={'/mis-siniestros/' + item.claimId}>{item.claimNumber}</a>}
             <span className={'claims-badge claim-payment-' + item.payment.status}>{t(item.payment.status)}</span><span className="claims-badge">{t('simulated')}</span></div>
-          <p className="claim-payment-amount">{formatters.copRounded(item.payment.amount)}</p>
+          <p className="claim-payment-amount">{formatters.copRounded(item.payment.amount)} <span className="claim-payment-currency">COP</span></p>
           {/\.\d{2}[1-9]|\.\d{3}[1-9]/.test(item.payment.amount) && <p className="note">{t('exact')}: {formatters.copDecimal(item.payment.amount)}</p>}
           <dl className="claim-payment-facts">
             {item.payment.reference && <div><dt>{t('reference')}</dt><dd className="mono">{item.payment.reference}</dd></div>}
-            <div><dt>{t('updated')}</dt><dd><time dateTime={item.updatedAt}>{formatters.dateTime(new Date(item.updatedAt))}</time></dd></div>
+            <div><dt>{t('updated')}</dt><dd><time dateTime={item.updatedAt}>{formatters.dateTime(new Date(item.updatedAt))}</time> {t('bogota')}</dd></div>
           </dl>
         </div></li>;
       })}</ul>}

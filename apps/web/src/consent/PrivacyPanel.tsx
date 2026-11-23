@@ -123,11 +123,12 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
             <div className="consent-item-head">
               <span className="mono-value">{item.consentId}</span>
               <span className={`pill pill-status-${item.status}`}>{intl.formatMessage({ id: `status.${item.status}` })}</span>
+              <span className="pill pill-pending source-simulated">{intl.formatMessage({ id: 'privacy.sourcesSimulated' })}</span>
             </div>
             <p className="consent-item-purpose">{intl.formatMessage({ id: 'consent.purposeShort' })}</p>
-            <p className="privacy-sources">{item.sources.map(code => <span key={code} className="privacy-source"><span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[code]?.icon ?? 'link'} size={15} /></span>{intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })}</span>)}<span className="pill pill-pending source-simulated">{intl.formatMessage({ id: 'consent.sourceSimulated' })}</span></p>
+            <p className="privacy-sources">{item.sources.map(code => <span key={code} className="privacy-source"><span className={`icon-chip icon-chip-sm icon-chip-${sourceIcon[code]?.tone ?? 'slate'}`} aria-hidden="true"><Icon name={sourceIcon[code]?.icon ?? 'link'} size={15} /></span>{intl.formatMessage({ id: `source.${code}.name`, defaultMessage: code })}</span>)}</p>
             <p className="note">{intl.formatMessage({ id: 'privacy.scopes' }, { scopes })}</p>
-            <p className="mono seal-line privacy-period"><Icon name="calendar" size={14} />{period} · {intl.formatMessage({ id: 'privacy.seal' })} {item.seal.slice(0, 4)}…{item.seal.slice(-4)}</p>
+            <p className="seal-line privacy-period"><Icon name="calendar" size={14} /><span className="privacy-meta-label">{intl.formatMessage({ id: 'privacy.validity' })}</span> {period}<span className="privacy-meta-sep" aria-hidden="true" /><span className="privacy-meta-label">{intl.formatMessage({ id: 'privacy.sealLabel' })}</span> <span className="mono">{item.seal.slice(0, 4)}…{item.seal.slice(-4)}</span></p>
           </div>
           {item.status === 'active' && confirming !== item.consentId &&
             <button type="button" className="btn btn-danger" disabled={busy} aria-label={intl.formatMessage({ id: 'privacy.revokeLabel' }, { id: item.consentId })} onClick={() => { setConfirming(item.consentId); setFailed(null); }}>

@@ -5,6 +5,7 @@ import { listClaims, type ClaimsOutcome, type ClaimsPage } from './api';
 import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './claims.css';
+import { keepMeridiem } from '../i18n/I18n';
 import { Icon } from '../navigation/Icon';
 
 type Filter = 'all' | 'unassigned' | 'pending_information' | 'overdue';
@@ -102,7 +103,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
             <td data-label={t('col.priority')}><span className={`claims-badge claims-priority-${item.priority}`}>{t(`priority.${item.priority}`)}</span></td>
           </tr>)}</tbody></table></div>
         <div className="claims-footer"><p role="status" className="note">{t('showing', { count: page.items.length })}</p>
-          {updatedAt && <p className="mono note">{t('updated', { time: intl.formatTime(updatedAt, { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) })}</p>}</div>
+          {updatedAt && <p className="note claims-updated"><Icon name="clock" size={14} />{t('updated', { time: keepMeridiem(intl.formatTime(updatedAt, { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })) + ' ' + t('bogota') })}</p>}</div>
         {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}
       </> : <div className="audit-state" role="status">
         <p>{filtered ? t('emptyFiltered', { filter: search ? search : t(`filter.${filter}`) }) : t('empty')}</p>

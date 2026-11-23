@@ -37,13 +37,13 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
   return <main className="audit-main claim-case">
     <div className="page-title"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{t('customerCases')}</h1></div>
     <section className="card report-in-app" aria-labelledby="report-in-app-title">
-      <span className="icon-chip" aria-hidden="true"><Icon name="phone" size={20} /></span>
+      <span className="report-in-app-icon" aria-hidden="true"><Icon name="info" size={20} /></span>
       <div><h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
       <p className="note">{t('reportInApp.body')}</p></div>
     </section>
     {error && <div role="alert" className="banner banner-error claims-banner"><Icon name="alert" size={18} className="banner-icon" /><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => { setError(''); setRevision(n => n + 1); }}><Icon name="refresh" size={16} />{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
-    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2><p className="note">{t('customerEmptyHint')}</p></div>}
+    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2><p className="note">{t('customerEmptyHint')}</p><a className="btn btn-secondary" href="/prestadores"><Icon name="wrench" size={18} />{t('customerEmptyAction')}</a></div>}
     {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
       <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
         <span className="icon-chip icon-chip-blue" aria-hidden="true"><Icon name="claims" size={20} /></span>
@@ -80,8 +80,9 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
     return () => abort.abort();
   }, [claimId, audience, onSessionLost, revision]);
 
-  const clock = (value: string) => keepMeridiem(intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })) + ' ' + t('bogota');
+  const clockShort = (value: string) => keepMeridiem(intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }));
+  const clock = (value: string) => clockShort(value) + ' ' + t('bogota');
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
@@ -126,7 +127,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
               <div><dt><Icon name="calendar" size={16} />{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
               {claim.eventType && <div><dt><Icon name="alert" size={16} />{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
               {claim.place && <div><dt><Icon name="location" size={16} />{t('place')}</dt><dd>{claim.place}</dd></div>}
-            </dl>{claim.description && <p className="case-note">{claim.description}</p>}
+            </dl>{claim.description && <div className="case-description"><p className="case-description-label">{t('descriptionLabel')}</p><p className="case-note">{claim.description}</p></div>}
             <h3>{t('caseNotices')}</h3>
             {claim.notices.length === 0 && <p className="empty-inline"><Icon name="info" size={18} />{t('noNotices')}</p>}
             <ul className="case-list">{claim.notices.map(notice => <li key={notice.id}><span className="icon-label"><Icon name="check" size={16} />{t('ack.' + notice.action)}</span><time dateTime={notice.at}>{clock(notice.at)}</time></li>)}</ul></>}
@@ -142,7 +143,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
               </article>)}
               {claim.requirements.map(item => <article key={item.id} className="case-task">
                 <h3 className="case-task-title"><span className="icon-chip icon-chip-sm icon-chip-amber" aria-hidden="true"><Icon name="info" size={16} /></span>{t('requirement')} · {t('requirement.' + item.status)}</h3><p className="case-note">{item.details}</p>
-                <dl className="case-fields"><div><dt><Icon name="user" size={16} />{t('recipient')}</dt><dd>{t('owner')}</dd></div><div><dt><Icon name="clock" size={16} />{t('deadline')}</dt><dd>{clock(item.deadline)}</dd></div></dl>
+                <dl className="case-fields"><div><dt><Icon name="user" size={16} />{t('recipient')}</dt><dd>{t('owner')}</dd></div><div><dt><Icon name="clock" size={16} />{t('deadline')}</dt><dd>{clockShort(item.deadline)}</dd></div></dl>
                 {item.responseText && <p className="case-note">{item.responseText}</p>}
                 {item.evidenceIds.map((id, i) => <p key={id}><a href={download(id)}>{t('documentNumber', { number: i + 1 })}</a></p>)}
                 {audience === 'customer' && item.status === 'pending' && Date.parse(item.deadline) > Date.now()
@@ -225,7 +226,7 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   }
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
-    {claim.access === 'unassigned' ? <><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}><Icon name="user" size={18} />{t('action.take')}</button></>
+    {claim.access === 'unassigned' ? <><p className="note case-take-note">{t('takeHint')}</p><button type="button" className="btn btn-primary case-take" disabled={busy} onClick={() => void submit('take')}><Icon name="user" size={18} />{t('action.take')}</button></>
       : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger case-action-reject' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}><Icon name={actionIcon[option]} size={18} />{t('action.' + option)}</button>)}</div>}

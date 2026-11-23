@@ -121,10 +121,10 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
             <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
             <td className="mono" data-label={t('col.rows')}>{t('rows', { count: report.manifest.rowCount })}</td>
             <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>
-              {report.delivery?.rejectionCode && <span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span>}</td>
+              {report.delivery?.rejectionCode && <><span className="note reports-reason">{t('rejection', { code: report.delivery.rejectionCode })}</span><span className="note reports-next">{t('rejectionNext')}</span></>}</td>
             <td className="reports-actions" data-label={t('col.actions')}><div>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}><Icon name="download" size={16} />{t('downloadCsv')}</button>
-              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}><Icon name="download" size={16} />{t('downloadManifest')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} aria-label={t('downloadCsv')} onClick={() => void download(report, 'csv')}><Icon name="download" size={16} />{t('csvShort')}</button>
+              <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} aria-label={t('downloadManifest')} onClick={() => void download(report, 'manifest')}><Icon name="download" size={16} />{t('manifestShort')}</button>
               {!isFinal(report) && confirming !== report.reportId && <button type="button" id={`report-send-${report.reportId}`} className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
                 onClick={() => { if (status && status !== 'pending') void send(report); else setConfirming(report.reportId); }}>
                 <Icon name={status && status !== 'pending' ? 'refresh' : 'send'} size={16} />{busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}

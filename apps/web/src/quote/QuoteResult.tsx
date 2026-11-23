@@ -55,6 +55,7 @@ export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix:
         </div>
       </dl>
       <p className="note">{intl.formatMessage({ id: 'result.note' })}</p>
+      <p className="note icon-label estimate-next"><Icon name="info" size={16} />{intl.formatMessage({ id: 'estimate.definitiveNote' })}</p>
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={onContinue} disabled={!onContinue}>{intl.formatMessage({ id: 'result.continue' })}<Icon name="forward" size={18} /></button>
         <button type="button" className="btn btn-secondary" onClick={onFix}><Icon name="back" size={18} />{intl.formatMessage({ id: 'result.fix' })}</button>

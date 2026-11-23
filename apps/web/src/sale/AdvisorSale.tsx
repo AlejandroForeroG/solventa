@@ -5,6 +5,7 @@ import { CopyValue } from '../forms/CopyValue';
 import { CalendarDateInput } from '../forms/CalendarDateInput';
 import { groupedDigits } from '../quote/estimate-api';
 import '../policies/policies.css';
+import './customer-sale.css';
 import { Icon } from '../navigation/Icon';
 
 const empty = { authorizationId: '', fullName: '', documentNumber: '', birthDate: '', city: '', partnerCreditId: '', amount: '', termMonths: '120' };
@@ -38,18 +39,21 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
   return <section className="card policy-section" aria-labelledby="advisor-sale-heading">
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
     {reference && <CopyValue label={t('yourReference')} value={reference} />}
-    <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+    <form className="advisor-sale-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <p className="note advisor-sale-required">{t('requiredLegend')}</p>
+      <h3 className="section-label sale-form-label"><span className="sale-step" aria-hidden="true">1</span>{t('authorizationSection')}</h3>
       <div className="grid">
-      <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></div>
+      <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" className="mono-input" required value={form.authorizationId} disabled={busy} autoComplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="sale-adv-1-hint" onChange={set('authorizationId')} />
+        <p id="sale-adv-1-hint" className="field-hint">{t('codeOrigin')}</p></div>
       </div>
-      <h3 className="section-label sale-form-label"><Icon name="user" size={16} />{t('customerSection')}</h3>
+      <h3 className="section-label sale-form-label"><span className="sale-step" aria-hidden="true">2</span>{t('customerSection')}</h3>
       <div className="grid">
       <div className="field"><label htmlFor="sale-adv-2">{t('fullName')}</label><input id="sale-adv-2" required value={form.fullName} disabled={busy} autoComplete="off" onChange={set('fullName')} /></div>
       <div className="field"><label htmlFor="sale-adv-3">{t('documentNumber')}</label><input id="sale-adv-3" required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></div>
       <div className="field"><label htmlFor="sale-adv-4">{t('birthDate')}</label><CalendarDateInput id="sale-adv-4" required value={form.birthDate} disabled={busy} onChange={value => set('birthDate')({ target: { value } })} /></div>
       <div className="field"><label htmlFor="sale-adv-5">{t('city')}</label><input id="sale-adv-5" required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></div>
       </div>
-      <h3 className="section-label sale-form-label"><Icon name="coins" size={16} />{t('creditSection')}</h3>
+      <h3 className="section-label sale-form-label"><span className="sale-step" aria-hidden="true">3</span>{t('creditSection')}</h3>
       <div className="grid">
       <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></div>
       <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>

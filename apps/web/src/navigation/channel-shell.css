@@ -113,3 +113,4 @@
   .channel-layout:not(.channel-layout-signed-in) .locale-code { display: none; }
   .channel-layout:not(.channel-layout-signed-in) .channel-topbar-brand img { width: 92px; }
 }
+@media (min-width: 1080px) { .topbar-privacy { display: none; } }
