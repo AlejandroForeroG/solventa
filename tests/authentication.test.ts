@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ApiAccess } from '../backend/identity-consent-ecosystem/src/application/api-access';
 import { Authentication } from '../backend/identity-consent-ecosystem/src/application/authentication';
 import { configuration, sealAttempt, unsealAttempt } from '../backend/identity-consent-ecosystem/src/adapters/inbound/authentication-http';
 import { createHttp } from '../backend/identity-consent-ecosystem/src/adapters/inbound/http';
@@ -159,6 +160,47 @@ test('callback persistence, session and logout remain functional on each alias w
     assert.deepEqual(calls, ['exchange', 'persist', 'local_logout', 'provider_logout']);
   }
 });
+test('a verified web session can request only its currently authorized operational workspaces', async () => {
+  const identity = { providerSubject: 'user_synthetic', sessionReference: 'session_synthetic', emailVerified: true };
+  const principal = { clientId: crypto.randomUUID(), subjectToken: crypto.randomUUID() };
+  const sessions = { open: async () => principal, register: async () => principal, find: async () => principal, revoke: async () => {} };
+  let reportsGranted = true;
+  const access = new ApiAccess({ find: async () => null }, sessions,
+    { find: async () => ({ expiresAt: new Date(Date.now() - 1000).toISOString() }) },
+    { find: async () => null },
+    { find: async () => { throw new Error('synthetic portal outage'); } },
+    undefined,
+    { find: async (subject, verified, operation) => {
+      assert.deepEqual(subject, principal);
+      assert.deepEqual(verified, identity);
+      assert.equal(operation, 'reports:read');
+      return reportsGranted ? { expiresAt: new Date(Date.now() + 4500).toISOString() } : null;
+    } });
+  let workspaceLookups = 0;
+  const app = createHttp({ authorizeApiAccess: async () => assert.fail('unexpected business authorization'), authentication: {
+    provider: () => ({ begin: async () => assert.fail(), exchange: async () => assert.fail(),
+      authenticate: async () => ({ identity }), revoke: async () => {}, logoutUrl: () => '' }),
+    sessions: () => sessions,
+    workspaces: (subject, verified) => { workspaceLookups++; return access.webWorkspaces(subject, verified); },
+  } });
+  const url = origin + '/auth/session';
+  const cookie = { Cookie: '__Host-solventa-session=synthetic' };
+  const optIn = { 'X-Solventa-Session-Include': 'operations' };
+
+  assert.equal((await app.request(url, { headers: optIn }, env)).status, 401);
+  assert.deepEqual(await (await app.request(url, { headers: cookie }, env)).json(), { authenticated: true, principal });
+  assert.equal(workspaceLookups, 0);
+
+  const response = await app.request(url, { headers: { ...cookie, ...optIn } }, env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await response.json(), { authenticated: true, principal, workspaces: ['reports'] });
+
+  reportsGranted = false;
+  const revoked = await app.request(url, { headers: { ...cookie, ...optIn } }, env);
+  assert.deepEqual(await revoked.json(), { authenticated: true, principal, workspaces: [] });
+});
+
 test('unverified identities cannot reach persistence', async () => {
   let called = false;
   const auth = new Authentication({ register: async () => { called=true; throw Error(); }, find: async () => null, revoke: async () => {} });

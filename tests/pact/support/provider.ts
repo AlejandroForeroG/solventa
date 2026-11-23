@@ -360,6 +360,10 @@ const states: Record<string, (parameters: StateParameters) => Promise<Partial<Wo
   'a native session with a draft claim report': () => nativeClaimReportWorld('draft'),
   'a native session with a claim report whose evidence was received': () => nativeClaimReportWorld('received'),
   'an active session': () => ({ identity: realIdentity(identityEnv, activeSessionProvider), sessionCookie: activeSessionCookie }),
+  'an active session with reports access': () => ({
+    identity: realIdentity(identityEnv, { ...activeSessionProvider, workspaces: async () => ['reports'] }),
+    sessionCookie: activeSessionCookie,
+  }),
   'no active session': () => ({}),
   'authentication is not configured': () => ({ identity: realIdentity({ ...identityEnv, WORKOS_API_KEY: '' }) }),
   'a customer with quote access': () => ({ sessionCookie: authorizedCookie }),

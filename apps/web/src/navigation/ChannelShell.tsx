@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type MouseEvent, type PropsWithChildren } from 'react';
 import { useIntl } from 'react-intl';
 import { brandAssets } from '@solventa/assets/web';
+import type { OperationalWorkspace } from '@solventa/contracts';
 import { useLocale } from '../i18n/I18n';
 import { locales } from '../i18n/messages';
 import { Icon, type IconName } from './Icon';
-import { MenuButton } from './MenuButton';
+import { MenuButton, type MenuEntry } from './MenuButton';
 import { IconLink } from './IconAction';
 import './channel-shell.css';
 
@@ -25,24 +26,34 @@ const customerLinks: { href: string; label: string; icon: IconName }[] = [
   { href: '/venta-asistida', label: 'sale.title', icon: 'advisor' },
   { href: '/privacidad', label: 'privacy.open', icon: 'privacy' },
 ];
-const workspaceLinks: typeof customerLinks = [
-  { href: '/siniestros', label: 'claims.open', icon: 'claims' },
-  { href: '/auditoria', label: 'audit.open', icon: 'audit' },
-  { href: '/reportes', label: 'reports.open', icon: 'reports' },
-  { href: '/asesor', label: 'advisor.title', icon: 'advisor' },
-  { href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
+const workspaceLinks: (typeof customerLinks[number] & { workspace: OperationalWorkspace })[] = [
+  { workspace: 'claims', href: '/siniestros', label: 'claims.open', icon: 'claims' },
+  { workspace: 'audit', href: '/auditoria', label: 'audit.open', icon: 'audit' },
+  { workspace: 'reports', href: '/reportes', label: 'reports.open', icon: 'reports' },
+  { workspace: 'advisor', href: '/asesor', label: 'advisor.title', icon: 'advisor' },
+  { workspace: 'partner', href: '/socios', label: 'partnerPortal.title', icon: 'partner' },
 ];
 
-export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin, children }: PropsWithChildren<{
-  authenticated: boolean; canLogin: boolean; busy: boolean; onLogout(): void; onLogin(event: MouseEvent<HTMLAnchorElement>): void;
+export function ChannelShell({ authenticated, workspaces, canLogin, busy, onLogout, onLogin, children }: PropsWithChildren<{
+  authenticated: boolean; workspaces: readonly OperationalWorkspace[];
+  canLogin: boolean; busy: boolean; onLogout(): void; onLogin(event: MouseEvent<HTMLAnchorElement>): void;
 }>) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const path = window.location.pathname;
   const matchesPath = (href: string) => path === href || (href !== '/' && path.startsWith(`${href}/`));
-  const workspace = workspaceLinks.some(item => matchesPath(item.href));
+  const availableWorkspaceLinks = workspaceLinks.filter(item => workspaces.includes(item.workspace));
+  const workspace = availableWorkspaceLinks.some(item => matchesPath(item.href));
   const area = t(workspace ? 'navigation.workspace' : 'navigation.account');
-  const links = workspace ? workspaceLinks : customerLinks;
+  const links = workspace ? availableWorkspaceLinks : customerLinks;
+  const accountEntries: MenuEntry[] = [];
+  const workspaceHome = availableWorkspaceLinks[0];
+  if (workspace) {
+    accountEntries.push({ kind: 'link', label: t('navigation.backToAccount'), href: '/polizas', icon: <Icon name="policy" size={18} />, disabled: busy });
+  } else if (workspaceHome) {
+    accountEntries.push({ kind: 'link', label: t('navigation.workspace'), href: workspaceHome.href, icon: <Icon name="workspace" size={18} />, disabled: busy });
+  }
+  accountEntries.push({ kind: 'action', label: t(busy ? 'session.loggingOut' : 'session.logout'), onSelect: onLogout, icon: <Icon name="exit" size={18} />, disabled: busy });
   const current = links.find(item => matchesPath(item.href)) ?? (matchesPath('/cotizar') ? { label: 'navigation.quote' } : undefined);
   const dialog = useRef<HTMLDialogElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -76,10 +87,7 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
           {authenticated && !workspace && path !== '/cotizar' && <IconLink label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
           {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
             content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
-            entries={[
-              { kind: 'link', label: t(workspace ? 'navigation.backToAccount' : 'navigation.workspace'), href: workspace ? '/polizas' : '/siniestros', icon: <Icon name={workspace ? 'policy' : 'workspace'} size={18} />, disabled: busy },
-              { kind: 'action', label: t(busy ? 'session.loggingOut' : 'session.logout'), onSelect: onLogout, icon: <Icon name="exit" size={18} />, disabled: busy },
-            ]} />}
+            entries={accountEntries} />}
         </div>
       </header>
       <div id="channel-content" tabIndex={-1} className="channel-content">{children}</div>

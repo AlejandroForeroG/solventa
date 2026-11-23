@@ -24,6 +24,17 @@ export type AccessDecision<Actor extends AccessActor = AccessActor> = { allowed:
   status: 400 | 401 | 403 | 503;
 };
 
+const workspaceOperations = [
+  ['claims', 'claims:read'],
+  ['reports', 'reports:read'],
+  ['audit', 'underwriting-decisions:read'],
+  ['advisor', 'policies:manage-delegated'],
+  ['partner', 'partner-portal:read'],
+] as const satisfies readonly (readonly [string, ApiOperation])[];
+type Workspace = typeof workspaceOperations[number][0];
+
+type WebGrant = { expiresAt: string; advisorPermission?: AdvisorPermission; partnerPortal?: PartnerPortalGrant };
+
 const operations: readonly ApiOperation[] = ['policies:manage-delegated', 'partner-portal:read', 'underwriting-decisions:read', 'claims:read', 'claims:decide', 'reports:generate', 'reports:read', 'reports:download', 'reports:send', 'assistance-providers:read', 'assistance-requests:create', 'assistance-requests:read', 'quotes:create', 'consents:read', 'consents:write', 'offers:create', 'offers:create-flight', 'offers:read', 'offers:accept', 'policies:read', 'policies:issue', 'policies:manage', 'identity-verifications:read', 'identity-verifications:write', 'notification-preferences:read', 'notification-preferences:write', 'partner-authorizations:read', 'partner-authorizations:write', 'partner-offers:create', 'claims:report', 'claims:respond', 'notices:read', 'notices:receipt', 'notices:read-device', 'notices:receipt-device', 'advisor-sale-authorizations:read', 'advisor-sale-authorizations:write'];
 // Consent is the customer's own decision: a partner credential never reads, grants or revokes it.
 const partnerOperations: readonly ApiOperation[] = ['quotes:create', 'partner-offers:create'];
@@ -80,31 +91,45 @@ export class ApiAccess {
     try {
       const principal = await this.sessions.find(identity);
       if (!principal) return unauthorized;
-      if (operation === 'policies:manage-delegated') {
-        const permission = await this.advisorPermissions?.find(principal, identity);
-        if (!permission) return forbidden;
-        const expiry = Date.parse(permission.expiresAt);
-        if (!(expiry > Date.now()) || expiry > Date.now() + 5500) return unavailable;
-        return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation],
-          authorizationExpiresAt: permission.expiresAt, advisorPermission: permission } };
-      }
-      if (operation === 'partner-portal:read') {
-        const grant = await this.portalPermissions?.find(principal, identity);
-        if (!grant) return forbidden;
-        if (!(Date.parse(grant.expiresAt) > Date.now()) || Date.parse(grant.expiresAt) > Date.now() + 5500) return unavailable;
-        return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation], authorizationExpiresAt: grant.expiresAt, partnerPortal: grant } };
-      }
-      if (operation === 'underwriting-decisions:read' || isClaimsOperation(operation) || isReportOperation(operation)) {
-        const grant = await (operation === 'underwriting-decisions:read'
-          ? this.auditPermissions?.find(principal, identity)
-          : isReportOperation(operation) ? this.reportPermissions?.find(principal, identity, operation) : this.claimsPermissions?.find(principal, identity, operation));
-        if (!grant) return forbidden;
-        if (!(Date.parse(grant.expiresAt) > Date.now()) || Date.parse(grant.expiresAt) > Date.now() + 5500) return unavailable;
-        return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation], authorizationExpiresAt: grant.expiresAt } };
+      const grant = await this.webGrant(principal, identity, operation);
+      if (grant === null) return forbidden;
+      if (grant) {
+        if (!this.isCurrentGrant(grant)) return unavailable;
+        const { expiresAt, ...details } = grant;
+        return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation], authorizationExpiresAt: expiresAt, ...details } };
       }
       return { allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: [operation] } };
     } catch { return unavailable; }
   }
+  async webWorkspaces(principal: Principal, identity: VerifiedIdentity): Promise<Workspace[]> {
+    const results = await Promise.allSettled(workspaceOperations.map(async ([workspace, operation]) => {
+      const grant = await this.webGrant(principal, identity, operation);
+      return grant && this.isCurrentGrant(grant) ? workspace : null;
+    }));
+    return results.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []);
+  }
+
+  private isCurrentGrant(grant: WebGrant): boolean {
+    const expiry = Date.parse(grant.expiresAt);
+    const now = Date.now();
+    return expiry > now && expiry <= now + 5500;
+  }
+
+  private async webGrant(principal: Principal, identity: VerifiedIdentity, operation: ApiOperation): Promise<WebGrant | null | undefined> {
+    if (operation === 'policies:manage-delegated') {
+      const advisorPermission = await this.advisorPermissions?.find(principal, identity);
+      return advisorPermission ? { expiresAt: advisorPermission.expiresAt, advisorPermission } : null;
+    }
+    if (operation === 'partner-portal:read') {
+      const partnerPortal = await this.portalPermissions?.find(principal, identity);
+      return partnerPortal ? { expiresAt: partnerPortal.expiresAt, partnerPortal } : null;
+    }
+    if (operation === 'underwriting-decisions:read') return await this.auditPermissions?.find(principal, identity) ?? null;
+    if (isReportOperation(operation)) return await this.reportPermissions?.find(principal, identity, operation) ?? null;
+    if (isClaimsOperation(operation)) return await this.claimsPermissions?.find(principal, identity, operation) ?? null;
+    return undefined;
+  }
+
   async mobileUser(identity: VerifiedIdentity, operation: string): Promise<AccessDecision<UserActor>> {
     if (!isApiOperation(operation)) return invalid;
     if (!mobileUserOperations.includes(operation)) return forbidden;

@@ -6,7 +6,7 @@ Private Worker with its own schema, runtime role and Hyperdrive. WorkOS AuthKit 
 |---|---|---|
 | `/auth/login` | GET | AuthKit redirect; encrypted OAuth transaction valid for ten minutes |
 | `/auth/callback` | GET | Validates state/PKCE, token and email; registers user/session and redirects to `/` |
-| `/auth/session` | GET | 200 with `authenticated` and `principal: {clientId, subjectToken}`; 401 without a valid session |
+| `/auth/session` | GET | 200 with `authenticated` and `principal: {clientId, subjectToken}`; optional `workspaces` for the web shell; 401 without a valid session |
 | `/auth/logout` | POST | Requires same Origin, revokes the local session and returns `logoutUrl` to complete provider logout |
 
 Responses are not cached. Tokens/refresh tokens remain in a sealed cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no Domain and the `__Host-` prefix remotely. Local HTTP is allowed only on localhost. Never deliver tokens to React or store them in localStorage, SQL, logs or Git. The adapter verifies signature and issuer for the configured client. When the access token expires, SDK refresh is used; transient failure returns 503 and preserves the cookie. Provider validation failures also preserve cookies: a concurrent request may have installed a refreshed session. If SQL finds no active, current principal, the 401 response clears the cookie; logout clears it too. Each session checks active user, ownership, expiry and local revocation in SQL. Maximum local duration: seven days.
@@ -44,6 +44,8 @@ WorkOS environment keys use the `sk_` prefix; it does not identify test versus p
 Tests: `npm run test:authentication` and, with local SQL running, `npm run test:authentication:sql`. The latter uses an independent temporary database with synthetic data; it does not empty the developer's database.
 
 ## Pending boundaries
+
+The web shell opts into navigation hints with the `X-Solventa-Session-Include: operations` header. Identity returns `workspaces` as a list of supported section IDs after verifying the cookie and active local session. Each section uses the same grant check as its entry API. Missing, expired or unavailable grants omit the corresponding section. The checks return section IDs and an expected absent grant creates no authorization denial. Session renewal without the header retains its existing response. Protected business calls independently recheck their operation and applicable resource access.
 
 The web adapter reuses at most one WorkOS SDK client per isolate for the current trusted client ID and API key. This preserves the SDK's public JWKS cache across request adapters; changed credentials replace the client. Cookies, user/session objects, access decisions and origin-dependent configuration remain per request. Every call still unseals its own cookie, verifies signature/issuer/expiry and reads the current local session and user state. The single joined session SELECT uses its implicit consistent transaction, avoiding explicit BEGIN/COMMIT round trips; registration and revocation retain their write transactions. Reusing provider public keys never postpones local revocation or grants consent.
 
