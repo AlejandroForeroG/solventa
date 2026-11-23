@@ -12,7 +12,7 @@ export function LocaleSwitch() {
   const { locale, setLocale } = useLocale();
   const name = (code: string) => intl.formatMessage({ id: `locale.short.${code}` });
   return <MenuButton className="locale-menu" label={intl.formatMessage({ id: 'locale.menu' }, { language: name(locale) })}
-    content={<><Icon name="globe" size={18} /><span className="locale-code">{locale === 'es-CO' ? 'ES' : 'EN'}</span><Icon name="chevron" size={14} /></>}
+    content={<><Icon name="globe" size={18} /><span className="locale-code">{locale === 'es-CO' ? 'ES' : 'EN'}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
     entries={locales.map(code => ({ kind: 'radio' as const, label: name(code), lang: code.slice(0, 2), checked: locale === code, onSelect: () => setLocale(code) }))} />;
 }
 
@@ -73,7 +73,7 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
         <div className="channel-topbar-tools"><LocaleSwitch />
           {canLogin && <a className="btn btn-primary btn-small" href="/auth/login" onClick={onLogin}>{t('session.title')}</a>}
           {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
-            content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} /></>}
+            content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
             entries={[
               { kind: 'link', label: t('privacy.open'), href: '/privacidad', icon: <Icon name="privacy" size={18} />, disabled: busy },
               { kind: 'link', label: t(workspace ? 'navigation.backToAccount' : 'navigation.workspace'), href: workspace ? '/polizas' : '/siniestros', icon: <Icon name={workspace ? 'policy' : 'workspace'} size={18} />, disabled: busy },
