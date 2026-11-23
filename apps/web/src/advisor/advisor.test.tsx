@@ -24,8 +24,11 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   await screen.findByText('Sin autorizaciones.');
   const button=screen.getByRole('button',{name:'Autorizar'});expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Referencia del asesor'),{target:{value:reference}});
-  await userEvent.setup().click(screen.getByLabelText('Autorizo esta actuación y el reemplazo indicado'));
+  expect(screen.getByLabelText('Actuación')).toHaveValue('');
+  await userEvent.setup().selectOptions(screen.getByLabelText('Actuación'),'cancelled');
+  await userEvent.setup().click(screen.getByLabelText('Autorizo a mi asesor a cancelar esta póliza'));
   await userEvent.setup().click(button);expect(await screen.findByRole('alert')).toHaveTextContent('No se confirmó');
+  vi.setSystemTime(new Date('2026-11-11T00:03:00Z'));
   await userEvent.setup().click(button);await waitFor(()=>expect(posts).toHaveLength(2));
   expect(posts[0].headers).toEqual(posts[1].headers);expect(posts[0].body).toEqual(posts[1].body);
   expect(String(posts[0].body)).not.toContain('clientId');

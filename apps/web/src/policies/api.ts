@@ -10,8 +10,9 @@ export const DOCUMENT_IDS = ['signed_policy', 'general_conditions', 'premium_rec
 export type PolicyDocumentId = typeof DOCUMENT_IDS[number];
 export type PolicyDetail = PolicySummary & { lifecycle?: { action: 'modified' | 'renewed' | 'cancelled'; at: string; reason: string; replacementPolicyId: string | null }; exclusions: { code: string; text: string }[]; conditionsVersion: string;
   documents: { documentId: PolicyDocumentId; issuedAt: string }[];
-  payments: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null }[] };
-export type PolicyListing = { policies: PolicySummary[]; hasMore: boolean };
+  payments: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null }[];
+  parametricPayment?: { date: string; amount: string; currency: 'COP'; status: 'paid' | 'pending' | 'failed'; reference: string | null } };
+export type PolicyListing = { policies: PolicySummary[]; hasMore: boolean; nextCursor: string | null };
 export type PolicyFile = { blob: Blob; fileName: string };
 export type PolicyOutcome<T> = { kind: 'ok'; value: T } | { kind: 'unauthenticated' | 'notFound' | 'unavailable'; traceId?: string };
 
@@ -54,7 +55,8 @@ const payment = (v: unknown): v is PolicyDetail['payments'][number] => record(v)
 function detail(v: unknown): v is PolicyDetail {
   return summary(v) && list((v as Record<string, unknown>).exclusions, exclusion) && typeof (v as Record<string, unknown>).conditionsVersion === 'string'
     && list((v as Record<string, unknown>).documents, documentEntry) && list((v as Record<string, unknown>).payments, payment)
-    && ((v as Record<string, unknown>).lifecycle === undefined || validLifecycle((v as Record<string, unknown>).lifecycle));
+    && ((v as Record<string, unknown>).lifecycle === undefined || validLifecycle((v as Record<string, unknown>).lifecycle))
+    && ((v as Record<string, unknown>).parametricPayment === undefined || payment((v as Record<string, unknown>).parametricPayment));
 }
 
 async function read<T>(path: string, signal: AbortSignal, valid: (body: Record<string, unknown>) => T | null): Promise<PolicyOutcome<T>> {
@@ -69,8 +71,20 @@ async function read<T>(path: string, signal: AbortSignal, valid: (body: Record<s
   } catch (error) { if (signal.aborted) throw error; return { kind: 'unavailable' }; }
 }
 
-export const listPolicies = (signal: AbortSignal) => read<PolicyListing>('/api/v1/policies/issued', signal,
-  body => (list(body.policies, summary) && body.policies.length <= 6 && typeof body.hasMore === 'boolean' ? { policies: body.policies, hasMore: body.hasMore } : null));
+export const listPolicies = (signal: AbortSignal, query?: { cursor?: string; policyId?: string }) => {
+  const params = new URLSearchParams();
+  if (query?.cursor !== undefined) params.set('cursor', query.cursor);
+  if (query?.policyId !== undefined) params.set('policyId', query.policyId);
+  return read<PolicyListing>('/api/v1/policies/issued' + (params.size ? '?' + params.toString() : ''), signal, body => {
+    if (!list(body.policies, summary) || body.policies.length > 6 || typeof body.hasMore !== 'boolean'
+      || new Set(body.policies.map(policy => policy.policyId)).size !== body.policies.length) return null;
+    const nextCursor = body.nextCursor ?? null;
+    if (body.hasMore ? !uuid(nextCursor) || body.policies.at(-1)?.policyId !== nextCursor : nextCursor !== null) return null;
+    if (query?.cursor && nextCursor === query.cursor
+      || query?.policyId && (body.hasMore || body.policies.some(policy => policy.policyId !== query.policyId))) return null;
+    return { policies: body.policies, hasMore: body.hasMore, nextCursor: typeof nextCursor === 'string' ? nextCursor : null };
+  });
+};
 export const readPolicyDetail = (policyId: string, signal: AbortSignal) =>
   read<PolicyDetail>(`/api/v1/policies/${encodeURIComponent(policyId)}/detail`, signal, body => (detail(body) ? body : null));
 

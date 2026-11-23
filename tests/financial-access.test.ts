@@ -358,3 +358,60 @@ test('a native user reads policies through the combined RPC without any consent 
   const webActor = await authorizeFinancialAccess(build(async () => ({ allowed: true, actor: { kind: 'user', channel: 'web', principal, operations: ['policies:read'] } })), { kind: 'mobile', operation: 'policies:read', token: 'synthetic-token', traceId });
   assert.deepEqual(webActor, { allowed: false, error: 'access_unavailable', status: 503 });
 });
+
+test('the notices operations belong to the native customer: reads return their own push choices, receipts return none, and the web has neither', async () => {
+  const identity = { emailVerified: true, providerSubject: 'synthetic-user', sessionReference: 'synthetic-session' };
+  const application = new ApiAccess({ find: async () => assert.fail('partner storage is not used') }, { find: async () => principal, open: async () => principal, revoke: async () => {} });
+  const choices = { policy: true, payments: false, claims: false, commercial: false };
+  const asked: string[] = [];
+  const build = (readPushChoices?: (clientId: string) => Promise<typeof choices>) => ({
+    authorize: (input: unknown) => authorizeApiAccess({ application, web: null,
+      mobile: { authenticate: async () => identity, authorize: (verified: typeof identity, operation: string) => application.mobileUser(verified, operation) }, partner: null }, input),
+    verifyConsents: async (): Promise<ConsentDecision[]> => assert.fail('notices need no risk consent'),
+    readPushChoices,
+  });
+  const traceId = '50000000-0000-4000-8000-000000000002';
+  const read = await authorizeFinancialAccess(build(async clientId => { asked.push(clientId); return choices; }), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId });
+  assert.ok(read.allowed && read.pushChoices);
+  assert.deepEqual(read.allowed && read.pushChoices, choices);
+  // The client is the one the access decision named, never a value of the request.
+  assert.deepEqual(asked, [principal.clientId]);
+  const receipt = await authorizeFinancialAccess(build(async () => assert.fail('a receipt needs no choices')), { kind: 'mobile', operation: 'notices:receipt', token: 'synthetic-token', traceId });
+  assert.ok(receipt.allowed && receipt.pushChoices === undefined);
+  // Without a reader the read cannot be answered, and it is never allowed without the choices.
+  assert.deepEqual(await authorizeFinancialAccess(build(), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId }), { allowed: false, error: 'access_unavailable', status: 503 });
+  assert.deepEqual(await authorizeFinancialAccess(build(async () => { throw new Error('store down'); }), { kind: 'mobile', operation: 'notices:read', token: 'synthetic-token', traceId }), { allowed: false, error: 'access_unavailable', status: 503 });
+  // A web session reaches neither operation.
+  const web = await authorizeFinancialAccess(build(async () => choices), { kind: 'web', operation: 'notices:read', cookie: 'synthetic-sealed', method: 'GET', origin: 'https://web.example' });
+  assert.ok(!web.allowed);
+});
+
+test('device notice financial authorization carries the verified destination and current owner choices in one decision', async () => {
+  const identity = { emailVerified:true, providerSubject:'native-notice-user', sessionReference:'native-notice-session' };
+  const destination = 'a1234567-1234-4123-8123-123456789abc';
+  const application = new ApiAccess({ find:async()=>null }, { find:async()=>principal, open:async()=>principal, revoke:async()=>{} }, undefined, undefined, undefined, undefined, undefined, { find:async()=>destination });
+  const choices = { policy:true, payments:false, claims:true, commercial:false };
+  let choiceReads = 0;
+  const deps = {
+    authorize:(input:unknown)=>authorizeApiAccess({ application, web:null, partner:null, mobile:{ authenticate:async()=>identity, authorize:(verified:typeof identity,operation:string)=>application.mobileUser(verified,operation) } },input),
+    verifyConsents:async():Promise<ConsentDecision[]>=>assert.fail('notice delivery does not use risk profiling consent'),
+    readPushChoices:async(clientId:string)=>{ assert.equal(clientId,principal.clientId); choiceReads++; return choices; },
+  };
+  const read = await authorizeFinancialAccess(deps,{kind:'mobile',operation:'notices:read-device',token:'synthetic-token'});
+  assert.ok(read.allowed); assert.equal(read.actor.noticeDestination,destination); assert.deepEqual(read.pushChoices,choices);
+  const receipt = await authorizeFinancialAccess(deps,{kind:'mobile',operation:'notices:receipt-device',token:'synthetic-token'});
+  assert.ok(receipt.allowed); assert.equal(receipt.actor.noticeDestination,destination); assert.equal(receipt.pushChoices,undefined);
+  assert.equal(choiceReads,1);
+});
+
+test('a missing notice binding records its exact native security denial without leaking installation or session data',async()=>{
+  const identity = {emailVerified:true,providerSubject:'private-native-subject',sessionReference:'private-native-session'};
+  const application = new ApiAccess({find:async()=>null},{find:async()=>principal,open:async()=>principal,revoke:async()=>{}},undefined,undefined,undefined,undefined,undefined,{find:async()=>null});
+  const recorded:unknown[] = [];
+  const decisionId = '50000000-0000-4000-8000-000000000003';
+  const security = new SecurityDecisions({append:async decision=>{recorded.push(decision);}},()=>decisionId);
+  const decision = await authorizeApiAccess({application,security,web:null,partner:null,mobile:{authenticate:async()=>identity,authorize:(verified:typeof identity,operation:string)=>application.mobileUser(verified,operation)}},
+    {kind:'mobile',operation:'notices:read-device',token:'synthetic-token',traceId:decisionId});
+  assert.deepEqual(decision,{allowed:false,error:'forbidden',status:403});
+  assert.deepEqual(recorded,[{schemaVersion:1,decisionId,correlationId:decisionId,category:'api_access',channel:'mobile',operation:'notices:read-device',cause:'forbidden'}]);
+});

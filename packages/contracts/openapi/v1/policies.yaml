@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Solventa API - Policies
-  version: 1.0.0
+  version: 1.1.0
   description: Authenticated academic financial flow. Buying and issuing are
     web-only; the native app only reads its own issued policies. External data,
     payment and signature providers are explicitly mocked; Solventa
@@ -25,8 +25,11 @@ paths:
       summary: List the caller's own issued policies for the native wallet
       description: Native read-only route. The owner comes from the verified user
         access token, never from a parameter. It returns at most six issued
-        policies, newest validity first, with the product, validity, premium and
-        coverage; hasMore reports that older ones exist. The reviewed document,
+        policies per page, newest validity first and UUID ascending for ties,
+        with the product, validity, premium and coverage. Follow nextCursor for
+        another page, or policyId to select one owned issued policy; these
+        parameters are mutually exclusive. Missing or foreign references
+        produce the same empty result. The reviewed document,
         its hash and payment data are not returned. The device keeps a protected
         copy for offline use and treats it as stale, never as the contractual
         source. Contracts ended by modification, renewal or cancellation are
@@ -38,6 +41,8 @@ paths:
         - MobileBearer: []
       parameters:
         - $ref: ./common.yaml#/components/parameters/TraceId
+        - $ref: "#/components/parameters/PolicyCursor"
+        - $ref: "#/components/parameters/PolicyFilter"
       responses:
         "200":
           description: The owner's issued policies, possibly none.
@@ -250,8 +255,11 @@ paths:
       operationId: listIssuedPolicies
       summary: List the signed-in customer's issued policies for the web portal
       description: Web read-only route. The owner comes from the verified session,
-        never from a parameter. It returns at most six issued policies, newest
-        validity first, with the same fields as the native list. Pending,
+        never from a parameter. It returns at most six issued policies per
+        page, newest validity first and UUID ascending for ties, with the same
+        fields as the native list. Follow nextCursor for another page, or use
+        policyId to select one owned issued policy. These parameters are mutually
+        exclusive; missing or foreign references produce the same empty result. Pending,
         charged, refunding and refunded policies belong to the purchase flow and
         are not listed.
       tags:
@@ -261,6 +269,8 @@ paths:
         - LocalWebSession: []
       parameters:
         - $ref: ./common.yaml#/components/parameters/TraceId
+        - $ref: "#/components/parameters/PolicyCursor"
+        - $ref: "#/components/parameters/PolicyFilter"
       responses:
         "200":
           description: The owner's issued policies, possibly none.
@@ -295,12 +305,15 @@ paths:
   /policies/{policyId}/detail:
     get:
       operationId: getOwnPolicyDetail
-      summary: Read the coverage, documents and premium payments of an issued policy
+      summary: Read the coverage, documents and payments of an issued policy
       description: One integrity-checked read of an issued policy. Coverage comes from
         the immutable accepted terms; exclusions come from the product
         conditions identified by conditionsVersion and are not part of the
         signed document. Documents list what can be downloaded with its issue
-        date. The payment list holds the policy's single premium charge. A
+        date. The payment list holds the policy's single premium charge. The optional
+        parametricPayment holds the integrity-checked stored indemnity separately, with its
+        last stored update time; only confirmed payments expose a reference and paid state.
+        Pending and declined payments are never announced as paid. A
         policy that is still in the purchase flow, missing or owned by another
         user returns the same opaque 404.
       tags:
@@ -506,6 +519,29 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 components:
+  parameters:
+    PolicyCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque nextCursor returned by this owner's preceding page.
+        The server resolves its ordering position with the authenticated owner;
+        a missing or foreign reference returns an empty page. Duplicate values,
+        an invalid UUID or combining it with policyId returns 400 after authorization.
+      schema:
+        type: string
+        format: uuid
+    PolicyFilter:
+      name: policyId
+      in: query
+      required: false
+      description: Select one owned issued policy, including one outside the
+        first page. A missing or foreign reference returns the same empty
+        result. Cannot be combined with cursor; duplicate or invalid values
+        return 400 after authorization. This never selects the owner.
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     WebSession:
       type: apiKey
@@ -665,6 +701,14 @@ components:
             $ref: "#/components/schemas/PolicySummary"
         hasMore:
           type: boolean
+        nextCursor:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opaque UUID of the last policy on this page when more
+            remain, otherwise null. Added in 1.1.0; new servers always return
+            it. Older clients can ignore it. It is not an authorization token
+            and carries no coverage dates, document or payment data.
         traceId:
           type: string
           format: uuid
@@ -883,6 +927,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PolicyPaymentEntry"
+        parametricPayment:
+          allOf:
+            - $ref: "#/components/schemas/PolicyPaymentEntry"
+          description: Stored parametric indemnity, separate from the premium. Only a confirmed payment is paid and has a receipt reference.
+          example:
+            date: '2026-11-19T12:30:00.000Z'
+            amount: '100000.0000'
+            currency: COP
+            status: paid
+            reference: MOCK-70000000-0000-4000-8000-000000000001
         traceId:
           type: string
           format: uuid

@@ -48,7 +48,7 @@ Provider settlement happens between owner transactions, as for premiums. A confi
 
 An uncertain provider result throws before that transaction: the payment stays `pending`, the call answers `unavailable` and nothing is announced as paid. A declined result is terminal: one transaction stores the payment as `declined` and writes the `indemnity.declined` audit and decision capture, then the call answers `payment_declined`. It is never announced, a replay of the same event answers `payment_declined` without reaching the gateway again, and the recovery no longer selects it. The indemnity and claim keep their stored state because the schema has no declined state for them; the payment and its decision are the terminal record. Settlement is idempotent per payment in the provider, so a retry never pays twice.
 
-Policy persists the notice, but no consumer delivers it yet: the push delivery, preferences and device permission belong to the notifications story. Until it adopts `policy.indemnity.notice`, no customer receives an alert.
+Policy persists the notice, and the native customer receives it through the simulated, choice-aware delivery of [customer notices](customer-notices.md): the payments choice and the device permission decide whether it is shown, and the receipt the device reports is the only evidence that it was. No real push provider is contacted.
 
 ## Recovery
 
@@ -60,6 +60,6 @@ A retry with the same event completes a pending payment. Without one, the Worker
 
 ## Verification and limits
 
-`tests/parametric-payout.test.ts` runs both variants through the real use case with an in-memory owner: covered events, thresholds, other station or flight, wrong kind, mortgage policy, periods, forged or malformed messages, replay, conflict, uncertain, declined and recovered payments, and the notice. `npm run test:financial:sql` repeats the weather flow, the notice and the recovery on real SQL with the runtime grants.
+`tests/parametric-payout.test.ts` runs both variants through the real use case with an in-memory owner: covered events, thresholds, other station or flight, wrong kind, mortgage policy, periods, forged or malformed messages, replay, conflict, uncertain, declined and recovered payments, and the notice. The delivery to the device is covered by `tests/notices.test.ts` and the SQL smoke. `npm run test:financial:sql` repeats the weather flow, the notice and the recovery on real SQL with the runtime grants.
 
 Limits: the event names its policy, as the simulated oracle already did, so no lookup from flight or station to policies exists; the provider is simulated and signed with the financial key; the weather product cannot be bought; a mass event campaign and back-pressure are a separate technical story; and the notice is stored, not delivered.

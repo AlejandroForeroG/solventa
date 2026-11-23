@@ -6,8 +6,9 @@ export interface AuthenticatedSession {
 }
 
 export interface PoliciesApi {
-  list(): Promise<{ policies: CachedPolicy[]; hasMore: boolean }>;
+  list(query?: { cursor?: string; policyId?: string }): Promise<PolicyPage>;
 }
+export type PolicyPage = { policies: CachedPolicy[]; hasMore: boolean; nextCursor: string | null };
 
 export interface WalletCache {
   unlock(): Promise<void>;

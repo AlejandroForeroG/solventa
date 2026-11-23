@@ -4,6 +4,7 @@ import { useFormatters, useLocale } from '../i18n/I18n';
 import { useAnnounce } from '../quote/Live';
 import { consentApi, newIdempotencyKey, type Consent, type ConsentApi, type Terms } from './api';
 import { SUPPORTED_TEXT_VERSION } from './wording';
+import { Icon } from '../navigation/Icon';
 
 type Load = 'loading' | 'ready' | 'error' | 'mismatch';
 type Problem = 'none' | 'grant' | 'decline' | 'outdated';
@@ -42,7 +43,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   }, [api, announce, intl, onSessionLost]);
 
   useEffect(() => { void fetchTerms(); return () => pending.current?.abort(); }, [fetchTerms]);
-  useEffect(() => { if (load !== 'loading') heading.current?.focus(); }, [load]);
+  useEffect(() => { heading.current?.focus(); }, [load, busy]);
   useEffect(() => { key.current = newIdempotencyKey(); }, [locale]);
 
   function reload() { setLoad('loading'); void fetchTerms(); }
@@ -50,6 +51,7 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   async function authorize() {
     if (!terms || !checked || busy !== 'idle') return;
     setBusy('authorizing'); setProblem('none');
+    announce(intl.formatMessage({ id: 'consent.submitting' }));
     const outcome = await api.grantConsent({ textVersion: SUPPORTED_TEXT_VERSION, locale, ...(quoteRef ? { quoteRef } : {}) }, key.current);
     setBusy('idle');
     if (outcome.kind === 'ok') {
@@ -94,20 +96,21 @@ export function ConsentStep({ quoteRef, api = consentApi, onGranted, onDeclined,
   if (load === 'error' || load === 'mismatch' || !terms) {
     return <section className="step">
       <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'consent.title' })}</h1>
-      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{intl.formatMessage({ id: load === 'mismatch' ? 'consent.versionMismatch' : 'consent.errorTerms' })}</p></div>
+      <div className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><p>{intl.formatMessage({ id: load === 'mismatch' ? 'consent.versionMismatch' : 'consent.errorTerms' })}</p></div>
       <button type="button" className="btn btn-primary" onClick={reload}>{intl.formatMessage({ id: 'consent.retry' })}</button>
     </section>;
   }
 
   return <section className="step">
     {problem !== 'none' && <div className="banner banner-error">
-      <span aria-hidden="true" className="banner-icon">!</span>
+      <Icon name="alert" size={18} className="banner-icon" />
       <p>{intl.formatMessage({ id: problem === 'outdated' ? 'consent.outdated' : problem === 'decline' ? 'consent.errorDecline' : 'consent.errorGrant' })}</p>
     </div>}
     <div className="card consent-card">
       <header className="consent-head">
         <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'consent.title' })}</h1>
         <p className="note">{intl.formatMessage({ id: 'consent.subtitle' })}</p>
+        <p className="banner banner-info">{intl.formatMessage({ id: 'consent.simulated' })}</p>
       </header>
       <div className="consent-body">
         <div>

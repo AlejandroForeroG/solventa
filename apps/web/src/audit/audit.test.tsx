@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -10,25 +10,58 @@ import examples from '../../../../packages/contracts/examples/underwriting-audit
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const traceId = examples.detail.traceId;
 const id = examples.detail.decision.decisionId;
+const buttonLabel = new RegExp('^Decisión: ' + (examples.detail.decision.quoteId ?? id) + ' · DEC-');
 const lost = vi.fn();
 const show = (english = false) => render(<I18n initial={english ? 'en-US' : 'es-CO'}><AuditWorkspace onSessionLost={lost} /></I18n>);
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); });
 describe('protected underwriting audit workspace', () => {
+  it('reveals retained results in groups without skipping records or changing the server cursor', async () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({ ...examples.page.items[0],
+      decisionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      quoteId: `COT-2026-${String(index + 1).padStart(5, '0')}` }));
+    const next = '00000000-0000-4000-8000-000000009999';
+    const fetch = vi.fn().mockImplementation(async () => response({ items, next, traceId }));
+    vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
+    await screen.findByRole('button', { name: /^Decisión: COT-2026-00001 · DEC-/ });
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(5);
+    expect(screen.getByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
+    const row = screen.getByRole('button', { name: /^Decisión: COT-2026-00001 · DEC-/ }).closest('tr')!;
+    expect(within(row).getByText(items[0].decisionId)).not.toBeVisible();
+    await user.click(within(row).getByText('Referencia técnica'));
+    expect(within(row).getByText(items[0].decisionId)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(10);
+    expect(screen.getByRole('button', { name: /^Decisión: COT-2026-00006 · DEC-/ })).toHaveFocus();
+    expect(fetch).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
+    expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: 'Mostrar más decisiones' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Página siguiente' })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(`/api/v1/underwriting-decisions?before=${next}`, expect.anything()));
+    expect(await screen.findByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Página siguiente' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Página anterior' }));
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions', expect.anything()));
+  });
   it('lists decisions, applies filters, opens captured facts and rule checks and returns to the list', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) => response(url.includes('/' + id) ? examples.detail : examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: id }));
+    await user.click(await screen.findByRole('button', { name: buttonLabel }));
     expect(await screen.findByRole('heading', { name: 'Entradas de la decisión' })).toBeVisible();
+    expect(screen.getByText('8.000.000')).not.toBeVisible();
+    await user.click(screen.getByRole('link', { name: 'Entradas de la decisión' }));
+    expect(document.getElementById('audit-inputs')).toHaveFocus();
     expect(screen.getByText('8.000.000')).toBeVisible(); expect(screen.getByText('Puntaje mínimo de 600')).toBeVisible();
     expect(screen.getByText('No se utilizó modelo')).toBeVisible();
     expect(screen.getByText('CNS-2026-00001 / 1')).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
-    await screen.findByRole('button', { name: id });
+    await screen.findByRole('button', { name: buttonLabel });
     await user.type(screen.getByLabelText('ID de decisión, oferta o cotización'), 'COT-2026-00001');
     await user.selectOptions(screen.getByLabelText('Resultado'), 'declined');
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions?reference=COT-2026-00001&outcome=declined', expect.objectContaining({ cache: 'no-store' })));
-    await user.click(await screen.findByRole('button', { name: id }));
+    await user.click(await screen.findByRole('button', { name: buttonLabel }));
     await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('ID de decisión, oferta o cotización')).toHaveValue('COT-2026-00001');
@@ -37,14 +70,14 @@ describe('protected underwriting audit workspace', () => {
     fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } });
     fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-31' } });
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
-    await user.click(await screen.findByRole('button', { name: id }));
+    await user.click(await screen.findByRole('button', { name: buttonLabel }));
     await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     await user.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
     expect(screen.getByLabelText('Producto')).toHaveValue('flight_delay');
-    expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
+    expect(screen.getByLabelText('Desde')).toHaveValue('01/10/2026');
     await user.click(screen.getByRole('button', { name: 'Limpiar' }));
     for (const label of ['ID de decisión, oferta o cotización', 'Producto', 'Resultado', 'Desde', 'Hasta']) expect(screen.getByLabelText(label)).toHaveValue('');
-    await screen.findByRole('button', { name: id });
+    await screen.findByRole('button', { name: buttonLabel });
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/underwriting-decisions', expect.anything()));
 
@@ -53,7 +86,7 @@ describe('protected underwriting audit workspace', () => {
     const { identityVerified: _identity, ...inputs } = examples.detail.decision.inputs;
     const detail = { ...examples.detail, decision: { ...examples.detail.decision, inputs, reconstruction: { status: 'incomplete_capture', missing: ['inputs.identityVerified'] } } };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response(detail)));
-    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
     expect(await screen.findByText('Captura histórica incompleta')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Datos faltantes' })).toBeVisible();
     expect(screen.queryByText('Coincide con la regla conservada')).toBeNull();
@@ -64,7 +97,8 @@ describe('protected underwriting audit workspace', () => {
       { field: 'inputs.affiliationActive', kind: 'historical_mock', reference: 'legacy-mock-risk-1', version: '689304a8458ee32e112fd52497488c7ce1170c73' }
     ] } };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response(detail)));
-    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Entradas de la decisión' }));
     expect(await screen.findByRole('heading', { name: 'Origen de las entradas recuperadas' })).toBeVisible();
     expect(screen.getByRole('cell', { name: 'Perfil conservado' })).toBeVisible();
     expect(screen.getByRole('cell', { name: 'Artefacto simulado histórico' })).toBeVisible();
@@ -77,7 +111,7 @@ describe('protected underwriting audit workspace', () => {
   });
   it('clears protected data when permission is revoked while reading a detail', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response({ error: 'forbidden', traceId }, 403)));
-    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
     expect(await screen.findByText('Tu cuenta no tiene permiso de auditoría.')).toBeVisible();
     expect(screen.queryByText('8.000.000')).toBeNull(); expect(screen.queryByRole('button', { name: 'Exportar JSON' })).toBeNull();
   });
@@ -89,32 +123,32 @@ describe('protected underwriting audit workspace', () => {
   it('ignores a late detail response after navigating back, even if transport ignores abort', async () => {
     let resolve: (response: Response) => void = () => {};
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockImplementationOnce(() => new Promise<Response>(done => { resolve = done; })).mockResolvedValue(response(examples.page)));
-    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
     await userEvent.click(screen.getByRole('button', { name: /Volver a decisiones/ }));
-    await screen.findByRole('button', { name: id });
+    await screen.findByRole('button', { name: buttonLabel });
     await act(async () => resolve(response(examples.detail)));
     expect(screen.queryByRole('heading', { name: 'Entradas de la decisión' })).toBeNull();
   });
   it('rechecks permission before export and does not download when access is revoked', async () => {
     const create = vi.fn(); vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValueOnce(response(examples.detail)).mockResolvedValue(response({ error: 'forbidden', traceId }, 403)));
-    show(); await userEvent.click(await screen.findByRole('button', { name: id }));
+    show(); await userEvent.click(await screen.findByRole('button', { name: buttonLabel }));
     await userEvent.click(await screen.findByRole('button', { name: 'Exportar JSON' }));
     expect(await screen.findByText('Tu cuenta no tiene permiso de auditoría.')).toBeVisible(); expect(create).not.toHaveBeenCalled();
   });
   it('purges data when the tab is hidden and reauthorizes when visible', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response(examples.page)).mockResolvedValue(response({ error: 'forbidden', traceId }, 403)); vi.stubGlobal('fetch', fetch);
-    show(); await screen.findByRole('button', { name: id });
+    show(); await screen.findByRole('button', { name: buttonLabel });
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(true); fireEvent(document, new Event('visibilitychange'));
-    expect(screen.queryByRole('button', { name: id })).toBeNull();
+    expect(screen.queryByRole('button', { name: buttonLabel })).toBeNull();
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false); fireEvent(document, new Event('visibilitychange'));
     expect(await screen.findByText('Tu cuenta no tiene permiso de auditoría.')).toBeVisible();
   });
   it('has no serious accessibility violations in the list and detail', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => response(url.endsWith(id) ? examples.detail : examples.page)));
-    const view = show(); await screen.findByRole('button', { name: id });
+    const view = show(); await screen.findByRole('button', { name: buttonLabel });
     expect(await axe(view.container)).toHaveNoViolations();
-    await userEvent.click(screen.getByRole('button', { name: id })); await screen.findByRole('heading', { name: 'Entradas de la decisión' });
+    await userEvent.click(screen.getByRole('button', { name: buttonLabel })); await screen.findByRole('heading', { name: 'Entradas de la decisión' });
     expect(await axe(view.container)).toHaveNoViolations();
   });
 });

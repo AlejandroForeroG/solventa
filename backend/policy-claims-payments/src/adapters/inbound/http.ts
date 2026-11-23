@@ -5,11 +5,13 @@ import { isDocumentKind } from '../../domain/policy-portal';
 import type { DocumentFile, PolicyDetailResult, PolicyDocumentKind, PolicyDocumentResult } from '../../domain/policy-portal';
 import { renderPdf } from './pdf';
 import { mountClaims, type ClaimsHttpDependencies } from './claims-http';
+import { mountReports, type ReportsHttpDependencies } from './reports-http';
 import { mountClaimReport, type ClaimReportHttpDependencies } from './claim-report-http';
 import { mountClaimDrafts, type ClaimDraftHttpDependencies } from './claim-drafts-http';
 
 import { mountAssistance, type AssistanceHttpDependencies } from './assistance-http';
 import { mountAdvisor, type AdvisorHttpDependencies } from './advisor-http';
+import { mountNotices, type NoticesHttpDependencies } from './notices-http';
 
 export type PolicyHttpDependencies = {
   claimDrafts?: ClaimDraftHttpDependencies;
@@ -18,11 +20,13 @@ export type PolicyHttpDependencies = {
   authorizeFinancialAccess(input: unknown): Promise<unknown>;
   denyResourceAccess(input: unknown): Promise<unknown>;
   claims?: ClaimsHttpDependencies;
+  reports?: ReportsHttpDependencies;
   claimReport?: ClaimReportHttpDependencies;
+  notices?: NoticesHttpDependencies;
   finance: {
     changeLifecycle?(input: { actor: FinancialActor; policyId: string; action: import('../../domain/policy-lifecycle').LifecycleAction;
       replacementPolicyId: string | null; documentHash: string; reason: string; idempotencyKey: string; traceId: string }): Promise<FinancialResult>;
-    listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean }): Promise<PolicyListResult>;
+    listOwn(input: { actor: FinancialActor; traceId: string; includeEnded?: boolean; cursor?: string; policyId?: string }): Promise<PolicyListResult>;
     get(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<FinancialResult>;
     detail(input: { actor: FinancialActor; policyId: string; traceId: string }): Promise<PolicyDetailResult>;
     document(input: { actor: FinancialActor; policyId: string; documentId: PolicyDocumentKind; traceId: string }): Promise<PolicyDocumentResult>;
@@ -37,6 +41,14 @@ export type PolicyHttpDependencies = {
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+function policyPageQuery(url: string): { cursor?: string; policyId?: string } | null {
+  const params = new URL(url).searchParams;
+  if (params.getAll('cursor').length > 1 || params.getAll('policyId').length > 1
+    || params.has('cursor') && params.has('policyId')) return null;
+  if (params.has('cursor') && !UUID.test(params.get('cursor') ?? '') || params.has('policyId') && !UUID.test(params.get('policyId') ?? '')) return null;
+  return params.has('cursor') ? { cursor: (params.get('cursor') ?? '').toLowerCase() }
+    : params.has('policyId') ? { policyId: (params.get('policyId') ?? '').toLowerCase() } : {};
+}
 async function smallBody(request: Request): Promise<unknown> {
   if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') ?? '')) return null;
   if (Number(request.headers.get('content-length')) > 1024 || !request.body) return null;
@@ -102,8 +114,10 @@ export function createHttp(deps?: PolicyHttpDependencies) {
         || !Array.isArray(actor.operations) || !actor.operations.includes('policies:read')
         || typeof actor.principal.clientId !== 'string' || !UUID.test(actor.principal.clientId)
         || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
-      const result = await deps.finance.listOwn({ actor: { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, traceId, includeEnded: false });
-      if (result.status === 'ok') return reply({ policies: result.policies, hasMore: result.hasMore }, 200);
+      const page = policyPageQuery(c.req.url);
+      if (!page) return reply({ error: 'invalid_request' }, 400);
+      const result = await deps.finance.listOwn({ actor: { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() }, traceId, includeEnded: false, ...page });
+      if (result.status === 'ok') return reply({ policies: result.policies, hasMore: result.hasMore, nextCursor: result.nextCursor }, 200);
       return reply({ error: result.error }, result.httpStatus);
     } catch { return reply({ error: 'financial_unavailable' }, 503); }
     finally { clearTimeout(timer); }
@@ -153,8 +167,10 @@ export function createHttp(deps?: PolicyHttpDependencies) {
           || typeof actor.principal.subjectToken !== 'string' || !UUID.test(actor.principal.subjectToken)) return reply({ error: 'access_unavailable' }, 503);
         const principal = { clientId: actor.principal.clientId.toLowerCase(), subjectToken: actor.principal.subjectToken.toLowerCase() };
         if (action === 'list') {
-          const listed = await deps.finance.listOwn({ actor: principal, traceId });
-          return listed.status === 'ok' ? reply({ policies: listed.policies, hasMore: listed.hasMore }, 200) : refuse(listed);
+          const page = policyPageQuery(c.req.url);
+          if (!page) return reply({ error: 'invalid_request' }, 400);
+          const listed = await deps.finance.listOwn({ actor: principal, traceId, ...page });
+          return listed.status === 'ok' ? reply({ policies: listed.policies, hasMore: listed.hasMore, nextCursor: listed.nextCursor }, 200) : refuse(listed);
         }
         const policyId = (c.req.param(byAcceptance ? 'acceptanceId' : 'policyId') ?? '').toLowerCase();
         if (!UUID.test(policyId)) return reply({ error: 'invalid_request' }, 400);
@@ -226,7 +242,9 @@ export function createHttp(deps?: PolicyHttpDependencies) {
   }
   // The report routes share the list's path, so they register first and the list keeps the remaining methods.
   if (deps?.claimReport) mountClaimReport(app, deps.claimReport);
+  if (deps?.notices) mountNotices(app, deps.notices);
   if (deps?.claims) mountClaims(app, deps.claims);
+  if (deps?.reports) mountReports(app, deps.reports);
   if (deps?.assistance) mountAssistance(app, deps.assistance, smallBody);
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
   return app;

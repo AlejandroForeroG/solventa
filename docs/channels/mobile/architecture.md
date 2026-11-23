@@ -78,7 +78,7 @@ The verification composition adapter injects Expo Crypto's native `randomUUID` f
 
 ## Authentication and server ownership
 
-The primary flow reads public configuration, opens WorkOS with PKCE, validates the callback/state, exchanges the code and registers the native session. Session inspection and the mobile permission probe must succeed before the app presents authenticated access. Biometric activation additionally requires native confirmation, server device registration and a committed protected credential record.
+The primary flow reads public configuration, opens WorkOS with PKCE, validates the callback/state, exchanges the code and registers the native session and current installation. Session inspection, the mobile permission probe and installation inspection must succeed before the app presents authenticated access. Session bootstrap remains pending until installation registration succeeds. Restoring an active session only inspects its binding; a missing or revoked binding requires primary login. Biometric activation separately requires native confirmation, a replay of the same server binding and a committed protected credential record. Installation registration never establishes biometric custody.
 
 The mobile HTTP adapter calls the public web gateway under `/api/v1`, using bearer credentials and omitting cookies. The gateway routes native identity operations to Identity, Consent & Ecosystem. The app does not connect to SQL, use internal Service Bindings or call another backend's persistence layer. WorkOS authenticates the primary identity; Solventa's backend verifies the session and authorization. A successful permission probe is not an implemented native quote flow.
 
@@ -97,7 +97,7 @@ No fingerprint, face template, device passcode or biometric sensor data enters t
 
 ## Policy wallet and protected local data
 
-Two capabilities cooperate. `policy-wallet` reads the customer's own issued policies and presents them; `policy-cache` is the only place where business data rests on the device. Both depend on ports, with real adapters injected in the composition (`adapters/create-policy-wallet.ts`).
+Two capabilities cooperate. `policy-wallet` reads the customer's own issued policies and presents them; `policy-cache` is the only place where business data rests on the device. Online pagination retains cursor history in memory only; each page replaces the bounded protected snapshot, so offline access represents the last viewed page and has no pagination. A requested report policy uses the owner-scoped list filter. Both depend on ports, with real adapters injected in the composition (`adapters/create-policy-wallet.ts`).
 
 | Layer | Wallet (`policy-wallet`) | Cache (`policy-cache`) |
 |---|---|---|

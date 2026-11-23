@@ -19,19 +19,23 @@ describe('protected claims inbox', () => {
     show();
     const table = await screen.findByRole('table', { name: 'Bandeja de siniestros' });
     const rows = within(table).getAllByRole('row').slice(1);
+    expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText('SIN-2026-01187')).toBeVisible();
+    expect(within(rows[0]).getByText(first.policyId)).not.toBeVisible();
+    await userEvent.click(within(rows[0]).getByText(`POL-${first.policyId.slice(0, 8).toUpperCase()}`));
+    expect(within(rows[0]).getByText(first.policyId)).toBeVisible();
+    expect(within(rows[0]).getByText(`POL-${first.policyId.slice(0, 8).toUpperCase()}`)).toHaveFocus();
     expect(within(rows[0]).getByText('En análisis')).toBeVisible();
     expect(within(rows[0]).getByText('9 días')).toHaveClass('claims-overdue');
     expect(within(rows[0]).getByText(/148\.000\.000 COP$/)).toBeVisible();
-    expect(within(rows[0]).getByText('4 de 5 · incompleta')).toBeVisible();
+    expect(within(rows[0]).getByText('4 archivos (mínimo 5) · incompleta')).toBeVisible();
     expect(within(rows[0]).getByText('Alta')).toBeVisible();
     expect(within(rows[1]).getByText('Escalado')).toBeVisible();
     expect(within(rows[1]).getByText('2 días')).not.toHaveClass('claims-overdue');
     expect(within(rows[2]).getByText('1 día')).toBeVisible();
     expect(within(rows[2]).getByText('Baja')).toBeVisible();
     expect(screen.getByText('Mostrando 3 siniestros')).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
   });
 
   it('shows a claim without an estimate as pending, in both languages, instead of a zero amount', async () => {
@@ -64,7 +68,7 @@ describe('protected claims inbox', () => {
     const fetch = vi.fn().mockImplementation(async () => response(examples.page));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await screen.findByRole('table');
-    const input = screen.getByLabelText('Buscar por N.º de siniestro o póliza');
+    const input = screen.getByLabelText('Buscar por N.º de siniestro o ID completo de póliza');
     const calls = fetch.mock.calls.length;
     await user.type(input, 'siniestro uno'); await user.click(screen.getByRole('button', { name: 'Buscar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('SIN-AAAA-NNNNN');
@@ -109,7 +113,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.forbidden, 403)));
     const denied = show();
     expect(await screen.findByRole('alert')).toHaveTextContent('Tu cuenta no tiene permiso para consultar siniestros.');
-    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeVisible();
+    expect(screen.queryByRole('table')).toBeNull(); expect(screen.getByText(examples.forbidden.traceId)).toBeInTheDocument(); expect(screen.getByRole('link', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas'); expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
     denied.unmount();
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response({ error: 'unauthorized', traceId }, 401)));
     const expired = show();
@@ -146,7 +150,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     await screen.findByRole('table');
     expect(screen.getByRole('heading', { name: 'Bandeja de siniestros' })).toHaveFocus();
-    const input = screen.getByLabelText('Buscar por N.º de siniestro o póliza');
+    const input = screen.getByLabelText('Buscar por N.º de siniestro o ID completo de póliza');
     await user.click(input); await user.type(input, 'SIN-2026');
     const before = fetch.mock.calls.length;
     await act(async () => { window.dispatchEvent(new Event('focus')); });
@@ -161,7 +165,7 @@ describe('protected claims inbox', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => response(examples.page)));
     const { container } = show(true);
     const table = await screen.findByRole('table', { name: 'Claims inbox' });
-    expect(within(table).getByText('Under review')).toBeVisible(); expect(within(table).getByText('4 of 5 · incomplete')).toBeVisible();
+    expect(within(table).getByText('Under review')).toBeVisible(); expect(within(table).getByText('4 files (minimum 5) · incomplete')).toBeVisible();
     expect(within(table).getByText('1 day')).toBeVisible(); expect(screen.getByText('Showing 3 claims')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Overdue' })).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();

@@ -7,6 +7,7 @@ import type { Quote } from '../quote/api';
 import { financialApi, newIdempotencyKey, type Acceptance, type FinancialApi, type FinancialOutcome, type Offer, type Policy, type SignatureChallenge } from './api';
 import { ChargeConfirmed, ChargeDeclined, ChargePending, OfferCard, PolicyDocument, PolicyIssued } from './OfferViews';
 import { clearPurchaseDraft, savePurchaseDraft, type PurchaseDraft } from './purchase-draft';
+import { Icon } from '../navigation/Icon';
 
 type Step = 4 | 5 | 6 | 7;
 type Phase =
@@ -35,7 +36,8 @@ function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
   if (phase.name === 'preparing' || phase.name === 'review') return 5;
   if (['awaitingPayment', 'charging', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
-  if (['signing', 'issued', 'recovering', 'refunded'].includes(phase.name)) return 7;
+  if (phase.name === 'issued') return 8;
+  if (['signing', 'recovering', 'refunded'].includes(phase.name)) return 7;
   return 4;
 }
 
@@ -54,6 +56,8 @@ const SETTLED: readonly Phase['name'][] = ['declined', 'expired', 'chargeDecline
 export function OfferJourney(props: {
   quote: Pick<Quote, 'quoteId'>;
   resume?: PurchaseDraft;
+  // An offer prepared for the customer, such as by an advisor: the journey starts at its review instead of creating one.
+  initialOffer?: Offer;
   api?: FinancialApi;
   poll?: PollSchedule;
   onRequote: () => void;
@@ -137,6 +141,12 @@ export function OfferJourney(props: {
   // After a reload the journey resumes from the stored acceptance and command key instead of creating another offer.
   const start = useRef((current: AbortSignal) => {
     const resume = latest.current.props.resume;
+    const initial = latest.current.props.initialOffer;
+    if (!resume && initial) {
+      setPhase({ name: 'offer', offer: initial, accepting: false });
+      say(initial.status === 'preliminary' ? 'live.offerPreliminary' : 'live.offerReady', { premium: latest.current.copDecimal(initial.premium) });
+      return Promise.resolve();
+    }
     if (!resume) return create(current);
     if (resume.issue) issueKeys.current.set(`${resume.issue.policyId}:${resume.issue.documentHash}`, resume.issue.key);
     if (resume.charge) chargeKeys.current.set(`${resume.charge.policyId}:${resume.charge.documentHash}`, resume.charge.key);
@@ -179,8 +189,9 @@ export function OfferJourney(props: {
           else if (outcome.value.status === 'charged' && outcome.value.payment?.status === 'confirmed') {
             if (signatureRecoveryRequired.current) {
               setPhase({ name: 'recovering', policy: outcome.value, busy: false }); say('live.refunding');
-            } else setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
+            } else { setPhase(sentKey ? { name: 'signing', policy: outcome.value, busy: false, uncertain: true }
               : { name: 'charged', policy: outcome.value });
+              say(sentKey ? 'live.issueUncertain' : 'live.chargeConfirmed', sentKey ? undefined : { amount: latest.current.copDecimal(outcome.value.premium) }); }
           }
           else if (outcome.value.payment?.status === 'pending' && chargeKeys.current.has(`${outcome.value.policyId}:${outcome.value.documentHash}`)) {
             setPhase({ name: 'charging', policy: outcome.value, busy: false, uncertain: true,
@@ -287,6 +298,7 @@ export function OfferJourney(props: {
     if (accepted.current) savePurchaseDraft({ quoteId: quote.quoteId, acceptance: accepted.current, issue: null,
       charge: { policyId: policy.policyId, documentHash: policy.documentHash, key } });
     setPhase({ name: 'charging', policy, busy: true, uncertain: false, key });
+    say('live.chargePending');
     try {
       const outcome = await api().chargePolicy(policy, key, current);
       if (current.aborted) return;
@@ -295,7 +307,7 @@ export function OfferJourney(props: {
         setPhase({ name: 'issued', policy: outcome.value }); say('live.issued'); return;
       }
       if (outcome.kind === 'ok' && outcome.value.documentHash === policy.documentHash && outcome.value.status === 'charged'
-        && outcome.value.payment?.status === 'confirmed') { setPhase({ name: 'charged', policy: outcome.value }); return; }
+        && outcome.value.payment?.status === 'confirmed') { setPhase({ name: 'charged', policy: outcome.value }); say('live.chargeConfirmed', { amount: latest.current.copDecimal(outcome.value.premium) }); return; }
       if (outcome.kind === 'ok' || outcome.kind === 'unavailable') {
         setPhase({ name: 'charging', policy, busy: false, uncertain: true, key }); return;
       }
@@ -365,7 +377,7 @@ export function OfferJourney(props: {
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.loading')}</h1>
       <p>{t('offer.loadingDetail')}</p>
     </section>}
-    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
+    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} assisted={props.initialOffer !== undefined} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
     {phase.name === 'declined' && <section className="step card declined-card">
       <header className="consent-head"><h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.declinedTitle')}</h1></header>
       <div className="declined-body">
@@ -375,7 +387,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'expired' && <section className="step card card-warning">
       <div className="warning-head">
-        <span aria-hidden="true" className="warning-icon">!</span>
+        <span aria-hidden="true" className="warning-icon"><Icon name="alert" size={14} /></span>
         <h1 ref={heading} tabIndex={-1} className="h-card">{phase.offerId ? t('offer.expiredTitleId', { id: phase.offerId }) : t('offer.expiredTitle')}</h1>
       </div>
       <div className="denied-body">
@@ -410,7 +422,7 @@ export function OfferJourney(props: {
       <div className="actions"><button type="button" className="btn btn-primary" onClick={() => accepted.current && void waitForPolicy(accepted.current, false, true)}>{t('policy.refresh')}</button></div>
     </section>}
     {phase.name === 'charged' && <ChargeConfirmed heading={heading} policy={phase.policy}
-      onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); }} />}
+      onContinue={() => { setChecked(false); setChallenge(null); setCode(''); setPhase({ name: 'signing', policy: phase.policy, busy: false, uncertain: false }); say('live.signatureReady'); }} />}
     {phase.name === 'signing' && <>
       <PolicyDocument heading={heading} policy={phase.policy} stage="sign" checked={checked} documentChanged={false}
         challenge={challenge} code={code} busy={challengeBusy || phase.busy || phase.uncertain} error={challengeError}
@@ -435,7 +447,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'failed' && <section className="step card card-error">
       <div className="denied-head">
-        <span aria-hidden="true" className="denied-icon">×</span>
+        <span aria-hidden="true" className="denied-icon"><Icon name="close" size={14} /></span>
         <h1 ref={heading} tabIndex={-1} className="h-card">{t('policy.failedTitle')}</h1>
       </div>
       <div className="denied-body">
@@ -448,7 +460,7 @@ export function OfferJourney(props: {
     </section>}
     {phase.name === 'unavailable' && <section className="step">
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('financial.unavailableTitle')}</h1>
-      <div className="banner banner-error"><span aria-hidden="true" className="banner-icon">!</span><p>{t('financial.unavailable')}</p></div>
+      <div className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><p>{t('financial.unavailable')}</p></div>
       {phase.traceId && <p className="trace mono">{t('denied.trace')}: {phase.traceId}</p>}
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={phase.retry}>{t('financial.retry')}</button>

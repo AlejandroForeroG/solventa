@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { settings, clientFor, owners, applyMigrations } from './database.mjs';
 import { SqlClaimReport } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-report';
+import { SqlClaimReview } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-review';
 import { SqlClaimInbox } from '../backend/policy-claims-payments/src/adapters/outbound/sql-claim-inbox';
 import { ClaimInbox } from '../backend/policy-claims-payments/src/application/claim-inbox';
 import type { ReportInput } from '../backend/policy-claims-payments/src/domain/claim-report';
@@ -49,7 +50,7 @@ try {
   const inbox = new ClaimInbox(new SqlClaimInbox(runtime.toString()), { now: () => new Date() });
   const reader = () => ({ clientId: randomUUID(), traceId: randomUUID(), expiresAt: new Date(Date.now() + 5000).toISOString() });
   const hash = (seed: string) => seed.padEnd(64, '0').slice(0, 64);
-  const input = (change: Partial<ReportInput> = {}): ReportInput => ({ policyId, eventType: 'collision', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Autopista Norte con Calle 116',
+  const input = (change: Partial<ReportInput> = {}): ReportInput => ({ policyId, eventType: 'collision', occurredAt: new Date(Date.now() - 3_600_000).toISOString(), place: 'Autopista Norte con Calle 116', location: null,
     description: 'Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.',
     evidence: [{ fileId: randomUUID(), contentType: 'image/jpeg', byteSize: 2048, sha256: 'c'.repeat(64) }, { fileId: randomUUID(), contentType: 'video/mp4', byteSize: 4096, sha256: 'd'.repeat(64) }], ...change });
   const draft = async (report = input(), key = 'key-' + randomUUID(), who = ownerA) => {
@@ -104,10 +105,45 @@ try {
   assert.equal(await store.markVerified(ownerA, claimId, first.evidence[0].fileId, randomUUID()), true);
   assert.equal((await store.evidence(ownerA, claimId, first.evidence[0].fileId))?.claimState, 'unassigned');
 
+  const review = new SqlClaimReview(runtime.toString());
+  const analystId = randomUUID();
+  const analyst = () => ({ clientId: analystId, subjectToken: randomUUID(), traceId: randomUUID(), expiresAt: new Date(Date.now() + 5000).toISOString() });
+  assert.equal((await review.review(claimId, analyst(), { action: 'take' }, 'report-requirement-take')).status, 'ok');
+  const requested = await review.review(claimId, analyst(), { action: 'request_information', details: 'Provide another supporting receipt.',
+    deadline: new Date(Date.now() + 3600000).toISOString() }, 'report-requirement-request');
+  assert.equal(requested.status, 'ok');
+  if (requested.status !== 'ok') throw Error('requirement_not_created');
+  const abandoned = { fileId: randomUUID(), byteSize: 100, contentType: 'image/jpeg' as const, sha256: 'e'.repeat(64) };
+  const selected = { ...abandoned, fileId: randomUUID() };
+  assert.equal((await review.prepareFile(claimId, requested.actionId, ownerA, abandoned, randomUUID())).status, 'pending');
+  assert.equal(await review.selectFiles(claimId, requested.actionId, ownerA, [selected.fileId], randomUUID()), 'selected');
+  assert.equal((await review.prepareFile(claimId, requested.actionId, ownerA, selected, randomUUID())).status, 'pending');
+  const assertOriginalManifest = async () => {
+    const replayed = await store.createDraft({ owner: ownerA, report: first, idempotencyKey: key, requestHash: hash('one'), traceId: randomUUID() });
+    assert.equal(replayed.status, 'replayed');
+    if (replayed.status !== 'replayed') throw Error('report_not_replayed');
+    assert.deepEqual(replayed.claim.evidence, first.evidence.map(file => ({ fileId: file.fileId, state: 'verified' })).sort((a, b) => a.fileId.localeCompare(b.fileId)),
+      'original report replay excludes both inactive and active requirement evidence');
+  };
+  await assertOriginalManifest();
+  assert.equal(await review.verifyFile(claimId, requested.actionId, ownerA, selected.fileId, randomUUID()), true);
+  assert.equal((await review.respond(claimId, requested.actionId, ownerA, { text: '', evidenceIds: [selected.fileId] }, 'report-requirement-response', randomUUID())).status, 'ok');
+  await assertOriginalManifest();
+
   const racing = input(); const racingKey = 'race-' + randomUUID();
   const both = await Promise.all([1, 2].map(() => store.createDraft({ owner: ownerA, report: racing, idempotencyKey: racingKey, requestHash: hash('race'), traceId: randomUUID() })));
   assert.deepEqual(both.map(result => result.status).sort(), ['created', 'replayed'], 'two simultaneous identical requests make one draft');
   assert.equal(Number((await db.query('SELECT count(*) AS n FROM policy.claims WHERE idempotency_key=$1', [racingKey])).rows[0].n), 1);
+
+  const located = await draft(input({ location: { latitude: 4.696944, longitude: -74.044167 } }));
+  const stored = (await db.query('SELECT location_latitude::STRING AS lat, location_longitude::STRING AS lon, location_authorized_at IS NOT NULL AS authorized FROM policy.claims WHERE id=$1', [located.claimId])).rows[0];
+  assert.deepEqual([stored.lat, stored.lon, stored.authorized], ['4.696944', '-74.044167', true], 'an authorized location is stored with the claim and the moment it was recorded');
+  const plain = (await db.query('SELECT location_latitude, location_longitude, location_authorized_at FROM policy.claims WHERE id=$1', [claimId])).rows[0];
+  assert.deepEqual([plain.location_latitude, plain.location_longitude, plain.location_authorized_at], [null, null, null], 'a report without a location stores none');
+  for (const change of ['location_latitude = 91', 'location_longitude = -181', 'location_latitude = NULL', 'location_authorized_at = NULL']) {
+    await assert.rejects(db.query(`UPDATE policy.claims SET ${change} WHERE id=$1`, [located.claimId]), /violat|constraint|check/i, change);
+  }
+  await assert.rejects(db.query('UPDATE policy.claims SET location_latitude = 4 WHERE id=$1', [claimId]), /violat|constraint|check/i, 'a half-set location is refused');
 
   const batch = [];
   for (let index = 0; index < 5; index++) { const item = await draft(); await receiveAll(item.claimId, item.report); batch.push(item); }
@@ -144,7 +180,7 @@ try {
   const legacy = randomUUID();
   await db.query(`INSERT INTO policy.claims(id,policy_id,idempotency_key,request_hash,status,occurred_at,correlation_id) VALUES($1,$2,'parametric-once',$3,'approved',now(),$4)`, [legacy, policyId, 'f'.repeat(64), randomUUID()]);
   assert.ok(!(await inbox.list({}, reader())).items.some(item => item.claimId === legacy), 'the parametric flow keeps its claims and is not listed');
-  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'draft-not-listed', 'evidence-verification',
+  console.log(JSON.stringify({ environment: 'local', status: 'passed', cases: ['draft', 'idempotent-replay', 'original-manifest-after-requirement-selection', 'payload-conflict', 'owner-isolation', 'issued-policy-only', 'coverage-window', 'draft-not-listed', 'evidence-verification',
     'incomplete-submit', 'single-number', 'inbox-shows-unestimated', 'concurrent-identical-requests', 'concurrent-numbering', 'audit-rollback', 'runtime-privileges', 'constraints', 'legacy-insert'] }));
 } finally {
   if (db) await db.end();

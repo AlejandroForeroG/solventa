@@ -4,6 +4,117 @@
   },
   "interactions": [
     {
+      "description": "a native customer disbursement page",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/disbursements"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "11111111-1111-4111-8111-111111111111",
+              "claimNumber": "SIN-2026-00001",
+              "payment": {
+                "amount": "1000.0000",
+                "currency": "COP",
+                "paymentId": "11111111-1111-4111-8111-111111111112",
+                "reference": "MOCK-11111111-1111-4111-8111-111111111112",
+                "simulated": true,
+                "status": "confirmed"
+              },
+              "updatedAt": "2026-11-19T15:00:00.000Z"
+            }
+          ],
+          "next": null,
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a native receipt filtered by the selected claim",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/disbursements",
+        "query": {
+          "claimId": [
+            "11111111-1111-4111-8111-111111111111"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "11111111-1111-4111-8111-111111111111",
+              "claimNumber": "SIN-2026-00001",
+              "payment": {
+                "amount": "1000.0000",
+                "currency": "COP",
+                "paymentId": "11111111-1111-4111-8111-111111111112",
+                "reference": "MOCK-11111111-1111-4111-8111-111111111112",
+                "simulated": true,
+                "status": "confirmed"
+              },
+              "updatedAt": "2026-11-19T15:00:00.000Z"
+            }
+          ],
+          "next": null,
+          "traceId": "11111111-1111-4111-8111-111111111113"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile access",
       "providerStates": [
         {
@@ -521,6 +632,198 @@
         },
         "matchingRules": {
           "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim report draft",
+      "providerStates": [
+        {
+          "name": "a native session that may report a claim"
+        }
+      ],
+      "request": {
+        "body": {
+          "description": "Colisión por alcance en la Autopista Norte con Calle 116, sentido sur. El otro vehículo frenó de golpe.",
+          "eventType": "collision",
+          "evidence": [
+            {
+              "byteSize": 84,
+              "contentType": "image/jpeg",
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "sha256": "cc2c18329a97018fc7a848827738391cc54e8f42b30018690bfd8fa45bcbebf4"
+            }
+          ],
+          "location": {
+            "authorized": true,
+            "latitude": 4.696944,
+            "longitude": -74.044167
+          },
+          "occurredAt": "2026-11-10T15:00:00.000Z",
+          "place": "Autopista Norte con Calle 116",
+          "policyId": "91000000-0000-4000-8000-000000000020"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pact-report-key-0001"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "evidence": [
+            {
+              "fileId": "91000000-0000-4000-8000-0000000000e1",
+              "state": "pending"
+            }
+          ],
+          "state": "draft",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "mobile claim report evidence",
+      "providerStates": [
+        {
+          "name": "a native session with a draft claim report"
+        }
+      ],
+      "request": {
+        "body": "/9j/4AAQSkZJRgABAQAAAQABAABzb2x2ZW50YSBzeW50aGV0aWMgZXZpZGVuY2UgZm9yIHRoZSBjbGFpbSByZXBvcnQgY29udHJhY3QgMDAwMf/Z",
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "image/jpeg"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "contentType",
+                  "value": "image/jpeg"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/evidence/91000000-0000-4000-8000-0000000000e1"
+      },
+      "response": {
+        "body": {
+          "fileId": "91000000-0000-4000-8000-0000000000e1",
+          "state": "verified",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile claim report submission",
+      "providerStates": [
+        {
+          "name": "a native session with a claim report whose evidence was received"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "POST",
+        "path": "/api/v1/claims/91000000-0000-4000-8000-000000000001/submit"
+      },
+      "response": {
+        "body": {
+          "claimId": "91000000-0000-4000-8000-000000000001",
+          "claimNumber": "SIN-2026-00001",
+          "state": "unassigned",
+          "submittedAt": "2026-11-11T00:00:00.000Z",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.claimNumber": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^SIN-[0-9]{4}-[0-9]{5}$"
+                }
+              ]
+            },
+            "$.submittedAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+                }
+              ]
+            },
             "$.traceId": {
               "combine": "AND",
               "matchers": [
@@ -2058,6 +2361,143 @@
       }
     },
     {
+      "description": "mobile notice destination",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/destination"
+      },
+      "response": {
+        "body": {
+          "destination": {
+            "kind": "policy",
+            "policyId": "91000000-0000-4000-8000-000000000020",
+            "section": "history"
+          },
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile notice receipt",
+      "providerStates": [
+        {
+          "name": "a native session with a notice offered to its device"
+        }
+      ],
+      "request": {
+        "body": {
+          "outcome": "presented"
+        },
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token",
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/v2/notices/70000000-0000-4000-8000-0000000000a1/receipt"
+      },
+      "response": {
+        "body": {
+          "eventId": "70000000-0000-4000-8000-0000000000a1",
+          "replayed": false,
+          "state": "presented",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile notices list",
+      "providerStates": [
+        {
+          "name": "a native session with a stored notice"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v2/notices"
+      },
+      "response": {
+        "body": {
+          "notices": [
+            {
+              "category": "payments",
+              "eventId": "70000000-0000-4000-8000-0000000000a1",
+              "kind": "parametric_payment_confirmed",
+              "occurredAt": "2026-11-18T11:00:00.000Z",
+              "policyId": "91000000-0000-4000-8000-000000000020",
+              "state": "offered"
+            }
+          ],
+          "simulated": true,
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "mobile own policy list",
       "providerStates": [
         {
@@ -2075,6 +2515,7 @@
       "response": {
         "body": {
           "hasMore": false,
+          "nextCursor": null,
           "policies": [
             {
               "coverage": {
@@ -2085,6 +2526,181 @@
               "effectiveFrom": "2026-10-15T00:00:00.000Z",
               "effectiveUntil": "2027-10-15T00:00:00.000Z",
               "policyId": "30000000-0000-4000-8000-000000000003",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy first page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies"
+      },
+      "response": {
+        "body": {
+          "hasMore": true,
+          "nextCursor": "30000000-0000-4000-8000-000000000003",
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000003",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy lookup page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies",
+        "query": {
+          "policyId": [
+            "30000000-0000-4000-8000-000000000004"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "hasMore": false,
+          "nextCursor": null,
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000004",
+              "premium": "77760.0000",
+              "product": "vida_hipotecario",
+              "status": "issued"
+            }
+          ],
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.traceId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "mobile policy next page",
+      "providerStates": [
+        {
+          "name": "a native session with multiple policy pages"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/policies",
+        "query": {
+          "cursor": [
+            "30000000-0000-4000-8000-000000000003"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "hasMore": false,
+          "nextCursor": null,
+          "policies": [
+            {
+              "coverage": {
+                "kind": "mortgage_life",
+                "sumInsured": "320000000.0000"
+              },
+              "currency": "COP",
+              "effectiveFrom": "2026-10-15T00:00:00.000Z",
+              "effectiveUntil": "2027-10-15T00:00:00.000Z",
+              "policyId": "30000000-0000-4000-8000-000000000004",
               "premium": "77760.0000",
               "product": "vida_hipotecario",
               "status": "issued"
@@ -2146,6 +2762,160 @@
                 {
                   "match": "regex",
                   "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the native tracking detail request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases/a0000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "access": "customer",
+          "claimNumber": "SIN-2026-01187",
+          "description": "Synthetic claim.",
+          "eventType": "other",
+          "evidence": [],
+          "history": [
+            {
+              "action": "take",
+              "actorId": null,
+              "at": "2026-11-13T20:00:00.000Z",
+              "expert": null,
+              "id": "a0000000-0000-4000-8000-0000000000e1",
+              "reason": null,
+              "state": "in_review"
+            },
+            {
+              "action": "submitted",
+              "actorId": null,
+              "at": "2026-11-13T19:50:00.000Z",
+              "expert": null,
+              "id": "a0000000-0000-4000-8000-000000000001",
+              "reason": null,
+              "state": "unassigned"
+            }
+          ],
+          "notices": [],
+          "occurredAt": "2026-11-13T19:45:00.000Z",
+          "place": null,
+          "policyId": "a0000000-0000-4000-8000-0000000000a1",
+          "requiredEvidence": 1,
+          "requirements": [],
+          "state": "in_review",
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "the native tracking foreign request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases/00000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "error": "not_found",
+          "traceId": "00000000-0000-4000-8000-000000000002"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "the native tracking list request",
+      "providerStates": [
+        {
+          "name": "native claim disbursement receipts"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer synthetic.jwt.token"
+        },
+        "method": "GET",
+        "path": "/api/v1/claims/native/cases"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "claimId": "a0000000-0000-4000-8000-000000000001",
+              "claimNumber": "SIN-2026-01187",
+              "state": "in_review"
+            }
+          ],
+          "traceId": "a0000000-0000-4000-8000-0000000000c1"
+        },
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
                 }
               ]
             }

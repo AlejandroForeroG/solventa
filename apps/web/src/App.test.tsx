@@ -4,9 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from './App';
 import { readPurchaseDraft, savePurchaseDraft } from './offer/purchase-draft';
+import { clearPolicyDocumentDestination, readPolicyDocumentDestination, savePolicyDocumentDestination } from './policies/document-destination';
+import { readCustomerDestination, saveCustomerDestination } from './navigation/customer-destination';
 import assistanceExamples from '../../../packages/contracts/examples/assistance-providers.json';
 import auditExamples from '../../../packages/contracts/examples/underwriting-audit.json';
 import claimsExamples from '../../../packages/contracts/examples/claims.json';
+import reportsExamples from '../../../packages/contracts/examples/reports.json';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function serve(session: number) {
@@ -62,16 +65,37 @@ describe('audit route in the application', () => {
       return json(auditExamples.page);
     });
     render(<App />); const user = userEvent.setup();
-    await screen.findByRole('button', { name: auditExamples.detail.decision.decisionId });
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
-    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    const decisionLabel = `Decisión: ${auditExamples.detail.decision.quoteId ?? auditExamples.detail.decision.decisionId}`;
+    await screen.findByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) });
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     await act(async () => failLogout());
-    expect(screen.queryByRole('button', { name: auditExamples.detail.decision.decisionId })).toBeNull();
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
   });
 });
 
 describe('claims inbox route in the application', () => {
+  it.each([
+    { prefix: '/siniestros', audience: 'analyst', navigation: 'Consola operativa', label: 'Siniestros' },
+    { prefix: '/mis-siniestros', audience: 'customer', navigation: 'Mi cuenta', label: 'Mis siniestros' }
+  ])('keeps the case and its active navigation context on $prefix', async ({ prefix, audience, navigation, label }) => {
+    const claimId = claimsExamples.ownedCases.items[0].claimId;
+    window.history.replaceState(null, '', `${prefix}/${claimId}`);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: true });
+      return json({ ...claimsExamples.caseFile, access: audience === 'analyst' ? 'assigned' : 'customer' });
+    });
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: `Expediente ${claimsExamples.caseFile.claimNumber}` })).toBeVisible();
+    const sidebar = within(screen.getByRole('complementary', { name: navigation }));
+    expect(sidebar.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
+    expect(sidebar.getByRole('link', { name: label })).toHaveAttribute('href', prefix);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`${claimId}`))).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    if (audience === 'customer') expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
+  });
+
   it('requires sign-in and does not render the public calculator on the claims route', async () => {
     window.history.replaceState(null, '', '/siniestros'); serve(401); render(<App />);
     expect(await screen.findByRole('main')).toBeVisible();
@@ -91,9 +115,12 @@ describe('claims inbox route in the application', () => {
     });
     render(<App />); const user = userEvent.setup();
     expect(await screen.findByRole('table', { name: 'Bandeja de siniestros' })).toBeVisible();
+    expect(within(screen.getByRole('table')).getByRole('link', { name: claimsExamples.page.items[0].claimNumber }))
+      .toHaveAttribute('href', `/siniestros/${claimsExamples.page.items[0].claimId}`);
+    await waitFor(() => expect(screen.getByTestId('live-region')).toBeEmptyDOMElement());
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
     expect(screen.queryByRole('table')).toBeNull();
     await act(async () => failLogout());
     expect(screen.queryByRole('table')).toBeNull();
@@ -101,9 +128,111 @@ describe('claims inbox route in the application', () => {
   });
 });
 
+describe('reports route in the application', () => {
+  it('requires sign-in and does not render the public calculator on the reports route', async () => {
+    window.history.replaceState(null, '', '/reportes'); serve(401); render(<App />);
+    expect(await screen.findByRole('main')).toBeVisible();
+    await screen.findByRole('heading', { name: 'Reportes' });
+    expect(screen.getAllByRole('link', { name: 'Ingresa a Solventa' })).toHaveLength(2);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+  });
+  it('shows the reports to a signed-in user, links the other consoles and marks the current one', async () => {
+    window.history.replaceState(null, '', '/reportes');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true }) : json(reportsExamples.page));
+    render(<App />);
+    expect(await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' })).toBeVisible();
+    const nav = within(screen.getByRole('complementary', { name: 'Consola operativa' }));
+    expect(nav.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.getByRole('link', { name: 'Siniestros' })).toHaveAttribute('href', '/siniestros');
+    expect(screen.getAllByRole('link', { name: 'Reportes' }).some(link => link.getAttribute('href') === '/reportes')).toBe(true);
+  });
+});
+
 describe('my policies route in the application', () => {
   const policy = { policyId: '10000000-0000-4000-8000-000000000001', product: 'vida_hipotecario', status: 'issued', premium: '86400.0000', currency: 'COP',
     effectiveFrom: '2026-10-15T00:00:00.000Z', effectiveUntil: '2099-10-15T00:00:00.000Z', coverage: { kind: 'mortgage_life', sumInsured: '320000000.0000' } };
+  afterEach(clearPolicyDocumentDestination);
+  it.each(['history', 'renewal', 'info'] as const)('keeps the %s action through an explicit sign-in click', async section => {
+    window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=${section}`);
+    serve(401); render(<App />);
+    const links = await screen.findAllByRole('link', { name: 'Ingresa a Solventa' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    act(() => { links[1].dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(readCustomerDestination()).toEqual({ kind: 'policy', policyId: policy.policyId, section });
+    expect(screen.queryByText('Inicia sesión para abrir los documentos de la póliza seleccionada.')).toBeNull();
+  });
+  it('keeps a customer claim destination after failed sign-in and revalidates it for retry', async () => {
+    const claimId = '30000000-0000-4000-8000-000000000001';
+    saveCustomerDestination({ kind: 'claim', claimId });
+    window.history.replaceState(null, '', '/?auth=failed');
+    serve(401); render(<App />);
+    await screen.findByRole('heading', { name: 'Mis siniestros' });
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    const links = screen.getAllByRole('link', { name: 'Ingresa a Solventa' });
+    act(() => { links[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    expect(readCustomerDestination()).toEqual({ kind: 'claim', claimId });
+  });
+  it('allows both normal sign-in links after leaving document detail and losing the session', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', `/polizas#policy=${policy.policyId}&section=documents`);
+    let expired = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (input === '/auth/session') return json({ authenticated: !expired }, expired ? 401 : 200);
+      if (input === `/api/v1/policies/${policy.policyId}/detail`) return json({ ...policy,
+        exclusions: [], conditionsVersion: 'academic-conditions-1', documents: [], payments: [],
+        traceId: '50000000-0000-4000-8000-000000000001' });
+      if (input === '/api/v1/policies/issued') return expired ? json({}, 401)
+        : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' });
+      return json({}, 404);
+    });
+    render(<App />);
+    await screen.findByRole('tab', { name: 'Documentos', selected: true });
+    const back = screen.getByRole('button', { name: /^Mis pólizas$/ });
+    // The detail also fetches issued policies, so expire the session on navigation.
+    back.addEventListener('click', () => { expired = true; }, { once: true });
+    await userEvent.click(back);
+    await screen.findByText('Tu sesión terminó. Inicia sesión para continuar.');
+    expect(window.location.hash).toBe('');
+    expect(readPolicyDocumentDestination()).toBeNull();
+    expect(screen.queryByText('Inicia sesión para abrir los documentos de la póliza seleccionada.')).toBeNull();
+    const links = screen.getAllByRole('link', { name: 'Ingresa a Solventa' });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      act(() => { link.dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(false);
+      expect(link).toHaveAttribute('href', '/auth/login');
+    }
+    expect(screen.queryByRole('link', { name: 'Iniciar sesión sin conservar la selección' })).toBeNull();
+  });
+  it('keeps the selected policy and a contextual retry after a failed sign-in', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', '/?auth=failed'); serve(401);
+    const { container } = render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Documentos de la póliza' })).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('No se completó el acceso.');
+    expect(screen.getByText('POL-10000000')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
+    const retry = await screen.findByRole('link', { name: 'Reintentar acceso' });
+    expect(retry).toHaveAttribute('href', '/auth/login');
+    await userEvent.click(retry);
+    expect(readPolicyDocumentDestination()).toEqual({ policyId: policy.policyId });
+    expect(await axe(container)).toHaveNoViolations();
+    await userEvent.click(screen.getByRole('link', { name: 'Ir al inicio' }));
+    expect(readPolicyDocumentDestination()).toBeNull();
+  });
+  it('does not silently retain an expired locator when retrying sign-in', async () => {
+    savePolicyDocumentDestination({ policyId: policy.policyId });
+    window.history.replaceState(null, '', '/?auth=failed'); serve(401); render(<App />);
+    const retry = await screen.findByRole('link', { name: 'Reintentar acceso' });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 15 * 60 * 1000);
+    await userEvent.click(retry);
+    expect(readPolicyDocumentDestination()).toBeNull();
+    expect(screen.getByText(/El navegador no pudo conservar la selección/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Iniciar sesión sin conservar la selección' })).toHaveAttribute('href', '/auth/login');
+  });
   it('requires sign-in and does not render the public calculator on the policies route', async () => {
     window.history.replaceState(null, '', '/polizas'); serve(401); render(<App />);
     await screen.findByRole('heading', { name: 'Mis pólizas' });
@@ -115,7 +244,7 @@ describe('my policies route in the application', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true })
       : json({ policies: [policy], hasMore: false, traceId: '50000000-0000-4000-8000-000000000001' }));
     render(<App />);
-    expect(await screen.findByRole('button', { name: /^Ver detalle de Vida hipotecario/ })).toBeVisible();
+    expect(await screen.findByRole('button', { name: /^Ver detalle de Seguro de vida hipotecario/ })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Mis pólizas' })).toHaveAttribute('href', '/polizas');
   });
 });
@@ -175,11 +304,11 @@ describe('privacy dashboard in the application', () => {
       expect(back).toBeDisabled();
       await user.click(back);
       expect(screen.getByRole('heading', { name: 'Tus datos y quién los usa' })).toBeVisible();
-      await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));
+      await user.click(screen.getByRole('button', { name: /^Idioma:/ })); await user.click(screen.getByRole('menuitemradio', { name: 'English' }));
       expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
       await act(async () => { finishRead?.(json({ items: [consent], nextCursor: null })); });
       recovered = true;
-      await user.click(screen.getByRole('button', { name: /Switch the interface to Spanish/ }));
+      await user.click(screen.getByRole('button', { name: /^Language:/ })); await user.click(screen.getByRole('menuitemradio', { name: 'Español' }));
     }
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Sí, revocar' })).toBeNull());
     if (reconciliation === 'failed' || reconciliation === 'missing') {
@@ -204,7 +333,7 @@ describe('privacy dashboard in the application', () => {
     serve(200);
     const user = userEvent.setup();
     const { container } = render(<App />);
-    const open = await screen.findByRole('button', { name: 'Panel de privacidad' });
+    const open = await screen.findByRole('button', { name: 'Privacidad' });
     await user.type(screen.getByLabelText(/Nombre completo/), 'Cliente Sintetico Uno');
 
     await user.click(open);
@@ -221,14 +350,14 @@ describe('privacy dashboard in the application', () => {
     serve(401);
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Calcular estimación' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Panel de privacidad' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Privacidad' })).toBeNull();
   });
 
   it('follows the language of the interface', async () => {
     serve(200);
     window.localStorage.setItem('solventa.locale', 'en-US');
     render(<App />);
-    expect(await screen.findByRole('button', { name: 'Privacy dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Privacy' })).toBeInTheDocument();
   });
 });
 
@@ -249,7 +378,16 @@ describe('purchase interrupted by a reload', () => {
     render(<App />);
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path) === `/api/v1/policies/by-acceptance/${acceptance.acceptanceId}/policy`)).toBe(true));
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/offers'))).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
     expect(readPurchaseDraft()).toBeNull();
   });
+});
+
+it('shows a not-found page for an unknown address instead of the landing', async () => {
+  window.history.replaceState(null, '', '/ruta-que-no-existe');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401, headers: { 'content-type': 'application/json' } })));
+  render(<App />);
+  expect(await screen.findByRole('heading', { name: 'No encontramos esta página' })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
+  window.history.replaceState(null, '', '/');
 });

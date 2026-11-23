@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import type { Quote } from './api';
+import { Icon } from '../navigation/Icon';
 
 export function Loading() {
   const intl = useIntl();
@@ -25,7 +26,7 @@ export function QuoteResult({ quote, onFix, onContinue }: { quote: Quote; onFix:
   const hasValidity = !Number.isNaN(validUntil.getTime());
   return <section className="step">
     <div className="banner banner-info">
-      <span aria-hidden="true" className="banner-icon">i</span>
+      <Icon name="info" size={18} className="banner-icon" />
       <p><strong>{intl.formatMessage({ id: 'result.minTitle' })}</strong> {intl.formatMessage({ id: 'result.minDetail' })}</p>
     </div>
     <div className="card">
@@ -69,7 +70,7 @@ export function Denied({ traceId, onRetry, onBack }: { traceId?: string; onRetry
   // One fixed message for every cause: absent, unknown, revoked or out-of-scope credentials.
   return <section className="step card card-error">
     <div className="denied-head">
-      <span aria-hidden="true" className="denied-icon">×</span>
+      <span aria-hidden="true" className="denied-icon"><Icon name="close" size={14} /></span>
       <h1 ref={heading} tabIndex={-1} className="h-card">{intl.formatMessage({ id: 'denied.title' })}</h1>
     </div>
     <div className="denied-body">

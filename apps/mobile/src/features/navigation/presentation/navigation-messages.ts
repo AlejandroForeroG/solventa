@@ -2,20 +2,26 @@ import { messages } from '@/shared/i18n/messages';
 import { useAppMessages } from '@/shared/i18n/use-app-messages';
 
 const es = {
-  home: 'Inicio', wallet: 'Billetera', claims: 'Siniestros', alerts: 'Alertas', profile: 'Perfil',
+  payments: 'Mis indemnizaciones', paymentsDetail: 'Consulta el monto, el estado y la referencia del desembolso.',
+  tracking: 'Mis siniestros', trackingDetail: 'Consulta el estado, los requerimientos y el historial de tus casos.',
+  drafts: 'Borradores', draftsDetail: 'Prepara un reporte y retómalo, incluso sin conexión.',
+  home: 'Inicio', wallet: 'Mis pólizas', claims: 'Siniestros', alerts: 'Avisos', profile: 'Perfil', preferences: 'Preferencias de avisos',
+  sections: 'Secciones', openNavigation: 'Abrir navegación', closeNavigation: 'Cerrar navegación',
   homeTitle: 'Inicio', walletDetail: 'Consulta tus pólizas y sus coberturas.',
   claimsDetail: 'Encuentra ayuda para tu siniestro.', alertsDetail: 'Consulta tus avisos.',
-  alertsUnavailable: 'Tus avisos aparecerán aquí cuando la bandeja esté disponible.',
   reportClaim: 'Reportar siniestro', reportClaimDetail: 'Cuéntanos qué pasó y adjunta fotos o video como evidencia.',
   assistance: 'Prestadores cercanos', assistanceDetail: 'Busca talleres, peritos o asistencia vial.',
   signIn: 'Inicia sesión para acceder a esta sección.', back: 'Volver a Inicio',
 };
 
 const en: typeof es = {
-  home: 'Home', wallet: 'Wallet', claims: 'Claims', alerts: 'Alerts', profile: 'Profile',
+  payments: 'My indemnities', paymentsDetail: 'Check the amount, status and disbursement reference.',
+  tracking: 'My claims', trackingDetail: 'Check your claim status, requests for information and history.',
+  drafts: 'Drafts', draftsDetail: 'Prepare a report and resume it, even offline.',
+  home: 'Home', wallet: 'My policies', claims: 'Claims', alerts: 'Notices', profile: 'Profile', preferences: 'Notification preferences',
+  sections: 'Sections', openNavigation: 'Open navigation', closeNavigation: 'Close navigation',
   homeTitle: 'Home', walletDetail: 'View your policies and their coverage.',
   claimsDetail: 'Find help with your claim.', alertsDetail: 'View your notifications.',
-  alertsUnavailable: 'Your notifications will appear here when the inbox is available.',
   reportClaim: 'Report a claim', reportClaimDetail: 'Tell us what happened and attach photos or video as evidence.',
   assistance: 'Nearby providers', assistanceDetail: 'Find workshops, experts or roadside assistance.',
   signIn: 'Sign in to access this section.', back: 'Back to Home',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from '../App';
@@ -37,8 +37,9 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
-    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: 'Conoce el seguro de vida de tu crédito.' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Menú de mi cuenta' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Hola' })).toBeVisible();
+    expect(within(screen.getByRole('navigation', { name: 'Accesos de tu cuenta' })).getByRole('link', { name: /Mis siniestros/ })).toHaveAttribute('href', '/mis-siniestros');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
   });
@@ -48,8 +49,10 @@ describe('product landing and quote entry', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.tab();
+    expect(screen.getByRole('link', { name: 'Ir al contenido' })).toHaveFocus();
+    await user.tab();
     expect(screen.getByRole('link', { name: 'Inicio de Solventa' })).toHaveFocus();
-    await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));
+    await user.click(screen.getByRole('button', { name: /^Idioma:/ })); await user.click(screen.getByRole('menuitemradio', { name: 'English' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Understand the life insurance for your loan.' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Start a quote' })).toHaveAttribute('href', '/cotizar');
     expect(screen.getByRole('link', { name: 'Solventa home' })).toHaveAttribute('href', '/');

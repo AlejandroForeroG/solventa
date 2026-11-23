@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { useAnnounce } from './Live';
-import { estimateFields, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
+import { displayGrouped, estimateFields, groupedDigits, invalidEstimateFields, requestEstimate, type Estimate, type EstimateField, type EstimateValues } from './estimate-api';
 import { clearEstimateDraft, saveEstimateDraft } from './estimate-draft';
 import { Stepper } from './Stepper';
 
@@ -25,8 +25,10 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => { heading.current?.focus(); }, [phase]);
 
-  async function calculate() {
+  async function calculate(current = values) {
     if (busy) return;
+    const values = { ...current, amount: groupedDigits(current.amount) };
+    if (values.amount !== current.amount) onValuesChange?.(values);
     const errors = invalidEstimateFields(values);
     setInvalid(errors); setUnavailable(false);
     if (errors.length) { document.getElementById(`estimate-${errors[0]}`)?.focus(); announce(t('estimate.invalid')); return; }
@@ -56,15 +58,17 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
     {phase === 'form' ? <>
       <p className="lede">{t('estimate.intro')}</p>
       {unavailable && <p className="banner banner-error" role="alert">{t('form.errorUnavailable')}</p>}
-      <form className="card" noValidate onSubmit={event => { event.preventDefault(); void calculate(); }}>
+      <form className="card" noValidate onSubmit={event => { event.preventDefault(); void calculate(values); }}>
         <div className="grid grid-3">{estimateFields.map(key => <div className="field" key={key}>
           <label htmlFor={`estimate-${key}`}>{t(`estimate.${key}`)} <span aria-hidden="true">*</span></label>
-          <input id={`estimate-${key}`} name={key} type="text" inputMode="numeric" className="mono-input" autoComplete="off" required disabled={busy} maxLength={key === 'ageYears' ? 2 : key === 'termMonths' ? 3 : 16}
+          <input id={`estimate-${key}`} name={key} type="text" inputMode="numeric" className="mono-input" autoComplete="off" required disabled={busy} maxLength={key === 'ageYears' ? 2 : key === 'termMonths' ? 3 : 22}
+            onBlur={key === 'amount' ? event => { const value = displayGrouped(event.target.value, intl.locale); if (value !== values.amount) { const next = { ...values, amount: value }; setValues(next); onValuesChange?.({ ...next, amount: groupedDigits(value) }); } } : undefined}
             value={values[key]} onChange={event => {
               clearEstimateDraft();
               const next = { ...values, [key]: event.target.value };
               setValues(next);
-              onValuesChange?.(next);
+              setInvalid(current => current.includes(key) && !invalidEstimateFields(next).includes(key) ? current.filter(field => field !== key) : current);
+              onValuesChange?.({ ...next, amount: groupedDigits(next.amount) });
             }}
             aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : undefined} />
           {invalid.includes(key) && <p className="field-error" id={`estimate-${key}-error`}>{t(`estimate.error.${key}`)}</p>}

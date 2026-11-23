@@ -1,9 +1,15 @@
+import { createHash } from 'node:crypto';
+import { parseRequirementFile } from '../../../backend/policy-claims-payments/src/domain/claim-review';
 import { createHttp } from '../../../backend/policy-claims-payments/src/adapters/inbound/http';
 import { ClaimInbox } from '../../../backend/policy-claims-payments/src/application/claim-inbox';
 import type { OpenClaimRecord } from '../../../backend/policy-claims-payments/src/domain/claims';
 import { ApiAccess } from '../../../backend/identity-consent-ecosystem/src/application/api-access';
 import { authorizeApiAccess } from '../../../backend/identity-consent-ecosystem/src/adapters/inbound/api-access-http';
+import { listSyntheticExperts } from '../../../backend/policy-claims-payments/src/adapters/outbound/synthetic-assistance-directory';
+import type { CaseRecord } from '../../../backend/policy-claims-payments/src/application/claim-review';
 import examples from '../../../packages/contracts/examples/claims.json';
+import paymentExamples from '../../../packages/contracts/examples/claim-payments.json';
+import { parseClaimPayment, parseClaimPaymentPage } from '../../../packages/contracts/src/claim-payments';
 
 const DAY = 86_400_000;
 
@@ -29,8 +35,45 @@ export function claimsWorld(origin: string, state: 'granted' | 'empty' | 'denied
       return { records: open, next: null };
     }
   }, { now: () => new Date() });
+  const payment = parseClaimPayment(paymentExamples.pendingReceipt.payment);
+  const ownPage = parseClaimPaymentPage(paymentExamples.confirmedPage);
+  if (!payment || !ownPage) throw Error('invalid_payment_contract_fixture');
+  const owned = async () => [{ ...examples.ownedCases.items[0], state: 'in_review' as const }];
+  const customerCase: CaseRecord = {
+    ...examples.customerCase, state: 'in_review', access: 'customer',
+    history: [
+      { ...examples.customerCase.history[0], state: 'in_review' },
+      { ...examples.customerCase.history[1], state: 'unassigned' },
+    ],
+  };
   const app = createHttp({ authorizeFinancialAccess: async () => null, denyResourceAccess: async () => null, finance: {} as never,
-    claims: { inbox, authorize: input => authorizeApiAccess(authorization, input) } });
+    claimReport: { report: { create: async () => { throw Error('unexpected report write'); }, receive: async () => { throw Error('unexpected upload'); }, submit: async () => { throw Error('unexpected submission'); } },
+      disbursements: { owned: async () => ownPage },
+      review: { owned, detail: async (id, access) =>
+        id === examples.ownedCases.items[0].claimId && access.kind === 'customer' && access.actor.subjectToken === principal.subjectToken ? customerCase : null },
+      authorize: async input => input.token === 'synthetic.jwt.token' ? { allowed: true,
+        actor: { kind: 'user', channel: 'mobile', operations: ['claims:report'], principal } } : { allowed: false, status: 401, error: 'unauthorized' } },
+    claims: { inbox,
+      disbursements: { request: async () => ({ status: 'ok', payment, replayed: false }), read: async () => payment, owned: async () => ownPage },
+      decisions: { decide: async () => ({ status: 'ok', decisionId: examples.decisionResult.decisionId, state: 'approved', replayed: false }) },
+      review: {
+        directory: listSyntheticExperts,
+        owned,
+        detail: async (id, access) => id === examples.page.items[0].claimId
+          ? access.kind === 'customer' ? customerCase : { ...examples.caseFile, state: 'in_review', access: 'assigned' } : null,
+        evidence: async () => null,
+        review: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'escalated', replayed: false }),
+        respond: async () => ({ status: 'ok', actionId: examples.actionReceipt.actionId, state: 'in_review', replayed: false }),
+        selectFiles: async () => 'selected',
+        receive: async (_id, _requirement, _owner, declaration, body) => {
+          const file = parseRequirementFile(declaration);
+          if (!file || !body) return 'invalid_request';
+          const bytes = await new Response(body).arrayBuffer();
+          return file.byteSize === bytes.byteLength && createHash('sha256').update(new Uint8Array(bytes)).digest('hex') === file.sha256
+            ? 'verified' : 'checksum_mismatch';
+        }
+      },
+      authorize: input => authorizeApiAccess(authorization, input) } });
   return { sessionCookie: cookie, policy: { fetch: (request: Request) => {
     const { pathname, search } = new URL(request.url);
     return Promise.resolve(app.request(new Request(origin + pathname + search, request), undefined, { APP_ENV: 'dev' } as PolicyEnv));

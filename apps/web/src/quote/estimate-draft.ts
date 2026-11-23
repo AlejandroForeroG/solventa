@@ -1,4 +1,4 @@
-import { invalidEstimateFields, type EstimateValues } from './estimate-api';
+import { groupedDigits, invalidEstimateFields, type EstimateValues } from './estimate-api';
 
 const KEY = 'solventa.estimate-draft';
 const TTL_MS = 30 * 60 * 1000;
@@ -21,7 +21,8 @@ export function readEstimateDraft(now = Date.now()): EstimateValues | null {
   } catch { clearEstimateDraft(); return null; }
 }
 
-export function saveEstimateDraft(values: EstimateValues): boolean {
+export function saveEstimateDraft(input: EstimateValues): boolean {
+  const values = { ...input, amount: groupedDigits(input.amount.trim()) };
   try {
     // Only calculator inputs cross the redirect, never identity fields, credentials or a trusted price.
     window.sessionStorage.setItem(KEY, JSON.stringify({ version: 1, savedAt: Date.now(), ageYears: values.ageYears, amount: values.amount, termMonths: values.termMonths }));

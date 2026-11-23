@@ -54,6 +54,16 @@ test('historical accepted and declined decisions explain retained facts and neve
     assert.equal(detail.inputs.monthlyIncomeCop, 8000000);
   }
 });
+test('the audited decision names the advisor or partner channel that requested it, and drops a channel that is malformed', () => {
+  const advisor = { kind: 'advisor', advisorReference: '10000000-0000-4000-8000-000000000002', authorizationId: '60000000-0000-4000-8000-000000000002' };
+  const partner = { kind: 'partner', partnerId: '10000000-0000-4000-8000-000000000001', authorizationId: '60000000-0000-4000-8000-000000000001' };
+  const withChannel = (channel: unknown) => { const record = historicalMortgage(); return explainDecision({ ...record, snapshot: { ...(record.snapshot as object), channel } }); };
+  assert.deepEqual(withChannel(advisor).channel, advisor);
+  assert.deepEqual(withChannel(partner).channel, partner);
+  assert.equal(explainDecision(historicalMortgage()).channel, undefined, 'a decision taken in the customer own journey has no channel');
+  for (const bad of [{ ...advisor, advisorReference: 'maria' }, { ...advisor, kind: 'web' }, { kind: 'advisor', authorizationId: advisor.authorizationId }, 'advisor', []]) assert.equal(withChannel(bad).channel, undefined);
+  assert.equal(JSON.stringify(withChannel({ ...advisor, clientId: 'x' }).channel).includes('clientId'), false, 'only the identifiers of the contract are exposed');
+});
 test('legacy gaps, unknown artifacts and disagreement with immutable row/revisions are explicit', () => {
   const record = historicalMortgage();
   const snapshot = JSON.parse(JSON.stringify(record.snapshot));

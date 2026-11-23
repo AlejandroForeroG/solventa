@@ -16,7 +16,7 @@ it('renders actual full-period metrics, safe credentials, catalog, quota and reg
   const fetch = vi.fn(async () => json(example)); vi.stubGlobal('fetch', fetch);
   const { container } = show();
   expect(await screen.findByText('synthetic-partner')).toBeVisible();
-  expect(screen.getByText('Período consultado: 2026-11-01 – 2026-11-07 UTC')).toBeVisible();
+  expect(screen.getByText('Período consultado: 01/11/2026 – 07/11/2026 UTC')).toBeVisible();
   expect(screen.getByText('Solicitudes por día UTC')).toBeVisible();
   expect(screen.getByText(example.credentials[0].id)).toBeVisible();
   expect(screen.getAllByText(/Sin fecha de retiro/)).toHaveLength(2);
@@ -27,11 +27,11 @@ it('keeps the applied period visible while draft dates are edited and uses new d
   const fetch = vi.fn(async () => json(example)); vi.stubGlobal('fetch', fetch); show();
   await screen.findByText('synthetic-partner');
   fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-11-03' } });
-  expect(screen.getByText('Período consultado: 2026-11-01 – 2026-11-07 UTC')).toBeVisible();
+  expect(screen.getByText('Período consultado: 01/11/2026 – 07/11/2026 UTC')).toBeVisible();
   expect(fetch).toHaveBeenCalledTimes(1);
   fetch.mockImplementation(async () => json({ ...example, period: { ...example.period, from: '2026-11-03' } }));
   await userEvent.setup().click(screen.getByRole('button', { name: 'Consultar' }));
-  expect(await screen.findByText('Período consultado: 2026-11-03 – 2026-11-07 UTC')).toBeVisible();
+  expect(await screen.findByText('Período consultado: 03/11/2026 – 07/11/2026 UTC')).toBeVisible();
 });
 it.each([[403,'No tienes acceso a un socio habilitado.'],[503,'No se pudo consultar la integración.'],[400,'Revisa el período: máximo 31 días.']])('shows %s without fabricated metrics', async (status, message) => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'synthetic', traceId: example.traceId }, Number(status)))); show();
@@ -71,4 +71,15 @@ it('never restores protected data from a pending response after the tab is hidde
   hidden.mockReturnValue(false); fireEvent(document, new Event('visibilitychange'));
   expect(await screen.findByRole('alert')).toHaveTextContent('No tienes acceso');
   expect(screen.queryByText('synthetic-partner')).not.toBeInTheDocument();
+});
+it('points to the end date when the period is inverted and does not query it', async () => {
+  const fetch = vi.fn(async () => json(example)); vi.stubGlobal('fetch', fetch); show();
+  await screen.findByText('synthetic-partner');
+  fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '30112026' } });
+  fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '01112026' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Consultar' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('La fecha final debe ser igual o posterior a la inicial.');
+  expect(screen.getByLabelText('Hasta')).toHaveFocus();
+  expect(screen.getByLabelText('Hasta')).toHaveAttribute('aria-invalid', 'true');
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

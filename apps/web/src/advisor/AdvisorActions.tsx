@@ -2,14 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
+import { AdvisorSale } from '../sale/AdvisorSale';
+import { IconButton } from '../navigation/IconAction';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
-export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSessionLost():void}) {
+export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:PolicyDetail;onSessionLost():void;onReference?(reference:string):void}) {
   const intl=useIntl(),t=(key:string)=>intl.formatMessage({id:`advisor.${key}`});
   const [cursors,setCursors]=useState<(string|undefined)[]>([undefined]);
   const [result,setResult]=useState<Outcome<ApprovalList>|null>(null),[refresh,setRefresh]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const [reference,setReference]=useState(''),[action,setAction]=useState<Approval['action']>('cancelled'),[replacement,setReplacement]=useState('');
-  const [expiry,setExpiry]=useState(()=>new Date(Date.now()+86400000).toISOString().slice(0,16)),[confirmed,setConfirmed]=useState(false);
+  const advisorReference=result?.kind==='ok'?result.value.advisorReference:undefined;
+  useEffect(()=>{if(advisorReference)onReference?.(advisorReference);},[advisorReference,onReference]);
+  const [reference,setReference]=useState(''),[action,setAction]=useState<Approval['action']|''>(''),[replacement,setReplacement]=useState('');
+  const validUntil=(count:number)=>new Date(Date.now()+count*86400000-300000).toISOString();
+  const [days,setDays]=useState(1),[expiresAt,setExpiresAt]=useState(()=>validUntil(1)),[confirmed,setConfirmed]=useState(false);
   const [selected,setSelected]=useState<string|null>(null),[executeConfirmed,setExecuteConfirmed]=useState(false);
   const command=useRef<{body:string;key:string}|null>(null),executions=useRef(new Map<string,string>());
   useEffect(()=>{
@@ -25,7 +31,7 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     return()=>{window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',visible);};
   },[]);
   const page=result?.kind==='ok'?result.value:null;
-  const timestamp=(v:string)=>intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC';
+  const timestamp=(v:string)=>intl.formatDate(v,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'})+' '+t('bogota');
   const reload=()=>{setResult(null);setRefresh(v=>v+1);};
   async function run(work:()=>Promise<Outcome<unknown>>) {
     if(busy)return;setBusy(true);setError('');
@@ -34,19 +40,19 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     finally{setBusy(false);}
   }
   const grant=()=>run(async()=>{
-    if(!policy||!confirmed||!uuid(reference)||(action!=='cancelled'&&!uuid(replacement)))return{kind:'invalid'};
-    const expiresAt=new Date(expiry+'Z').toISOString(),payload={advisorReference:reference.toLowerCase(),action,replacementPolicyId:action==='cancelled'?null:replacement.toLowerCase(),expiresAt};
+    if(!policy||!confirmed||!action||!uuid(reference)||(action!=='cancelled'&&!uuid(replacement)))return{kind:'invalid'};
+    const payload={advisorReference:reference.toLowerCase(),action,replacementPolicyId:action==='cancelled'?null:replacement.toLowerCase(),expiresAt};
     const body=JSON.stringify(payload);if(command.current?.body!==body)command.current={body,key:crypto.randomUUID()};
     return grantApproval(policy.policyId,payload,command.current.key);
   });
   return <section className="card policy-section" aria-labelledby="advisor-heading">
-    <h2 id="advisor-heading" className="h-card">{t(policy?'authorizations':'title')}</h2>
-    {page?.advisorReference&&<p className="mono">{t('reference')}: {page.advisorReference}</p>}
+    <h2 id="advisor-heading" className="h-card">{t(policy ? 'authorizations' : 'pending')}</h2>
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
-    <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
+    <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
     {page&&<>
       {!page.authorizations.length&&<p>{t('empty')}</p>}
+
       <ul className="policy-documents">{page.authorizations.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
         {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}
@@ -60,15 +66,17 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     </>}
     {policy&&!policy.lifecycle&&<form onSubmit={event=>{event.preventDefault();void grant();}}>
       <p className="note">{t('scope')}</p><label className="field">{t('reference')}<input required value={reference} disabled={busy} onChange={e=>{setReference(e.target.value.trim());setConfirmed(false);}}/></label>
-      <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']);setConfirmed(false);}}>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
-      {action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
-      <label className="field">{t('expires')}<input type="datetime-local" required value={expiry} disabled={busy} onChange={e=>{setExpiry(e.target.value);setConfirmed(false);}}/></label>
-      <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t('confirm')}</label></div>
-      <button className="btn btn-secondary" disabled={busy||!confirmed} type="submit">{busy?t('saving'):t('grant')}</button>
+      <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']|'');setConfirmed(false);}}><option value="" disabled>{intl.formatMessage({id:'policies.lifecycle.choose'})}</option>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
+      {action&&action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
+      <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={e=>{const count=Number(e.target.value);setDays(count);setExpiresAt(validUntil(count));setConfirmed(false);}}>{[1,2,3,7].map(value=><option key={value} value={value}>{intl.formatMessage({id:'sale.days'},{count:value})}</option>)}</select></label>
+      <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t(action==='cancelled'?'confirmCancel':'confirm')}</label></div>
+      <button className="btn btn-secondary" disabled={busy||!confirmed||!action} type="submit">{busy?t('saving'):t('grant')}</button>
     </form>}
     {error&&<p role="alert">{t(error)}</p>}
   </section>;
 }
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
-  return <main className="content policies"><AdvisorActions onSessionLost={onSessionLost}/></main>;
+  const intl=useIntl();
+  const [reference,setReference]=useState<string|null>(null);
+  return <main className="content policies"><div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({id:'advisor.console'})}</h1></div><AdvisorSale reference={reference} onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost} onReference={setReference}/></main>;
 }

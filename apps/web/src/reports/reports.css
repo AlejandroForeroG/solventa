@@ -1,0 +1,28 @@
+.reports-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 16px; }
+.reports-form label, .reports-format { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: 12.5px; font-weight: 600; color: #3a424e; }
+.reports-format { font-weight: 500; }
+.reports-format span { font-weight: 600; }
+.reports-form select { min-height: 44px; padding: 9px 12px; border: 1px solid var(--line-input); border-radius: 10px; background: #fff; font: inherit; font-size: 16px; }
+.reports-form select:focus-visible { outline: 3px solid #0b6b5f; outline-offset: 2px; }
+.reports-filters { margin-bottom: 16px; }
+.reports-table td { vertical-align: middle; }
+.reports-table .audit-id { margin-top: 0; font-size: 11.5px; white-space: nowrap; overflow-wrap: normal; }
+.reports-actions > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.reports-table td:first-child span { white-space: nowrap; }
+@container (max-width: 760px) {
+  .reports-table td:first-child { display: block; padding: 14px 16px; background: #faf9f7; font-weight: 600; font-size: 15px; }
+  .reports-table td:first-child::before, .reports-table td.reports-actions::before { display: none; }
+  .reports-table td.reports-actions { display: block; }
+  .reports-actions .btn { flex: 1 1 140px; min-height: 44px; }
+}
+.reports-reason { display: block; margin-top: 4px; }
+.reports-delivery-acknowledged { background: #e4f1ee; color: #08544a; }
+.reports-delivery-uncertain, .reports-delivery-dispatched { background: #fbf0dc; color: #7a4e05; }
+.reports-delivery-rejected { background: #fbe9e7; color: #8a241c; }
+.reports-confirm { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px solid #edd8ae; border-radius: 10px; background: #fbf0dc; }
+.reports-confirm .note { margin: 0; color: #5c3b04; }
+.reports-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.reports-table td.mono, .reports-table .mono { font-family: 'IBM Plex Sans', sans-serif; font-variant-numeric: tabular-nums; }
+.reports-table td:first-child span, .reports-table td:nth-child(2) { white-space: nowrap; }
+.reports-table td.reports-actions { min-width: 220px; }
+.reports-table .audit-id { font-family: 'IBM Plex Mono', ui-monospace, monospace; }

@@ -1,0 +1,185 @@
+openapi: 3.0.3
+info:
+  title: Solventa API - Advisor offers
+  version: 1.0.0
+  description: >
+    An advisor with a current professional permission prepares a profiled mortgage life offer for a
+    customer who authorized them. The advisor presents their own authenticated web session and the
+    authorization id the customer created (see advisor-sale-authorizations.yaml); they never name the
+    customer. Identity verifies the advisor session and permission, resolves the customer behind the
+    authorization and verifies that customer's consent for the four risk-profiling scopes fresh on every
+    call, in one internal call. The quote and the offer belong to the customer and follow the same
+    profiling, degradation and persistence as the customer's own web journey; the retained decision
+    records the advisor reference and the authorization (see underwriting-decisions.yaml). Revoking
+    either the authorization or the consent blocks the next call, including a retry of an earlier sale.
+    The advisor only prepares: accepting, paying and signing are the customer's, in the customer's own
+    session through offers.yaml and policies.yaml, and no advisor session can perform them for the
+    customer. A source that did not answer is replaced and the offer is preliminary: it states each
+    signal's condition and confidence and cannot be contracted. The response carries the price, its
+    validity and the explanation, never the customer's identifiers or raw signal values. Offers are
+    synthetic. The same Idempotency-Key with the same request returns the original offer; a key is scoped
+    to the advisor and the authorization.
+servers:
+  - url: /api/v1
+tags:
+  - name: Advisor offers
+    description: Profiled offer prepared by an authorized advisor.
+paths:
+  /advisor/offers:
+    post:
+      operationId: createAdvisorOffer
+      summary: Prepare a profiled offer for a customer who authorized the advisor
+      tags: [Advisor offers]
+      description: >
+        Requires the advisor's sealed web session and the same Origin as the actual request host. The body
+        is limited to 4096 bytes. A bearer token is not an advisor credential (400). Unknown, foreign,
+        revoked and expired authorizations, and a session without advisor permission, are indistinguishable
+        (403 forbidden).
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common.yaml#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdvisorOfferRequest' }
+      responses:
+        '201':
+          description: Offer created.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: './partner-offers.yaml#/components/schemas/PartnerOffer' }
+        '200':
+          description: The Idempotency-Key was reused with the same request. Returns the original offer without creating another.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: './partner-offers.yaml#/components/schemas/PartnerOffer' }
+        '400':
+          description: >
+            Invalid or missing authorization id, key or quote fields, an Authorization header, a customer
+            identifier or an unknown property in the body. Nothing is stored.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: './partner-offers.yaml#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/AccessError'
+        '401':
+          description: Missing, invalid or expired session.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '403':
+          description: >
+            forbidden: the session has no advisor permission or the advisor does not hold a usable
+            authorization. consent_required: the customer has no current consent for the four scopes.
+            Nothing is stored.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '405':
+          description: Only POST is allowed.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+            Allow: { schema: { type: string, enum: [POST] } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '409':
+          description: >
+            idempotency_key_reused: the key belongs to a different request. declined: the underwriting rule
+            rejected the customer with all signals available. conflict: the quote expired or the offer
+            cannot be completed.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '500':
+          description: Unexpected error. The write outcome may be uncertain; retry with the same Idempotency-Key and unchanged body.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+        '503':
+          description: >
+            access_unavailable: Identity could not verify the advisor, authorization or consent in time, so
+            nothing was priced, or the advisor's own short permission ended before the quote and the offer were
+            written (nothing is written at or after it, separately from the validity of the offer; retry with the
+            same Idempotency-Key). financial_unavailable: a required dependency of the offer failed. Retry with
+            the same Idempotency-Key.
+          headers:
+            X-Trace-Id: { $ref: '#/components/headers/TraceId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessError' }
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-solventa-session
+      description: Remote sealed HttpOnly session of the advisor from the web login flow.
+    LocalWebSession:
+      type: apiKey
+      in: cookie
+      name: solventa-session
+      description: Local-only sealed HttpOnly session for http://localhost:8787.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key per sale, 1 to 128 characters. Scoped to the advisor and the authorization; the same key under another authorization is another sale.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  headers:
+    TraceId:
+      description: Request correlation UUID, normalized to lowercase. Missing or invalid values are replaced.
+      schema: { type: string, format: uuid }
+  schemas:
+    AdvisorOfferRequest:
+      type: object
+      additionalProperties: false
+      required: [authorizationId, product, customer, credit]
+      properties:
+        authorizationId:
+          type: string
+          format: uuid
+          description: Authorization the customer created for this advisor. It identifies no one by itself.
+        product: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/product' }
+        customer: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/customer' }
+        credit: { $ref: './quotes.yaml#/components/schemas/QuoteRequest/properties/credit' }
+    AccessError:
+      type: object
+      additionalProperties: false
+      required: [error, traceId]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - consent_required
+            - access_unavailable
+            - idempotency_key_reused
+            - declined
+            - conflict
+            - financial_unavailable
+            - internal_error
+            - method_not_allowed
+        traceId: { type: string, format: uuid }

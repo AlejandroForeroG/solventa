@@ -13,6 +13,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "@react-native-community/datetimepicker": "9.1.0",
     "@solventa/assets": "0.0.0",
     "@solventa/contracts": "0.0.0",
@@ -31,6 +32,7 @@
     "expo-network": "~57.0.3",
     "expo-notifications": "~57.0.24",
     "expo-router": "~57.0.25",
+    "expo-screen-capture": "~57.0.4",
     "expo-secure-store": "~57.0.4",
     "expo-standard-web-crypto": "^57.0.3",
     "expo-status-bar": "~57.0.1",

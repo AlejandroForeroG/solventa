@@ -15,6 +15,8 @@ export type NewQuote = {
   validUntil: string;
   year: number;
   traceId: string;
+  // The write must not commit at or after this instant (an acting advisor's short lease); the store throws LeaseExpired instead.
+  deadline?: string;
 };
 
 export type StoredQuote = { quoteId: string; premiumMonthly: number; sumInsured: number; termMonths: number; validUntil: string; ruleVersion: string };

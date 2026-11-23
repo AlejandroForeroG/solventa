@@ -30,7 +30,7 @@ export type PolicyView = { lifecycle?: import('./policy-lifecycle').LifecycleCha
 // The customer's wallet shows these fields only: the reviewed document, its hash and the payment stay on the policy read route.
 export type PolicySummary = { contractStatus?: 'modified' | 'renewed' | 'cancelled'; policyId: string; product: AcceptedOffer['product']; status: 'issued'; premium: string; currency: 'COP';
   effectiveFrom: string; effectiveUntil: string; coverage: Coverage };
-// Bounded so the native device can keep the whole list in its protected copy.
+// Each page fits the native device's protected copy; online readers can request subsequent pages.
 export const MAX_LISTED_POLICIES = 6;
 export type FinancialErrorCode = 'invalid_request' | 'invalid_event' | 'event_conflict' | 'offer_invalid'
   | 'forbidden' | 'not_found' | 'idempotency_conflict' | 'document_mismatch' | 'integrity_violation'
@@ -42,7 +42,7 @@ export type FinancialResult = { status: 'ok'; replayed: boolean; policy: PolicyV
   challenge?: { challengeId: string; expiresAt: string; demoCode: string } }
   | { status: 'denied'; error: FinancialErrorCode; httpStatus: 400 | 403 | 404 | 409; traceId: string }
   | { status: 'unavailable'; error: 'financial_unavailable'; httpStatus: 503; traceId: string };
-export type PolicyListResult = { status: 'ok'; policies: PolicySummary[]; hasMore: boolean }
+export type PolicyListResult = { status: 'ok'; policies: PolicySummary[]; hasMore: boolean; nextCursor: string | null }
   | Extract<FinancialResult, { status: 'denied' | 'unavailable' }>;
 export class InvalidFinancialRecord extends Error {}
 export function paymentContent(payment: { id: string; policyId: string; operation: 'premium' | 'indemnity'; key: string; amount: string; currency: 'COP' }): string {

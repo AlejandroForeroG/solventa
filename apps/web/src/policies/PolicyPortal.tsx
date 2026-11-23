@@ -5,11 +5,14 @@ import { downloadDocument, listPolicies, readPolicyDetail, type PolicyDetail, ty
 import './policies.css';
 import { AdvisorActions } from '../advisor/AdvisorActions';
 import { LifecycleActions } from './LifecycleActions';
+import type { PolicyDocumentDestination } from './document-destination';
+import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
+import { Icon } from '../navigation/Icon';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
-type Tab = 'info' | 'documents' | 'history';
-const TABS: readonly Tab[] = ['info', 'documents', 'history'];
+type Tab = 'info' | 'documents' | 'history' | 'manage';
+const TABS: readonly Tab[] = ['info', 'documents', 'history', 'manage'];
 
 function useTranslate() {
   const intl = useIntl();
@@ -57,31 +60,42 @@ function Validity({ policy }: { policy: PolicySummary }) {
   return <>{t('validity', { from: format.dayMonthYear(new Date(policy.effectiveFrom)), until: format.dayMonthYear(new Date(policy.effectiveUntil)) })}</>;
 }
 
-function PolicyList({ onOpen, onSessionLost }: { onOpen(policyId: string): void; onSessionLost(): void }) {
+function PolicyList({ onOpen, onSessionLost, cursors, onPage }: { onOpen(policyId: string): void; onSessionLost(): void;
+  cursors: (string | undefined)[]; onPage(cursors: (string | undefined)[]): void }) {
   const t = useTranslate();
   const format = useFormatters();
   const heading = useHeading();
-  const { state, retry } = useLoad(listPolicies, onSessionLost);
+  const cursor = cursors.at(-1);
+  const readPage = useCallback((signal: AbortSignal) => listPolicies(signal, { cursor }), [cursor]);
+  const { state, retry } = useLoad(readPage, onSessionLost);
+  const changePage = (next: (string | undefined)[]) => { retry(); onPage(next); heading.current?.focus(); };
   const [now] = useState(Date.now);
   return <main className="content policies">
     <p className="section-label">{t('label')}</p>
-    <h1 ref={heading} tabIndex={-1}>{t('title')}</h1>
-    <p className="lede">{t('subtitle')}</p>
+    <div className="page-title"><span className="page-icon page-icon-green" aria-hidden="true"><Icon name="policy" size={22} /></span><h1 ref={heading} tabIndex={-1}>{t('title')}</h1></div>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
     {state.kind === 'ready' && (state.value.policies.length ? <ul className="policy-list">{state.value.policies.map(policy => {
       const status = policyState(policy, now), product = t(`product.${policy.product}`);
-      return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={t('open.detail', { product }) + ' · ' + policy.policyId.slice(0, 8)} onClick={() => onOpen(policy.policyId)}>
+      return <li key={policy.policyId}><button type="button" className="card policy-card" aria-label={`${t('open.detail', { product })} · POL-${policy.policyId.slice(0, 8).toUpperCase()} · ${t(`state.${status}`)}`} onClick={() => onOpen(policy.policyId)}>
         <span className="policy-card-head"><span className="h-card">{product}</span><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span></span>
-        <span className="mono policy-id">{policy.policyId}</span>
-        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)}</span></span>
+        <span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span>
+        <span className="policy-card-meta"><span><Validity policy={policy} /></span><span className="mono">{format.copDecimalAmount(policy.premium)} <span className="note">{t('oneOff')}</span></span></span>
       </button></li>;
-    })}</ul> : <div className="card policy-empty"><p>{t('empty')}</p><a className="btn btn-primary" href="/cotizar">{t('quote')}</a></div>)}
-    {state.kind === 'ready' && state.value.hasMore && <p className="note" role="status">{t('truncated')}</p>}
+    })}</ul> : <div className="card policy-empty"><p>{t(cursors.length > 1 ? 'emptyPage' : 'empty')}</p>
+      {cursors.length === 1 && <a className="btn btn-primary" href="/cotizar">{t('quote')}</a>}</div>)}
+    {(cursors.length > 1 || state.kind === 'ready' && state.value.hasMore) && <nav className="actions" aria-label={t('pagination')}>
+      <button type="button" className="btn btn-secondary" disabled={state.kind === 'loading' || cursors.length === 1}
+        onClick={() => changePage(cursors.slice(0, -1))}>{t('previousPage')}</button>
+      <span className="note" role="status">{t('page', { number: cursors.length })}</span>
+      <button type="button" className="btn btn-secondary" disabled={state.kind !== 'ready' || !state.value.nextCursor}
+        onClick={() => { if (state.kind === 'ready' && state.value.nextCursor) changePage([...cursors, state.value.nextCursor]); }}>{t('nextPage')}</button>
+    </nav>}
   </main>;
 }
 
 function Coverage({ policy }: { policy: PolicyDetail }) {
+  const intl = useIntl();
   const t = useTranslate();
   const format = useFormatters();
   const rows: [string, React.ReactNode][] = [['coverage.type', t(`product.${policy.product}`)]];
@@ -96,7 +110,9 @@ function Coverage({ policy }: { policy: PolicyDetail }) {
       <dl className="policy-facts">{rows.map(([key, value]) => <div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>)}</dl></section>
     <section className="card policy-section" aria-labelledby="policy-exclusions"><h2 id="policy-exclusions" className="h-card">{t('exclusions')}</h2>
       <ul className="policy-exclusions">{policy.exclusions.map(item => <li key={item.code}><span className="mono">{item.code}</span><span>{item.text}</span></li>)}</ul>
-      <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></section>
+      {intl.locale === 'en-US' && <p className="note">{t('contractLanguage')}</p>}
+      <details className="document-verification"><summary>{intl.formatMessage({ id: 'document.verification' })}</summary>
+        <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details></section>
   </>;
 }
 
@@ -144,12 +160,19 @@ function History({ policy }: { policy: PolicyDetail }) {
         <td data-label={t('col.date')}>{format.dateTime(new Date(payment.date))}</td><td data-label={t('col.amount')} className="mono">{format.copDecimalAmount(payment.amount)}</td>
         <td data-label={t('col.status')}><span className={`pill policy-payment-${payment.status}`}>{t(`payment.${payment.status}`)}</span></td>
         <td data-label={t('col.reference')} className="mono">{payment.reference ?? t('noReference')}</td></tr>)}</tbody></table></div>
+    {policy.parametricPayment && <section aria-labelledby="parametric-payment"><h3 id="parametric-payment">{t('parametricPayment')}</h3>
+      <dl className="policy-facts">
+        <div><dt>{t('col.date')}</dt><dd>{format.dateTime(new Date(policy.parametricPayment.date))}</dd></div>
+        <div><dt>{t('col.amount')}</dt><dd className="mono">{format.copDecimalAmount(policy.parametricPayment.amount)}</dd></div>
+        <div><dt>{t('col.status')}</dt><dd>{t(`payment.${policy.parametricPayment.status}`)}</dd></div>
+        <div><dt>{t('col.reference')}</dt><dd className="mono">{policy.parametricPayment.reference ?? t('noReference')}</dd></div>
+      </dl></section>}
     <p className="note">{t('synthetic')}</p></section>;
 }
 
 function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
   const t = useTranslate();
-  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null });
+  const buttons = useRef<Record<Tab, HTMLButtonElement | null>>({ info: null, documents: null, history: null, manage: null });
   function move(event: KeyboardEvent, from: Tab) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
     if (!step) return;
@@ -163,37 +186,50 @@ function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
     onClick={() => onChange(name)} onKeyDown={event => move(event, name)}>{t(`tab.${name}`)}</button>)}</div>;
 }
 
-function PolicyDetailView({ policyId, onBack, onSessionLost }: { policyId: string; onBack(): void; onSessionLost(): void }) {
+function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBack, onSessionLost }: { policyId: string; initialTab?: Tab; renewal?: boolean; onBack(): void; onSessionLost(): void }) {
   const t = useTranslate();
   const heading = useHeading();
-  const [tab, setTab] = useState<Tab>('info');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const load = useCallback((signal: AbortSignal) => readPolicyDetail(policyId, signal), [policyId]);
   const { state, retry } = useLoad(load, onSessionLost);
   const [now] = useState(Date.now);
   const policy = state.kind === 'ready' ? state.value : null;
   const status = policy ? policyState(policy, now) : null;
   return <main className="content policies">
-    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}>‹ {t('back')}</button>
+    <button type="button" className="btn btn-secondary btn-small policy-back" onClick={onBack}><Icon name="back" size={16} />{t('back')}</button>
     <p className="section-label">{t('label')}</p>
     <h1 ref={heading} tabIndex={-1}>{policy ? t(`product.${policy.product}`) : t('title')}</h1>
     {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
     {policy && status && <>
-      <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">{policy.policyId}</span></p>
+      <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></p>
+      <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>
       <Tabs tab={tab} onChange={setTab} />
       <div role="tabpanel" id={`policy-panel-${tab}`} aria-labelledby={`policy-tab-${tab}`}>
         {tab === 'info' && <Coverage policy={policy} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
+        {tab === 'manage' && <>
+          <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />
+          <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
+        </>}
       </div>
-      <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />
-      <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
     </>}
   </main>;
 }
 
-export function PolicyPortal({ onSessionLost }: { onSessionLost(): void }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  return selected ? <PolicyDetailView policyId={selected} onBack={() => setSelected(null)} onSessionLost={onSessionLost} />
-    : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} />;
+export function PolicyPortal({ onSessionLost, documentDestination, destination: suppliedDestination, onBackToList }: {
+  onSessionLost(): void; destination?: PolicyDestination; documentDestination?: PolicyDocumentDestination | null; onBackToList?(): void;
+}) {
+  const [destination, setDestination] = useState<PolicyDestination | null>(() => {
+    const current = suppliedDestination ?? customerDestination();
+    return documentDestination ? { kind: 'policy', policyId: documentDestination.policyId, section: 'documents' } : current?.kind === 'policy' ? current : null;
+  });
+  const [selected, setSelected] = useState<string | null>(destination?.policyId ?? null);
+  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
+  const section = selected === destination?.policyId ? destination.section : 'info';
+  return selected ? <PolicyDetailView policyId={selected} initialTab={section === 'renewal' ? 'manage' : section} renewal={section === 'renewal'} onBack={() => {
+    window.history.replaceState(null, '', '/polizas'); setDestination(null); setSelected(null); onBackToList?.();
+  }} onSessionLost={onSessionLost} />
+    : <PolicyList onOpen={setSelected} onSessionLost={onSessionLost} cursors={cursors} onPage={setCursors} />;
 }

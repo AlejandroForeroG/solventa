@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useFormatters } from '../i18n/I18n';
 import { listClaims, type ClaimsOutcome, type ClaimsPage } from './api';
+import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './claims.css';
+import { Icon } from '../navigation/Icon';
 
 type Filter = 'all' | 'unassigned' | 'pending_information' | 'overdue';
 const FILTERS: readonly Filter[] = ['all', 'unassigned', 'pending_information', 'overdue'];
@@ -31,6 +33,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<{ view: string; state: State } | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(true);
   const view = [filter, search, before ?? ''].join('|');
@@ -59,12 +62,9 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   const page = state.kind === 'ready' ? state.page : null;
   const filtered = filter !== 'all' || search !== '';
   return <main className="audit-shell">
-    <aside className="audit-nav" aria-label={t('console')}><p>{t('console')}</p>
-      <a href="/siniestros" aria-current="page">{t('nav')}</a>
-      <a href="/auditoria">{intl.formatMessage({ id: 'audit.open' })}</a>
-    </aside>
     <div className="audit-main">
-      <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      <div className="audit-heading"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <div className="claims-toolbar">
         <div role="group" aria-label={t('filterGroup')} className="claims-filters">
           {FILTERS.map(option => <button key={option} type="button" className="claims-filter" aria-pressed={filter === option} onClick={() => choose(option)}>{t(`filter.${option}`)}</button>)}
@@ -72,31 +72,34 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <form className="claims-search" onSubmit={event => {
           event.preventDefault();
           const value = draft.trim();
-          if (value && !SEARCH.test(value)) { setSearchInvalid(true); return; }
+          if (value && !SEARCH.test(value)) { setSearchInvalid(true); document.getElementById('claims-search')?.focus(); return; }
           moveFocus.current = true; setSearchInvalid(false); setSearch(value.toLowerCase().startsWith('sin-') ? value.toUpperCase() : value.toLowerCase()); setBefore(undefined);
         }}>
-          <label htmlFor="claims-search" className="visually-hidden">{t('search')}</label>
-          <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} placeholder={t('search')} maxLength={64} autoComplete="off"
+          <label htmlFor="claims-search">{t('search')}</label>
+          <input id="claims-search" name="query" value={draft} onChange={event => setDraft(event.target.value)} maxLength={64} autoComplete="off"
             aria-invalid={searchInvalid} aria-describedby={searchInvalid ? 'claims-search-error' : undefined} />
           <button className="btn btn-secondary" type="submit">{t('searchButton')}</button>
         </form>
       </div>
       {searchInvalid && <p id="claims-search-error" className="claims-error" role="alert">{t('searchInvalid')}</p>}
-      {state.kind !== 'ready' && <div className={`audit-state ${state.kind === 'forbidden' ? 'audit-denied' : ''}`} role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
+      {state.kind !== 'ready' && <div className="audit-state" role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
         <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && <button type="button" className="btn btn-secondary" onClick={() => { moveFocus.current = true; setResult(null); setRefresh(value => value + 1); }}>{t('retry')}</button>}
         {'traceId' in state && state.traceId && <p className="mono audit-id">{state.traceId}</p>}
       </div>}
       {page && (page.items.length ? <>
-        <div className="audit-table-wrap"><table className="audit-table claims-table"><caption className="visually-hidden">{t('title')}</caption>
+        <div className="audit-table-wrap audit-card-wrap"><table className="audit-table claims-table audit-card-table"><caption className="visually-hidden">{t('title')}</caption>
           <thead><tr>{['claim', 'policy', 'state', 'age', 'amount', 'evidence', 'priority'].map(key => <th key={key} scope="col" className={key === 'amount' ? 'claims-amount' : undefined}>{t(`col.${key}`)}</th>)}</tr></thead>
-          <tbody>{page.items.map(item => <tr key={item.claimId}>
-            <td className="mono claims-number">{item.claimNumber}</td>
-            <td className="mono audit-id">{item.policyId}</td>
-            <td><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
-            <td className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
-            <td className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
-            <td>{t('evidence', { provided: item.evidence.provided, required: item.evidence.required, status: t(`evidenceStatus.${item.evidence.status}`) })}</td>
-            <td><span className={`claims-badge claims-priority-${item.priority}`}>{t(`priority.${item.priority}`)}</span></td>
+          <tbody>{page.items.map(item => <tr key={item.claimId} className={`compact-record ${expanded[item.claimId] ? 'record-expanded' : ''}`}>
+            <td data-label={t('col.claim')} className="mono claims-number"><div><a href={'/siniestros/' + item.claimId}>{item.claimNumber}</a><button type="button" className="record-toggle"
+              aria-expanded={!!expanded[item.claimId]} aria-label={`${t(expanded[item.claimId] ? 'hideDetails' : 'details')}: ${item.claimNumber}`}
+              aria-controls={['policy', 'evidence'].map(key => `claim-${item.claimId}-${key}`).join(' ')}
+              onClick={() => setExpanded(current => ({ ...current, [item.claimId]: !current[item.claimId] }))}>{t(expanded[item.claimId] ? 'hideDetails' : 'details')}</button></div></td>
+            <td id={`claim-${item.claimId}-policy`} data-secondary data-label={t('col.policy')} className="mono audit-id"><details className="claims-policy-reference"><summary aria-label={`${t('fullPolicyId')}: POL-${item.policyId.slice(0, 8).toUpperCase()}`}>POL-{item.policyId.slice(0, 8).toUpperCase()}</summary><span>{item.policyId}</span></details></td>
+            <td data-label={t('col.state')}><span className={`claims-badge claims-state-${item.state}`}>{t(`state.${item.state}`)}</span></td>
+            <td id={`claim-${item.claimId}-age`} data-label={t('col.age')} className={`mono ${item.overdue ? 'claims-overdue' : ''}`}>{t('age', { days: item.ageDays })}</td>
+            <td id={`claim-${item.claimId}-amount`} data-label={t('col.amount')} className="mono claims-amount">{item.estimatedAmount === null ? t('amountPending') : item.currency === 'COP' ? format.copDecimal(item.estimatedAmount) : `${item.estimatedAmount} ${item.currency}`}</td>
+            <td id={`claim-${item.claimId}-evidence`} data-secondary data-label={t('col.evidence')}>{item.evidence.required === 0 && item.evidence.provided === 0 ? t('noEvidenceRequired') : t('evidence', { provided: item.evidence.provided, required: item.evidence.required, status: t(`evidenceStatus.${item.evidence.status}`) })}</td>
+            <td data-label={t('col.priority')}><span className={`claims-badge claims-priority-${item.priority}`}>{t(`priority.${item.priority}`)}</span></td>
           </tr>)}</tbody></table></div>
         <div className="claims-footer"><p role="status" className="note">{t('showing', { count: page.items.length })}</p>
           {updatedAt && <p className="mono note">{t('updated', { time: intl.formatTime(updatedAt, { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) })}</p>}</div>
@@ -105,6 +108,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
         <p>{filtered ? t('emptyFiltered', { filter: search ? search : t(`filter.${filter}`) }) : t('empty')}</p>
         {filtered && <><p className="note">{t('emptyHint')}</p><button type="button" className="btn btn-secondary" onClick={clear}>{t('clearFilter')}</button></>}
       </div>)}
+      </>}
     </div>
   </main>;
 }
