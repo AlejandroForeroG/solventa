@@ -277,7 +277,7 @@ label.field input, label.field select, label.field textarea { font-weight: 400; 
   background:
     radial-gradient(420px 320px at 100% 0%, rgb(18 217 184 / 12%), transparent 70%),
     radial-gradient(360px 300px at 0% 100%, rgb(11 107 95 / 8%), transparent 70%),
-    radial-gradient(rgb(11 107 95 / 9%) 1px, transparent 1.5px) 0 0 / 22px 22px;
+    radial-gradient(rgb(11 107 95 / 20%) 1.2px, transparent 1.8px) 0 0 / 22px 22px;
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%); mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%); }
 .channel-area-workspace .channel-content::before { content: none; }
 .empty-state { position: relative; overflow: hidden; display: grid; justify-items: center; gap: 8px; padding: 40px 28px; text-align: center; }

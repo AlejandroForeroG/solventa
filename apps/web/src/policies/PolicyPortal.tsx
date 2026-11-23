@@ -8,6 +8,7 @@ import { LifecycleActions } from './LifecycleActions';
 import type { PolicyDocumentDestination } from './document-destination';
 import { customerDestination, type PolicyDestination } from '../navigation/customer-destination';
 import { Icon } from '../navigation/Icon';
+import { DocumentSheet } from '../offer/DocumentSheet';
 
 type Failure = Exclude<PolicyOutcome<never>, { kind: 'ok' }>['kind'];
 type Load<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: Failure };
@@ -105,15 +106,15 @@ function Coverage({ policy }: { policy: PolicyDetail }) {
   else rows.push(['coverage.rainPayout', format.copDecimalAmount(policy.coverage.payoutAmount)], ['coverage.rainThreshold', t('coverage.rainValue', { mm: policy.coverage.threshold })],
     ['coverage.station', <span className="mono" key="station">{policy.coverage.stationId}</span>]);
   rows.push(['coverage.validity', <Validity policy={policy} key="validity" />], ['coverage.premium', format.copDecimalAmount(policy.premium)]);
-  return <>
-    <section className="card policy-section" aria-labelledby="policy-coverage"><h2 id="policy-coverage" className="h-card">{t('coverage')}</h2>
+  return <DocumentSheet title={intl.formatMessage({ id: 'sheet.policyTitle' })} seal={intl.formatMessage({ id: 'sheet.sealSigned' })}>
+    <section className="sheet-section" aria-labelledby="policy-coverage"><h2 id="policy-coverage" className="h-card"><Icon name="policy" size={18} />{t('coverage')}</h2>
       <dl className="policy-facts">{rows.map(([key, value]) => <div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>)}</dl></section>
-    <section className="card policy-section" aria-labelledby="policy-exclusions"><h2 id="policy-exclusions" className="h-card">{t('exclusions')}</h2>
+    <section className="sheet-section" aria-labelledby="policy-exclusions"><h2 id="policy-exclusions" className="h-card"><Icon name="alert" size={18} />{t('exclusions')}</h2>
       <ul className="policy-exclusions">{policy.exclusions.map(item => <li key={item.code}><span className="mono">{item.code}</span><span>{item.text}</span></li>)}</ul>
       {intl.locale === 'en-US' && <p className="note">{t('contractLanguage')}</p>}
       <details className="document-verification"><summary>{intl.formatMessage({ id: 'document.verification' })}</summary>
         <p className="note">{t('exclusionsNote', { version: policy.conditionsVersion })}</p></details></section>
-  </>;
+  </DocumentSheet>;
 }
 
 function savePdf(file: PolicyFile) {
