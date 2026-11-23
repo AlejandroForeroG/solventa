@@ -273,7 +273,7 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
       <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></p>
       {policy.lifecycle && <div className={`banner ${policy.lifecycle.action === 'cancelled' ? 'banner-error' : 'banner-info'} policy-lifecycle-banner`} role="status">
         <Icon name={policy.lifecycle.action === 'cancelled' ? 'ban' : 'info'} size={18} className="banner-icon" />
-        <p><strong>{t('lifecycleBanner', { state: t(`state.${policy.lifecycle.action}`), date: format.dateTime(new Date(policy.lifecycle.at)) })}</strong>{' '}
+        <p><strong>{t('lifecycleBanner', { state: t(`state.${policy.lifecycle.action}`), date: format.dateTime(new Date(policy.lifecycle.at)) })}</strong><br />
           {t('lifecycle.reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(`lifecycle.${policy.lifecycle.reason}`) : policy.lifecycle.reason}. {t('lifecycle.recorded')}</p>
       </div>}
       <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>

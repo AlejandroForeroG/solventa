@@ -10,7 +10,7 @@ export const policiesEs = {
   'policies.open': 'Mis pólizas', 'policies.title': 'Mis pólizas', 'policies.label': 'Pólizas emitidas',
  
   'policies.loading': 'Consultando tus pólizas…', 'policies.unavailable': 'No se pudo consultar tus pólizas.', 'policies.retry': 'Reintentar',
-  'policies.empty': 'Aún no tienes pólizas emitidas.', 'policies.emptyHint': 'Cotiza en minutos y contrata en línea. Tus pólizas y sus documentos aparecerán aquí.', 'policies.lifecycleBanner': '{state} el {date}.', 'policies.quote': 'Cotizar un seguro', 'policies.back': 'Mis pólizas',
+  'policies.empty': 'Aún no tienes pólizas emitidas.', 'policies.emptyHint': 'Cotiza en minutos y contrata en línea. Tus pólizas y sus documentos aparecerán aquí.', 'policies.lifecycleBanner': '{state} el {date}', 'policies.quote': 'Cotizar un seguro', 'policies.back': 'Mis pólizas',
   'policies.emptyPage': 'No hay pólizas en esta página.', 'policies.pagination': 'Páginas de pólizas',
   'policies.previousPage': 'Anterior', 'policies.nextPage': 'Siguiente', 'policies.page': 'Página {number}',
   'policies.notFound': 'No encontramos esta póliza.', 'policies.unauthenticated': 'La sesión venció. Inicia sesión de nuevo.',
@@ -72,7 +72,7 @@ export const policiesEn: Record<keyof typeof policiesEs, string> = {
   'policies.open': 'My policies', 'policies.title': 'My policies', 'policies.label': 'Issued policies',
  
   'policies.loading': 'Loading your policies…', 'policies.unavailable': 'Your policies could not be loaded.', 'policies.retry': 'Try again',
-  'policies.empty': 'You have no issued policies yet.', 'policies.emptyHint': 'Get a quote in minutes and buy online. Your policies and their documents will appear here.', 'policies.lifecycleBanner': '{state} on {date}.', 'policies.quote': 'Get a quote', 'policies.back': 'My policies',
+  'policies.empty': 'You have no issued policies yet.', 'policies.emptyHint': 'Get a quote in minutes and buy online. Your policies and their documents will appear here.', 'policies.lifecycleBanner': '{state} on {date}', 'policies.quote': 'Get a quote', 'policies.back': 'My policies',
   'policies.emptyPage': 'There are no policies on this page.', 'policies.pagination': 'Policy pages',
   'policies.previousPage': 'Previous', 'policies.nextPage': 'Next', 'policies.page': 'Page {number}',
   'policies.notFound': 'We could not find this policy.', 'policies.unauthenticated': 'Your session expired. Sign in again.',
