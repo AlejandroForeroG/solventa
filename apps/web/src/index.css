@@ -425,3 +425,8 @@ select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-rig
   .channel-layout-signed-in .channel-topbar-tools > .icon-action { display: none; }
 }
 .assistance-count { margin: 16px 0 -4px; }
+@media (max-width: 480px) {
+  .step .actions { flex-direction: column; align-items: stretch; }
+  .step .actions > .btn { width: 100%; }
+  .step .actions > .note { text-align: left; }
+}
