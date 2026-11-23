@@ -87,10 +87,12 @@ export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts,
     'Sección 3 · Prima y forma de pago', 'Prima: ' + pesos(facts.premium) + ' (pago único)', 'Forma de pago: Pago único por toda la vigencia.',
     'Estado del pago: ' + PAYMENT_LABEL[paymentStatus(facts.payment.status)], 'Recibo: ' + (facts.payment.reference ?? 'Sin referencia'),
     'Sección 4 · Exclusiones', 'Las señaladas en la cláusula 7 de las condiciones generales de la póliza.',
-    verification, 'Huella SHA-256: ' + facts.documentHash, 'Referencia de póliza: ' + reference, 'Identificador interno: ' + facts.policyId, '', NOTICE] };
-  if (kind === 'general_conditions') return { fileName, title: 'Condiciones generales · ' + product, kicker: 'Condiciones generales',
+    verification, 'Huella SHA-256: ' + facts.documentHash, 'Referencia de póliza: ' + reference, 'Identificador interno: ' + facts.policyId] };
+  const clauses = [...conditions.clauses.map(clause => /\d+/.exec(clause.title)?.[0]).filter(Boolean), '7'];
+  if (kind === 'general_conditions') return { fileName, title: product, kicker: 'Condiciones generales',
     meta: 'Póliza ' + reference + '  ·  Versión ' + conditions.version, footer: reference, lines: [
-    'Versión de las condiciones: ' + conditions.version, 'Producto: ' + product, '',
+    'Versión de las condiciones: ' + conditions.version, 'Producto: ' + product,
+    'Alcance: extracto con las cláusulas ' + clauses.slice(0, -1).join(', ') + ' y ' + clauses[clauses.length - 1] + ' aplicables a esta póliza.', '',
     ...conditions.clauses.flatMap(clause => [clause.title, ...clause.lines, '']),
     'Cláusula 7 · Exclusiones', ...conditions.exclusions.map(item => item.code + ' ' + item.text), '', NOTICE] };
   if (facts.payment.status !== 'confirmed') return null;
@@ -98,5 +100,5 @@ export function documentFile(kind: PolicyDocumentKind, facts: IssuedPolicyFacts,
     'Sección 1 · Detalle del pago', 'Concepto: Prima única de la póliza', 'Producto: ' + product, 'Monto: ' + pesos(facts.payment.amount),
     'Medio de pago: Cobro simulado, sin movimiento de dinero real', 'Referencia del recibo: ' + (facts.payment.reference ?? 'sin referencia'),
     'Fecha: ' + paid, 'Estado: pagado',
-    'Sección 2 · Verificación', 'Referencia de póliza: ' + reference, 'Identificador interno: ' + facts.policyId, '', NOTICE] };
+    'Sección 2 · Verificación', 'Referencia de póliza: ' + reference, 'Huella SHA-256: ' + facts.documentHash, 'Identificador interno: ' + facts.policyId, '', NOTICE] };
 }
