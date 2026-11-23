@@ -102,11 +102,14 @@ export function IssuedPolicyPage({ policy, holderName, signedAt }: { policy: Pol
     meta={signedAt ? <span>{t('sheet.issuedOn', { date: signedAt })}</span> : undefined} status="signed" statusLabel={t('sheet.sealIssued')} page={1} total={1}>
     <PolicyGeneralSections policy={policy} holderName={holderName} statusText={t('sheet.statusIssued')} />
     <PolicyPremiumSection policy={policy} />
-    <DocSection number={4} title={t('sheet.sectionSignature')}>
+    <DocSection number={4} title={t('policies.exclusions')}>
+      <p className="doc-section-intro">{t('sheet.exclusionsIntro')}</p>
+    </DocSection>
+    <DocSection number={5} title={t('sheet.sectionSignature')}>
       <DocSignature signed name={name} role={t('sheet.holderRole')} signedAt={signedAt} method={t('sheet.signatureMethodValue')}
         reference={`SHA-256 ${policy.documentHash.slice(0, 16)}…`} stroke={signatureStroke(policy.documentHash)} />
     </DocSection>
-    <DocSection number={5} title={t('sheet.sectionVerification')}>
+    <DocSection number={6} title={t('sheet.sectionVerification')}>
       <DocVerification hash={policy.documentHash} rows={[{ label: t('policies.reference'), value: policyNumber(policy.policyId), mono: true }]} support={[
         { label: t('sheet.internalId'), value: policy.policyId, mono: true },
         { label: t('issued.reference'), value: policy.traceId, mono: true },
