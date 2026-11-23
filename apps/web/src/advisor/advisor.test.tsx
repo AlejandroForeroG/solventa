@@ -78,5 +78,7 @@ it('lets the owner revoke an executed approval while preserving the execution hi
   render(<I18n><AdvisorActions policy={{policyId,lifecycle:{action:'cancelled'}} as PolicyDetail} onSessionLost={()=>{}}/></I18n>);
   await userEvent.setup().click(await screen.findByRole('button',{name:'Revocar'}));
   await waitFor(()=>expect(screen.queryByRole('button',{name:'Revocar'})).not.toBeInTheDocument());
-  expect(screen.getByText(/Ejecutada/)).toBeVisible();expect(screen.getByText(/^Revocada:/)).toBeVisible();
+  const table = within(screen.getByRole('table', { name: 'Autorizaciones de asesor' }));
+  expect(table.getByText('Ejecutada', { exact: true })).toBeVisible();
+  expect(table.getByText(/^Revocada:/)).toBeVisible();
 });

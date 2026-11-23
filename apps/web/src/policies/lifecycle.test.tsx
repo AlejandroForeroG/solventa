@@ -22,8 +22,10 @@ it('retains a command identity after an uncertain cancellation and reports succe
   }); vi.stubGlobal('fetch', fetch);
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={changed} onSessionLost={lost} /></I18n>);
   const user = userEvent.setup();
-  expect(screen.queryByRole('combobox', { name: 'Operación' })).not.toBeInTheDocument();
-  await user.click(screen.getByText('Gestionar póliza', { selector: 'summary' }));
+  const summary = screen.getByText('Gestionar póliza', { selector: 'summary' });
+  expect(summary.closest('details')).not.toHaveAttribute('open');
+  await user.click(summary);
+  expect(summary.closest('details')).toHaveAttribute('open');
   expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('');
   expect(screen.queryByRole('button', { name: 'Confirmar cancelación' })).not.toBeInTheDocument();
   await user.selectOptions(screen.getByRole('combobox'), 'cancelled');
