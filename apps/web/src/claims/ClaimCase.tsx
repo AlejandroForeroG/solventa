@@ -80,7 +80,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   }, [claimId, audience, onSessionLost, revision]);
 
   const clock = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota', timeZoneName: 'short' });
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
@@ -116,6 +116,10 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
         <div className="claim-case-grid">
           <section className="case-card" role="tabpanel" id="claim-tab-panel" aria-labelledby={`claim-tab-${tab}`}>
             <h2>{t('section.' + tab)}</h2>
+            {tab === 'overview' && audience === 'customer' && claim.requirements.some(item => item.status === 'pending' && Date.parse(item.deadline) > Date.now()) && <div className="banner banner-info case-pending-task" role="status">
+              <Icon name="info" size={18} className="banner-icon" /><p><strong>{t('pendingTask')}</strong> {t('pendingTaskDetail')}</p>
+              <button type="button" className="btn btn-primary btn-small" onClick={() => { setTab('tasks'); document.getElementById('claim-tab-tasks')?.focus(); }}>{t('openTasks')}<Icon name="arrow" size={16} /></button>
+            </div>}
             {tab === 'overview' && <><dl className="case-fields">
               <div><dt><Icon name="policy" size={16} />{t('col.policy')}</dt><dd><span className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</span><details className="claims-policy-reference"><summary>{t('fullPolicyId')}</summary><span className="mono">{claim.policyId}</span></details></dd></div>
               <div><dt><Icon name="calendar" size={16} />{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
@@ -221,7 +225,7 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
     {claim.access === 'unassigned' ? <><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}><Icon name="user" size={18} />{t('action.take')}</button></>
-      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
+      : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger case-action-reject' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}><Icon name={actionIcon[option]} size={18} />{t('action.' + option)}</button>)}</div>}
     {blocked && claim.access !== 'unassigned' && <p className="note icon-label"><Icon name="alert" size={16} />{t('missingEvidence')}</p>}

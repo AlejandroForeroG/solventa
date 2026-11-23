@@ -21,7 +21,8 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
           <p className="offer-billing">{t(assisted ? 'offer.billingAssisted' : 'document.billing')}</p>
-          {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p> : <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>}
+          {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p>
+            : <details className="offer-estimate"><summary>{t('offer.aboutEstimate')}</summary><p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p></details>}
         </>}
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
@@ -131,7 +132,7 @@ export function PolicyDocument({ heading, policy, holderName, stage, checked, do
           <p className="sign-summary-title"><Icon name="signature" size={16} />{t('sheet.signSummary')}</p>
           <dl>
             <div><dt>{t('sheet.signDocument')}</dt><dd>{number}</dd></div>
-            <div><dt>{t('charge.amount')}</dt><dd className="mono">{copDecimal(policy.premium)}</dd></div>
+            <div><dt>{t(policy.payment?.status === 'confirmed' ? 'charge.charged' : 'charge.amount')}</dt><dd className="mono">{copDecimal(policy.premium)}</dd></div>
             <div><dt>{t('sheet.signFingerprint')}</dt><dd className="mono">{policy.documentHash.slice(0, 12)}…</dd></div>
           </dl>
         </div>

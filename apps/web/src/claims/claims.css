@@ -137,3 +137,6 @@
 }
 .claim-case-heading h1 { flex: 1 1 220px; min-width: 0; }
 @media (max-width: 600px) { .claim-case-heading .page-icon { align-self: flex-start; } }
+.case-pending-task { flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.case-pending-task p { flex: 1 1 240px; }
+.case-action-reject { margin-top: 10px; }

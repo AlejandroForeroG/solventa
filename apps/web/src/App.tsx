@@ -9,7 +9,6 @@ import { ReportsWorkspace } from './reports/ReportsWorkspace';
 import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { ChannelShell } from './navigation/ChannelShell';
-import { IconButton } from './navigation/IconAction';
 import { Icon } from './navigation/Icon';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
@@ -146,7 +145,7 @@ function Shell() {
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><span className="product">{t('brand.product')}</span>
-          <IconButton className="btn-privacy" label={t('privacy.open')} icon="privacy" current={view === 'privacy'} onClick={() => setView('privacy')} />
+          <button type="button" className="btn btn-secondary btn-small btn-privacy" aria-current={view === 'privacy' ? 'page' : undefined} onClick={() => setView('privacy')}><Icon name="privacy" size={16} />{t('privacy.open')}</button>
         </div>
         <div hidden={view === 'privacy'}><QuoteFlow initialEstimate={estimateDraft} consentUpdates={consentUpdates} uncertainConsents={uncertainConsents} onOpenPrivacy={() => setView('privacy')} onSessionLost={sessionLost} /></div>
         {view === 'privacy' && <PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => setView('flow')} onSessionLost={sessionLost} />}

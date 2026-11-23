@@ -81,3 +81,19 @@
 .landing { isolation: isolate; }
 .landing::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 520px; z-index: -1; pointer-events: none; background: radial-gradient(rgb(11 107 95 / 8%) 1px, transparent 1.5px) 0 0 / 22px 22px; -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 100%); mask-image: linear-gradient(180deg, #000 0%, transparent 100%); }
 @media (max-width: 680px) { .landing-step { padding: 22px 20px; } .landing::before { height: 380px; } }
+.account-process { padding: 22px 24px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgb(6 47 42 / 4%); }
+.account-process h2 { margin: 0 0 16px; font: 600 18px/1.3 'Space Grotesk', sans-serif; letter-spacing: -.01em; }
+.account-process-steps { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.account-process-steps li { position: relative; display: grid; justify-items: center; gap: 8px; text-align: center; }
+.account-process-steps li + li::before { content: ''; position: absolute; top: 19px; right: calc(50% + 24px); width: calc(100% - 38px); height: 2px; background: #e3e1dc; }
+.account-process-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: var(--mint-tint); color: var(--brand-strong); }
+.account-process-name { display: grid; gap: 1px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.account-process-name small { font: 500 11px 'IBM Plex Mono', ui-monospace, monospace; color: var(--ink-3); }
+.account-process-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; font-size: 13px; }
+.account-process-note svg { flex: none; margin-top: 3px; }
+@media (max-width: 760px) {
+  .account-process-steps { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .account-process-steps li { grid-template-columns: auto minmax(0, 1fr); justify-items: start; align-items: center; gap: 12px; padding: 6px 0; text-align: left; }
+  .account-process-steps li + li::before { top: -8px; left: 19px; right: auto; width: 2px; height: 16px; }
+  .account-process-name { display: flex; align-items: baseline; gap: 8px; }
+}

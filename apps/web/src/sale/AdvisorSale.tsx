@@ -55,7 +55,8 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
       <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>
       <div className="field"><label htmlFor="sale-adv-8">{t('termMonths')}</label><input id="sale-adv-8" required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></div>
       </div>
-      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !ready}><Icon name="file" size={18} />{busy ? t('preparing') : t('prepare')}</button></div>
+      <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !ready} aria-describedby={!ready ? 'sale-ready-hint' : undefined}><Icon name="file" size={18} />{busy ? t('preparing') : t('prepare')}</button>
+        {!ready && <span id="sale-ready-hint" className="note icon-label"><Icon name="info" size={16} />{t('readyHint')}</span>}</div>
     </form>
     {error && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(error)}</span></p>}
     {offer && <div role="status" className={`sale-offer ${offer.contractable ? 'sale-offer-ok' : 'sale-offer-pending'}`}>

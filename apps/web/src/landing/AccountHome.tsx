@@ -1,6 +1,8 @@
 import { useIntl } from 'react-intl';
 import { Icon, type IconName } from '../navigation/Icon';
 
+const steps: [number, IconName][] = [[1, 'calculator'], [2, 'reports'], [3, 'privacy'], [4, 'coins'], [5, 'file'], [6, 'card'], [7, 'signature']];
+
 const tiles: { href: string; icon: IconName; title: string; detail: string; tone: string }[] = [
   { href: '/polizas', icon: 'policy', title: 'policies.open', detail: 'home.tile.policies', tone: 'green' },
   { href: '/mis-siniestros', icon: 'claims', title: 'claims.customerCases', detail: 'home.tile.claims', tone: 'blue' },
@@ -27,5 +29,13 @@ export function AccountHome() {
         <Icon name="arrow" size={18} className="account-tile-arrow" />
       </a>)}
     </nav>
+    <section className="account-process" aria-labelledby="account-process-title">
+      <h2 id="account-process-title">{t('home.processTitle')}</h2>
+      <ol className="account-process-steps">{steps.map(([step, icon]) => <li key={step}>
+        <span className="account-process-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
+        <span className="account-process-name"><small>{step}</small>{t(`stepper.${step}`)}</span>
+      </li>)}</ol>
+      <p className="note account-process-note"><Icon name="info" size={16} />{t('home.processNote')}</p>
+    </section>
   </main>;
 }

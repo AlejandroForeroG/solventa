@@ -56,3 +56,5 @@
   .sale-authorization { grid-template-columns: minmax(0, 1fr); padding: 14px 12px; }
   .sale-authorization > .icon-chip { display: none; }
 }
+.sale-choice-copy { display: grid; gap: 2px; }
+.sale-choice-copy small { font-size: 13px; font-weight: 400; line-height: 1.4; color: var(--ink-3); }

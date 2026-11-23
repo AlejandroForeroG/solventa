@@ -91,7 +91,8 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
     <div className="audit-main">
       <div className="audit-heading"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="reports" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
-      <form className="card reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
+      <form className="card reports-form" aria-labelledby="reports-form-title" onSubmit={event => { event.preventDefault(); void generate(); }}>
+        <h2 id="reports-form-title" className="reports-form-title"><Icon name="file" size={18} />{t('form')}</h2>
         <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{month(option)}</option>)}</select></label>
         <label>{t('destination')}<select value={destination} onChange={event => setDestination(event.target.value as Destination)}>
           {DESTINATIONS.map(option => <option key={option} value={option}>{t(`destination.${option}`)}</option>)}</select></label>
@@ -99,7 +100,8 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         <button className="btn btn-primary" type="submit" disabled={busy !== null}><Icon name="file" size={18} />{busy === 'generate' ? t('generating') : t('generate')}</button>
       </form>
       {notice && notice.text && <p className={notice.kind === 'alert' ? 'claims-error' : 'note'} role={notice.kind}>{notice.text}</p>}
-      <div role="group" aria-label={t('filterGroup')} className="claims-filters reports-filters">
+      <p className="section-label reports-filter-label" id="reports-filter-label">{t('filterGroup')}</p>
+      <div role="group" aria-labelledby="reports-filter-label" className="claims-filters reports-filters">
         {(['all', ...DESTINATIONS] as const).map(option => <button key={option} type="button" className="claims-filter" aria-pressed={filter === option}
           onClick={() => { moveFocus.current = true; setFilter(option); setBefore(undefined); }}>{t(`destination.${option}`)}</button>)}
       </div>
@@ -114,7 +116,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
           <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
             <td data-label={t('col.period')}><span id={label}>{month(report.period)} · {t(`destination.${report.destination}`)}</span></td>
             <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
-            <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
+            <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })}</td>
             <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
             <td className="mono" data-label={t('col.rows')}>{t('rows', { count: report.manifest.rowCount })}</td>
             <td data-label={t('col.delivery')}><span className={`claims-badge reports-delivery-${status ?? 'none'}`}>{t(`delivery.${status ?? 'none'}`)}</span>

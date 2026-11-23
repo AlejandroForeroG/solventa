@@ -71,8 +71,9 @@ export function PublicQuoteFlow({ initialValues, onValuesChange }: { initialValu
               setInvalid(current => current.includes(key) && !invalidEstimateFields(next).includes(key) ? current.filter(field => field !== key) : current);
               onValuesChange?.({ ...next, amount: groupedDigits(next.amount) });
             }}
-            aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : undefined} />
-          {invalid.includes(key) && <p className="field-error" id={`estimate-${key}-error`}>{t(`estimate.error.${key}`)}</p>}
+            aria-invalid={invalid.includes(key) || undefined} aria-describedby={invalid.includes(key) ? `estimate-${key}-error` : `estimate-${key}-hint`} />
+          {invalid.includes(key) ? <p className="field-error" id={`estimate-${key}-error`}>{t(`estimate.error.${key}`)}</p>
+            : <p className="field-hint" id={`estimate-${key}-hint`}>{t(`estimate.error.${key}`)}</p>}
         </div>)}</div>
         <div className="form-footer"><p className="note">{t('estimate.noSources')}</p><button className="btn btn-primary" disabled={busy}><Icon name="calculator" size={18} />{t(busy ? 'live.calculating' : 'estimate.calculate')}</button></div>
       </form>

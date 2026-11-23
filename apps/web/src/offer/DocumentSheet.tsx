@@ -76,20 +76,6 @@ export function DocSignature({ signed, name, role, signedAt, reference, method, 
   </div>;
 }
 
-function VisualCode({ hash }: { hash: string }) {
-  const bits = (hash.match(/[0-9a-f]/gi) ?? []).map(char => parseInt(char, 16));
-  const cells: [number, number][] = [];
-  for (let row = 0; row < 9; row++) for (let column = 0; column < 5; column++) {
-    if ((bits[(row * 5 + column) % Math.max(bits.length, 1)] ?? 0) % 2 === 0) continue;
-    cells.push([column, row]);
-    if (column < 4) cells.push([8 - column, row]);
-  }
-  return <svg className="doc-visual-code" viewBox="-1 -1 11 11" aria-hidden="true">
-    <rect x="-1" y="-1" width="11" height="11" rx="1" className="doc-visual-frame" />
-    {cells.map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />)}
-  </svg>;
-}
-
 export function DocVerification({ hash, rows, note }: { hash: string | null; rows: DocRow[]; note?: string }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
@@ -101,7 +87,6 @@ export function DocVerification({ hash, rows, note }: { hash: string | null; row
       </dl>
       {note && <p className="doc-verify-note">{note}</p>}
     </div>
-    {hash && <figure className="doc-verify-figure"><VisualCode hash={hash} /><figcaption>{t('sheet.visualCode')}</figcaption></figure>}
   </div>;
 }
 

@@ -16,7 +16,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
   onConsentUncertain?: (id: string) => void;
 }) {
   const intl = useIntl();
-  const { shortDate } = useFormatters();
+  const { dayMonthYear: shortDate } = useFormatters();
   const announce = useAnnounce();
   const announcement = useRef({ intl, announce });
   useLayoutEffect(() => { announcement.current = { intl, announce }; }, [intl, announce]);

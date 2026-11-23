@@ -10,7 +10,7 @@ export const saleEs = {
  
   'sale.offerCode': 'Código de la oferta', 'sale.openOffer': 'Revisar oferta',
   'sale.offerNotFound': 'No encontramos una oferta tuya con ese código.', 'sale.consentRequired': 'Necesitas tu autorización de datos vigente. Otórgala en Privacidad desde Cotizar y vuelve a abrir la oferta.',
-  'sale.prepareTitle': 'Preparar una venta para un cliente', 'sale.customerSection': 'Datos del cliente', 'sale.creditSection': 'Datos del crédito',
+  'sale.prepareTitle': 'Preparar una venta para un cliente', 'sale.customerSection': 'Datos del cliente', 'sale.creditSection': 'Datos del crédito', 'sale.continueDetail': 'Abre con su código la oferta que tu asesor preparó y revísala, págala y fírmala tú.', 'sale.authorizeDetail': 'Da permiso por unos días a un asesor para que prepare una oferta a tu nombre.', 'sale.readyHint': 'Completa los campos obligatorios para preparar la oferta.',
  
   'sale.fullName': 'Nombre completo del cliente', 'sale.documentNumber': 'Número de documento (CC)', 'sale.birthDate': 'Fecha de nacimiento', 'sale.city': 'Ciudad',
   'sale.creditId': 'Identificador del crédito (opcional)', 'sale.amount': 'Monto del crédito (COP)', 'sale.termMonths': 'Plazo (meses)',
@@ -32,7 +32,7 @@ export const saleEn = {
  
   'sale.offerCode': 'Offer code', 'sale.openOffer': 'Review offer',
   'sale.offerNotFound': 'We could not find an offer of yours with that code.', 'sale.consentRequired': 'You need a current data authorization. Grant it in Privacy from Quote and open the offer again.',
-  'sale.prepareTitle': 'Prepare a sale for a customer', 'sale.customerSection': 'Customer details', 'sale.creditSection': 'Credit details',
+  'sale.prepareTitle': 'Prepare a sale for a customer', 'sale.customerSection': 'Customer details', 'sale.creditSection': 'Credit details', 'sale.continueDetail': 'Open the offer your advisor prepared with its code, then review, pay and sign it yourself.', 'sale.authorizeDetail': 'Allow an advisor for a few days to prepare an offer in your name.', 'sale.readyHint': 'Fill in the required fields to prepare the offer.',
  
   'sale.fullName': 'Customer full name', 'sale.documentNumber': 'Document number (CC)', 'sale.birthDate': 'Birth date', 'sale.city': 'City',
   'sale.creditId': 'Credit identifier (optional)', 'sale.amount': 'Credit amount (COP)', 'sale.termMonths': 'Term (months)',

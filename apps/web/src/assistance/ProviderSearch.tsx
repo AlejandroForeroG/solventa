@@ -59,6 +59,7 @@ export function ProviderSearch({ onSessionLost }: { onSessionLost: () => void })
         <button className="btn btn-primary" type="submit" disabled={query.trim().length < 2}><Icon name="search" size={18} />{t('search')}</button>
       </div>
     </form>
+    {result.state === 'idle' && <div className="card empty-state assistance-idle"><span className="empty-state-art" aria-hidden="true"><Icon name="search" size={30} /></span><h2>{t('idleTitle')}</h2><p className="note">{t('idleDetail')}</p></div>}
     {result.state === 'loading' && <p role="status" className="assistance-status"><span className="spinner" aria-hidden="true" />{t('loading')}</p>}
     {result.state === 'unavailable' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t('unavailable')}</span></p>}
     {result.state === 'ready' && result.providers.length === 0 && <p role="status" className="empty-inline"><Icon name="search" size={18} />{t('empty')}</p>}

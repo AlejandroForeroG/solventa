@@ -161,7 +161,7 @@ function PolicySheet({ policy, status, hash }: { policy: PolicyDetail; status: R
     </DocSection>
     <DocSection number={6} title={sheet('sheet.sectionVerification')}>
       <DocVerification hash={hash} rows={[
-        { label: sheet('issued.policy'), value: policy.policyId, mono: true },
+        { label: sheet('sheet.internalId'), value: policy.policyId, mono: true },
         { label: sheet('sheet.conditionsVersion'), value: policy.conditionsVersion, mono: true },
       ]} />
     </DocSection>
@@ -255,6 +255,7 @@ function Tabs({ tab, onChange }: { tab: Tab; onChange(tab: Tab): void }) {
 
 function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBack, onSessionLost }: { policyId: string; initialTab?: Tab; renewal?: boolean; onBack(): void; onSessionLost(): void }) {
   const t = useTranslate();
+  const format = useFormatters();
   const heading = useHeading();
   const [tab, setTab] = useState<Tab>(initialTab);
   const load = useCallback((signal: AbortSignal) => readPolicyDetail(policyId, signal), [policyId]);
@@ -270,6 +271,11 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
     {state.kind !== 'loading' && state.kind !== 'ready' && <Failed kind={state.kind} onRetry={retry} />}
     {policy && status && <>
       <p className="policy-summary"><span className={`pill ${stateClass[status]}`}>{t(`state.${status}`)}</span><span className="mono policy-id">POL-{policy.policyId.slice(0, 8).toUpperCase()}</span></p>
+      {policy.lifecycle && <div className={`banner ${policy.lifecycle.action === 'cancelled' ? 'banner-error' : 'banner-info'} policy-lifecycle-banner`} role="status">
+        <Icon name={policy.lifecycle.action === 'cancelled' ? 'ban' : 'info'} size={18} className="banner-icon" />
+        <p><strong>{t('lifecycleBanner', { state: t(`state.${policy.lifecycle.action}`), date: format.dateTime(new Date(policy.lifecycle.at)) })}</strong>{' '}
+          {t('lifecycle.reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(`lifecycle.${policy.lifecycle.reason}`) : policy.lifecycle.reason}. {t('lifecycle.recorded')}</p>
+      </div>}
       <details className="document-verification"><summary>{t('fullReference')}</summary><p className="mono policy-id">{policy.policyId}</p></details>
       <Tabs tab={tab} onChange={setTab} />
       <div role="tabpanel" id={`policy-panel-${tab}`} aria-labelledby={`policy-tab-${tab}`}>

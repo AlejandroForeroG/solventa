@@ -108,7 +108,7 @@ export function IssuedPolicyPage({ policy, holderName, signedAt }: { policy: Pol
     </DocSection>
     <DocSection number={5} title={t('sheet.sectionVerification')}>
       <DocVerification hash={policy.documentHash} rows={[
-        { label: t('issued.policy'), value: policy.policyId, mono: true },
+        { label: t('sheet.internalId'), value: policy.policyId, mono: true },
         { label: t('issued.reference'), value: policy.traceId, mono: true },
       ]} note={t('issued.onceDetail')} />
     </DocSection>

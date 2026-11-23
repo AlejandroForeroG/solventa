@@ -54,14 +54,14 @@ function Authorizations({ onSessionLost }: { onSessionLost(): void }) {
     {load.kind === 'failed' && <p role="alert" className="banner banner-error"><Icon name="alert" size={18} className="banner-icon" /><span>{t(load.reason)}</span></p>}
     {load.kind === 'ready' && (load.items.length ? <>
       {load.items.some(item => item.status === 'active') && <ul className="sale-authorizations" aria-label={t('advisor')}>{load.items.filter(item => item.status === 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
-      <p className="sale-authorization-head"><span className="mono">{item.advisorReference}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="sale-authorization-head"><span className="mono" title={item.advisorReference}>{t('advisor')} {item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
       <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
     </div>{item.status === 'active' && <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => void run(() => revokeSaleAuthorization(item.authorizationId))}><Icon name="ban" size={16} />{t('revoke')}</button>}</li>)}</ul>}
       {load.items.some(item => item.status !== 'active') && <details className="document-verification sale-history"><summary>{t('history')}</summary>
         <ul className="sale-authorizations">{load.items.filter(item => item.status !== 'active').map(item => <li key={item.authorizationId} className="sale-authorization"><span className="icon-chip icon-chip-violet" aria-hidden="true"><Icon name="user" size={18} /></span><div className="sale-authorization-copy">
-      <p className="sale-authorization-head"><span className="mono">{item.advisorReference}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
+      <p className="sale-authorization-head"><span className="mono" title={item.advisorReference}>{t('advisor')} {item.advisorReference.slice(0, 8)}…{item.advisorReference.slice(-4)}</span><span className={`pill ${item.status === 'active' ? 'pill-ok' : 'pill-status-expired'}`}>{t(item.status)}</span></p>
       <p className="note icon-label"><Icon name="clock" size={14} />{t('expires')}: {timestamp(item.expiresAt)}</p>
       {item.revokedAt && <p className="note icon-label"><Icon name="ban" size={14} />{t('revoked')}: {timestamp(item.revokedAt)}</p>}
       {item.status === 'active' && <CopyValue label={t('code')} value={item.authorizationId} />}
@@ -106,8 +106,8 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
 }
 
 const saleChoices = [
-  { flow: 'continue', message: 'continueTitle', icon: 'reports' },
-  { flow: 'authorize', message: 'authorizeTitle', icon: 'advisor' },
+  { flow: 'continue', message: 'continueTitle', detail: 'continueDetail', icon: 'reports' },
+  { flow: 'authorize', message: 'authorizeTitle', detail: 'authorizeDetail', icon: 'advisor' },
 ] as const;
 type SaleFlow = typeof saleChoices[number]['flow'];
 
@@ -139,9 +139,9 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
       </div>
     </>}
     {!flow && <ul className="sale-choices" aria-labelledby="sale-flow-title">{saleChoices.map(option => <li key={option.flow}>
-      <button className="sale-choice" type="button" onClick={() => setFlow(option.flow)}>
+      <button className="sale-choice" type="button" aria-labelledby={`sale-choice-${option.flow}`} aria-describedby={`sale-choice-${option.flow}-detail`} onClick={() => setFlow(option.flow)}>
         <span className="sale-choice-icon" aria-hidden="true"><Icon name={option.icon} /></span>
-        <span>{t(option.message)}</span>
+        <span className="sale-choice-copy"><span id={`sale-choice-${option.flow}`}>{t(option.message)}</span><small id={`sale-choice-${option.flow}-detail`}>{t(option.detail)}</small></span>
         <Icon name="arrow" size={18} className="sale-choice-arrow" />
       </button>
     </li>)}</ul>}
