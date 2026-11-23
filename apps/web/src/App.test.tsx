@@ -83,7 +83,7 @@ describe('claims inbox route in the application', () => {
     const claimId = claimsExamples.ownedCases.items[0].claimId;
     window.history.replaceState(null, '', `${prefix}/${claimId}`);
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
-      if (input === '/auth/session') return json({ authenticated: true });
+      if (input === '/auth/session') return json({ authenticated: true, workspaces: audience === 'analyst' ? ['claims'] : [] });
       return json({ ...claimsExamples.caseFile, access: audience === 'analyst' ? 'assigned' : 'customer' });
     });
     render(<App />);
@@ -94,6 +94,17 @@ describe('claims inbox route in the application', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`${claimId}`))).toBe(true);
     expect(screen.queryByRole('button', { name: 'Calcular estimación' })).toBeNull();
     if (audience === 'customer') expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
+  });
+
+  it('keeps a direct claims denial in the customer shell', async () => {
+    window.history.replaceState(null, '', '/siniestros');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input =>
+      String(input) === '/auth/session' ? json({ authenticated: true, workspaces: [] }) : json({ error: 'forbidden' }, 403));
+    render(<App />);
+    expect(await screen.findByText('Tu cuenta no tiene permiso para consultar siniestros.')).toBeVisible();
+    expect(screen.getByRole('complementary', { name: 'Mi cuenta' })).toBeVisible();
+    expect(screen.queryByRole('complementary', { name: 'Consola operativa' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/claims')).toBe(true);
   });
 
   it('requires sign-in and does not render the public calculator on the claims route', async () => {
@@ -109,7 +120,7 @@ describe('claims inbox route in the application', () => {
     let failLogout: () => void = () => {};
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
       const path = String(input);
-      if (path === '/auth/session') return json({ authenticated: true });
+      if (path === '/auth/session') return json({ authenticated: true, workspaces: ['claims', 'audit'] });
       if (path === '/auth/logout') return new Promise((_resolve, reject) => { failLogout = () => reject(new Error('synthetic outage')); });
       return json(claimsExamples.page);
     });
@@ -139,7 +150,7 @@ describe('reports route in the application', () => {
   });
   it('shows the reports to a signed-in user, links the other consoles and marks the current one', async () => {
     window.history.replaceState(null, '', '/reportes');
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true }) : json(reportsExamples.page));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => String(input) === '/auth/session' ? json({ authenticated: true, workspaces: ['claims', 'reports', 'unknown'] }) : json(reportsExamples.page));
     render(<App />);
     expect(await screen.findByRole('table', { name: 'Reportes al regulador y la reaseguradora' })).toBeVisible();
     const nav = within(screen.getByRole('complementary', { name: 'Consola operativa' }));
