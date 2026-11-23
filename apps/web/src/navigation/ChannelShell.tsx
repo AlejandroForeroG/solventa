@@ -62,7 +62,7 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
     </nav>
   </>;
 
-  return <div className={`channel-layout${authenticated ? ' channel-layout-signed-in' : ''}`}>
+  return <div className={`channel-layout${authenticated ? ' channel-layout-signed-in' : ''} ${workspace ? 'channel-area-workspace' : 'channel-area-customer'}`}>
     <a href="#channel-content" className="skip-link">{t('navigation.skip')}</a>
     {authenticated && <aside className="channel-sidebar" aria-label={workspace ? t('claims.console') : area}>{navigation}</aside>}
     <div className="channel-workspace">
