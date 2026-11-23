@@ -30,7 +30,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-caption">{t('offer.premium')}</p>
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
-          <p className="offer-billing">{t('document.billing')}</p>
+          <p className="offer-billing">{t(assisted ? 'offer.billingAssisted' : 'document.billing')}</p>
           {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p> : <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>}
         </>}
         <dl className="offer-facts">

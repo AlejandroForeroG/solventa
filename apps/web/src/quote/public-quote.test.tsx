@@ -84,7 +84,7 @@ describe('public estimate and sign-in handoff', () => {
     await fill(user);
     await act(async () => { finish?.(json({}, 200)); });
     await screen.findByLabelText(/Nombre completo/);
-    expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
+    expect(screen.getByLabelText(/Monto/)).toHaveValue('320.000.000');
     expect(screen.getByLabelText(/Plazo/)).toHaveValue('180');
     expect(screen.getByText(/Retomamos tu estimación para 34 años/)).toBeVisible();
   });
@@ -123,7 +123,7 @@ describe('public estimate and sign-in handoff', () => {
     await user.click(screen.getByRole('button', { name: 'Corregir datos' }));
     expect(within(progress).getByRole('listitem', { current: 'step' })).toHaveTextContent('Paso 1: Cotización');
     expect(screen.getByLabelText(/Edad/)).toHaveValue('34');
-    expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
+    expect(screen.getByLabelText(/Monto/)).toHaveValue('320.000.000');
   });
 
   it('preserves only calculator inputs across login, recalculates the saved quote and then shows explicit consent', async () => {
@@ -150,7 +150,7 @@ describe('public estimate and sign-in handoff', () => {
     window.history.replaceState(null, '', '/');
     render(<App />);
     await screen.findByLabelText(/Nombre completo/);
-    expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
+    expect(screen.getByLabelText(/Monto/)).toHaveValue('320.000.000');
     expect(screen.getByLabelText(/Plazo/)).toHaveValue('180');
     expect(screen.getByLabelText(/Fecha de nacimiento/)).toHaveValue('');
     expect(screen.getByText(/Retomamos tu estimación para 34 años/)).toBeVisible();
@@ -186,7 +186,7 @@ describe('public estimate and sign-in handoff', () => {
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Calcular estimación' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Intenta de nuevo');
-    expect(screen.getByLabelText(/Monto/)).toHaveValue('320000000');
+    expect(screen.getByLabelText(/Monto/)).toHaveValue('320.000.000');
   });
 
   it('translates the anonymous journey and access instructions', async () => {
