@@ -56,10 +56,6 @@
 .receipt-card .facts dt svg { flex: none; color: var(--brand); }
 .receipt-card .document-verification { margin-bottom: 16px; padding: 12px 14px; border: 1px dashed #cfccc5; border-radius: 10px; background: #fcfbf9; }
 .receipt-card .trace { margin-bottom: 0; overflow-wrap: anywhere; word-break: break-all; }
-.account-hero-detail { margin: 6px 0 0; font-size: 15px; opacity: 0.86; }
-.account-tile-text small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; line-height: 1.35; color: var(--ink-3); }
-.policy-empty::before { content: none; }
-.field-hint-tag { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 3px 9px; border-radius: 999px; background: #e6f3ec; color: #175c3a; font-size: 12px; font-weight: 600; }
 @media (max-width: 720px) {
   .sheet { padding: 26px 18px 20px; }
   .document-card .sheet { margin: 10px; }
