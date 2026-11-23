@@ -82,6 +82,11 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const challengeId = challenge?.challengeId;
   useEffect(() => { if (challengeId) codeInput.current?.focus(); }, [challengeId]);
   useEffect(() => { if (error && challengeId) codeInput.current?.focus(); }, [error, challengeId]);
+  const hadChallenge = useRef(false);
+  useEffect(() => {
+    if (challengeId) { hadChallenge.current = true; return; }
+    if (hadChallenge.current) { hadChallenge.current = false; window.document.getElementById('policy-review-cb')?.focus(); }
+  }, [challengeId]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
   const document = JSON.parse(policy.document) as Record<string, unknown>;

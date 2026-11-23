@@ -9,7 +9,7 @@ import '../policies/policies.css';
 const empty = { authorizationId: '', fullName: '', documentNumber: '', birthDate: '', city: '', partnerCreditId: '', amount: '', termMonths: '120' };
 
 // The advisor prepares a quote and an offer for the customer who gave the authorization code. Nothing here accepts, pays or signs.
-export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
+export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): void; reference?: string | null }) {
   const intl = useIntl(), t = (key: string) => intl.formatMessage({ id: `sale.${key}` });
   const [form, setForm] = useState(empty), [busy, setBusy] = useState(false), [error, setError] = useState(''), [offer, setOffer] = useState<PreparedOffer | null>(null);
   // The same sale keeps its key across retries, so a lost answer never creates a second offer.
@@ -36,6 +36,7 @@ export function AdvisorSale({ onSessionLost }: { onSessionLost(): void }) {
   return <section className="card policy-section" aria-labelledby="advisor-sale-heading">
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
     <p className="note">{t('prepareScope')}</p>
+    {reference && <CopyValue label={t('yourReference')} value={reference} />}
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className="grid">
       <div className="field"><label htmlFor="sale-adv-1">{t('code')}</label><input id="sale-adv-1" required value={form.authorizationId} disabled={busy} autoComplete="off" onChange={set('authorizationId')} /></div>
