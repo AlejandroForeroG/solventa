@@ -35,8 +35,6 @@ describe('channel navigation', () => {
     expect(screen.getByRole('menuitem', { name: 'Volver a mi cuenta' })).toHaveAttribute('href', '/polizas');
   });
   it('opens the native modal and clears expanded state when it is dismissed', () => {
-    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
-    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } });
     renderShell();
     const trigger = screen.getByRole('button', { name: 'Abrir menú' }); fireEvent.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Menú de navegación' });
@@ -52,7 +50,5 @@ describe('channel navigation', () => {
     fireEvent.click(close);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog')).toBeNull();
-    delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;
-    delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close;
   });
 });

@@ -46,8 +46,38 @@
 .advisor-approval-references dl { margin: 6px 0 0; }
 .advisor-approval-references dt { color: var(--ink-2); }
 .advisor-approval-references dd { margin: 0 0 6px; overflow-wrap: anywhere; }
-.policy-management-form { margin-bottom: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
-.policy-management-form .field:first-child { max-width: 420px; }
+.policy-management-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.policy-management-dialog::backdrop { background: rgb(6 28 25 / 42%); }
+.policy-management-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.policy-management-header .h-card { margin: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
+.policy-management-header .icon-action::after { left: auto; right: 0; transform: translateY(-2px); }
+.policy-management-header .icon-action:is(:hover, :focus-visible, :active)::after { transform: none; }
+.policy-management-body { padding: 16px 20px 20px; }
 .advisor-table-feedback p { margin: 0; }
 @media (max-width: 600px) {
   .policy-facts { grid-template-columns: 1fr; }

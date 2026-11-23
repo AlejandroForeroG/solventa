@@ -29,7 +29,11 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   expect(screen.queryByRole('combobox', { name: '¿Quién hará la gestión?' })).not.toBeInTheDocument();
   await screen.findByText('Sin autorizaciones.');
   await user.click(screen.getByRole('button', { name: 'Gestionar póliza' }));
-  const mode = screen.getByRole('combobox', { name: '¿Quién hará la gestión?' });
+  const dialog = screen.getByRole('dialog', { name: 'Gestionar póliza' });
+  expect(dialog).toHaveAttribute('aria-modal', 'true');
+  expect(within(dialog).queryByRole('table')).not.toBeInTheDocument();
+  const mode = within(dialog).getByRole('combobox', { name: '¿Quién hará la gestión?' });
+  expect(mode).toHaveFocus();
   await user.selectOptions(mode, 'direct');
   expect(screen.getByRole('textbox', { name: 'Operación directa' })).toBeVisible();
   expect(screen.queryByRole('textbox', { name: 'Referencia del asesor' })).not.toBeInTheDocument();
@@ -46,6 +50,12 @@ it('requires explicit customer approval and retries an uncertain grant with the 
   await userEvent.setup().click(button);await waitFor(()=>expect(posts).toHaveLength(2));
   expect(posts[0].headers).toEqual(posts[1].headers);expect(posts[0].body).toEqual(posts[1].body);
   expect(String(posts[0].body)).not.toContain('clientId');
+  await user.click(within(dialog).getByRole('button', { name: 'Cerrar gestión' }));
+  expect(screen.queryByRole('dialog', { name: 'Gestionar póliza' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Gestionar póliza' }));
+  fireEvent(screen.getByRole('dialog', { name: 'Gestionar póliza' }), new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Gestionar póliza' })).not.toBeInTheDocument();
+  expect(within(table).getByText('Sin autorizaciones.')).toBeVisible();
 });
 it('filters the owner table across pages and distinguishes approval from execution', async () => {
   const executed = { ...approval, authorizationId: '55555555-5555-4555-8555-555555555555', status: 'executed', changeId: traceId };

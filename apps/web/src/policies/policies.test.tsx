@@ -46,8 +46,9 @@ describe('my policies', () => {
     window.history.replaceState(null, '', '/polizas#policy=' + policyId + '&section=renewal');
     show();
     expect(await screen.findByRole('tab', { name: 'Gestionar', selected: true })).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
-    expect(screen.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
+    const dialog = within(await screen.findByRole('dialog', { name: 'Gestionar póliza' }));
+    expect(dialog.getByRole('combobox', { name: 'Operación' })).toHaveValue('renewed');
+    expect(dialog.getByRole('button', { name: 'Confirmar renovación' })).toBeDisabled();
     expect(fetch.mock.calls.every(([url]) => !url.endsWith('/lifecycle'))).toBe(true);
   });
   it('opens the requested documents and abandons that selection when returning to the list', async () => {
