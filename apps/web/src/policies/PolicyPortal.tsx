@@ -209,11 +209,9 @@ function PolicyDetailView({ policyId, initialTab = 'info', renewal = false, onBa
         {tab === 'info' && <Coverage policy={policy} />}
         {tab === 'documents' && <Documents policy={policy} onSessionLost={onSessionLost} />}
         {tab === 'history' && <History policy={policy} />}
-        {tab === 'manage' && <>
-          {policy.lifecycle && <LifecycleActions policy={policy} onChanged={retry} onSessionLost={onSessionLost} />}
-          <AdvisorActions key={policy.policyId} policy={policy} onSessionLost={onSessionLost} />
+        {tab === 'manage' && <AdvisorActions key={policy.policyId} policy={policy} openRenewal={renewal} onSessionLost={onSessionLost}>
           {!policy.lifecycle && <LifecycleActions policy={policy} initialAction={renewal ? 'renewed' : undefined} onChanged={retry} onSessionLost={onSessionLost} />}
-        </>}
+        </AdvisorActions>}
       </div>
     </>}
   </main>;

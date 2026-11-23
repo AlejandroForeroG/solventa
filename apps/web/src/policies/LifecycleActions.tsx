@@ -59,13 +59,7 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
     } catch { setError('uncertain'); }
     finally { setBusy(false); }
   }
-  if (policy.lifecycle) return <section className="card policy-section" aria-labelledby="lifecycle-title">
-    <h2 id="lifecycle-title" className="h-card">{t('history')}</h2><p role="status">{intl.formatMessage({ id: `policies.state.${policy.lifecycle.action}` })}: {intl.formatDate(policy.lifecycle.at)}.</p>
-    <p>{t('reason')}: {['customer_request', 'coverage_change', 'term_renewal'].includes(policy.lifecycle.reason) ? t(policy.lifecycle.reason) : policy.lifecycle.reason}</p>{policy.lifecycle.replacementPolicyId && <p className="mono">{t('replacement')}: {policy.lifecycle.replacementPolicyId}</p>}
-    <p>{t('recorded')}</p>
-  </section>;
-  return <details className="card policy-section policy-management-disclosure policy-direct-actions" open={initialAction ? true : undefined}>
-    <summary>{t('manage')}</summary>
+  return <>
     <div className="field"><label htmlFor="lifecycle-operation">{t('operation')}</label><select id="lifecycle-operation" value={action} disabled={busy} onChange={event => { setAction(event.target.value as Action | ''); setConfirmed(false); setError(''); }}>
       <option value="" disabled>{t('choose')}</option>
       {actions.map(value => <option key={value} value={value}>{t(value)}</option>)}
@@ -88,5 +82,5 @@ export function LifecycleActions({ policy, initialAction, onChanged, onSessionLo
     {error && <p role="alert">{t(error)}</p>}
     {action && <div className="actions"><button type="button" className={`btn ${action === 'cancelled' ? 'btn-danger' : 'btn-primary'}`} disabled={!eligible || !confirmed || busy || action !== 'cancelled' && !replacement}
       onClick={() => void submit()}>{busy ? t('saving') : t(`submit.${action}`)}</button></div>}
-  </details>;
+  </>;
 }

@@ -1,7 +1,5 @@
+import type { ReactNode } from 'react';
 import type { Approval } from './api';
-
-export const approvalStatuses = ['active', 'executed', 'expired', 'revoked'] as const satisfies readonly Approval['status'][];
-export type ApprovalFilter = 'all' | Approval['status'];
 
 const statusClass: Record<Approval['status'], string> = {
   active: 'pill-ok',
@@ -10,8 +8,9 @@ const statusClass: Record<Approval['status'], string> = {
   revoked: 'pill-status-expired',
 };
 
-export function OwnerApprovalTable({ approvals, busy, t, timestamp, onRevoke }: {
+export function OwnerApprovalTable({ approvals, feedback, busy, t, timestamp, onRevoke }: {
   approvals: Approval[];
+  feedback?: ReactNode;
   busy: boolean;
   t(key: string): string;
   timestamp(value: string): string;
@@ -22,7 +21,8 @@ export function OwnerApprovalTable({ approvals, busy, t, timestamp, onRevoke }: 
     <table className="policy-table advisor-approval-table">
       <caption className="visually-hidden">{t('authorizations')}</caption>
       <thead><tr>{columns.map(column => <th key={column} scope="col">{t(column)}</th>)}</tr></thead>
-      <tbody>{approvals.map(approval => <tr key={approval.authorizationId}>
+      <tbody>
+        {approvals.map(approval => <tr key={approval.authorizationId}>
         <td data-label={t('action')}>
           <div>
             <strong>{t(approval.action)}</strong>
@@ -49,7 +49,9 @@ export function OwnerApprovalTable({ approvals, busy, t, timestamp, onRevoke }: 
         <td data-label={t('expires')}><time dateTime={approval.expiresAt}>{timestamp(approval.expiresAt)}</time></td>
         <td data-label={t('options')}>{approval.revokedAt ? '—' : <button type="button" className="btn btn-secondary btn-small"
           disabled={busy} onClick={() => onRevoke(approval)}>{t('revoke')}</button>}</td>
-      </tr>)}</tbody>
+      </tr>)}
+        {feedback && <tr className="advisor-table-feedback"><td colSpan={columns.length}>{feedback}</td></tr>}
+      </tbody>
     </table>
   </div>;
 }

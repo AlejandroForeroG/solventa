@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
@@ -6,9 +6,11 @@ import { AdvisorSale } from '../sale/AdvisorSale';
 import { IconButton } from '../navigation/IconAction';
 import '../policies/policies.css';
 import { Icon } from '../navigation/Icon';
-import { approvalStatuses, OwnerApprovalTable, type ApprovalFilter } from './OwnerApprovalTable';
+import { OwnerApprovalTable } from './OwnerApprovalTable';
 
 const pageSize = 20;
+const approvalStatuses = ['active', 'executed', 'expired', 'revoked'] as const satisfies readonly Approval['status'][];
+type ApprovalFilter = 'all' | Approval['status'];
 
 async function readMatchingApprovals(policyId: string, status: Approval['status'], signal: AbortSignal): Promise<Outcome<ApprovalList>> {
   const authorizations: Approval[] = [];
@@ -27,8 +29,10 @@ async function readMatchingApprovals(policyId: string, status: Approval['status'
   return { kind: 'unavailable' };
 }
 
-export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:PolicyDetail;onSessionLost():void;onReference?(reference:string):void}) {
-  const intl=useIntl(),t=(key:string)=>intl.formatMessage({id:`advisor.${key}`});
+export function AdvisorActions({policy,onSessionLost,onReference,children,openRenewal = false}:{policy?:PolicyDetail;onSessionLost():void;onReference?(reference:string):void;children?:ReactNode;openRenewal?:boolean}) {
+  const intl=useIntl(),t=(key:string)=>intl.formatMessage({id:key.startsWith('policies.') ? key : `advisor.${key}`});
+  const [managementOpen, setManagementOpen] = useState(openRenewal);
+  const [managementMode, setManagementMode] = useState<'direct' | 'advisor' | ''>(openRenewal ? 'direct' : '');
   const [cursors,setCursors]=useState<(string|undefined)[]>([undefined]);
   const [filter, setFilter] = useState<ApprovalFilter>('all');
   const [filteredPage, setFilteredPage] = useState(0);
@@ -69,9 +73,9 @@ export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:Polic
     setFilteredPage(0);
     setFilter(value);
   }
-  async function run(work:()=>Promise<Outcome<unknown>>) {
+  async function run(work:()=>Promise<Outcome<unknown>>, onSuccess = reload) {
     if(busy)return;setBusy(true);setError('');
-    try{const value=await work();if(value.kind==='unauthenticated')onSessionLost();if(value.kind==='ok'){setConfirmed(false);setSelected(null);setExecuteConfirmed(false);reload();}else setError(value.kind);}
+    try{const value=await work();if(value.kind==='unauthenticated')onSessionLost();if(value.kind==='ok'){setConfirmed(false);setSelected(null);setExecuteConfirmed(false);onSuccess();}else setError(value.kind);}
     catch{setError('unavailable');}
     finally{setBusy(false);}
   }
@@ -80,25 +84,78 @@ export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:Polic
     const payload={advisorReference:reference.toLowerCase(),action,replacementPolicyId:action==='cancelled'?null:replacement.toLowerCase(),expiresAt};
     const body=JSON.stringify(payload);if(command.current?.body!==body)command.current={body,key:crypto.randomUUID()};
     return grantApproval(policy.policyId,payload,command.current.key);
+  }, () => {
+    setManagementOpen(false);
+    setManagementMode('');
+    setReference('');
+    setAction('');
+    setReplacement('');
+    changeFilter('all');
   });
+  const listFeedback = !result ? <p role="status">{t('loading')}</p>
+    : result.kind !== 'ok' ? <p role="alert">{t(result.kind === 'unavailable' ? 'listUnavailable' : result.kind)}</p>
+    : !visibleApprovals.length ? <p role="status">{t(filter === 'all' ? 'empty' : 'filteredEmpty')}</p> : null;
+  const recordedChange = policy?.lifecycle;
   return <section className="card policy-section" aria-labelledby="advisor-heading">
     <div className="advisor-approval-header">
       <h2 id="advisor-heading" className="h-card">{t(policy ? 'authorizations' : 'pending')}</h2>
-      <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
+      <div className="advisor-approval-actions">
+        {policy && !recordedChange && <button type="button" className="btn btn-primary btn-small"
+          aria-expanded={managementOpen} aria-controls="policy-management" disabled={busy}
+          onClick={() => setManagementOpen(open => !open)}>{t(managementOpen ? 'closeManagement' : 'policies.lifecycle.manage')}</button>}
+        <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
+      </div>
     </div>
+    {recordedChange && <details className="advisor-approval-references">
+      <summary>{t(`policies.state.${recordedChange.action}`)} · {timestamp(recordedChange.at)}</summary>
+      <dl>
+        <dt>{t('policies.lifecycle.reason')}</dt>
+        <dd>{['customer_request', 'coverage_change', 'term_renewal'].includes(recordedChange.reason)
+          ? t(`policies.lifecycle.${recordedChange.reason}`) : recordedChange.reason}</dd>
+        {recordedChange.replacementPolicyId && <>
+          <dt>{t('replacement')}</dt><dd className="mono">{recordedChange.replacementPolicyId}</dd>
+        </>}
+      </dl>
+      <p className="note">{t('policies.lifecycle.recorded')}</p>
+    </details>}
+    {policy && !recordedChange && <div id="policy-management" className="policy-management-form" hidden={!managementOpen}>
+      <label className="field">{t('managementMode')}
+        <select value={managementMode} disabled={busy} onChange={event => {
+          const value = event.target.value;
+          if (value === 'direct' || value === 'advisor') setManagementMode(value);
+        }}>
+          <option value="" disabled>{t('chooseManagementMode')}</option>
+          {children && <option value="direct">{t('manageDirectly')}</option>}
+          <option value="advisor">{t('authorizeAdvisor')}</option>
+        </select>
+      </label>
+      {children && <div hidden={managementMode !== 'direct'}>{children}</div>}
+      <form hidden={managementMode !== 'advisor'} onSubmit={event=>{event.preventDefault();if(managementOpen&&managementMode==='advisor')void grant();}}>
+        <p className="note">{t('scope')}</p>
+        <label className="field">{t('reference')}<input required value={reference} disabled={busy} onChange={e=>{setReference(e.target.value.trim());setConfirmed(false);}}/></label>
+        <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']|'');setConfirmed(false);}}><option value="" disabled>{intl.formatMessage({id:'policies.lifecycle.choose'})}</option>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
+        {action&&action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
+        <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={e=>{const count=Number(e.target.value);setDays(count);setExpiresAt(validUntil(count));setConfirmed(false);}}>{[1,2,3,7].map(value=><option key={value} value={value}>{intl.formatMessage({id:'sale.days'},{count:value})}</option>)}</select></label>
+        {action && <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t(action==='cancelled'?'confirmCancel':'confirm')}</label></div>}
+        <button className="btn btn-primary" disabled={busy||!confirmed||!action} type="submit">{busy?t('saving'):t('grant')}</button>
+      </form>
+    </div>}
     {policy && <label className="field advisor-approval-filter">{t('filterStatus')}
       <select value={filter} disabled={busy} onChange={event => changeFilter(event.target.value as ApprovalFilter)}>
         <option value="all">{t('allStatuses')}</option>
         {approvalStatuses.map(status => <option key={status} value={status}>{t(status === 'active' ? 'approved' : status)}</option>)}
       </select>
     </label>}
-    {!result&&<p role="status">{t('loading')}</p>}
-    {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
+    {policy ? <OwnerApprovalTable approvals={visibleApprovals} feedback={listFeedback}
+      busy={busy} t={t} timestamp={timestamp} onRevoke={approval => void run(() => revokeApproval(approval))} />
+      : <>
+        {!result&&<p role="status">{t('loading')}</p>}
+        {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
+      </>}
     {page&&<>
-      {!visibleApprovals.length && <p role="status">{t(filter === 'all' ? 'empty' : 'filteredEmpty')}</p>}
+      {!policy && !visibleApprovals.length && <p role="status">{t('empty')}</p>}
 
-      {policy ? visibleApprovals.length > 0 && <OwnerApprovalTable approvals={visibleApprovals} busy={busy} t={t} timestamp={timestamp}
-        onRevoke={approval => void run(() => revokeApproval(approval))} /> : <ul className="policy-documents">{visibleApprovals.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
+      {!policy && <ul className="policy-documents">{visibleApprovals.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
         {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}
         {a.status==='active'&&<div className="check"><input id={'approve-'+a.authorizationId} type="checkbox" checked={selected===a.authorizationId&&executeConfirmed} disabled={busy}
@@ -118,17 +175,6 @@ export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:Polic
         <button type="button" className="btn btn-secondary" disabled={busy || visiblePage === lastFilteredPage} onClick={() => setFilteredPage(visiblePage + 1)}>{t('next')}</button>
       </div>}
     </>}
-    {policy&&!policy.lifecycle&&<details className="policy-management-disclosure">
-      <summary>{t('newAuthorization')}</summary>
-      <form onSubmit={event=>{event.preventDefault();void grant();}}>
-      <p className="note">{t('scope')}</p><label className="field">{t('reference')}<input required value={reference} disabled={busy} onChange={e=>{setReference(e.target.value.trim());setConfirmed(false);}}/></label>
-      <label className="field">{t('action')}<select value={action} disabled={busy} onChange={e=>{setAction(e.target.value as Approval['action']|'');setConfirmed(false);}}><option value="" disabled>{intl.formatMessage({id:'policies.lifecycle.choose'})}</option>{(['cancelled','modified','renewed'] as const).map(a=><option key={a} value={a}>{t(a)}</option>)}</select></label>
-      {action&&action!=='cancelled'&&<label className="field">{t('replacement')}<input required value={replacement} disabled={busy} onChange={e=>{setReplacement(e.target.value.trim());setConfirmed(false);}}/></label>}
-      <label className="field">{t('validity')}<select value={days} disabled={busy} onChange={e=>{const count=Number(e.target.value);setDays(count);setExpiresAt(validUntil(count));setConfirmed(false);}}>{[1,2,3,7].map(value=><option key={value} value={value}>{intl.formatMessage({id:'sale.days'},{count:value})}</option>)}</select></label>
-      <div className="check"><input id="advisor-grant-confirm" type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/><label htmlFor="advisor-grant-confirm">{t(action==='cancelled'?'confirmCancel':'confirm')}</label></div>
-      <button className="btn btn-secondary" disabled={busy||!confirmed||!action} type="submit">{busy?t('saving'):t('grant')}</button>
-      </form>
-    </details>}
     {error&&<p role="alert">{t(error)}</p>}
   </section>;
 }

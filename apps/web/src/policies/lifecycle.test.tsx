@@ -22,10 +22,6 @@ it('retains a command identity after an uncertain cancellation and reports succe
   }); vi.stubGlobal('fetch', fetch);
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={changed} onSessionLost={lost} /></I18n>);
   const user = userEvent.setup();
-  const summary = screen.getByText('Gestionar póliza', { selector: 'summary' });
-  expect(summary.closest('details')).not.toHaveAttribute('open');
-  await user.click(summary);
-  expect(summary.closest('details')).toHaveAttribute('open');
   expect(screen.getByRole('combobox', { name: 'Operación' })).toHaveValue('');
   expect(screen.queryByRole('button', { name: 'Confirmar cancelación' })).not.toBeInTheDocument();
   await user.selectOptions(screen.getByRole('combobox'), 'cancelled');
@@ -41,7 +37,6 @@ it('retains a command identity after an uncertain cancellation and reports succe
 it('explains renewal eligibility before offering a replacement purchase, in the selected language', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => json({ policies: [], hasMore: false, traceId })));
   render(<I18n initial="en-US"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
-  await userEvent.setup().click(screen.getByText('Manage policy', { selector: 'summary' }));
   await userEvent.setup().selectOptions(screen.getByRole('combobox'), 'renewed');
   expect(screen.getByText(/You can renew after the previous policy expires/)).toBeVisible();
   expect(screen.queryByRole('link', { name: 'Quote replacement' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Confirm renewal' })).toBeDisabled();
@@ -66,7 +61,6 @@ it('offers eligible replacements by short reference instead of a raw identifier'
   vi.stubGlobal('fetch', vi.fn(async () => json({ policies: [policy, other], hasMore: false, traceId })));
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
   const user = userEvent.setup();
-  await user.click(screen.getByText('Gestionar póliza', { selector: 'summary' }));
   await user.selectOptions(screen.getByRole('combobox'), 'modified');
   const choice = await screen.findByRole('radio', { name: /POL-20000000/ });
   expect(screen.queryByRole('radio', { name: /POL-10000000/ })).not.toBeInTheDocument();
@@ -82,7 +76,6 @@ it('offers a replacement that only appears on a later page of issued policies', 
     : json({ policies: [policy], hasMore: true, nextCursor: policyId, traceId }));
   vi.stubGlobal('fetch', fetch);
   render(<I18n initial="es-CO"><LifecycleActions policy={policy} onChanged={vi.fn()} onSessionLost={vi.fn()} /></I18n>);
-  await userEvent.setup().click(screen.getByText('Gestionar póliza', { selector: 'summary' }));
   await userEvent.setup().selectOptions(screen.getByRole('combobox'), 'modified');
   expect(await screen.findByRole('radio', { name: /POL-30000000/ })).toBeInTheDocument();
   expect(fetch.mock.calls.some(([url]) => String(url).includes(`cursor=${policyId}`))).toBe(true);

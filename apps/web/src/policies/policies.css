@@ -36,19 +36,19 @@
 .policy-payment-paid { background: #e6f3ec; color: #175c3a; }
 .policy-payment-pending { background: #fbf0dc; color: #7a4e05; }
 .policy-payment-failed { background: #fbe9e7; color: #8a241c; }
-.advisor-approval-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.advisor-approval-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .advisor-approval-header .h-card { margin: 0; }
+.advisor-approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .advisor-approval-filter { max-width: 260px; }
 .advisor-revoked-date { display: block; margin-top: 6px; }
 .advisor-approval-references { margin-top: 6px; }
-.advisor-approval-references summary, .policy-management-disclosure > summary { color: var(--brand-strong); cursor: pointer; }
+.advisor-approval-references summary { color: var(--brand-strong); cursor: pointer; }
 .advisor-approval-references dl { margin: 6px 0 0; }
 .advisor-approval-references dt { color: var(--ink-2); }
 .advisor-approval-references dd { margin: 0 0 6px; overflow-wrap: anywhere; }
-.policy-management-disclosure { margin-top: 16px; }
-.policy-management-disclosure > summary { padding-block: 8px; font-weight: 600; }
-.policy-management-disclosure[open] > summary { margin-bottom: 12px; }
-.policy-direct-actions:not([open]) > summary { padding-block: 0; }
+.policy-management-form { margin-bottom: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.policy-management-form .field:first-child { max-width: 420px; }
+.advisor-table-feedback p { margin: 0; }
 @media (max-width: 600px) {
   .policy-facts { grid-template-columns: 1fr; }
   /* Each payment becomes a labelled block so no column is squeezed; the header stays available to screen readers. */
@@ -59,6 +59,8 @@
   .policy-table td::before { content: attr(data-label); flex: none; font: 600 14px/1.5 'IBM Plex Sans', sans-serif; color: #485563; text-align: left; }
   .advisor-approval-table td { align-items: flex-start; }
   .advisor-approval-table td > * { min-width: 0; }
+  .advisor-table-feedback td { display: block; text-align: start; }
+  .advisor-table-feedback td::before { content: none; }
 }
 @media (prefers-reduced-motion: reduce) { .policy-card { transition: none; } }
 .replacement-choices { display: grid; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }

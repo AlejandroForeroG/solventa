@@ -11,7 +11,9 @@ export const advisorEs={
   'advisor.modified':'Modificar', 'advisor.renewed':'Renovar', 'advisor.cancelled':'Cancelar', 'advisor.policy':'Póliza',
   'advisor.executeConfirm':'Confirmo ejecutar la actuación y el reemplazo autorizados',
   'advisor.filterStatus':'Filtrar por estado', 'advisor.allStatuses':'Todos los estados', 'advisor.approved':'Aprobada',
-  'advisor.filteredEmpty':'No hay autorizaciones con este estado.', 'advisor.newAuthorization':'Nueva autorización',
+  'advisor.filteredEmpty':'No hay autorizaciones con este estado.', 'advisor.listUnavailable':'No pudimos consultar las autorizaciones. Pulsa Actualizar para reintentar.',
+  'advisor.closeManagement':'Cerrar gestión', 'advisor.managementMode':'¿Quién hará la gestión?',
+  'advisor.chooseManagementMode':'Elige una opción', 'advisor.manageDirectly':'Hacerla yo', 'advisor.authorizeAdvisor':'Autorizar a un asesor',
   'advisor.status':'Estado', 'advisor.grantedAt':'Aprobada el', 'advisor.options':'Acciones', 'advisor.viewReferences':'Ver referencias',
 };
 export const advisorEn={
@@ -27,6 +29,8 @@ export const advisorEn={
   'advisor.modified':'Modify', 'advisor.renewed':'Renew', 'advisor.cancelled':'Cancel', 'advisor.policy':'Policy',
   'advisor.executeConfirm':'I confirm the authorized action and replacement',
   'advisor.filterStatus':'Filter by status', 'advisor.allStatuses':'All statuses', 'advisor.approved':'Approved',
-  'advisor.filteredEmpty':'There are no authorizations with this status.', 'advisor.newAuthorization':'New authorization',
+  'advisor.filteredEmpty':'There are no authorizations with this status.', 'advisor.listUnavailable':'We could not load authorizations. Select Refresh to try again.',
+  'advisor.closeManagement':'Close policy management', 'advisor.managementMode':'Who will manage the policy?',
+  'advisor.chooseManagementMode':'Choose an option', 'advisor.manageDirectly':'Do it myself', 'advisor.authorizeAdvisor':'Authorize an advisor',
   'advisor.status':'Status', 'advisor.grantedAt':'Approved on', 'advisor.options':'Actions', 'advisor.viewReferences':'View references',
 };
