@@ -34,6 +34,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
   const [destination, setDestination] = useState<Destination>('regulator');
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  useEffect(() => { if (confirming) document.getElementById(`report-confirm-${confirming}`)?.focus(); }, [confirming]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef(true);
@@ -108,10 +109,9 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
       </div>}
       {page && (page.items.length ? <>
         <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table reports-table"><caption className="visually-hidden">{t('title')}</caption>
-          <thead><tr>{['period', 'destination', 'revision', 'generated', 'hash', 'rows', 'delivery', 'actions'].map(key => <th key={key} scope="col">{t(`col.${key}`)}</th>)}</tr></thead>
+          <thead><tr>{['period', 'revision', 'generated', 'hash', 'rows', 'delivery', 'actions'].map(key => <th key={key} scope="col">{t(`col.${key}`)}</th>)}</tr></thead>
           <tbody>{page.items.map(report => { const label = `reports-row-${report.reportId}`; const status = report.delivery?.status; return <tr key={report.reportId}>
             <td data-label={t('col.period')}><span id={label}>{month(report.period)} · {t(`destination.${report.destination}`)}</span></td>
-            <td data-label={t('col.destination')}>{t(`destination.${report.destination}`)}</td>
             <td className="mono" data-label={t('col.revision')}>{t('revision', { revision: report.revision })}</td>
             <td className="mono" data-label={t('col.generated')}>{intl.formatDate(report.generatedAt, { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Bogota' })}</td>
             <td className="mono audit-id" data-label={t('col.hash')} title={report.contentHash}>{report.contentHash.slice(0, 12)}</td>
@@ -121,14 +121,14 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
             <td className="reports-actions" data-label={t('col.actions')}><div>
               <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'csv')}>{t('downloadCsv')}</button>
               <button type="button" className="btn btn-secondary btn-small" aria-describedby={label} disabled={busy !== null} onClick={() => void download(report, 'manifest')}>{t('downloadManifest')}</button>
-              {!isFinal(report) && confirming !== report.reportId && <button type="button" className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
+              {!isFinal(report) && confirming !== report.reportId && <button type="button" id={`report-send-${report.reportId}`} className="btn btn-primary btn-small" aria-describedby={label} disabled={busy !== null}
                 onClick={() => { if (status && status !== 'pending') void send(report); else setConfirming(report.reportId); }}>
                 {busy === report.reportId ? t('sending') : status && status !== 'pending' ? t('retry') : t(`send.${report.destination}`)}</button>}
             </div>
             {confirming === report.reportId && <div className="reports-confirm" role="group" aria-label={t('confirmTitle')}>
               <p className="note">{t('confirmSend', { month: month(report.period), revision: report.revision, rows: report.manifest.rowCount, destination: t(`destination.${report.destination}`) })}</p>
-              <div><button type="button" className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}>{t('confirmButton')}</button>
-                <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => setConfirming(null)}>{t('cancelSend')}</button></div>
+              <div><button type="button" id={`report-confirm-${report.reportId}`} className="btn btn-primary btn-small" disabled={busy !== null} onClick={() => { setConfirming(null); void send(report); }}>{t('confirmButton')}</button>
+                <button type="button" className="btn btn-secondary btn-small" disabled={busy !== null} onClick={() => { const id = confirming; setConfirming(null); requestAnimationFrame(() => document.getElementById(`report-send-${id}`)?.focus()); }}>{t('cancelSend')}</button></div>
             </div>}</td>
           </tr>; })}</tbody></table></div>
         {page.next && <div className="audit-pagination"><button className="btn btn-secondary" type="button" onClick={() => { moveFocus.current = true; setBefore(page.next ?? undefined); }}>{t('next')}</button></div>}

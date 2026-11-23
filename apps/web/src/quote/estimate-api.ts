@@ -4,7 +4,7 @@ export type EstimateField = keyof EstimateValues;
 export type EstimateOutcome = { kind: 'estimate'; estimate: Estimate } | { kind: 'invalid'; fields: EstimateField[] } | { kind: 'unavailable' };
 export const estimateFields: EstimateField[] = ['ageYears', 'amount', 'termMonths'];
 
-export const groupedDigits = (value: string) => /^\d{1,3}([.\s ]\d{3})+$/.test(value.trim()) ? value.replace(/[.\s ]/g, '') : value;
+export const groupedDigits = (value: string) => /^\d{1,3}([.,\s]\d{3})+$/.test(value.trim()) ? value.replace(/[.,\s]/g, '') : value;
 
 export function invalidEstimateFields(values: EstimateValues): EstimateField[] {
   return estimateFields.filter(key => {

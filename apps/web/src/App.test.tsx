@@ -66,11 +66,11 @@ describe('audit route in the application', () => {
     });
     render(<App />); const user = userEvent.setup();
     const decisionLabel = `Decisión: ${auditExamples.detail.decision.quoteId ?? auditExamples.detail.decision.decisionId}`;
-    await screen.findByRole('button', { name: decisionLabel });
+    await screen.findByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) });
     await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
-    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     await act(async () => failLogout());
-    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
   });
 });
