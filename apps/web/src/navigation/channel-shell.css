@@ -18,15 +18,11 @@
 .navigation-brand img { display: block; height: auto; max-width: 100%; }
 .navigation-section { margin: 0 14px 14px; color: #a4c9c2; font: 500 10px 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: .1em; }
 .navigation-links { display: grid; gap: 5px; }
-.navigation-links a, .navigation-context, .navigation-logout { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 12px 14px; border-radius: 9px; border: 1px solid transparent; text-decoration: none; background: transparent; color: #d4e6e2; font: 500 13px/1.4 'IBM Plex Sans', sans-serif; }
-.navigation-links svg, .navigation-context svg, .navigation-logout svg { flex: none; opacity: .8; }
+.navigation-links a { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 12px 14px; border-radius: 9px; border: 1px solid transparent; text-decoration: none; background: transparent; color: #d4e6e2; font: 500 13px/1.4 'IBM Plex Sans', sans-serif; }
+.navigation-links svg { flex: none; opacity: .8; }
 .navigation-links a[aria-current='page'] { background: #125b50; border-color: #247768; color: #fff; font-weight: 600; }
 .navigation-links a[aria-current='page'] svg { color: #7fc7bc; opacity: 1; }
-.navigation-links a:focus-visible, .navigation-footer a:focus-visible, .navigation-footer button:focus-visible, .navigation-menu-close:focus-visible { outline-color: #7fc7bc; outline-offset: 3px; }
-.navigation-footer { display: grid; gap: 4px; margin-top: auto; padding-top: 24px; border-top: 1px solid rgb(127 199 188 / 18%); }
-.navigation-context { font-size: 12px; color: #a4c9c2; }
-.navigation-context > :last-child { width: 14px; margin-left: auto; }
-.navigation-logout { width: 100%; text-align: left; font-size: 12px; }
+.navigation-links a:focus-visible, .navigation-menu-close:focus-visible { outline-color: #7fc7bc; outline-offset: 3px; }
 .channel-layout a[aria-disabled='true'] { opacity: .55; cursor: wait; }
 .navigation-menu-trigger, .navigation-menu-close { display: none; min-width: 44px; min-height: 44px; width: 44px; padding: 10px; border-radius: 9px; }
 .skip-link { position: fixed; top: -100px; left: 16px; z-index: 100; padding: 12px 18px; background: #fff; color: #062f2a; border-radius: 8px; font-weight: 600; }
@@ -37,11 +33,10 @@
 .navigation-dialog-panel { position: relative; display: flex; flex-direction: column; width: min(320px, calc(100% - 40px)); height: 100%; padding: max(32px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); background: #062f2a; box-shadow: 12px 0 40px rgb(6 28 25 / 12%); }
 .navigation-menu-close { position: absolute; right: 12px; top: 18px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: transparent; border-color: transparent; }
 .navigation-dialog .navigation-brand { margin-bottom: 44px; max-width: 194px; padding-left: 10px; }
-.navigation-dialog .navigation-footer { flex: none; }
-.channel-layout-signed-in .audit-shell { display: block; min-height: calc(100dvh - 76px); }
+.navigation-dialog .channel-layout-signed-in .audit-shell { display: block; min-height: calc(100dvh - 76px); }
 .channel-layout-signed-in .audit-main { max-width: 1360px; margin: 0 auto; }
 @media (hover: hover) and (pointer: fine) {
-  .navigation-links a:hover, .navigation-context:hover, .navigation-logout:hover { background: rgb(127 199 188 / 10%); color: #fff; }
+  .navigation-links a:hover { background: rgb(127 199 188 / 10%); color: #fff; }
 }
 @media (max-width: 1079px) {
   .channel-layout-signed-in { padding-left: 0; }
@@ -72,3 +67,24 @@
   .channel-layout:not(.channel-layout-signed-in) .channel-topbar-tools { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
   .channel-layout:not(.channel-layout-signed-in) .channel-topbar-tools .btn { flex: 1 1 auto; }
 }
+.menu { position: relative; }
+.menu-trigger { display: inline-flex; align-items: center; gap: 8px; width: auto; min-height: 40px; padding: 6px 12px 6px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #062f2a; font: 600 13px 'IBM Plex Sans', sans-serif; cursor: pointer; }
+.menu-trigger[aria-expanded='true'] { border-color: var(--brand); box-shadow: 0 0 0 3px rgb(11 107 95 / 14%); }
+@media (hover: hover) and (pointer: fine) { .menu-trigger:hover { background: #f4faf8; border-color: #cbe5e0; } }
+.menu-trigger svg { flex: none; color: var(--brand); }
+.menu-panel { position: absolute; top: calc(100% + 8px); z-index: 40; min-width: 220px; padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 18px 40px rgb(6 47 42 / 14%), 0 2px 6px rgb(6 47 42 / 6%); transform-origin: top right; animation: menu-in 160ms var(--ease-out); }
+.menu-panel-end { right: 0; }
+.menu-panel-start { left: 0; transform-origin: top left; }
+@keyframes menu-in { from { opacity: 0; transform: scale(.97) translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .menu-panel { animation: none; } }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); font: 500 14px 'IBM Plex Sans', sans-serif; text-align: left; text-decoration: none; cursor: pointer; }
+.menu-item svg { flex: none; color: var(--brand); }
+.menu-item:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; background: var(--brand-tint); }
+@media (hover: hover) and (pointer: fine) { .menu-item:hover { background: #f4faf8; } }
+.menu-item[aria-disabled='true'] { opacity: .5; cursor: wait; }
+.menu-item:last-child:not([role='menuitemradio']) { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+.menu-check { display: inline-flex; width: 18px; color: var(--brand); }
+.account-avatar { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #12d9b8, #0b6b5f); color: #fff; }
+.account-avatar svg { color: #fff; }
+.locale-code { letter-spacing: .04em; }
+@media (max-width: 599px) { .account-label { display: none; } .menu-trigger { padding: 6px 10px 6px 6px; min-height: 44px; } }
