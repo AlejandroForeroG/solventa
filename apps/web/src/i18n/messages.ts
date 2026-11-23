@@ -379,7 +379,7 @@ const enUS: typeof esCO = {
   'home.greeting': 'Hi! Get your insurance quote here', 'home.greetingDetail': 'Calculate your premium in minutes and buy online.',
   'home.tile.policies': 'View your policies and download their documents.', 'home.tile.claims': 'Track the status of your claims.', 'home.tile.assistance': 'Find providers near you.',
   'home.tile.sale': 'Buy with the help of an advisor.', 'home.tile.privacy': 'Review and manage your authorizations.',
-  'sheet.issuer': 'Solventa Seguros', 'sheet.issuerDetail': 'Mortgage life insurance · Colombia', 'sheet.kicker': 'Policy document', 'sheet.policyTitle': 'Group mortgage life insurance policy',
+  'sheet.issuer': 'Solventa Insurance', 'sheet.issuerDetail': 'Mortgage life insurance · Colombia', 'sheet.kicker': 'Policy document', 'sheet.policyTitle': 'Group mortgage life insurance policy',
   'sheet.number': 'No. {number}', 'sheet.sealDraft': 'Pending signature', 'sheet.sealIssued': 'Issued', 'sheet.sealSigned': 'Signed',
   'sheet.legend': 'Academic simulation document. It is not a real insurance contract and has no legal validity.',
   'sheet.coverage': 'Coverage', 'sheet.coverageNote': 'Single payment for the whole period.', 'sheet.verificationTitle': 'Document verification data',
