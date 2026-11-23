@@ -67,11 +67,11 @@ describe('audit route in the application', () => {
     });
     render(<App />); const user = userEvent.setup();
     const decisionLabel = `Decisión: ${auditExamples.detail.decision.quoteId ?? auditExamples.detail.decision.decisionId}`;
-    await screen.findByRole('button', { name: decisionLabel });
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
-    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
+    await screen.findByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) });
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     await act(async () => failLogout());
-    expect(screen.queryByRole('button', { name: decisionLabel })).toBeNull();
+    expect(screen.queryByRole('button', { name: new RegExp(`^${decisionLabel} · DEC-`) })).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos comprobar tu sesión.');
   });
 });
@@ -121,7 +121,7 @@ describe('claims inbox route in the application', () => {
     await waitFor(() => expect(screen.getByTestId('live-region')).toBeEmptyDOMElement());
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Siniestros' })).toHaveAttribute('aria-current', 'page');
     expect(within(screen.getByRole('complementary', { name: 'Consola operativa' })).getByRole('link', { name: 'Auditoría' })).toHaveAttribute('href', '/auditoria');
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
     expect(screen.queryByRole('table')).toBeNull();
     await act(async () => failLogout());
     expect(screen.queryByRole('table')).toBeNull();
@@ -305,11 +305,11 @@ describe('privacy dashboard in the application', () => {
       expect(back).toBeDisabled();
       await user.click(back);
       expect(screen.getByRole('heading', { name: 'Tus datos y quién los usa' })).toBeVisible();
-      await user.click(screen.getByRole('button', { name: /Cambiar la interfaz a inglés/ }));
+      await user.click(screen.getByRole('button', { name: /^Idioma:/ })); await user.click(screen.getByRole('menuitemradio', { name: 'English' }));
       expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
       await act(async () => { finishRead?.(json({ items: [consent], nextCursor: null })); });
       recovered = true;
-      await user.click(screen.getByRole('button', { name: /Switch the interface to Spanish/ }));
+      await user.click(screen.getByRole('button', { name: /^Language:/ })); await user.click(screen.getByRole('menuitemradio', { name: 'Español' }));
     }
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Sí, revocar' })).toBeNull());
     if (reconciliation === 'failed' || reconciliation === 'missing') {
@@ -379,7 +379,7 @@ describe('purchase interrupted by a reload', () => {
     render(<App />);
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path) === `/api/v1/policies/by-acceptance/${acceptance.acceptanceId}/policy`)).toBe(true));
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/offers'))).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+    await user.click(screen.getByRole('button', { name: 'Menú de mi cuenta' })); await user.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }));
     expect(readPurchaseDraft()).toBeNull();
   });
 });

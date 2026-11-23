@@ -10,7 +10,7 @@ import examples from '../../../../packages/contracts/examples/underwriting-audit
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const traceId = examples.detail.traceId;
 const id = examples.detail.decision.decisionId;
-const buttonLabel = 'Decisi\u00f3n: ' + (examples.detail.decision.quoteId ?? id);
+const buttonLabel = new RegExp('^Decisión: ' + (examples.detail.decision.quoteId ?? id) + ' · DEC-');
 const lost = vi.fn();
 const show = (english = false) => render(<I18n initial={english ? 'en-US' : 'es-CO'}><AuditWorkspace onSessionLost={lost} /></I18n>);
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); lost.mockClear(); });
@@ -22,16 +22,16 @@ describe('protected underwriting audit workspace', () => {
     const next = '00000000-0000-4000-8000-000000009999';
     const fetch = vi.fn().mockImplementation(async () => response({ items, next, traceId }));
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
-    await screen.findByRole('button', { name: 'Decisión: COT-2026-00001' });
+    await screen.findByRole('button', { name: /^Decisión: COT-2026-00001 · DEC-/ });
     expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(5);
     expect(screen.getByText('Mostrando 5 de 12 decisiones de esta página.')).toBeVisible();
-    const row = screen.getByRole('button', { name: 'Decisión: COT-2026-00001' }).closest('tr')!;
+    const row = screen.getByRole('button', { name: /^Decisión: COT-2026-00001 · DEC-/ }).closest('tr')!;
     expect(within(row).getByText(items[0].decisionId)).not.toBeVisible();
     await user.click(within(row).getByText('Referencia técnica'));
     expect(within(row).getByText(items[0].decisionId)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
     expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(10);
-    expect(screen.getByRole('button', { name: 'Decisión: COT-2026-00006' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^Decisión: COT-2026-00006 · DEC-/ })).toHaveFocus();
     expect(fetch).toHaveBeenCalledOnce();
     await user.click(screen.getByRole('button', { name: 'Mostrar más decisiones' }));
     expect(screen.getAllByRole('button', { name: /^Decisión:/ })).toHaveLength(12);

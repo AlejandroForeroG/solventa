@@ -23,3 +23,61 @@
 .landing-footer p { margin: 0; }
 @media (max-width: 850px) { .landing { padding-top: 48px; } .landing-hero { gap: 32px; } .landing-process-grid { gap: 24px; } }
 @media (max-width: 680px) { .landing { padding: 36px 20px 24px; } .landing-hero { grid-template-columns: 1fr; gap: 32px; padding-bottom: 40px; } .landing-lede { font-size: 16px; } .landing-preparation { padding: 24px; } .landing-process-grid { grid-template-columns: 1fr; } .landing-process { padding-bottom: 36px; } }
+.account-home { max-width: 1080px; margin: 0 auto; padding: 32px 40px 56px; display: grid; gap: 24px; }
+.account-hero { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px 32px; padding: 32px; overflow: hidden; border-radius: 22px; color: #f7f6f3;
+  background: radial-gradient(120% 140% at 100% 0%, rgb(18 217 184 / 32%) 0%, transparent 55%), linear-gradient(135deg, #062f2a 0%, #0b6b5f 100%); box-shadow: var(--shadow-soft); }
+.account-hero::after { content: ''; position: absolute; right: -60px; bottom: -80px; width: 240px; height: 240px; border-radius: 50%; border: 36px solid rgb(255 255 255 / 6%); pointer-events: none; }
+.account-hero-copy { position: relative; max-width: 560px; }
+.account-hero-eyebrow { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; padding: 5px 12px; border-radius: 999px; background: rgb(255 255 255 / 12%); color: #c8f5ec; font: 600 12px 'IBM Plex Sans', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.account-hero h1 { margin: 0 0 10px; color: #fff; font: 600 clamp(26px, 3.4vw, 36px)/1.12 'Space Grotesk', sans-serif; letter-spacing: -.03em; text-wrap: balance; }
+.account-hero-lede { margin: 0; color: #d7ece8; font-size: 15px; }
+.account-hero-cta { position: relative; gap: 10px; min-height: 48px; padding: 12px 20px; border-color: var(--mint); background: var(--mint); color: #062f2a; font-size: 15px; }
+@media (hover: hover) and (pointer: fine) { .account-hero-cta:hover { background: #4fe3ca; } }
+.account-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.account-tile { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #fff; color: var(--ink); text-decoration: none; box-shadow: 0 1px 2px rgb(6 47 42 / 4%); transition: transform 160ms var(--ease-out), box-shadow 160ms ease, border-color 160ms ease; }
+.account-tile-icon { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 14px; }
+.account-tile-text { display: grid; gap: 3px; min-width: 0; }
+.account-tile-text strong { font: 600 16px 'Space Grotesk', sans-serif; letter-spacing: -.01em; }
+.account-tile-text span { color: var(--ink-3); font-size: 13.5px; line-height: 1.4; }
+.account-tile-arrow { color: #9aa3af; }
+.account-tile-green .account-tile-icon { background: var(--mint-tint); color: var(--brand-strong); }
+.account-tile-blue .account-tile-icon { background: var(--blue-tint); color: var(--blue-ink); }
+.account-tile-amber .account-tile-icon { background: var(--amber-tint); color: var(--amber-ink); }
+.account-tile-violet .account-tile-icon { background: var(--violet-tint); color: var(--violet-ink); }
+.account-tile-slate .account-tile-icon { background: var(--slate-tint); color: var(--slate-ink); }
+.account-tile:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .account-tile:hover { transform: translateY(-2px); border-color: #cbe5e0; box-shadow: var(--shadow-soft); } .account-tile:hover .account-tile-arrow { color: var(--brand); } }
+.account-tile:active { transform: scale(.99); }
+@media (prefers-reduced-motion: reduce) { .account-tile { transition: none; } .account-tile:hover, .account-tile:active { transform: none; } }
+.account-note { display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; border: 1px solid #c6daeb; border-radius: 16px; background: var(--blue-tint); }
+.account-note-icon { display: inline-flex; flex: none; color: var(--blue-ink); }
+.account-note h2 { margin: 0 0 4px; color: var(--blue-ink); font: 600 15px 'Space Grotesk', sans-serif; }
+.account-note p { margin: 0; color: var(--blue-ink); font-size: 14px; }
+@media (max-width: 680px) { .account-home { padding: 20px 16px 40px; gap: 18px; } .account-hero { padding: 24px 20px; border-radius: 18px; } .account-hero-cta { width: 100%; justify-content: center; } }
+.account-hero::before { content: ''; position: absolute; left: 38%; top: -40px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, rgb(255 255 255 / 9%), transparent 70%); pointer-events: none; }
+.account-hero { background-image: radial-gradient(120% 140% at 100% 0%, rgb(18 217 184 / 32%) 0%, transparent 55%), radial-gradient(rgb(255 255 255 / 7%) 1px, transparent 1.5px), linear-gradient(135deg, #062f2a 0%, #0b6b5f 100%); background-size: auto, 18px 18px, auto; }
+.landing-hero { position: relative; isolation: isolate; }
+.landing-hero::before { content: ''; position: absolute; z-index: -1; right: -10%; top: -20%; width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle, rgb(18 217 184 / 14%), transparent 65%); pointer-events: none; }
+.landing { position: relative; overflow-x: clip; }
+.landing-badge { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 20px; padding: 6px 14px; border: 1px solid #cbe5e0; border-radius: 999px; background: #fff; color: var(--brand-strong); font: 600 12px 'IBM Plex Sans', sans-serif; letter-spacing: .06em; text-transform: uppercase; box-shadow: 0 1px 2px rgb(6 47 42 / 5%); }
+.landing h1 { background: linear-gradient(120deg, #062f2a 0%, #0b6b5f 70%, #0f8f7d 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (forced-colors: active) { .landing h1 { color: CanvasText; background: none; } }
+.landing-actions .btn-primary { min-height: 50px; padding: 14px 22px; box-shadow: 0 10px 24px rgb(11 107 95 / 22%); }
+.landing-preparation { position: relative; overflow: hidden; border-color: #cbe5e0; background: #fff; box-shadow: var(--shadow-soft); }
+.landing-preparation::before { content: ''; position: absolute; right: -60px; top: -60px; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle, rgb(18 217 184 / 18%), transparent 70%); pointer-events: none; }
+.landing-preparation > * { position: relative; }
+.landing-preparation li { display: flex; align-items: center; gap: 14px; border-top-color: var(--line); }
+.landing-chip { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; }
+.landing-chip-green { background: var(--mint-tint); color: var(--brand-strong); }
+.landing-chip-blue { background: var(--blue-tint); color: var(--blue-ink); }
+.landing-chip-amber { background: var(--amber-tint); color: var(--amber-ink); }
+.landing-chip-violet { background: var(--violet-tint); color: var(--violet-ink); }
+.landing-process-grid { gap: 20px; }
+.landing-step { position: relative; padding: 26px 24px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgb(6 47 42 / 4%); }
+.landing-step-icon { position: relative; width: 48px; height: 48px; margin-bottom: 16px; border-radius: 15px; }
+.landing-step-number { position: absolute; right: -8px; top: -8px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font: 700 11px 'IBM Plex Sans', sans-serif; box-shadow: 0 0 0 3px #fff; }
+.landing-process { position: relative; }
+.landing-process::before { content: ''; position: absolute; left: -80px; bottom: -40px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgb(11 107 95 / 7%), transparent 70%); pointer-events: none; z-index: -1; }
+.landing { isolation: isolate; }
+.landing::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 520px; z-index: -1; pointer-events: none; background: radial-gradient(rgb(11 107 95 / 8%) 1px, transparent 1.5px) 0 0 / 22px 22px; -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 100%); mask-image: linear-gradient(180deg, #000 0%, transparent 100%); }
+@media (max-width: 680px) { .landing-step { padding: 22px 20px; } .landing::before { height: 380px; } }

@@ -30,7 +30,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <p className="offer-caption">{t('offer.premium')}</p>
         <p className="offer-premium">{copDecimalAmount(offer.premium)} <span className="offer-unit">{t('offer.perMonth')}</span></p>
         {offer.status === 'definitive' && <>
-          <p className="offer-billing">{t('document.billing')}</p>
+          <p className="offer-billing">{t(assisted ? 'offer.billingAssisted' : 'document.billing')}</p>
           {assisted ? <p className="offer-billing offer-billing-relation">{t('offer.preparedByAdvisor')}</p> : <p className="offer-billing offer-billing-relation">{t('document.billingDetail')}</p>}
         </>}
         <dl className="offer-facts">
@@ -82,6 +82,11 @@ export function PolicyDocument({ heading, policy, stage, checked, documentChange
   const challengeId = challenge?.challengeId;
   useEffect(() => { if (challengeId) codeInput.current?.focus(); }, [challengeId]);
   useEffect(() => { if (error && challengeId) codeInput.current?.focus(); }, [error, challengeId]);
+  const hadChallenge = useRef(false);
+  useEffect(() => {
+    if (challengeId) { hadChallenge.current = true; return; }
+    if (hadChallenge.current) { hadChallenge.current = false; window.document.getElementById('policy-review-cb')?.focus(); }
+  }, [challengeId]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const secondsLeft = challenge ? Math.max(0, Math.ceil((Date.parse(challenge.expiresAt) - now) / 1000)) : 0;
   const document = JSON.parse(policy.document) as Record<string, unknown>;

@@ -1,3 +1,4 @@
+import { groupedDigits } from './estimate-api';
 import type { Locale } from '../i18n/messages';
 import { fetchWithSession } from '../session-fetch';
 
@@ -59,7 +60,7 @@ export function toRequestBody(values: QuoteValues, idempotencyKey: string) {
     product: 'vida_hipotecario',
     customer: { fullName: values.fullName.trim(), documentType: 'CC', documentNumber: values.documentNumber.trim(), birthDate: values.birthDate, city: values.city.trim() },
     // Derived from the key, so every retry of one attempt sends the same body and can be recognised as a repetition.
-    credit: { partnerCreditId: `WEB-${idempotencyKey.replace(/-/g, '').slice(0, 12).toUpperCase()}`, amount: Number(values.amount), termMonths: Number(values.termMonths) }
+    credit: { partnerCreditId: `WEB-${idempotencyKey.replace(/-/g, '').slice(0, 12).toUpperCase()}`, amount: Number(groupedDigits(values.amount.trim())), termMonths: Number(values.termMonths) }
   };
 }
 

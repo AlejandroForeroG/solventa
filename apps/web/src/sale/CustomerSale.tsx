@@ -6,6 +6,7 @@ import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
 import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
 type Load = { kind: 'loading' } | { kind: 'ready'; items: SaleAuthorization[] } | { kind: 'failed'; reason: string };
 
@@ -94,7 +95,6 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   }
   return <section className="card policy-section" aria-labelledby="sale-continue-heading">
     <h2 id="sale-continue-heading" className="h-card">{t('continueTitle')}</h2>
-    <p className="note">{t('continueScope')}</p>
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
       <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
       <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>
@@ -114,7 +114,7 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
       onConsentRequired={leave} /></main>;
   }
   return <main className="content policies">
-    {!offerOpen && <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>}
+    {!offerOpen && <div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({ id: 'sale.title' })}</h1></div>}
     <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
     {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
   </main>;

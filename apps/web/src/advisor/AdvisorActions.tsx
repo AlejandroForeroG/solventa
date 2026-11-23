@@ -3,13 +3,16 @@ import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
 import { AdvisorSale } from '../sale/AdvisorSale';
-import { CopyValue } from '../forms/CopyValue';
+import { IconButton } from '../navigation/IconAction';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
-export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSessionLost():void}) {
+export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:PolicyDetail;onSessionLost():void;onReference?(reference:string):void}) {
   const intl=useIntl(),t=(key:string)=>intl.formatMessage({id:`advisor.${key}`});
   const [cursors,setCursors]=useState<(string|undefined)[]>([undefined]);
   const [result,setResult]=useState<Outcome<ApprovalList>|null>(null),[refresh,setRefresh]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const advisorReference=result?.kind==='ok'?result.value.advisorReference:undefined;
+  useEffect(()=>{if(advisorReference)onReference?.(advisorReference);},[advisorReference,onReference]);
   const [reference,setReference]=useState(''),[action,setAction]=useState<Approval['action']|''>(''),[replacement,setReplacement]=useState('');
   const validUntil=(count:number)=>new Date(Date.now()+count*86400000-300000).toISOString();
   const [days,setDays]=useState(1),[expiresAt,setExpiresAt]=useState(()=>validUntil(1)),[confirmed,setConfirmed]=useState(false);
@@ -46,10 +49,10 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
     <h2 id="advisor-heading" className="h-card">{t(policy ? 'authorizations' : 'pending')}</h2>
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
-    <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
+    <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
     {page&&<>
       {!page.authorizations.length&&<p>{t('empty')}</p>}
-      {page.advisorReference&&<CopyValue label={t('reference')} value={page.advisorReference}/>}
+
       <ul className="policy-documents">{page.authorizations.map(a=><li key={a.authorizationId}><div><p>{t('policy')}: <span className="mono">{a.policyId}</span></p><p>{t(a.action)} · {t(a.status)}</p>
         {a.replacementPolicyId&&<p className="mono">{t('replacement')}: {a.replacementPolicyId}</p>}<p>{t('expires')}: {timestamp(a.expiresAt)}</p>
         {a.revokedAt&&<p>{t('revoked')}: {timestamp(a.revokedAt)}</p>}
@@ -74,5 +77,6 @@ export function AdvisorActions({policy,onSessionLost}:{policy?:PolicyDetail;onSe
 }
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
   const intl=useIntl();
-  return <main className="content policies"><h1>{intl.formatMessage({id:'advisor.console'})}</h1><AdvisorSale onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost}/></main>;
+  const [reference,setReference]=useState<string|null>(null);
+  return <main className="content policies"><div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({id:'advisor.console'})}</h1></div><AdvisorSale reference={reference} onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost} onReference={setReference}/></main>;
 }

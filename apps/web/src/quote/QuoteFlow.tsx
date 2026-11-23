@@ -1,4 +1,4 @@
-import { groupedDigits } from './estimate-api';
+import { displayGrouped, groupedDigits } from './estimate-api';
 import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { consentApi, reconcileConsent, type Consent, type ConsentApi } from '../consent/api';
@@ -36,7 +36,7 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
   // A purchase interrupted by a reload resumes at its policy; the form data itself is never stored.
   const [resume] = useState(readPurchaseDraft);
   const [phase, setPhase] = useState<Phase>(resume ? 'offer' : 'form');
-  const [values, setValues] = useState<QuoteValues>(() => initialEstimate ? { ...empty, amount: initialEstimate.amount, termMonths: initialEstimate.termMonths } : empty);
+  const [values, setValues] = useState<QuoteValues>(() => initialEstimate ? { ...empty, amount: displayGrouped(initialEstimate.amount, intl.locale), termMonths: initialEstimate.termMonths } : empty);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [focusRequest, setFocusRequest] = useState<{ field: FieldKey } | null>(null);
   const [banner, setBanner] = useState<'none' | 'fields' | 'unavailable' | 'conflict'>('none');
@@ -67,7 +67,6 @@ export function QuoteFlow({ request = defaultRequest, consent = consentApi, fina
 
   async function submit(next: 'result' | 'offer' = 'result', current = values) {
     const values = { ...current, amount: groupedDigits(current.amount) };
-    if (values.amount !== current.amount) setValues(values);
     const local = checkLocally(values);
     if (local.length) { showProblems(local); setBanner('fields'); announce(intl.formatMessage({ id: 'live.quoteError' })); return; }
     setProblems([]); setFocusRequest(null); setBanner('none'); setPhase('loading');

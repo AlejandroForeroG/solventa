@@ -5,6 +5,7 @@ import { listClaims, type ClaimsOutcome, type ClaimsPage } from './api';
 import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './claims.css';
+import { Icon } from '../navigation/Icon';
 
 type Filter = 'all' | 'unassigned' | 'pending_information' | 'overdue';
 const FILTERS: readonly Filter[] = ['all', 'unassigned', 'pending_information', 'overdue'];
@@ -62,7 +63,7 @@ export function ClaimsInbox({ onSessionLost }: { onSessionLost(): void }) {
   const filtered = filter !== 'all' || search !== '';
   return <main className="audit-shell">
     <div className="audit-main">
-      <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      <div className="audit-heading"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <div className="claims-toolbar">
         <div role="group" aria-label={t('filterGroup')} className="claims-filters">
