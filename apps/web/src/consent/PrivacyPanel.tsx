@@ -101,7 +101,7 @@ export function PrivacyPanel({ api = consentApi, onBack, onSessionLost, onConsen
   }
 
   return <section className="step privacy">
-    <h1 ref={heading} tabIndex={-1}>{intl.formatMessage({ id: 'privacy.title' })}</h1>
+    <div className="page-title"><span className="page-icon page-icon-slate" aria-hidden="true"><Icon name="privacy" size={22} /></span><h1 ref={heading} tabIndex={-1}>{intl.formatMessage({ id: 'privacy.title' })}</h1></div>
     <p className="lede">{intl.formatMessage({ id: 'privacy.lede' })}</p>
     {load === 'loading' && <p aria-busy="true">{intl.formatMessage({ id: 'privacy.loading' })}</p>}
     {load === 'error' && <div>

@@ -4,6 +4,7 @@ import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, ty
 import type { PolicyDetail } from '../policies/api';
 import { AdvisorSale } from '../sale/AdvisorSale';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
 export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:PolicyDetail;onSessionLost():void;onReference?(reference:string):void}) {
   const intl=useIntl(),t=(key:string)=>intl.formatMessage({id:`advisor.${key}`});
@@ -76,5 +77,5 @@ export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:Polic
 export function AdvisorPortal({onSessionLost}:{onSessionLost():void}) {
   const intl=useIntl();
   const [reference,setReference]=useState<string|null>(null);
-  return <main className="content policies"><h1>{intl.formatMessage({id:'advisor.console'})}</h1><AdvisorSale reference={reference} onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost} onReference={setReference}/></main>;
+  return <main className="content policies"><div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({id:'advisor.console'})}</h1></div><AdvisorSale reference={reference} onSessionLost={onSessionLost}/><AdvisorActions onSessionLost={onSessionLost} onReference={setReference}/></main>;
 }

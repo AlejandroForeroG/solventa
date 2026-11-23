@@ -6,6 +6,7 @@ import { dateRangeProblem, type DateRangeProblem } from '../forms/date-range';
 import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import './portal.css';
+import { Icon } from '../navigation/Icon';
 
 export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const intl = useIntl();
@@ -40,7 +41,7 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
   const timestamp = (value: string) => intl.formatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) + ' ' + t('bogota');
   return <main className="audit-shell portal-shell">
     <div className="audit-main">
-      <div className="audit-heading"><h1>{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
+      <div className="audit-heading"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="partner" size={22} /></span><h1 className="audit-heading-text">{t('title')}</h1><a className="btn btn-secondary btn-small" href="/api/docs/?spec=v2/partner-portal">{t('documentation')}</a></div>
       {state?.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="portal-period" noValidate onSubmit={event => {
         event.preventDefault();

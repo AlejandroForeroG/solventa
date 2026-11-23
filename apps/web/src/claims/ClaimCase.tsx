@@ -34,7 +34,7 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
   }, [onSessionLost, revision]);
 
   return <main className="audit-main claim-case">
-    <h1>{t('customerCases')}</h1>
+    <div className="page-title"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{t('customerCases')}</h1></div>
     <section className="card report-in-app" aria-labelledby="report-in-app-title">
       <h2 id="report-in-app-title" className="h-card">{t('reportInApp.title')}</h2>
       <p className="note">{t('reportInApp.body')}</p>

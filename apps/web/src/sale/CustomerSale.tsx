@@ -6,6 +6,7 @@ import { clearPurchaseDraft, readPurchaseDraft } from '../offer/purchase-draft';
 import { grantSaleAuthorization, listSaleAuthorizations, revokeSaleAuthorization, uuid, type Outcome, type SaleAuthorization } from './api';
 import { CopyValue } from '../forms/CopyValue';
 import '../policies/policies.css';
+import { Icon } from '../navigation/Icon';
 
 type Load = { kind: 'loading' } | { kind: 'ready'; items: SaleAuthorization[] } | { kind: 'failed'; reason: string };
 
@@ -114,7 +115,7 @@ export function CustomerSalePortal({ onSessionLost }: { onSessionLost(): void })
       onConsentRequired={leave} /></main>;
   }
   return <main className="content policies">
-    {!offerOpen && <h1>{intl.formatMessage({ id: 'sale.title' })}</h1>}
+    {!offerOpen && <div className="page-title"><span className="page-icon page-icon-violet" aria-hidden="true"><Icon name="advisor" size={22} /></span><h1>{intl.formatMessage({ id: 'sale.title' })}</h1></div>}
     <Continuation onSessionLost={onSessionLost} onOpenChange={setOfferOpen} />
     {!offerOpen && <Authorizations onSessionLost={onSessionLost} />}
   </main>;

@@ -5,6 +5,7 @@ import { AccessDenied } from '../navigation/AccessDenied';
 import '../audit/audit.css';
 import '../claims/claims.css';
 import './reports.css';
+import { Icon } from '../navigation/Icon';
 
 type Filter = 'all' | Destination;
 type State = { kind: 'loading' | 'hidden' } | { kind: 'ready'; page: ReportsPage } | Exclude<ReportsOutcome<never>, { kind: 'ok' }>;
@@ -88,7 +89,7 @@ export function ReportsWorkspace({ onSessionLost }: { onSessionLost(): void }) {
 
   return <main className="audit-shell">
     <div className="audit-main">
-      <div className="audit-heading"><div><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
+      <div className="audit-heading"><span className="page-icon page-icon-amber" aria-hidden="true"><Icon name="reports" size={22} /></span><div className="audit-heading-text"><p className="section-label">{t('console')}</p><h1 ref={heading} tabIndex={-1}>{t('title')}</h1><p className="note audit-mode">{t('subtitle')}</p></div></div>
       {state.kind === 'forbidden' ? <AccessDenied message={t('forbidden')} traceId={'traceId' in state ? state.traceId : undefined} /> : <>
       <form className="reports-form" aria-label={t('form')} onSubmit={event => { event.preventDefault(); void generate(); }}>
         <label>{t('period')}<select value={period} onChange={event => setPeriod(event.target.value)}>{periods.map(option => <option key={option} value={option}>{month(option)}</option>)}</select></label>
