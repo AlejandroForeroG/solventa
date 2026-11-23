@@ -1,6 +1,8 @@
 import { getCookie, setCookie } from 'hono/cookie';
 import type { Hono, Context } from 'hono';
+import { operationsSessionHeader, type OperationalWorkspace } from '@solventa/contracts';
 import { Authentication } from '../../application/authentication';
+import type { Principal, VerifiedIdentity } from '../../application/authentication';
 import { WorkosAuthentication } from '../outbound/workos-authentication';
 import type { AuthConfiguration } from '../outbound/workos-authentication';
 import type { LoginSessions } from '../../application/authentication';
@@ -53,6 +55,7 @@ function writeCookie(c: Context<AuthEnv>, config: AuthConfiguration, value: stri
 export type AuthenticationCollaborators = {
   provider(config: AuthConfiguration): Pick<WorkosAuthentication, 'begin' | 'exchange' | 'authenticate' | 'revoke' | 'logoutUrl'>;
   sessions(connectionString: string): LoginSessions;
+  workspaces?(principal: Principal, identity: VerifiedIdentity): Promise<OperationalWorkspace[]>;
 };
 
 export function mountAuthentication(app: Hono<AuthEnv>, collaborators: AuthenticationCollaborators, security?: Pick<SecurityDecisions, 'deny'>) {
@@ -122,6 +125,10 @@ export function mountAuthentication(app: Hono<AuthEnv>, collaborators: Authentic
         return c.json({ authenticated: false }, 401);
       }
       if (verified.cookie) writeCookie(c, config, verified.cookie);
+      if (c.req.header(operationsSessionHeader) === 'operations') {
+        const workspaces = await collaborators.workspaces?.(principal, verified.identity) ?? [];
+        return c.json({ authenticated: true, principal, workspaces });
+      }
       return c.json({ authenticated: true, principal });
     } catch {
       // Never log provider exceptions: they can contain tokens, email or codes.

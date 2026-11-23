@@ -16,6 +16,75 @@ tags:
   - name: Access
     description: Identity-owned authorization probes.
 paths:
+  /auth/session:
+    servers:
+      - url: /
+    get:
+      operationId: getWebSession
+      summary: Check or renew the current web session
+      tags: [Access]
+      description: Verifies the sealed WorkOS cookie and active local session. An opt-in header includes the current operational sections available for navigation. Each business API independently checks access.
+      security:
+        - WebSession: []
+        - LocalWebSession: []
+      parameters:
+        - name: X-Solventa-Session-Include
+          in: header
+          description: Send operations to include navigation hints. Other values are ignored.
+          schema:
+            type: string
+            example: operations
+      responses:
+        '200':
+          description: The web session is authenticated.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated, principal]
+                properties:
+                  authenticated:
+                    type: boolean
+                    enum: [true]
+                  principal:
+                    $ref: '#/components/schemas/Principal'
+                  workspaces:
+                    type: array
+                    description: Included when requested. Only sections backed by a current grant appear.
+                    uniqueItems: true
+                    items:
+                      type: string
+                      enum: [claims, reports, audit, advisor, partner]
+              example:
+                authenticated: true
+                principal:
+                  clientId: 10000000-0000-4000-8000-000000000001
+                  subjectToken: 10000000-0000-4000-8000-000000000002
+                workspaces: [reports]
+        '400':
+          description: The request origin is not configured for authentication.
+        '401':
+          description: The request has no valid web session.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated]
+                properties:
+                  authenticated:
+                    type: boolean
+                    enum: [false]
+        '503':
+          description: Session verification is temporarily unavailable.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
   /access/partner:
     get:
       operationId: getPartnerAccess

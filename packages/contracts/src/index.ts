@@ -1,4 +1,6 @@
 export { apiVersions } from './versions';
+export { operationalWorkspaces, operationsSessionHeader } from './web-session';
+export type { OperationalWorkspace } from './web-session';
 export type { ApiVersion } from './versions';
 export { identityVerificationFixtures } from './identity-fixtures';
 export { assistanceOperation, assistanceRecord, assistanceSearchPath, parseAssistanceResults, parseAssistanceSearch } from './assistance';

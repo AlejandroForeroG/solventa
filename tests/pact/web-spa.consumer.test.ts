@@ -34,25 +34,25 @@ const pact = new PactV3({ consumer: consumerName, provider: providerName, dir: o
 after(() => assertMatchesCommitted(outputDir, `${consumerName}-${providerName}.json`));
 
 describe('SPA session check', () => {
-  test('reports an authenticated session', async () => {
-    pact.given('an active session').uponReceiving('a session check with an active session')
-      .withRequest({ method: 'GET', path: '/auth/session' })
-      .willRespondWith({ status: 200 });
-    await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'authenticated'));
+  test('reports an authenticated session and its operational workspaces', async () => {
+    pact.given('an active session with reports access').uponReceiving('a session check with an active session')
+      .withRequest({ method: 'GET', path: '/auth/session', headers: { 'X-Solventa-Session-Include': 'operations' } })
+      .willRespondWith({ status: 200, headers: jsonResponse, body: { authenticated: true, workspaces: ['reports'] } });
+    await pact.executeTest(async server => assert.deepEqual(await fetchSession(server.url), { status: 'authenticated', workspaces: ['reports'] }));
   });
 
   test('reports an anonymous visitor', async () => {
     pact.given('no active session').uponReceiving('a session check without a session')
       .withRequest({ method: 'GET', path: '/auth/session' })
       .willRespondWith({ status: 401 });
-    await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'anonymous'));
+    await pact.executeTest(async server => assert.deepEqual(await fetchSession(server.url), { status: 'anonymous' }));
   });
 
   test('reports unavailable when authentication is not configured', async () => {
     pact.given('authentication is not configured').uponReceiving('a session check while authentication is unavailable')
       .withRequest({ method: 'GET', path: '/auth/session' })
       .willRespondWith({ status: 503 });
-    await pact.executeTest(async server => assert.equal(await fetchSession(server.url), 'unavailable'));
+    await pact.executeTest(async server => assert.deepEqual(await fetchSession(server.url), { status: 'unavailable' }));
   });
 });
 
