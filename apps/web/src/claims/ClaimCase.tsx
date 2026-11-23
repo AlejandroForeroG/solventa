@@ -91,7 +91,7 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
       {trace && <details className="audit-reference-details"><summary>{t('supportDetails')}</summary><span className="mono">{trace}</span></details>}</div>}
     {!claim && !error && <p role="status">{t('loading')}</p>}
     {claim && <>
-      <header className="claim-case-heading"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
+      <header className="claim-case-heading"><span className="page-icon page-icon-blue" aria-hidden="true"><Icon name="claims" size={22} /></span><h1>{intl.formatMessage({ id: 'claims.caseTitle' }, { number: <span className="nowrap">{claim.claimNumber}</span> })}</h1>
         <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
       {confirmation && <p role="status" className="claim-confirmation"><Icon name="check" size={18} />{t('ack.' + confirmation)}</p>}
       {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <div className="claim-case-grid">
