@@ -27,7 +27,7 @@ export function OfferCard({ heading, offer, accepting, onAccept, onReevaluate, o
         <dl className="offer-facts">
           <div><dt>{t('offer.sumInsured')}</dt><dd className="mono-light">{copDecimal(offer.sumInsured)}</dd></div>
           <div><dt>{t('offer.coverage')}</dt><dd>{t('offer.coverageValue')}</dd></div>
-          <div><dt>{t('offer.period')}</dt><dd className="mono-light">{t('offer.periodValue', { from: dayMonthYear(new Date(offer.effectiveFrom)), until: dayMonthYear(new Date(offer.effectiveUntil)) })}</dd></div>
+          <div><dt>{t('offer.period')}</dt><dd>{t('offer.periodValue', { from: dayMonthYear(new Date(offer.effectiveFrom)), until: dayMonthYear(new Date(offer.effectiveUntil)) })}</dd></div>
         </dl>
         <details className="offer-verification"><summary>{t('document.verification')}</summary>
           <dl className="offer-facts"><div><dt>{t('document.offerId')}</dt><dd className="offer-id">{offer.offerId}</dd></div>
