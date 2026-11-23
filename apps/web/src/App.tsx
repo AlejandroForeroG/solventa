@@ -10,6 +10,7 @@ import { PolicyPortal } from './policies/PolicyPortal';
 import { ProviderSearch } from './assistance/ProviderSearch';
 import { brandAssets } from '@solventa/assets/web';
 import { ChannelShell } from './navigation/ChannelShell';
+import { IconButton } from './navigation/IconAction';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { fetchSession, requestLogout } from './api/auth';
 import type { SessionStatus } from './api/auth';
@@ -142,7 +143,7 @@ function Shell() {
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>
-          <button type="button" className="btn btn-secondary btn-small btn-privacy" onClick={() => setView('privacy')} aria-current={view === 'privacy' ? 'page' : undefined}>{t('privacy.open')}</button>
+          <IconButton className="btn-privacy" label={t('privacy.open')} icon="privacy" current={view === 'privacy'} onClick={() => setView('privacy')} />
         </div>
         <div hidden={view === 'privacy'}><QuoteFlow initialEstimate={estimateDraft} consentUpdates={consentUpdates} uncertainConsents={uncertainConsents} onOpenPrivacy={() => setView('privacy')} onSessionLost={sessionLost} /></div>
         {view === 'privacy' && <PrivacyPanel onConsentUncertain={consentUncertain} onConsentsChanged={updateConsents} onBack={() => setView('flow')} onSessionLost={sessionLost} />}
