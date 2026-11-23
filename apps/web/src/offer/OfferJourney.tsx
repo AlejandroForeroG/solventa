@@ -36,7 +36,8 @@ function stepOf(phase: Phase): number {
   if (phase.name === 'failed' || phase.name === 'unavailable') return phase.step;
   if (phase.name === 'preparing' || phase.name === 'review') return 5;
   if (['awaitingPayment', 'charging', 'charged', 'chargeDeclined'].includes(phase.name)) return 6;
-  if (['signing', 'issued', 'recovering', 'refunded'].includes(phase.name)) return 7;
+  if (phase.name === 'issued') return 8;
+  if (['signing', 'recovering', 'refunded'].includes(phase.name)) return 7;
   return 4;
 }
 
@@ -376,7 +377,7 @@ export function OfferJourney(props: {
       <h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.loading')}</h1>
       <p>{t('offer.loadingDetail')}</p>
     </section>}
-    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
+    {phase.name === 'offer' && <OfferCard heading={heading} offer={phase.offer} assisted={props.initialOffer !== undefined} accepting={phase.accepting} onAccept={() => void accept(phase.offer)} onReevaluate={reevaluate} onBack={onBack} />}
     {phase.name === 'declined' && <section className="step card declined-card">
       <header className="consent-head"><h1 ref={heading} tabIndex={-1} className="h-card">{t('offer.declinedTitle')}</h1></header>
       <div className="declined-body">

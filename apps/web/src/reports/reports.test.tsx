@@ -50,6 +50,8 @@ describe('protected reports workspace', () => {
     vi.stubGlobal('fetch', fetch); show(); const user = userEvent.setup();
     const row = within(await screen.findByRole('table')).getAllByRole('row')[2];
     await user.click(within(row).getByRole('button', { name: /^Enviar a/ }));
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/delivery'), expect.anything());
+    await user.click(within(row).getByRole('button', { name: 'Confirmar envío' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('El destino no respondió a tiempo. Reintenta para consultar su estado.');
     expect(fetch).toHaveBeenCalledWith(`/api/v1/reports/${unsent.reportId}/delivery`, expect.objectContaining({ method: 'POST', body: '{}' }));
     await waitFor(() => expect(screen.queryByText('Acuse recibido', { selector: '.reports-delivery-uncertain' })).toBeNull());

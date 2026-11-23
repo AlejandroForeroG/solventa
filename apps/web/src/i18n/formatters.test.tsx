@@ -40,3 +40,18 @@ describe('owner decimal currency display', () => {
     expect(screen.getByTestId('currency').textContent).toBe('$999,999,999,999,999.9999 COP');
   });
 });
+
+function Rounded({ value }: { value: string }) {
+  const { copRounded } = useFormatters();
+  return <output data-testid="rounded">{copRounded(value)}</output>;
+}
+
+describe('rounded indemnity display', () => {
+  for (const [value, expected] of [
+    ['1250.1234', '$ 1.250,12'], ['1000.0000', '$ 1.000'], ['0.0050', '$ 0,01'],
+    ['999999999999999.9949', '$ 999.999.999.999.999,99'], ['999999999999999.9999', '$ 1.000.000.000.000.000'],
+  ] as const) it(`rounds ${value} without losing integer digits`, () => {
+    render(<I18n initial="es-CO"><Rounded value={value} /></I18n>);
+    expect(screen.getByTestId('rounded').textContent).toBe(expected);
+  });
+});

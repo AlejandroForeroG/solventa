@@ -82,8 +82,8 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
   const tabs: ViewTab[] = ['overview', 'documents', 'tasks', 'history'];
   const download = (id: string) => '/api/v1/claims/' + claimId + '/' + audience + '/files/' + id;
   return <main className="audit-main claim-case">
-    <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}><Icon name="back" size={16} />{t('caseBack')}</a>
-    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + error)}</p>
+    {error !== 'not_found' && <a className="audit-back" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}><Icon name="back" size={16} />{t('caseBack')}</a>}
+    {error && <div role="alert" className="audit-state"><p>{t('caseError.' + (error === 'not_found' && audience === 'case' ? 'not_found_case' : error))}</p>
       {error === 'not_found' ? <a className="btn btn-secondary" href={audience === 'case' ? '/siniestros' : '/mis-siniestros'}>{t('caseBack')}</a>
         : <button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button>}
       {trace && <details className="audit-reference-details"><summary>{t('supportDetails')}</summary><span className="mono">{trace}</span></details>}</div>}
@@ -93,7 +93,17 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
         <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
       {audience === 'customer' && claim.state === 'unassigned' && <p className="note">{t('customerState.unassignedHint')}</p>}
       {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
-      {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} /> : <>
+      {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <div className="claim-case-grid">
+        <section className="case-card" aria-labelledby="claim-preview-title"><h2 id="claim-preview-title">{t('preview')}</h2>
+          <dl className="case-fields">
+            <div><dt>{t('col.policy')}</dt><dd className="mono">POL-{claim.policyId.slice(0, 8).toUpperCase()}</dd></div>
+            <div><dt>{t('occurred')}</dt><dd>{clock(claim.occurredAt)}</dd></div>
+            {claim.eventType && <div><dt>{t('eventType')}</dt><dd>{t('event.' + claim.eventType)}</dd></div>}
+            <div><dt>{t('col.evidence')}</dt><dd>{claim.requiredEvidence ? t('evidenceRequired', { required: claim.requiredEvidence }) : t('noEvidenceRequired')}</dd></div>
+          </dl>
+        </section>
+        <AnalystActions claimId={claimId} claim={claim} onSessionLost={onSessionLost} onDone={refresh} />
+      </div> : <>
         <div role="tablist" className="policy-tabs" aria-label={t('caseSections')}>
           {tabs.map(section => <button key={section} type="button" role="tab" id={`claim-tab-${section}`} aria-selected={tab === section} aria-controls="claim-tab-panel" tabIndex={tab === section ? 0 : -1}
             onClick={() => setTab(section)} onKeyDown={event => {
