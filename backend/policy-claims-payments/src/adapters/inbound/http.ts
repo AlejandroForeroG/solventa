@@ -128,7 +128,7 @@ export function createHttp(deps?: PolicyHttpDependencies) {
       const traceId = UUID.test(supplied) ? supplied.toLowerCase() : crypto.randomUUID();
       const reply = (body: Record<string, unknown>, status: 200 | 400 | 401 | 403 | 404 | 405 | 409 | 503) => c.json({ ...body, traceId }, status,
         { 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-      const pdfReply = (file: DocumentFile) => new Response(renderPdf(file.title, file.lines, { kicker: file.kicker, meta: file.meta, signature: file.signature }), { status: 200, headers: { 'content-type': 'application/pdf',
+      const pdfReply = (file: DocumentFile) => new Response(renderPdf(file.title, file.lines, { kicker: file.kicker, meta: file.meta, stamp: file.stamp, footer: file.footer, signature: file.signature }), { status: 200, headers: { 'content-type': 'application/pdf',
         'content-disposition': `attachment; filename="${file.fileName}"`, 'x-trace-id': traceId, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
       // Same opaque response as an absent resource; only a missing import skips the resource-denial record.
       const refuse = async (result: Extract<FinancialResult, { status: 'denied' | 'unavailable' }>) => {

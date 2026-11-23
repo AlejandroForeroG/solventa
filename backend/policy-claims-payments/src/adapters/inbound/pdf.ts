@@ -1,18 +1,21 @@
-// Dependency-free PDF 1.4 writer: standard fonts in WinAnsi, A4, no dates, so the same input gives the same bytes.
-export type PdfOptions = { kicker?: string; meta?: string; signature?: { signedAt: string; fingerprint: string } };
+// Dependency-free PDF 1.4 writer: standard fonts in WinAnsi, US Letter, no dates, so the same input gives the same bytes.
+export type PdfSignature = { section: string; title: string; before: string; signedAt: string; fingerprint: string };
+export type PdfOptions = { kicker?: string; meta?: string; stamp?: string; footer?: string; signature?: PdfSignature };
 
-const PAGE = { width: 595, height: 842, left: 56, right: 539, top: 790, bottom: 70 };
+const PAGE = { width: 612, height: 792, left: 60, right: 552, top: 736, bottom: 72 };
 const WIDTH = PAGE.right - PAGE.left;
 const FONT = { sans: 'F1', bold: 'F2', serif: 'F3', mono: 'F4' } as const;
 const ADVANCE = { F1: 0.53, F2: 0.58, F3: 0.47, F4: 0.6 } as const;
 const COLOR = { ink: '0.082 0.094 0.114', muted: '0.361 0.388 0.427', rule: '0.788 0.773 0.737', fill: '0.961 0.953 0.937', brand: '0.043 0.420 0.373', seal: '0.114 0.369 0.247' };
 const ISSUER = ['Solventa Seguros', 'Entidad aseguradora académica simulada', 'Bogotá D.C., Colombia'];
-const LEGEND = 'Documento de simulación académica. No constituye un contrato de seguro real ni tiene validez legal.';
+const LEGEND = 'Simulación académica sin validez legal.';
 
 // WinAnsi matches Latin-1 for accents, ñ, ¿ and ¡; anything else is replaced so a stray character never breaks the file.
-const winAnsi = (text: string) => [...text].map(char => (char.charCodeAt(0) < 256 && char.charCodeAt(0) >= 32 ? char : '?')).join('');
+const WIN_ANSI: Record<string, number> = { '–': 0x96, '—': 0x97, '…': 0x85, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95 };
+const winAnsi = (text: string) => [...text].map(char => (char.charCodeAt(0) < 256 && char.charCodeAt(0) >= 32 ? char : char in WIN_ANSI ? String.fromCharCode(WIN_ANSI[char]) : '?')).join('');
 const literal = (text: string) => '(' + winAnsi(text).replace(/[\\()]/g, match => '\\' + match) + ')';
 const fixed = (value: number) => (Math.round(value * 100) / 100).toString();
+const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function wrap(text: string, columns: number): string[] {
   const rows: string[] = [];
@@ -37,30 +40,29 @@ class Canvas {
   line(x1: number, y1: number, x2: number, y2: number, width = 0.6, color = COLOR.rule) {
     this.ops.push(`${color} RG ${fixed(width)} w ${fixed(x1)} ${fixed(y1)} m ${fixed(x2)} ${fixed(y2)} l S`);
   }
-  box(x: number, y: number, width: number, height: number, fill?: string, stroke?: string) {
-    const parts = [];
-    if (fill) parts.push(`${fill} rg ${fixed(x)} ${fixed(y)} ${fixed(width)} ${fixed(height)} re f`);
-    if (stroke) parts.push(`${stroke} RG 0.6 w ${fixed(x)} ${fixed(y)} ${fixed(width)} ${fixed(height)} re S`);
-    this.ops.push(...parts);
+  box(x: number, y: number, width: number, height: number, fill?: string, stroke?: string, strokeWidth = 0.6) {
+    if (fill) this.ops.push(`${fill} rg ${fixed(x)} ${fixed(y)} ${fixed(width)} ${fixed(height)} re f`);
+    if (stroke) this.ops.push(`${stroke} RG ${fixed(strokeWidth)} w ${fixed(x)} ${fixed(y)} ${fixed(width)} ${fixed(height)} re S`);
   }
   raw(op: string) { this.ops.push(op); }
 }
 
 type Block = { height: number; keepWithNext?: boolean; draw(canvas: Canvas, top: number): void };
 
+const SECTION = /^(Sección|Cláusula|Clausula) (\d+) · (.+)$/;
 function isClauseItem(line: string) { return /^\d+\.\d+ /.test(line); }
 function isFact(line: string) {
   const at = line.indexOf(': ');
   return at > 0 && at <= 48 && !line.startsWith('Documento sintético');
 }
-const monoValue = (value: string) => /[0-9a-f]{16,}/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value) || value.startsWith('MOCK-');
+const monoValue = (value: string) => /[0-9a-f]{16,}/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value) || value.startsWith('MOCK-') || /^POL-/.test(value);
 
 function factRow(label: string, value: string, first: boolean, last: boolean): Block {
-  const labelWidth = 168, padding = 7, size = 9.5, leading = 12.5;
+  const labelWidth = 172, padding = 7, size = 9.5, leading = 12.5;
   const valueFont = monoValue(value) ? FONT.mono : FONT.sans;
   const valueSize = valueFont === FONT.mono ? 8.5 : size;
   const labelRows = wrap(label, columnsFor(labelWidth - 2 * padding, size, FONT.sans));
-  const valueRows = wrap(value, columnsFor(WIDTH - labelWidth - 2 * padding, valueSize, valueFont));
+  const valueRows = wrap(valueFont === FONT.mono ? value : sentence(value), columnsFor(WIDTH - labelWidth - 2 * padding, valueSize, valueFont));
   const height = Math.max(labelRows.length, valueRows.length) * leading + 2 * padding - 2;
   return { height: height + (last ? 10 : 0), draw(canvas, top) {
     const bottom = top - height;
@@ -73,18 +75,18 @@ function factRow(label: string, value: string, first: boolean, last: boolean): B
   } };
 }
 
-function paragraph(text: string, size = 10, font: keyof typeof ADVANCE = 'F1', color = COLOR.ink, indent = 0): Block {
+function paragraph(text: string, size = 10, color = COLOR.ink): Block {
   const leading = size * 1.45;
-  const rows = wrap(text, columnsFor(WIDTH - indent, size, font));
-  return { height: rows.length * leading + 4, draw(canvas, top) {
-    rows.forEach((row, index) => canvas.text(PAGE.left + indent, top - size - index * leading, row, font, size, color));
+  const rows = wrap(text, columnsFor(WIDTH, size, FONT.sans));
+  return { height: rows.length * leading + 6, draw(canvas, top) {
+    rows.forEach((row, index) => canvas.text(PAGE.left, top - size - index * leading, row, FONT.sans, size, color));
   } };
 }
 
 function heading(text: string, number?: string): Block {
-  return { height: 30, keepWithNext: true, draw(canvas, top) {
-    canvas.text(PAGE.left, top - 18, (number ? number + '.  ' : '') + text.toUpperCase(), FONT.bold, 9.5);
-    canvas.line(PAGE.left, top - 24, PAGE.right, top - 24, 0.8, COLOR.ink);
+  return { height: 32, keepWithNext: true, draw(canvas, top) {
+    canvas.text(PAGE.left, top - 19, (number ? number + '.  ' : '') + text.toUpperCase(), FONT.bold, 9.5);
+    canvas.line(PAGE.left, top - 25, PAGE.right, top - 25, 0.8, COLOR.ink);
   } };
 }
 
@@ -116,49 +118,59 @@ function strokeOps(seed: string, x0: number, baseline: number): string {
     x += width;
   }
   ops.push(`${point(x + 12, y - 10)} ${point(x + 4, y + 10)} ${point(x - 40, y + 9)} c`);
+  ops.push(`${point(x - 84, y + 8)} ${point(22, y + 14)} ${point(14, y + 10)} c`);
   return `0.11 0.165 0.29 RG 1.1 w 1 J 1 j ${ops.join(' ')} S`;
 }
 
-function signatureBlock(signature: NonNullable<PdfOptions['signature']>): Block {
-  return { height: 112, draw(canvas, top) {
+function signatureBlock(signature: PdfSignature): Block {
+  const x = PAGE.left + 280;
+  const valueWidth = PAGE.right - (x + 66);
+  const facts: [string, string, string][] = [['Fecha y hora', signature.signedAt, FONT.sans], ['Método', 'Código de un solo uso (simulado)', FONT.sans],
+    ['Huella', signature.fingerprint.slice(0, 20) + '...', FONT.mono]];
+  const rows = facts.map(([label, value, font]) => ({ label, font, lines: wrap(value, columnsFor(valueWidth, 8.5, font as keyof typeof ADVANCE)) }));
+  const factsHeight = rows.reduce((sum, row) => sum + row.lines.length * 11.5 + 4, 0);
+  return { height: Math.max(108, 34 + factsHeight + 8), draw(canvas, top) {
     const lineY = top - 62;
     canvas.raw(strokeOps(signature.fingerprint, PAGE.left + 4, lineY + 6));
-    canvas.line(PAGE.left, lineY, PAGE.left + 230, lineY, 0.8, COLOR.ink);
+    canvas.line(PAGE.left, lineY, PAGE.left + 240, lineY, 0.8, COLOR.ink);
     canvas.text(PAGE.left, lineY - 14, 'Titular de la póliza', FONT.bold, 9.5);
     canvas.text(PAGE.left, lineY - 27, 'Tomador y asegurado', FONT.sans, 8.5, COLOR.muted);
-    const x = PAGE.left + 270;
-    canvas.box(x, top - 26, 190, 18, undefined, COLOR.seal);
+    canvas.box(x, top - 26, 200, 18, undefined, COLOR.seal, 1);
     canvas.text(x + 8, top - 20.5, 'FIRMADO ELECTRÓNICAMENTE (SIMULADO)', FONT.bold, 7.5, COLOR.seal);
-    const facts: [string, string][] = [['Fecha y hora', signature.signedAt], ['Método', 'Código de un solo uso (simulado)'], ['Huella', signature.fingerprint.slice(0, 24) + '...']];
-    facts.forEach(([label, value], index) => {
-      canvas.text(x, top - 44 - index * 15, label, FONT.sans, 8.5, COLOR.muted);
-      canvas.text(x + 62, top - 44 - index * 15, value, label === 'Huella' ? FONT.mono : FONT.sans, label === 'Huella' ? 8 : 8.5);
-    });
+    let y = top - 44;
+    for (const row of rows) {
+      canvas.text(x, y, row.label, FONT.sans, 8.5, COLOR.muted);
+      row.lines.forEach((line, index) => canvas.text(x + 66, y - index * 11.5, line, row.font, row.font === FONT.mono ? 8 : 8.5));
+      y -= row.lines.length * 11.5 + 4;
+    }
   } };
 }
 
 function blocksFor(lines: string[], options: PdfOptions): Block[] {
   const blocks: Block[] = [];
-  let sections = 0;
   let factIndex = 0;
+  let sections = 0;
   const facts = (index: number) => isFact(lines[index] ?? '');
   lines.forEach((line, index) => {
     if (line === '') { blocks.push({ height: 6, draw() {} }); factIndex = 0; return; }
-    const clause = /^(?:Cláusula|Clausula) (\d+) · (.+)$/.exec(line);
-    if (clause) { blocks.push(heading(clause[2], clause[1])); sections++; factIndex = 0; return; }
+    if (options.signature && line === options.signature.before) blocks.push(heading(options.signature.title, options.signature.section), signatureBlock(options.signature));
+    const section = SECTION.exec(line);
+    if (section) {
+      blocks.push(section[1] === 'Sección' ? heading(section[3], section[2]) : heading(`Cláusula ${section[2]} · ${section[3]}`));
+      sections++; factIndex = 0; return;
+    }
     if (isClauseItem(line)) { blocks.push(clauseItem(line)); return; }
     if (facts(index)) {
       const at = line.indexOf(': ');
-      if (factIndex === 0 && sections === 0) { blocks.push(heading(options.signature ? 'Condiciones particulares' : 'Datos del documento')); sections++; }
+      if (factIndex === 0 && sections === 0) { blocks.push(heading('Datos del documento')); sections++; }
       blocks.push(factRow(line.slice(0, at), line.slice(at + 2), factIndex === 0, !facts(index + 1)));
       factIndex++;
       return;
     }
     factIndex = 0;
     const notice = line.startsWith('Documento sintético');
-    blocks.push(paragraph(line, notice ? 8.5 : 10, 'F1', notice ? COLOR.muted : COLOR.ink));
+    blocks.push(paragraph(line, notice ? 8.5 : 10, notice ? COLOR.muted : COLOR.ink));
   });
-  if (options.signature) blocks.push(heading('Firma del tomador'), signatureBlock(options.signature));
   return blocks;
 }
 
@@ -176,41 +188,41 @@ function paginate(blocks: Block[], firstTop: number): Block[][] {
 }
 
 function letterhead(canvas: Canvas) {
-  canvas.box(PAGE.left, PAGE.top - 4, 18, 18, COLOR.brand);
-  canvas.text(PAGE.left + 4.6, PAGE.top + 0.6, 'S', FONT.bold, 14, '1 1 1');
-  canvas.text(PAGE.left + 24, PAGE.top, 'solventa', FONT.bold, 18, COLOR.brand);
-  ISSUER.forEach((row, index) => canvas.text(PAGE.right - 168, PAGE.top + 10 - index * 11, row, index === 0 ? FONT.bold : FONT.sans, index === 0 ? 9 : 8, index === 0 ? COLOR.ink : COLOR.muted));
+  canvas.text(PAGE.left, PAGE.top, 'solventa', FONT.bold, 22, COLOR.brand);
+  ISSUER.forEach((row, index) => canvas.text(PAGE.right - 172, PAGE.top + 10 - index * 11, row, index === 0 ? FONT.bold : FONT.sans, index === 0 ? 9 : 8, index === 0 ? COLOR.ink : COLOR.muted));
   canvas.line(PAGE.left, PAGE.top - 20, PAGE.right, PAGE.top - 20, 1.2, COLOR.ink);
   canvas.line(PAGE.left, PAGE.top - 23, PAGE.right, PAGE.top - 23, 0.5, COLOR.ink);
 }
 
-function footer(canvas: Canvas, page: number, total: number) {
+function footer(canvas: Canvas, page: number, total: number, note: string) {
   canvas.line(PAGE.left, PAGE.bottom - 18, PAGE.right, PAGE.bottom - 18, 0.5);
-  canvas.text(PAGE.left, PAGE.bottom - 31, LEGEND, FONT.sans, 7.5, COLOR.muted);
-  canvas.text(PAGE.right - 62, PAGE.bottom - 31, `Página ${page} de ${total}`, FONT.mono, 7.5, COLOR.muted);
+  canvas.text(PAGE.left, PAGE.bottom - 31, note, FONT.sans, 7.5, COLOR.muted);
+  canvas.text(PAGE.right - 62, PAGE.bottom - 31, `Página ${page} de ${total}`, FONT.sans, 7.5, COLOR.muted);
 }
 
 export function renderPdf(title: string, lines: string[], options: PdfOptions = {}): Uint8Array {
-  const titleRows = wrap(title, Math.floor((WIDTH - 104) / (20 * 0.44)));
+  const titleRows = wrap(title, Math.floor((WIDTH - 118) / (20 * 0.44)));
   const kicker = options.kicker ?? 'Documento';
   const titleHeight = 30 + titleRows.length * 24 + (options.meta ? 30 : 14);
   const pages = paginate(blocksFor(lines, options), PAGE.top - 36 - titleHeight);
+  const note = options.footer ? `Solventa Seguros · ${options.footer} · ${LEGEND}` : `Solventa Seguros · ${LEGEND}`;
   const streams = pages.map((blocks, index) => {
     const canvas = new Canvas();
     letterhead(canvas);
     let y = PAGE.top - 36;
     if (index === 0) {
-      canvas.text(PAGE.left, y - 10, winAnsi(kicker).toUpperCase(), FONT.mono, 8, COLOR.muted);
+      canvas.text(PAGE.left, y - 10, winAnsi(kicker).toUpperCase(), FONT.sans, 8, COLOR.muted);
       titleRows.forEach((row, rowIndex) => canvas.text(PAGE.left, y - 34 - rowIndex * 24, row, FONT.serif, 20));
-      if (options.meta) canvas.text(PAGE.left, y - 34 - titleRows.length * 24 - 6, options.meta, FONT.mono, 8.5, COLOR.muted);
-      if (options.signature) {
-        canvas.box(PAGE.right - 92, y - 40, 92, 22, undefined, COLOR.seal);
-        canvas.text(PAGE.right - 78, y - 32, 'EMITIDA', FONT.bold, 10, COLOR.seal);
+      if (options.meta) canvas.text(PAGE.left, y - 34 - titleRows.length * 24 - 6, options.meta, FONT.sans, 9, COLOR.muted);
+      if (options.stamp) {
+        const width = Math.max(80, options.stamp.length * 7.2 + 24);
+        canvas.box(PAGE.right - width, y - 40, width, 22, undefined, COLOR.seal, 1.4);
+        canvas.text(PAGE.right - width + 12, y - 32, options.stamp.toUpperCase(), FONT.bold, 10, COLOR.seal);
       }
       y -= titleHeight;
     } else y -= 28;
     for (const block of blocks) { block.draw(canvas, y); y -= block.height; }
-    footer(canvas, index + 1, pages.length);
+    footer(canvas, index + 1, pages.length, note);
     return canvas.ops.join('\n');
   });
   const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', '', `<< /Title ${literal(title)} /Author ${literal(ISSUER[0] + ' (simulación académica)')} /Subject ${literal(kicker)} /Creator ${literal('Solventa')} /Producer ${literal('Solventa')} >>`];
