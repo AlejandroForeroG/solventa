@@ -1,5 +1,5 @@
 // Dependency-free PDF 1.4 writer: standard fonts in WinAnsi, A4, no dates, so the same input gives the same bytes.
-export type PdfOptions = { kicker?: string; signature?: { signedAt: string; fingerprint: string } };
+export type PdfOptions = { kicker?: string; meta?: string; signature?: { signedAt: string; fingerprint: string } };
 
 const PAGE = { width: 595, height: 842, left: 56, right: 539, top: 790, bottom: 70 };
 const WIDTH = PAGE.right - PAGE.left;
@@ -191,9 +191,9 @@ function footer(canvas: Canvas, page: number, total: number) {
 }
 
 export function renderPdf(title: string, lines: string[], options: PdfOptions = {}): Uint8Array {
-  const titleRows = wrap(title, columnsFor(WIDTH - 120, 20, FONT.serif));
+  const titleRows = wrap(title, Math.floor((WIDTH - 104) / (20 * 0.44)));
   const kicker = options.kicker ?? 'Documento';
-  const titleHeight = 30 + titleRows.length * 24 + 14;
+  const titleHeight = 30 + titleRows.length * 24 + (options.meta ? 30 : 14);
   const pages = paginate(blocksFor(lines, options), PAGE.top - 36 - titleHeight);
   const streams = pages.map((blocks, index) => {
     const canvas = new Canvas();
@@ -202,6 +202,7 @@ export function renderPdf(title: string, lines: string[], options: PdfOptions = 
     if (index === 0) {
       canvas.text(PAGE.left, y - 10, winAnsi(kicker).toUpperCase(), FONT.mono, 8, COLOR.muted);
       titleRows.forEach((row, rowIndex) => canvas.text(PAGE.left, y - 34 - rowIndex * 24, row, FONT.serif, 20));
+      if (options.meta) canvas.text(PAGE.left, y - 34 - titleRows.length * 24 - 6, options.meta, FONT.mono, 8.5, COLOR.muted);
       if (options.signature) {
         canvas.box(PAGE.right - 92, y - 40, 92, 22, undefined, COLOR.seal);
         canvas.text(PAGE.right - 78, y - 32, 'EMITIDA', FONT.bold, 10, COLOR.seal);
@@ -212,14 +213,14 @@ export function renderPdf(title: string, lines: string[], options: PdfOptions = 
     footer(canvas, index + 1, pages.length);
     return canvas.ops.join('\n');
   });
-  const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', ''];
+  const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', '', `<< /Title ${literal(title)} /Author ${literal(ISSUER[0] + ' (simulación académica)')} /Subject ${literal(kicker)} /Creator ${literal('Solventa')} /Producer ${literal('Solventa')} >>`];
   const fonts = ['Helvetica', 'Helvetica-Bold', 'Times-Roman', 'Courier'];
   fonts.forEach(name => objects.push(`<< /Type /Font /Subtype /Type1 /BaseFont /${name} /Encoding /WinAnsiEncoding >>`));
   const pageIds: number[] = [];
   streams.forEach(stream => {
     const pageId = objects.length + 1;
     pageIds.push(pageId);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE.width} ${PAGE.height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents ${pageId + 1} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE.width} ${PAGE.height}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R /F4 7 0 R >> >> /Contents ${pageId + 1} 0 R >>`);
     objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
   objects[1] = `<< /Type /Pages /Kids [${pageIds.map(id => id + ' 0 R').join(' ')}] /Count ${pageIds.length} >>`;
@@ -231,7 +232,7 @@ export function renderPdf(title: string, lines: string[], options: PdfOptions = 
   });
   const xref = output.length;
   output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` + offsets.map(offset => String(offset).padStart(10, '0') + ' 00000 n \n').join('')
-    + `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    + `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   // Every character is below 256, so one character is one byte and the offsets above are byte offsets.
   return Uint8Array.from(output, char => char.charCodeAt(0));
 }
