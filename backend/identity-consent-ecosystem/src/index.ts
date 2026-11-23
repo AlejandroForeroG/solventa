@@ -55,10 +55,17 @@ function securityFor(env: IdentityEnv) {
 }
 
 type SharedIdentityClient = Awaited<ReturnType<typeof SqlIdentitySessions.sharedConnection>>;
+function accessFor(connectionString: string, shared?: SharedIdentityClient) {
+  return new ApiAccess(new SqlPartnerAccess(connectionString), new SqlIdentitySessions(connectionString, shared),
+    new SqlUnderwritingAuditGrants(connectionString), new SqlClaimsAccessGrants(connectionString),
+    new SqlPartnerPortalGrants(connectionString), new SqlPolicyAdvisorGrants(connectionString),
+    new SqlReportAccessGrants(connectionString), new SqlNoticeDestinations(connectionString));
+}
+
 async function authorize(env: IdentityEnv, input: unknown, shared?: SharedIdentityClient): Promise<AccessDecision> {
   try {
     const config = configuration(env);
-    const application = new ApiAccess(new SqlPartnerAccess(env.IDENTITY_DB.connectionString), new SqlIdentitySessions(env.IDENTITY_DB.connectionString, shared), new SqlUnderwritingAuditGrants(env.IDENTITY_DB.connectionString), new SqlClaimsAccessGrants(env.IDENTITY_DB.connectionString), new SqlPartnerPortalGrants(env.IDENTITY_DB.connectionString), new SqlPolicyAdvisorGrants(env.IDENTITY_DB.connectionString), new SqlReportAccessGrants(env.IDENTITY_DB.connectionString), new SqlNoticeDestinations(env.IDENTITY_DB.connectionString));
+    const application = accessFor(env.IDENTITY_DB.connectionString, shared);
     return await authorizeApiAccess({
       application,
       security: securityFor(env),
@@ -118,6 +125,7 @@ export default class extends WorkerEntrypoint<ConsentEnv> {
       authentication: {
         provider: config => new WorkosAuthentication(config),
         sessions: connectionString => new SqlIdentitySessions(connectionString),
+        workspaces: (principal, identity) => accessFor(this.env.IDENTITY_DB.connectionString).webWorkspaces(principal, identity),
       },
       consents: consentsFor(this.env),
       devices: new RegisteredDevices(new SqlRegisteredDevices(this.env.IDENTITY_DB.connectionString), securityFor(this.env)),
