@@ -36,7 +36,6 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
   }
   return <section className="card policy-section" aria-labelledby="advisor-sale-heading">
     <h2 id="advisor-sale-heading" className="h-card">{t('prepareTitle')}</h2>
-    <p className="note">{t('prepareScope')}</p>
     {reference && <CopyValue label={t('yourReference')} value={reference} />}
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className="grid">
@@ -45,7 +44,7 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
       <div className="field"><label htmlFor="sale-adv-3">{t('documentNumber')}</label><input id="sale-adv-3" required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></div>
       <div className="field"><label htmlFor="sale-adv-4">{t('birthDate')}</label><CalendarDateInput id="sale-adv-4" required value={form.birthDate} disabled={busy} onChange={value => set('birthDate')({ target: { value } })} /></div>
       <div className="field"><label htmlFor="sale-adv-5">{t('city')}</label><input id="sale-adv-5" required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></div>
-      <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" value={form.partnerCreditId} aria-describedby="sale-adv-6-hint" disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /><span className="note date-format" id="sale-adv-6-hint">{t('creditIdHint')}</span></div>
+      <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></div>
       <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>
       <div className="field"><label htmlFor="sale-adv-8">{t('termMonths')}</label><input id="sale-adv-8" required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></div>
       </div>
@@ -56,7 +55,6 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
       <p>{offer.contractable ? t('definitive') : t('preliminary')}</p>
       <p>{t('premium')}: {intl.formatNumber(Number(offer.premium), { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</p>
       <CopyValue label={t('offerCode')} value={offer.offerId} />
-      <p className="note">{t('handoff')}</p>
     </div>}
   </section>;
 }

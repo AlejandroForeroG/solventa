@@ -66,7 +66,6 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
         <div className="portal-context"><span className="pill pill-ok mono">{page.partner.code}</span><p className="note">{t('appliedPeriod')} {day(page.period.from)} – {day(page.period.to)} UTC</p><p className="note">{t('updated')} {timestamp(page.updatedAt)}</p></div>
         <section aria-labelledby="portal-metrics"><h2 id="portal-metrics">{t('metrics')}</h2>
           <dl className="portal-metrics">{(['completed','accepted','preliminary','declined'] as const).map(k => <div key={k}><dt>{t(k)}</dt><dd className="mono">{intl.formatNumber(page.totals[k])}</dd></div>)}</dl>
-          <p className="note">{t('metricLimit')}</p>
         </section>
         <section aria-labelledby="portal-quota"><h2 id="portal-quota">{t('quota')}</h2>{page.quota.configured ? <><dl className="portal-metrics">{(['limit','used','remaining'] as const).map(k=><div key={k}><dt>{t(k)}</dt><dd className="mono">{intl.formatNumber(page.quota.configured ? page.quota[k] : 0)}</dd></div>)}</dl><p className="note">{t('quotaHint')}</p><p>{t('resets')} {timestamp(page.quota.resetsAt)}</p><p className="note">{t('trackingSince')} {timestamp(page.quota.trackingSince)}</p><p className="note">{t('updated')} {timestamp(page.quota.updatedAt)}</p></> : <p>{t('notConfigured')}</p>}</section>
         <section aria-labelledby="portal-transactions"><h2 id="portal-transactions">{t('transactions')}</h2>
@@ -75,12 +74,11 @@ export function PartnerPortal({ onSessionLost }: { onSessionLost(): void }) {
           {page.hasMore && <p className="note">{t('recentLimit')}</p>}
         </section>
         <section aria-labelledby="portal-credentials"><h2 id="portal-credentials">{t('credentials')}</h2>
-          <p className="note">{t('credentialHint')}</p>
           {page.credentials.length ? <div className="audit-table-wrap audit-card-wrap"><table className="audit-table audit-card-table"><caption className="visually-hidden">{t('credentials')}</caption><thead><tr>{['reference','scopes','expires','status'].map(k => <th key={k} scope="col">{t(k)}</th>)}</tr></thead><tbody>{page.credentials.map(c => <tr key={c.id}><td data-label={t('reference')} className="mono audit-id">{c.id}</td><td data-label={t('scopes')}>{c.scopes.join(', ')}</td><td data-label={t('expires')}>{timestamp(c.expiresAt)}</td><td data-label={t('status')}>{t(c.status)}</td></tr>)}</tbody></table></div> : <p>{t('noCredentials')}</p>}
           {page.hasMoreCredentials && <p className="note">{t('credentialLimit')}</p>}
         </section>
         <section aria-labelledby="portal-catalog"><h2 id="portal-catalog">{t('catalog')}</h2><p>{t('mortgage')}</p><ul>{page.catalog.flatMap(p => p.operations).map(o => <li className="mono" key={o.path}>{o.method} {o.path} · {o.scope}</li>)}</ul></section>
-        <section aria-labelledby="portal-versions"><h2 id="portal-versions">{t('versions')}</h2><ul>{page.versions.map(v => <li key={v.id}><span className="mono">{v.id}</span> · {v.sunset ? `${t('sunset')} ${v.sunset}` : t('noSunset')}</li>)}</ul><p className="note">{t('versionHint')}</p></section>
+        <section aria-labelledby="portal-versions"><h2 id="portal-versions">{t('versions')}</h2><ul>{page.versions.map(v => <li key={v.id}><span className="mono">{v.id}</span> · {v.sunset ? `${t('sunset')} ${v.sunset}` : t('noSunset')}</li>)}</ul></section>
       </>}
       </>}
     </div>

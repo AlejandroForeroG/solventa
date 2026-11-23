@@ -8,7 +8,7 @@ export const policiesEs = {
   'policies.lifecycle.submit.cancelled': 'Confirmar cancelación', 'policies.lifecycle.submit.modified': 'Confirmar modificación', 'policies.lifecycle.submit.renewed': 'Confirmar renovación',
   'policies.lifecycle.choose': 'Elige una operación', 'policies.lifecycle.noReplacements': 'Aún no tienes otra póliza emitida de este producto. Cotiza y emite el reemplazo primero.', 'policies.lifecycle.cancelEffect': 'La póliza quedará cancelada al confirmar. No hay devolución automática y los pagos anteriores conservan su historial.',
   'policies.open': 'Mis pólizas', 'policies.title': 'Mis pólizas', 'policies.label': 'Pólizas emitidas',
-  'policies.subtitle': 'Consulta tus coberturas, documentos y pagos.',
+ 
   'policies.loading': 'Consultando tus pólizas…', 'policies.unavailable': 'No se pudo consultar tus pólizas.', 'policies.retry': 'Reintentar',
   'policies.empty': 'Aún no tienes pólizas emitidas.', 'policies.quote': 'Cotizar un seguro', 'policies.back': 'Mis pólizas',
   'policies.emptyPage': 'No hay pólizas en esta página.', 'policies.pagination': 'Páginas de pólizas',
@@ -70,7 +70,7 @@ export const policiesEn: Record<keyof typeof policiesEs, string> = {
   'policies.lifecycle.submit.cancelled': 'Confirm cancellation', 'policies.lifecycle.submit.modified': 'Confirm modification', 'policies.lifecycle.submit.renewed': 'Confirm renewal',
   'policies.lifecycle.choose': 'Choose an operation', 'policies.lifecycle.noReplacements': 'You have no other issued policy for this product yet. Quote and issue the replacement first.', 'policies.lifecycle.cancelEffect': 'The policy is cancelled when you confirm. There is no automatic refund and previous payments keep their history.',
   'policies.open': 'My policies', 'policies.title': 'My policies', 'policies.label': 'Issued policies',
-  'policies.subtitle': 'Review your coverage, documents and payments.',
+ 
   'policies.loading': 'Loading your policies…', 'policies.unavailable': 'Your policies could not be loaded.', 'policies.retry': 'Try again',
   'policies.empty': 'You have no issued policies yet.', 'policies.quote': 'Get a quote', 'policies.back': 'My policies',
   'policies.emptyPage': 'There are no policies on this page.', 'policies.pagination': 'Policy pages',
