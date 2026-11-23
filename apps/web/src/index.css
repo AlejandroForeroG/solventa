@@ -1,4 +1,4 @@
-:root { --ink: #12151a; --ink-2: #3a424e; --ink-3: #56616f; --paper: #f7f6f3; --surface: #fff; --line: #e3e1dc; --line-input: #8c9089; --brand: #0b6b5f; --brand-strong: #08544a; --brand-tint: #e4f1ee; --ease-out: cubic-bezier(.23, 1, .32, 1);
+:root { --ink: #12151a; --ink-2: #3a424e; --ink-3: #56616f; --paper: #f7f6f3; --surface: #fff; --line: #e3e1dc; --line-input: #8c9089; --brand: #0b6b5f; --brand-strong: #08544a; --brand-tint: #e4f1ee; --mint: #12d9b8; --mint-tint: #dcf7f1; --blue-tint: #e5eff7; --blue-ink: #1b4266; --amber-tint: #fbf0dc; --amber-ink: #7a4e05; --violet-tint: #eceafb; --violet-ink: #4438b8; --slate-tint: #eef0f3; --slate-ink: #3a424e; --shadow-soft: 0 1px 2px rgb(6 47 42 / 5%), 0 8px 24px rgb(6 47 42 / 6%); --ease-out: cubic-bezier(.23, 1, .32, 1);
   color: var(--ink); background: var(--paper); font-family: 'IBM Plex Sans', sans-serif; font-synthesis: none; -webkit-tap-highlight-color: transparent; text-size-adjust: 100%; }
 body { background: var(--paper); }
 :where(a) { color: var(--brand); text-underline-offset: 3px; }

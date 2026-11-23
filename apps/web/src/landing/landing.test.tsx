@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import App from '../App';
@@ -38,7 +38,8 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
     expect(await screen.findByRole('button', { name: 'Menú de mi cuenta' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: 'Pólizas y cotizaciones' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Hola, este es tu espacio Solventa' })).toBeVisible();
+    expect(within(screen.getByRole('navigation', { name: 'Accesos de tu cuenta' })).getByRole('link', { name: /Mis siniestros/ })).toHaveAttribute('href', '/mis-siniestros');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);
   });

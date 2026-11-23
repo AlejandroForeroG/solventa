@@ -14,8 +14,11 @@ export const locales = ['es-CO', 'en-US'] as const;
 export type Locale = (typeof locales)[number];
 
 const esCO = {
-  'landing.accountHeading': 'Pólizas y cotizaciones',
-  'landing.accountIntro': 'Consulta tus pólizas emitidas o inicia una cotización.',
+  'landing.accountHeading': 'Hola, este es tu espacio Solventa',
+  'landing.accountIntro': 'Consulta tus pólizas, sigue tus siniestros y pide asistencia desde un solo lugar.',
+  'home.eyebrow': 'Tu cuenta', 'home.quote': 'Cotizar un seguro', 'home.shortcuts': 'Accesos de tu cuenta',
+  'home.policiesDetail': 'Coberturas, documentos, pagos y gestión.', 'home.claimsDetail': 'Estado, tareas e indemnizaciones.',
+  'home.assistanceDetail': 'Prestadores cercanos y solicitudes.', 'home.advisorDetail': 'Autoriza a tu asesor y revisa su oferta.', 'home.privacyDetail': 'Quién usa tus datos y por cuánto tiempo.',
   'consent.simulated': 'Simulación académica: las fuentes nombradas usan datos de prueba. No accedemos a cuentas bancarias ni registros reales.',
   'policy.readBothPages': 'Abre la página 2 del documento para habilitar la aceptación y solicitar el código.',
   'live.signatureReady': 'Revisa las dos páginas del documento antes de aceptar y solicitar el código de firma simulado.',
@@ -364,8 +367,11 @@ const esCO = {
 };
 
 const enUS: typeof esCO = {
-  'landing.accountHeading': 'Policies and quotes',
-  'landing.accountIntro': 'View your issued policies or start a quote.',
+  'landing.accountHeading': 'Hi, this is your Solventa space',
+  'landing.accountIntro': 'See your policies, follow your claims and request assistance from one place.',
+  'home.eyebrow': 'Your account', 'home.quote': 'Get a quote', 'home.shortcuts': 'Account shortcuts',
+  'home.policiesDetail': 'Coverage, documents, payments and management.', 'home.claimsDetail': 'Status, tasks and indemnities.',
+  'home.assistanceDetail': 'Nearby providers and requests.', 'home.advisorDetail': 'Authorize your advisor and review their offer.', 'home.privacyDetail': 'Who uses your data and for how long.',
   'consent.simulated': 'Academic simulation: the named sources use test data. We do not access real bank accounts or personal records.',
   'policy.readBothPages': 'Open page 2 of the document to enable acceptance and request the code.',
   'live.signatureReady': 'Review both pages of the document before accepting and requesting the simulated signature code.',

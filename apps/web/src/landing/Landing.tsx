@@ -1,10 +1,12 @@
 import { useIntl } from 'react-intl';
 import { Icon } from '../navigation/Icon';
+import { AccountHome } from './AccountHome';
 import './landing.css';
 
 export function Landing({ authenticated = false, sessionUnavailable, onRetry }: { authenticated?: boolean; sessionUnavailable: boolean; onRetry: () => void }) {
   const intl = useIntl();
   const t = (key: string) => intl.formatMessage({ id: `landing.${key}` });
+  if (authenticated && !sessionUnavailable) return <AccountHome />;
   return <main className="landing">
     {sessionUnavailable && <div className="banner banner-error" role="alert">
       <p>{intl.formatMessage({ id: 'session.unavailable' })}</p>
