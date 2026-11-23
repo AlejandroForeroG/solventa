@@ -31,3 +31,8 @@
 .reports-form-title { display: flex; align-items: center; gap: 8px; flex-basis: 100%; margin: 0; font: 600 16px/1.3 'Space Grotesk', sans-serif; color: var(--ink); }
 .reports-form-title svg { color: var(--brand); }
 .reports-filter-label { margin: 8px 0 8px; }
+@media (max-width: 600px) {
+  .reports-form label { flex: 1 1 100%; }
+  .reports-form select { width: 100%; }
+  .reports-form .btn { flex: 1 1 100%; }
+}
