@@ -38,7 +38,7 @@ describe('product landing and quote entry', () => {
     expect(screen.queryByRole('link', { name: 'Ingresa a Solventa' })).toBeNull();
     resolveSession(sessionResponse(200));
     expect(await screen.findByRole('button', { name: 'Menú de mi cuenta' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 1, name: 'Hola' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: '¡Hola! Cotiza tu seguro aquí' })).toBeVisible();
     expect(within(screen.getByRole('navigation', { name: 'Accesos de tu cuenta' })).getByRole('link', { name: /Mis siniestros/ })).toHaveAttribute('href', '/mis-siniestros');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.every(([path]) => path === '/auth/session')).toBe(true);

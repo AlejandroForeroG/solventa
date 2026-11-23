@@ -70,6 +70,7 @@ export function QuoteForm({ values, problems, focusRequest, banner, busy, onChan
         <div className="field">
           <span className="field-label">{intl.formatMessage({ id: 'form.product' })}</span>
           <p className="field-readonly">{intl.formatMessage({ id: 'form.productValue' })}</p>
+          <p className="field-hint-tag">{intl.formatMessage({ id: 'form.productHint' })}</p>
         </div>
       </div>
       <div className="form-footer">
