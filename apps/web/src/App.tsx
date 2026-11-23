@@ -139,7 +139,7 @@ function Shell() {
           </> : <a className="btn btn-primary" href="/auth/login" onClick={prepareLogin}>{t(failed && isPolicies && destination ? 'policies.retrySignIn' : 'session.title')}</a>}
         {failed && isPolicies && destination && <p><a href="/" onClick={clearCustomerDestination}>{t('policies.backHome')}</a></p>}
       </main>)
-      : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><p>{t('navigation.notFoundHint')}</p><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
+      : !knownPath ? <main className="access-panel"><h1>{t('navigation.notFound')}</h1><a className="btn btn-primary" href="/">{t('navigation.goHome')}</a></main>
       : isLanding ? <Landing authenticated={session === 'authenticated'} sessionUnavailable={session === 'unavailable'} onRetry={() => void load()} /> : session === 'authenticated'
       ? <main className="content" aria-busy={busy}>
         <div className="channel-line"><img src={brandAssets.icon.green} alt="" width={28} height={28} /><span className="product">{t('brand.product')}</span>

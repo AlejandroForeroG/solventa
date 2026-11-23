@@ -8,15 +8,15 @@ export const portalEs = {
   'partnerPortal.updated': 'Actualizado:', 'partnerPortal.metrics': 'Actividad del período', 'partnerPortal.completed': 'Cotizaciones completadas', 'partnerPortal.accepted': 'Evaluaciones favorables',
   'partnerPortal.preliminary': 'Evaluaciones preliminares', 'partnerPortal.declined': 'Evaluaciones rechazadas',
   'partnerPortal.bogota': '(hora de Bogotá)', 'partnerPortal.result.completed': 'Completada', 'partnerPortal.result.accepted': 'Favorable', 'partnerPortal.result.preliminary': 'Preliminar', 'partnerPortal.result.declined': 'Rechazada',
-  'partnerPortal.metricLimit': 'Hechos registrados del canal. Una evaluación favorable no acredita aceptación del cliente, pago ni emisión. Los fallos de solicitud no forman parte de estos conteos.',
+ 
   'partnerPortal.transactions': 'Transacciones recientes', 'partnerPortal.reference': 'Referencia', 'partnerPortal.kind': 'Tipo', 'partnerPortal.date': 'Fecha', 'partnerPortal.result': 'Resultado', 'partnerPortal.rule': 'Regla',
   'partnerPortal.quote': 'Cotización', 'partnerPortal.offer_decision': 'Evaluación de oferta', 'partnerPortal.empty': 'Sin transacciones en el período.',
   'partnerPortal.recentLimit': 'Se muestran las 20 transacciones más recientes. Las métricas incluyen todo el período.',
-  'partnerPortal.credentials': 'Credenciales', 'partnerPortal.credentialHint': 'Referencias de registro. Los secretos no se muestran.', 'partnerPortal.noCredentials': 'Sin credenciales registradas.',
+  'partnerPortal.credentials': 'Credenciales', 'partnerPortal.noCredentials': 'Sin credenciales registradas.',
   'partnerPortal.scopes': 'Permisos', 'partnerPortal.expires': 'Vencimiento', 'partnerPortal.status': 'Estado', 'partnerPortal.active': 'Activa', 'partnerPortal.expired': 'Vencida', 'partnerPortal.revoked': 'Revocada',
   'partnerPortal.credentialLimit': 'Se muestran los 20 registros más recientes.', 'partnerPortal.catalog': 'Catálogo del canal', 'partnerPortal.mortgage': 'Seguro de vida hipotecario',
   'partnerPortal.quota': 'Cuota', 'partnerPortal.notConfigured': 'Sin configurar', 'partnerPortal.versions': 'Versiones de API', 'partnerPortal.noSunset': 'Sin fecha de retiro',
-  'partnerPortal.sunset': 'Retiro:', 'partnerPortal.versionHint': 'La disponibilidad depende de cada operación. Consulta su ruta versionada en la documentación.',
+  'partnerPortal.sunset': 'Retiro:',
 };
 export const portalEn = {
   'partnerPortal.limit':'Requests per UTC day', 'partnerPortal.used':'Used today', 'partnerPortal.remaining':'Remaining today', 'partnerPortal.resets':'Reset:', 'partnerPortal.trackingSince':'Policy configured since:', 'partnerPortal.quotaHint':'Current daily quota, shared by quotes and offers. Every admitted request consumes one unit, including retries.',
@@ -28,13 +28,13 @@ export const portalEn = {
   'partnerPortal.updated': 'Updated:', 'partnerPortal.metrics': 'Period activity', 'partnerPortal.completed': 'Completed quotes', 'partnerPortal.accepted': 'Favorable evaluations',
   'partnerPortal.preliminary': 'Preliminary evaluations', 'partnerPortal.declined': 'Declined evaluations',
   'partnerPortal.bogota': '(Bogotá time)', 'partnerPortal.result.completed': 'Completed', 'partnerPortal.result.accepted': 'Approved', 'partnerPortal.result.preliminary': 'Preliminary', 'partnerPortal.result.declined': 'Declined',
-  'partnerPortal.metricLimit': 'Recorded channel facts. A favorable evaluation does not establish customer acceptance, payment or issuance. Request failures are outside these counts.',
+ 
   'partnerPortal.transactions': 'Recent transactions', 'partnerPortal.reference': 'Reference', 'partnerPortal.kind': 'Type', 'partnerPortal.date': 'Date', 'partnerPortal.result': 'Result', 'partnerPortal.rule': 'Rule',
   'partnerPortal.quote': 'Quote', 'partnerPortal.offer_decision': 'Offer evaluation', 'partnerPortal.empty': 'No transactions in this period.',
   'partnerPortal.recentLimit': 'Showing the 20 most recent transactions. Metrics include the entire period.',
-  'partnerPortal.credentials': 'Credentials', 'partnerPortal.credentialHint': 'Registration references. Secrets are never displayed.', 'partnerPortal.noCredentials': 'No registered credentials.',
+  'partnerPortal.credentials': 'Credentials', 'partnerPortal.noCredentials': 'No registered credentials.',
   'partnerPortal.scopes': 'Permissions', 'partnerPortal.expires': 'Expiry', 'partnerPortal.status': 'Status', 'partnerPortal.active': 'Active', 'partnerPortal.expired': 'Expired', 'partnerPortal.revoked': 'Revoked',
   'partnerPortal.credentialLimit': 'Showing the 20 most recent registrations.', 'partnerPortal.catalog': 'Channel catalog', 'partnerPortal.mortgage': 'Mortgage life',
   'partnerPortal.quota': 'Quota', 'partnerPortal.notConfigured': 'Not configured', 'partnerPortal.versions': 'API versions', 'partnerPortal.noSunset': 'No retirement date',
-  'partnerPortal.sunset': 'Retirement:', 'partnerPortal.versionHint': 'Availability depends on each operation. Check its versioned route in the documentation.',
+  'partnerPortal.sunset': 'Retirement:',
 };

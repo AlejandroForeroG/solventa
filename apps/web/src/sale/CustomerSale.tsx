@@ -95,7 +95,6 @@ function Continuation({ onSessionLost, onOpenChange }: { onSessionLost(): void; 
   }
   return <section className="card policy-section" aria-labelledby="sale-continue-heading">
     <h2 id="sale-continue-heading" className="h-card">{t('continueTitle')}</h2>
-    <p className="note">{t('continueScope')}</p>
     <form onSubmit={event => { event.preventDefault(); void open(); }}>
       <div className="field"><label htmlFor="sale-cus-3">{t('offerCode')}</label><input id="sale-cus-3" required value={offerId} disabled={state.kind === 'loading'} autoComplete="off" onChange={event => setOfferId(event.target.value.trim())} /></div>
       <div className="actions"><button className="btn btn-primary" type="submit" disabled={state.kind === 'loading'}>{state.kind === 'loading' ? t('loading') : t('openOffer')}</button></div>

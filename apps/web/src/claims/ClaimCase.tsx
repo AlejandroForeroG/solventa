@@ -41,7 +41,7 @@ export function CustomerClaims({ onSessionLost }: { onSessionLost(): void }) {
     </section>
     {error && <div role="alert"><p>{t('caseError.' + error)}</p><button type="button" className="btn btn-secondary" onClick={() => { setError(''); setRevision(n => n + 1); }}>{t('retry')}</button></div>}
     {!claims && !error && <p role="status">{t('loading')}</p>}
-    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2><p className="note">{t('customerEmptyHint')}</p></div>}
+    {claims?.length === 0 && <div className="card empty-state"><span className="empty-state-art" aria-hidden="true"><Icon name="claims" size={30} /></span><h2>{t('customerEmpty')}</h2></div>}
     {claims && claims.length > 0 && <ul className="own-claims">{claims.map(claim => <li key={claim.claimId}>
       <a className="card own-claim" href={'/mis-siniestros/' + claim.claimId}>
         <span className="mono own-claim-number">{claim.claimNumber}</span>
@@ -91,7 +91,6 @@ export function ClaimCase({ claimId, audience, onSessionLost }: CaseProps) {
     {claim && <>
       <header className="claim-case-heading"><h1>{t('caseTitle', { number: claim.claimNumber })}</h1>
         <span className={'claims-badge claims-state-' + claim.state}>{t((audience === 'customer' && claim.state === 'unassigned' ? 'customerState.' : 'state.') + claim.state)}</span></header>
-      {audience === 'customer' && claim.state === 'unassigned' && <p className="note">{t('customerState.unassignedHint')}</p>}
       {confirmation && <p role="status" className="claim-confirmation">{t('ack.' + confirmation)}</p>}
       {updating ? <p role="status">{t('loading')}</p> : claim.access === 'unassigned' ? <div className="claim-case-grid">
         <section className="case-card" aria-labelledby="claim-preview-title"><h2 id="claim-preview-title">{t('preview')}</h2>
@@ -217,7 +216,7 @@ function AnalystActions({ claim, claimId, onDone, onSessionLost }: ActionProps &
   }
   return <aside className="case-card claim-actions">
     <h2>{t('actions')}</h2>
-    {claim.access === 'unassigned' ? <><p className="note">{t('takeHint')}</p><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
+    {claim.access === 'unassigned' ? <><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit('take')}>{t('action.take')}</button></>
       : <div className="case-action-options">{options.map(option => <button key={option} type="button" className={`btn ${option === 'approve' ? 'btn-primary' : option === 'reject' ? 'btn-danger' : 'btn-secondary'}`}
         aria-pressed={action === option} disabled={busy || (blocked && (option === 'approve' || option === 'reject'))}
         onClick={() => { setAction(option); setReason(''); setSelected([]); setError(''); setDirectoryError(false); }}>{t('action.' + option)}</button>)}</div>}

@@ -111,7 +111,7 @@ it('the advisor prepares the offer, retries with the same key and shows only wha
   expect(bodies[0]).toEqual({ authorizationId, product: 'vida_hipotecario', customer: { fullName: 'Ana Prueba', documentType: 'CC', documentNumber: '1000000001', birthDate: '1990-05-17', city: 'Bogota' },
     credit: { partnerCreditId: 'CR-1', amount: 200000000, termMonths: 120 } });
   expect(screen.getByText(offerId)).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent('Copia el código y compártelo con el cliente');
+  expect(screen.getByRole('status')).toHaveTextContent('Código de la oferta');
   expect(await axe(container)).toHaveNoViolations();
   fill('Monto del crédito (COP)', '300000000');
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
