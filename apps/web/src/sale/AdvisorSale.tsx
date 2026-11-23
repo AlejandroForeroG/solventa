@@ -14,15 +14,16 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
   const [form, setForm] = useState(empty), [busy, setBusy] = useState(false), [error, setError] = useState(''), [offer, setOffer] = useState<PreparedOffer | null>(null);
   // The same sale keeps its key across retries, so a lost answer never creates a second offer.
   const command = useRef<{ body: string; key: string } | null>(null);
+  const generatedCredit = useRef(`ASE-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`);
   const set = (field: keyof typeof empty) => (event: { target: { value: string } }) => { setForm(current => ({ ...current, [field]: event.target.value })); setOffer(null); };
   const amount = Number(groupedDigits(form.amount.trim())), term = Number(form.termMonths);
-  const ready = uuid(form.authorizationId.trim()) && form.fullName.trim() && form.documentNumber.trim() && /^\d{4}-\d{2}-\d{2}$/.test(form.birthDate) && form.city.trim() && form.partnerCreditId.trim()
+  const ready = uuid(form.authorizationId.trim()) && form.fullName.trim() && form.documentNumber.trim() && /^\d{4}-\d{2}-\d{2}$/.test(form.birthDate) && form.city.trim()
     && Number.isSafeInteger(amount) && amount > 0 && Number.isSafeInteger(term) && term > 0;
   async function submit() {
     if (busy || !ready) return;
     const request: PrepareRequest = { authorizationId: form.authorizationId.trim().toLowerCase(),
       customer: { fullName: form.fullName.trim(), documentType: 'CC', documentNumber: form.documentNumber.trim(), birthDate: form.birthDate, city: form.city.trim() },
-      credit: { partnerCreditId: form.partnerCreditId.trim(), amount, termMonths: term } };
+      credit: { partnerCreditId: form.partnerCreditId.trim() || generatedCredit.current, amount, termMonths: term } };
     const body = JSON.stringify(request);
     if (command.current?.body !== body) command.current = { body, key: crypto.randomUUID() };
     setBusy(true); setError(''); setOffer(null);
@@ -44,7 +45,7 @@ export function AdvisorSale({ onSessionLost, reference }: { onSessionLost(): voi
       <div className="field"><label htmlFor="sale-adv-3">{t('documentNumber')}</label><input id="sale-adv-3" required value={form.documentNumber} disabled={busy} autoComplete="off" inputMode="numeric" onChange={set('documentNumber')} /></div>
       <div className="field"><label htmlFor="sale-adv-4">{t('birthDate')}</label><CalendarDateInput id="sale-adv-4" required value={form.birthDate} disabled={busy} onChange={value => set('birthDate')({ target: { value } })} /></div>
       <div className="field"><label htmlFor="sale-adv-5">{t('city')}</label><input id="sale-adv-5" required value={form.city} disabled={busy} autoComplete="off" onChange={set('city')} /></div>
-      <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" required value={form.partnerCreditId} disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /></div>
+      <div className="field"><label htmlFor="sale-adv-6">{t('creditId')}</label><input id="sale-adv-6" value={form.partnerCreditId} aria-describedby="sale-adv-6-hint" disabled={busy} autoComplete="off" onChange={set('partnerCreditId')} /><span className="note date-format" id="sale-adv-6-hint">{t('creditIdHint')}</span></div>
       <div className="field"><label htmlFor="sale-adv-7">{t('amount')}</label><input id="sale-adv-7" required inputMode="numeric" value={form.amount} disabled={busy} onChange={set('amount')} /></div>
       <div className="field"><label htmlFor="sale-adv-8">{t('termMonths')}</label><input id="sale-adv-8" required inputMode="numeric" value={form.termMonths} disabled={busy} onChange={set('termMonths')} /></div>
       </div>
