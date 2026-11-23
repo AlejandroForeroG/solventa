@@ -99,3 +99,9 @@
 .access-denied-support { justify-self: stretch; text-align: left; }
 .audit-back.btn { display: inline-flex; gap: 6px; min-height: 36px; padding: 8px 14px; border: 1px solid #cbe5e0; border-radius: 10px; background: #fff; font-weight: 600; }
 @media (pointer: coarse) { .audit-back.btn { min-height: 44px; } }
+@media (max-width: 720px) {
+  .audit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .audit-filters .audit-reference, .audit-filter-actions { grid-column: 1 / -1; }
+  .audit-filters .date-format { font-size: 11.5px; }
+}
+@media (max-width: 360px) { .audit-filters { grid-template-columns: minmax(0, 1fr); } }

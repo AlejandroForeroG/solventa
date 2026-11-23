@@ -105,7 +105,7 @@ export function AuditWorkspace({ onSessionLost }: { onSessionLost(): void }) {
         {(['from', 'to'] as const).map(key => <div className="field" key={key}><label htmlFor={`audit-${key}`}>{t(key)}</label><CalendarDateInput id={`audit-${key}`} name={key} value={filters[key]} aria-invalid={rangeProblem?.field === key || undefined} aria-describedby={rangeProblem?.field === key ? 'audit-range-error' : undefined}
           onChange={value => { setFilters(current => ({ ...current, [key]: value })); setRangeProblem(null); }} />
           {rangeProblem?.field === key && <p className="field-error" id="audit-range-error" role="alert">{intl.formatMessage({ id: `form.range.${rangeProblem.reason}` }, { days: 31 })}</p>}</div>)}
-        <div className="audit-filter-actions"><button className="btn btn-primary" type="submit">{t('search')}</button><button className="btn btn-secondary" type="reset">{t('reset')}</button></div>
+        <div className="audit-filter-actions"><button className="btn btn-primary" type="submit"><Icon name="search" size={16} />{t('search')}</button><button className="btn btn-secondary" type="reset"><Icon name="close" size={16} />{t('reset')}</button></div>
       </form>}
       {state.kind !== 'ready' && <div className="audit-state" role={state.kind === 'loading' || state.kind === 'hidden' ? 'status' : 'alert'}>
         <p>{t(state.kind)}</p>{state.kind !== 'loading' && state.kind !== 'hidden' && state.kind !== 'unauthenticated' && state.kind !== 'invalid' && <button type="button" className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}>{t('retry')}</button>}
