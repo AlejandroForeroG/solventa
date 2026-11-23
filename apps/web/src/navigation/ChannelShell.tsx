@@ -5,6 +5,7 @@ import { useLocale } from '../i18n/I18n';
 import { locales } from '../i18n/messages';
 import { Icon, type IconName } from './Icon';
 import { MenuButton } from './MenuButton';
+import { IconLink } from './IconAction';
 import './channel-shell.css';
 
 export function LocaleSwitch() {
@@ -72,10 +73,10 @@ export function ChannelShell({ authenticated, canLogin, busy, onLogout, onLogin,
         {authenticated && <div className="channel-breadcrumb"><span>{area}</span><span aria-hidden="true">/</span><span>{t(current?.label ?? 'navigation.home')}</span></div>}
         <div className="channel-topbar-tools"><LocaleSwitch />
           {canLogin && <a className="btn btn-primary btn-small" href="/auth/login" onClick={onLogin}>{t('session.title')}</a>}
+          {authenticated && !workspace && path !== '/cotizar' && <IconLink label={t('privacy.open')} icon="privacy" href="/privacidad" current={path === '/privacidad'} onClick={stopBusyNavigation} />}
           {authenticated && <MenuButton className="account-menu" label={t('session.accountMenu')}
             content={<><span className="account-avatar" aria-hidden="true"><Icon name="advisor" size={18} /></span><span className="account-label">{t('navigation.account')}</span><Icon name="chevron" size={14} className="menu-caret" /></>}
             entries={[
-              { kind: 'link', label: t('privacy.open'), href: '/privacidad', icon: <Icon name="privacy" size={18} />, disabled: busy },
               { kind: 'link', label: t(workspace ? 'navigation.backToAccount' : 'navigation.workspace'), href: workspace ? '/polizas' : '/siniestros', icon: <Icon name={workspace ? 'policy' : 'workspace'} size={18} />, disabled: busy },
               { kind: 'action', label: t(busy ? 'session.loggingOut' : 'session.logout'), onSelect: onLogout, icon: <Icon name="exit" size={18} />, disabled: busy },
             ]} />}

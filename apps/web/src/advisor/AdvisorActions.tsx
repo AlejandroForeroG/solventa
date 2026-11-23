@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl';
 import { executeApproval, grantApproval, readApprovals, revokeApproval, uuid, type Approval, type ApprovalList, type Outcome } from './api';
 import type { PolicyDetail } from '../policies/api';
 import { AdvisorSale } from '../sale/AdvisorSale';
+import { IconButton } from '../navigation/IconAction';
 import '../policies/policies.css';
 import { Icon } from '../navigation/Icon';
 
@@ -48,7 +49,7 @@ export function AdvisorActions({policy,onSessionLost,onReference}:{policy?:Polic
     <h2 id="advisor-heading" className="h-card">{t(policy ? 'authorizations' : 'pending')}</h2>
     {!result&&<p role="status">{t('loading')}</p>}
     {result&&result.kind!=='ok'&&<p role="alert">{t(result.kind)}</p>}
-    <button className="btn btn-secondary btn-small" type="button" disabled={busy} onClick={reload}>{t('refresh')}</button>
+    <IconButton label={t('refresh')} icon="refresh" disabled={busy} onClick={reload} />
     {page&&<>
       {!page.authorizations.length&&<p>{t('empty')}</p>}
 
